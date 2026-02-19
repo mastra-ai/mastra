@@ -455,11 +455,22 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
+  const mockToolProvider = {
+    info: { id: 'test-provider', name: 'Test Provider', description: 'A test tool provider' },
+    listToolkits: vi.fn().mockResolvedValue({ data: [] }),
+    listTools: vi.fn().mockResolvedValue({ data: [], total: 0, page: 0, perPage: 20, hasMore: false }),
+    getToolSchema: vi.fn().mockResolvedValue({ name: 'test-tool-slug', inputSchema: {}, outputSchema: {} }),
+  };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+      clearCache: vi.fn(),
+    },
+    mcp: {
+      clearCache: vi.fn(),
     },
     agent: {
+      list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
@@ -472,6 +483,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         updatedAt: new Date(),
       }),
     },
+    scorer: {
+      clearCache: vi.fn(),
+    },
+    getToolProviders: vi.fn().mockReturnValue({ 'test-provider': mockToolProvider }),
+    getToolProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
   } as any);
 
   await mockWorkflowRun(workflow);
@@ -541,7 +559,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored scorer for stored scorers routes
     const scorers = await storage.getStore('scorerDefinitions');
     if (scorers) {
-      await scorers.create({
+      const storedScorer = await scorers.create({
         scorerDefinition: {
           id: 'test-stored-scorer',
           name: 'Test Stored Scorer',
@@ -550,6 +568,80 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           instructions: 'Evaluate the response for accuracy.',
           model: { provider: 'openai', name: 'gpt-4o' },
           scoreRange: { min: 0, max: 1 },
+        },
+      });
+      // Version 2 with known ID for version-specific route tests
+      await scorers.createVersion({
+        id: 'test-version-id',
+        scorerDefinitionId: 'test-stored-scorer',
+        versionNumber: 2,
+        name: 'Test Stored Scorer',
+        type: 'llm-judge',
+        instructions: 'Updated instructions for version 2.',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        scoreRange: { min: 0, max: 1 },
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored MCP client with version 2 (version 1 is auto-created by create())
+    const mcpClients = await storage.getStore('mcpClients');
+    if (mcpClients) {
+      await mcpClients.create({
+        mcpClient: {
+          id: 'test-stored-mcp-client',
+          name: 'Test Stored MCP Client',
+          servers: { 'test-server': { type: 'http', url: 'http://localhost:3000' } },
+        },
+      });
+      await mcpClients.createVersion({
+        id: 'test-version-id',
+        mcpClientId: 'test-stored-mcp-client',
+        versionNumber: 2,
+        name: 'Test Stored MCP Client',
+        servers: { 'test-server': { type: 'http', url: 'http://localhost:3001' } },
+        changedFields: ['servers'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored prompt block with version 2
+    const promptBlocks = await storage.getStore('promptBlocks');
+    if (promptBlocks) {
+      await promptBlocks.create({
+        promptBlock: {
+          id: 'test-stored-prompt-block',
+          name: 'Test Stored Prompt Block',
+          content: 'Hello {{name}}, this is a test prompt block.',
+        },
+      });
+      await promptBlocks.createVersion({
+        id: 'test-version-id',
+        blockId: 'test-stored-prompt-block',
+        versionNumber: 2,
+        name: 'Test Stored Prompt Block',
+        content: 'Updated content for {{name}}.',
+        changedFields: ['content'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored workspace and skill (no extra versions needed)
+    const workspaces = await storage.getStore('workspaces');
+    if (workspaces) {
+      await workspaces.create({
+        workspace: { id: 'test-stored-workspace', name: 'Test Stored Workspace' },
+      });
+    }
+    const skills = await storage.getStore('skills');
+    if (skills) {
+      await skills.create({
+        skill: {
+          id: 'test-stored-skill',
+          name: 'test-stored-skill',
+          description: 'A test stored skill',
+          instructions: 'Test skill instructions',
         },
       });
     }

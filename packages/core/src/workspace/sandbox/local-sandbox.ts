@@ -96,7 +96,7 @@ function execWithStreaming(
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' | 'onStop' | 'onDestroy'> {
+export interface LocalSandboxOptions extends MastraSandboxOptions {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
@@ -206,7 +206,7 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   constructor(options: LocalSandboxOptions = {}) {
-    super({ name: 'LocalSandbox', onStart: options.onStart, onStop: options.onStop, onDestroy: options.onDestroy });
+    super({ ...options, name: 'LocalSandbox' });
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
@@ -247,7 +247,10 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async start(): Promise<void> {
-    this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
+    this.logger.debug('[LocalSandbox] Starting sandbox', {
+      workingDirectory: this._workingDirectory,
+      isolation: this._isolation,
+    });
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
 
@@ -295,7 +298,7 @@ export class LocalSandbox extends MastraSandbox {
       }
     }
 
-    this.logger.debug('Sandbox started', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Sandbox started', { workingDirectory: this._workingDirectory });
   }
 
   /**
@@ -303,7 +306,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
-    this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Stopping sandbox', { workingDirectory: this._workingDirectory });
   }
 
   /**
@@ -312,7 +315,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
       try {
@@ -396,7 +399,7 @@ export class LocalSandbox extends MastraSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
-    this.logger.debug('Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
+    this.logger.debug('[LocalSandbox] Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
 
     // Auto-start if not running (lazy initialization)
     await this.ensureRunning();
@@ -425,7 +428,7 @@ export class LocalSandbox extends MastraSandbox {
         executionTimeMs: Date.now() - startTime,
       };
 
-      this.logger.info('Command completed', {
+      this.logger.debug('[LocalSandbox] Command completed', {
         command,
         exitCode: commandResult.exitCode,
         executionTimeMs: commandResult.executionTimeMs,
@@ -434,7 +437,7 @@ export class LocalSandbox extends MastraSandbox {
       return commandResult;
     } catch (error: unknown) {
       const executionTimeMs = Date.now() - startTime;
-      this.logger.error('Command failed', { command, error, executionTimeMs });
+      this.logger.error('[LocalSandbox] Command failed', { command, error, executionTimeMs });
       return {
         success: false,
         stdout: '',

@@ -448,6 +448,7 @@ function executeStreamWithFallbackModels<T>(
     let finalResult: T | undefined;
 
     let done = false;
+    let lastError: unknown;
     for (const modelConfig of models) {
       index++;
       const maxRetries = modelConfig.maxRetries || 0;
@@ -471,6 +472,7 @@ function executeStreamWithFallbackModels<T>(
             throw err;
           }
 
+          lastError = err;
           attempt++;
 
           logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -488,8 +490,10 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
-      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      const errorMessage = `Exhausted all fallback models and reached the maximum number of retries. Last error: ${lastErrMsg}`;
+      logger?.error(errorMessage);
+      throw new Error(errorMessage, { cause: lastError });
     }
     return finalResult;
   };

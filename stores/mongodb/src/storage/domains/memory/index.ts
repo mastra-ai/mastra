@@ -595,8 +595,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
                 role: message.role,
                 type: message.type || 'v2',
-                createdAt: formatDateForMongoDB(time),
                 resourceId: message.resourceId,
+              },
+              $setOnInsert: {
+                createdAt: formatDateForMongoDB(time),
               },
             },
             upsert: true,
@@ -1555,11 +1557,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
-    // Validate tokenCount before using in $inc
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    // Validate tokenCount before using in $set
     if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
       throw new MastraError({
-        id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
+        id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
         text: `Invalid tokenCount: must be a finite non-negative number, got ${tokenCount}`,
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1572,14 +1574,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const result = await collection.updateOne(
         { id },
         {
-          $inc: { pendingMessageTokens: tokenCount },
-          $set: { updatedAt: new Date() },
+          $set: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
         },
       );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
           text: `Observational memory record not found: ${id}`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -1592,7 +1593,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },

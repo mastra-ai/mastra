@@ -522,6 +522,19 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   blockAfter?: number;
+
+  /**
+   * Custom instructions appended to the Observer agent's system prompt.
+   * Use this to customize what the Observer focuses on or how it formats observations.
+   *
+   * @example
+   * ```ts
+   * observation: {
+   *   instruction: 'Focus on user dietary preferences and allergies.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**
@@ -611,6 +624,19 @@ export interface ObservationalMemoryReflectionConfig {
    * ```
    */
   bufferActivation?: number;
+
+  /**
+   * Custom instructions appended to the Reflector agent's system prompt.
+   * Use this to customize how the Reflector consolidates observations.
+   *
+   * @example
+   * ```ts
+   * reflection: {
+   *   instruction: 'Consolidate observations and remove duplicates.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**
@@ -1021,4 +1047,68 @@ export type SerializedMemoryConfig = {
    * Options to pass to the embedder, omitting telemetry
    */
   embedderOptions?: Omit<MastraEmbeddingOptions, 'telemetry'>;
+
+  /**
+   * Serialized observational memory configuration.
+   * `true` to enable with defaults, or a config object for customization.
+   * Only JSON-safe fields are included (model IDs as strings, numeric/boolean settings).
+   */
+  observationalMemory?: boolean | SerializedObservationalMemoryConfig;
+};
+
+/**
+ * JSON-serializable subset of ObservationalMemoryOptions for storage.
+ * Model references are stored as string IDs (e.g., "google/gemini-2.5-flash").
+ */
+export type SerializedObservationalMemoryConfig = {
+  /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
+  model?: string;
+
+  /** Memory scope: 'resource' or 'thread' */
+  scope?: 'resource' | 'thread';
+
+  /** Share the token budget between messages and observations */
+  shareTokenBudget?: boolean;
+
+  /** Observation step configuration */
+  observation?: SerializedObservationalMemoryObservationConfig;
+
+  /** Reflection step configuration */
+  reflection?: SerializedObservationalMemoryReflectionConfig;
+};
+
+/** Serializable subset of ObservationalMemoryObservationConfig */
+export type SerializedObservationalMemoryObservationConfig = {
+  /** Observer model ID */
+  model?: string;
+  /** Token count threshold that triggers observation */
+  messageTokens?: number;
+  /** Model settings (temperature, maxOutputTokens, etc.) */
+  modelSettings?: Record<string, unknown>;
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** Maximum tokens per batch */
+  maxTokensPerBatch?: number;
+  /** Token interval for async buffering, or false to disable */
+  bufferTokens?: number | false;
+  /** Ratio of buffered observations to activate */
+  bufferActivation?: number;
+  /** Token threshold for synchronous blocking */
+  blockAfter?: number;
+};
+
+/** Serializable subset of ObservationalMemoryReflectionConfig */
+export type SerializedObservationalMemoryReflectionConfig = {
+  /** Reflector model ID */
+  model?: string;
+  /** Token count threshold that triggers reflection */
+  observationTokens?: number;
+  /** Model settings (temperature, maxOutputTokens, etc.) */
+  modelSettings?: Record<string, unknown>;
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** Token threshold for synchronous blocking */
+  blockAfter?: number;
+  /** Ratio for async reflection buffering */
+  bufferActivation?: number;
 };

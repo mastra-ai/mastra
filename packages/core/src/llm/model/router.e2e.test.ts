@@ -16,7 +16,7 @@ const testConfigs = [
   },
   {
     provider: 'google',
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.0-flash',
     envVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
   },
   {
@@ -114,7 +114,7 @@ describe('ModelRouter Integration Tests', () => {
 
   describe.each(testConfigs)('$provider/$model', ({ provider, model, envVar }) => {
     const modelId = `${provider}/${model}` as const;
-    const isGemini = modelId.includes('gemini-2.0-flash-exp');
+    const isGemini = modelId.includes('gemini-2.0-flash');
     const skipInCI = process.env.CI === 'true' && isGemini;
 
     it.skipIf(skipInCI)('should generate text response', async () => {
@@ -214,11 +214,7 @@ describe('ModelRouter Integration Tests', () => {
 
   describe('Model ID Validation', () => {
     it('should accept valid model IDs at construction time', () => {
-      const validIds = [
-        'openai/gpt-4o',
-        'anthropic/claude-3-5-sonnet-20241022',
-        'google/gemini-2.0-flash-exp',
-      ] as const;
+      const validIds = ['openai/gpt-4o', 'anthropic/claude-3-5-sonnet-20241022', 'google/gemini-2.0-flash'] as const;
 
       validIds.forEach(id => {
         expect(

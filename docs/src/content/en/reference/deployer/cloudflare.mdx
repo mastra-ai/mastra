@@ -2,15 +2,24 @@
 title: "Reference: CloudflareDeployer | Deployer"
 description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
 packages:
-  - "@mastra/core"
   - "@mastra/deployer-cloudflare"
 ---
 
 # CloudflareDeployer
 
-The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Cloudflare specific functionality.
+The `CloudflareDeployer` bundles your Mastra server and generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/). Cloudflare deploys this as a Cloudflare Worker.
+
+## Installation
+
+To use `CloudflareDeployer`, install the `@mastra/deployer-cloudflare` package:
+
+```bash npm2yarn
+npm install @mastra/deployer-cloudflare@latest
+```
 
 ## Usage example
+
+Import `CloudflareDeployer` and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -18,7 +27,7 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    name: "hello-mastra",
+    name: "your-project-name",
     routes: [
       {
         pattern: "example.com/*",
@@ -50,15 +59,8 @@ export const mastra = new Mastra({
 
 ## Constructor options
 
-The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.jsonc`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
 
-### Migrating from earlier versions
+## Build output
 
-The following fields are deprecated and should be replaced with their standard `wrangler.json` equivalents:
-
-| Deprecated | Use instead |
-|------------|-------------|
-| `projectName` | `name` |
-| `d1Databases` | `d1_databases` |
-| `kvNamespaces` | `kv_namespaces` |
-| `workerNamespace` | *(removed, no longer used)* |
+After running `mastra build`, the deployer generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/). It points to files inside `.mastra/output` so you need to run `mastra build` before deploying with Wrangler.

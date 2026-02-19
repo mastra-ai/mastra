@@ -1,20 +1,23 @@
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core';
-import { convertSchemaToZod } from '@mastra/schema-compat';
+import { createHash } from 'node:crypto';
 
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core';
+import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
+import type { SkillSource, VersionedSkillEntry } from '@mastra/core/workspace';
+import type { MastraMemory, MemoryConfig, SerializedMemoryConfig, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraVector as MastraVectorProvider } from '@mastra/core/vector';
+import type { ToolAction } from '@mastra/core/tools';
+import type { Workflow } from '@mastra/core/workflows';
+import type { MastraScorers } from '@mastra/core/evals';
 import type {
-  Mastra,
-  MastraMemory,
-  MastraVectorProvider,
-  ToolAction,
-  Workflow,
-  MastraScorers,
   StorageResolvedAgentType,
   StorageScorerConfig,
-  SerializedMemoryConfig,
-  SharedMemoryConfig,
   StorageToolConfig,
-} from '@mastra/core';
+  StorageMCPClientToolsConfig,
+  StorageSkillConfig,
+} from '@mastra/core/storage';
+import { convertSchemaToZod } from '@mastra/schema-compat';
 
 import type {
   StorageCreateAgentInput,
@@ -27,15 +30,18 @@ import type {
   StorageDefaultOptions,
   StorageModelConfig,
   AgentInstructionBlock,
+  StoredProcessorGraph,
+  StorageWorkspaceRef,
 } from '@mastra/core/storage';
 
 import { RequestContext } from '@mastra/core/request-context';
-import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
+import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
+import { EditorMCPNamespace } from './mcp';
 
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
@@ -56,7 +62,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       StorageResolvedAgentType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('agents');
     if (!store) throw new Error('Agents storage domain is not available');
@@ -77,7 +83,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           if (!version) return null;
 
           const {
-            id: _vId,
+            id: versionId,
             agentId: _aId,
             versionNumber: _vn,
             changedFields: _cf,
@@ -85,9 +91,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             createdAt: _ca,
             ...snapshotConfig
           } = version;
-          return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
+          return { ...agent, ...snapshotConfig, resolvedVersionId: versionId } as StorageResolvedAgentType;
         }
-        return store.getByIdResolved(id);
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },
       update: input => store.update(input),
       delete: id => store.delete(id),
@@ -105,6 +111,39 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
   protected override onCacheEvict(id: string): void {
     this.mastra?.removeAgent(id);
+  }
+
+  /**
+   * Evict all cached agents that reference a given skill ID.
+   * Called by EditorSkillNamespace after a skill is published so that
+   * subsequent agent.getById() calls re-hydrate with the updated skill version.
+   */
+  invalidateAgentsReferencingSkill(skillId: string): void {
+    for (const [agentId, agent] of this._cache.entries()) {
+      const raw = (agent as Agent).toRawConfig?.();
+      if (!raw?.skills) continue;
+
+      const skillsField = raw.skills;
+      let found = false;
+
+      if (Array.isArray(skillsField)) {
+        // StorageConditionalVariant<Record<string, StorageSkillConfig>>[]
+        found = skillsField.some(
+          (variant: { value?: Record<string, unknown> }) => variant?.value && skillId in variant.value,
+        );
+      } else if (typeof skillsField === 'object' && skillsField !== null) {
+        // Plain Record<string, StorageSkillConfig>
+        found = skillId in (skillsField as Record<string, unknown>);
+      }
+
+      if (found) {
+        this.logger?.debug(
+          `[invalidateAgentsReferencingSkill] Evicting agent "${agentId}" (references skill "${skillId}")`,
+        );
+        this._cache.delete(agentId);
+        this.onCacheEvict(agentId);
+      }
+    }
   }
 
   // ============================================================================
@@ -173,6 +212,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // Determine if any conditional fields exist that require dynamic resolution
     const hasConditionalTools = storedAgent.tools != null && this.isConditionalVariants(storedAgent.tools);
+    const hasConditionalMCPClients =
+      storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
+    const hasConditionalIntegrationTools =
+      storedAgent.integrationTools != null && this.isConditionalVariants(storedAgent.integrationTools);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -184,44 +227,103 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasConditionalDefaultOptions =
       storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
     const hasConditionalModel = this.isConditionalVariants(storedAgent.model);
+    const hasConditionalWorkspace = storedAgent.workspace != null && this.isConditionalVariants(storedAgent.workspace);
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
 
-    // Tools (Record): accumulate by merging objects from all matching variants
-    const tools = hasConditionalTools
-      ? ({ requestContext }: { requestContext: RequestContext }) => {
-          const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
-          return this.resolveStoredTools(resolved);
-        }
-      : this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+    // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
+    // If any is conditional, the combined result must be a dynamic function.
+    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
 
-    // Workflows (array): accumulate by concatenating all matching variants
+    let tools:
+      | Record<string, ToolAction<any, any, any, any, any, any>>
+      | (({
+          requestContext,
+        }: {
+          requestContext: RequestContext;
+        }) => Promise<Record<string, ToolAction<any, any, any, any, any, any>>>);
+
+    if (isDynamicTools) {
+      // At least one tool source is conditional — resolve all at request time
+      tools = async ({ requestContext }: { requestContext: RequestContext }) => {
+        const ctx = requestContext.toJSON();
+
+        // Resolve registry tools
+        const resolvedToolsConfig = hasConditionalTools
+          ? this.accumulateObjectVariants(
+              storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+              ctx,
+            )
+          : (storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+        const registryTools = this.resolveStoredTools(resolvedToolsConfig);
+
+        // Resolve MCP client tools
+        const resolvedMCPClientsConfig = hasConditionalMCPClients
+          ? this.accumulateObjectVariants(
+              storedAgent.mcpClients as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+              ctx,
+            )
+          : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+
+        // Resolve integration tools (tool providers)
+        const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
+          ? this.accumulateObjectVariants(
+              storedAgent.integrationTools as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+              ctx,
+            )
+          : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
+        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+
+        return { ...registryTools, ...mcpTools, ...integrationTools };
+      };
+    } else {
+      // All are static — resolve once at agent creation time
+      const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+      const mcpTools = await this.resolveStoredMCPTools(
+        storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+      );
+      const integrationTools = await this.resolveStoredIntegrationTools(
+        storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
+      );
+      tools = { ...registryTools, ...mcpTools, ...integrationTools };
+    }
+
+    // Workflows: variant values may be string[] or Record<string, StorageToolConfig>
     const workflows = hasConditionalWorkflows
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.workflows as StorageConditionalVariant<string[]>[],
-            ctx,
-          );
+          const variants = storedAgent.workflows as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredWorkflows(resolved);
         }
-      : this.resolveStoredWorkflows(storedAgent.workflows as string[] | undefined);
+      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | string[] | undefined);
 
-    // Agents (array): accumulate by concatenating all matching variants
+    // Agents: variant values may be string[] or Record<string, StorageToolConfig>
     const agents = hasConditionalAgents
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.agents as StorageConditionalVariant<string[]>[],
-            ctx,
-          );
+          const variants = storedAgent.agents as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredAgents(resolved);
         }
-      : this.resolveStoredAgents(storedAgent.agents as string[] | undefined);
+      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
     // Memory (object): accumulate by merging config from all matching variants
     const memory = hasConditionalMemory
@@ -247,29 +349,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
 
-    // Input processors (array): accumulate by concatenating all matching variants
+    // Input processors (graph): first-match from conditional variants, then hydrate
+    const processorProviders = this.editor.getProcessorProviders();
+    const hydrationCtx = { providers: processorProviders, mastra: this.mastra, logger: this.logger };
+
     const inputProcessors = hasConditionalInputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.inputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.inputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredInputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'input', hydrationCtx);
         }
-      : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.inputProcessors as StoredProcessorGraph | undefined, 'input', hydrationCtx);
 
-    // Output processors (array): accumulate by concatenating all matching variants
+    // Output processors (graph): first-match from conditional variants, then hydrate
     const outputProcessors = hasConditionalOutputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.outputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.outputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredOutputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'output', hydrationCtx);
         }
-      : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.outputProcessors as StoredProcessorGraph | undefined, 'output', hydrationCtx);
 
     // Model (object): accumulate by merging config from all matching variants
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
@@ -365,6 +470,26 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       ? convertSchemaToZod(storedAgent.requestContextSchema as Record<string, unknown>)
       : undefined;
 
+    // Resolve agent-level skill source for versioned skills (pin/latest strategy).
+    // This creates a CompositeVersionedSkillSource that reads from the blob store
+    // instead of the live filesystem, enabling draft/publish/rollback semantics.
+    const skillSource = await this.resolveAgentSkillSource(storedAgent.skills);
+
+    // Workspace: resolve stored workspace reference (ID or inline) to a runtime Workspace.
+    // When conditional, wrapped in a DynamicArgument function resolved at request time.
+    const workspace = hasConditionalWorkspace
+      ? async ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolvedRef = this.accumulateObjectVariants(
+            storedAgent.workspace as StorageConditionalVariant<StorageWorkspaceRef>[],
+            ctx,
+          );
+          return this.resolveStoredWorkspace(resolvedRef, skillSource);
+        }
+      : await this.resolveStoredWorkspace(storedAgent.workspace as StorageWorkspaceRef | undefined, skillSource);
+
+    const skillsFormat = storedAgent.skillsFormat;
+
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
     // complex generic inference of Agent<TTools, TRequestContext, …>.  The
     // individual field values have already been validated above.
@@ -385,6 +510,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       rawConfig: storedAgent as unknown as Record<string, unknown>,
       defaultOptions,
       requestContextSchema,
+      workspace,
+      ...(skillsFormat && { skillsFormat }),
     } as any);
 
     this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
@@ -455,14 +582,197 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedTools;
   }
 
-  private resolveStoredWorkflows(
-    storedWorkflows?: string[],
-  ): Record<string, Workflow<any, any, any, any, any, any, any>> {
-    if (!storedWorkflows || storedWorkflows.length === 0) return {};
+  /**
+   * Resolve MCP client/server references to tools.
+   *
+   * For each entry in `mcpClients`, resolution checks two sources in order:
+   * 1. Stored MCP clients (from DB) — creates an MCPClient to fetch remote tools
+   * 2. Code-defined MCP servers on the Mastra instance — uses `server.tools()` directly
+   *
+   * When `clientToolsConfig.tools` is absent, no tools are included (client registered but nothing selected).
+   * When `clientToolsConfig.tools` is an empty object `{}`, all tools from the source are included.
+   * When specified with keys, only listed tools are included with optional description overrides.
+   */
+  private async resolveStoredMCPTools(
+    mcpClients?: Record<string, StorageMCPClientToolsConfig>,
+  ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
+    if (!mcpClients || Object.keys(mcpClients).length === 0) return {};
     if (!this.mastra) return {};
 
+    const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    // Lazily loaded — only needed when stored MCP clients are found
+    let MCPClient: any;
+
+    for (const [clientId, clientToolsConfig] of Object.entries(mcpClients)) {
+      try {
+        // No `tools` key = client registered but no tools selected yet
+        if (!clientToolsConfig.tools) continue;
+
+        let tools: Record<string, any> | undefined;
+
+        // 1. Check stored MCP clients (remote servers from DB)
+        const storedClient = await this.editor.mcp.getById(clientId);
+        if (storedClient) {
+          if (!MCPClient) {
+            try {
+              const mcpModule = await import('@mastra/mcp');
+              MCPClient = mcpModule.MCPClient;
+            } catch {
+              this.logger?.warn(
+                'Stored MCP client references found but @mastra/mcp is not installed. ' +
+                  'Install @mastra/mcp to use remote MCP tools.',
+              );
+              continue;
+            }
+          }
+          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient);
+          const client = new MCPClient(clientOptions);
+          tools = await client.listTools();
+          this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from stored MCP client "${clientId}"`);
+        } else {
+          // 2. Fallback to code-defined MCP server on the Mastra instance
+          //    Check by registration key first, then by server ID
+          const mcpServer = this.mastra.getMCPServer(clientId) ?? this.mastra.getMCPServerById(clientId);
+          if (mcpServer) {
+            tools = mcpServer.tools() as Record<string, any>;
+            this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from code-defined MCP server "${clientId}"`);
+          }
+        }
+
+        if (!tools) {
+          this.logger?.warn(`MCP client/server "${clientId}" referenced in stored agent but not found`);
+          continue;
+        }
+
+        // Two-layer filtering:
+        //   1. Client-level (per-server): storedClient.servers[serverName].tools — narrows tools exposed by each server
+        //   2. Agent-level: clientToolsConfig.tools — further narrows from the client set
+        // Agent-level description overrides take precedence over client-level.
+        //
+        // Tools from MCPClient.listTools() are namespaced as `serverName_toolName`.
+        // Per-server tool configs use the non-namespaced `toolName`.
+        const clientServers = storedClient?.servers;
+        const agentAllowedTools = clientToolsConfig.tools;
+
+        for (const [namespacedToolName, tool] of Object.entries(tools)) {
+          // Parse the server name and bare tool name from the namespaced key
+          const underscoreIdx = namespacedToolName.indexOf('_');
+          const serverName = underscoreIdx > -1 ? namespacedToolName.slice(0, underscoreIdx) : undefined;
+          const bareToolName = underscoreIdx > -1 ? namespacedToolName.slice(underscoreIdx + 1) : namespacedToolName;
+
+          // Client-level per-server filter: if a server has tools defined, only include listed tools
+          if (serverName && clientServers?.[serverName]?.tools) {
+            if (!(bareToolName in clientServers[serverName].tools!)) continue;
+          }
+
+          // Agent-level filter: `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+          const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools)) continue;
+
+          // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
+          const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
+          const description = agentAllowedTools?.[namespacedToolName]?.description ?? serverToolConfig?.description;
+
+          if (description) {
+            allTools[namespacedToolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description };
+          } else {
+            allTools[namespacedToolName] = tool as ToolAction<any, any, any, any, any, any>;
+          }
+        }
+      } catch (error) {
+        this.logger?.warn(`Failed to resolve MCP tools from "${clientId}"`, { error });
+      }
+    }
+
+    return allTools;
+  }
+
+  /**
+   * Resolve integration tool references from tool providers.
+   *
+   * For each entry in `integrationTools`, looks up the tool provider by ID
+   * from the editor's registered tool providers and calls `getTools()` on it.
+   *
+   * When `providerConfig.tools` is absent, no tools are included (provider registered but nothing selected).
+   * When `providerConfig.tools` is an empty object `{}`, all tools from the provider are included.
+   * When `providerConfig.tools` has specific keys, only those tools are included with optional overrides.
+   */
+  private async resolveStoredIntegrationTools(
+    integrationTools?: Record<string, StorageMCPClientToolsConfig>,
+    requestContext?: Record<string, unknown>,
+  ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
+    if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
+
+    const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
+      try {
+        // No `tools` key = provider registered but no tools selected yet
+        if (!providerConfig.tools) continue;
+
+        const provider = this.editor.getToolProvider(providerId);
+        if (!provider) {
+          this.logger?.warn(
+            `Tool provider "${providerId}" referenced in stored agent but not registered in the editor`,
+          );
+          continue;
+        }
+
+        // `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+        const wantedSlugs = Object.keys(providerConfig.tools);
+
+        let slugsToResolve: string[];
+        if (wantedSlugs.length === 0) {
+          // "All tools" — ask the provider for its full catalog
+          const allAvailable = await provider.listTools();
+          slugsToResolve = allAvailable.data.map(t => t.slug);
+        } else {
+          slugsToResolve = wantedSlugs;
+        }
+
+        // Fetch tools from the provider — pass slugs, configs, and request context
+        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, { requestContext });
+
+        for (const [toolId, tool] of Object.entries(providerTools)) {
+          // Apply description override if configured at the agent level
+          const description = providerConfig.tools?.[toolId]?.description;
+          if (description) {
+            allTools[toolId] = { ...tool, description };
+          } else {
+            allTools[toolId] = tool;
+          }
+        }
+
+        this.logger?.debug(
+          `[resolveStoredIntegrationTools] Loaded ${Object.keys(providerTools).length} tools from provider "${providerId}"`,
+        );
+      } catch (error) {
+        this.logger?.warn(`Failed to resolve integration tools from provider "${providerId}"`, { error });
+      }
+    }
+
+    return allTools;
+  }
+
+  private resolveStoredWorkflows(
+    storedWorkflows?: Record<string, StorageToolConfig> | string[],
+  ): Record<string, Workflow<any, any, any, any, any, any, any>> {
+    if (
+      !storedWorkflows ||
+      (Array.isArray(storedWorkflows) ? storedWorkflows.length === 0 : Object.keys(storedWorkflows).length === 0)
+    ) {
+      return {};
+    }
+    if (!this.mastra) return {};
+
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedWorkflows)
+      ? Object.fromEntries(storedWorkflows.map(key => [key, {}]))
+      : storedWorkflows;
+
     const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
-    for (const workflowKey of storedWorkflows) {
+    for (const workflowKey of Object.keys(normalized)) {
       try {
         resolvedWorkflows[workflowKey] = this.mastra.getWorkflow(workflowKey);
       } catch {
@@ -476,12 +786,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedWorkflows;
   }
 
-  private resolveStoredAgents(storedAgents?: string[]): Record<string, Agent<any>> {
-    if (!storedAgents || storedAgents.length === 0) return {};
+  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig> | string[]): Record<string, Agent<any>> {
+    if (
+      !storedAgents ||
+      (Array.isArray(storedAgents) ? storedAgents.length === 0 : Object.keys(storedAgents).length === 0)
+    ) {
+      return {};
+    }
     if (!this.mastra) return {};
 
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedAgents)
+      ? Object.fromEntries(storedAgents.map(key => [key, {}]))
+      : storedAgents;
+
     const resolvedAgents: Record<string, Agent<any>> = {};
-    for (const agentKey of storedAgents) {
+    for (const agentKey of Object.keys(normalized)) {
       try {
         resolvedAgents[agentKey] = this.mastra.getAgent(agentKey);
       } catch {
@@ -515,14 +835,23 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       }
 
-      if (memoryConfig.options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
+      // Build options, merging observationalMemory from serialized config
+      let options: MemoryConfig | undefined = memoryConfig.options ? { ...memoryConfig.options } : undefined;
+      if (memoryConfig.observationalMemory) {
+        options = {
+          ...options,
+          observationalMemory: memoryConfig.observationalMemory,
+        };
+      }
+
+      if (options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
         this.logger?.warn(
           'Semantic recall is enabled but no vector store or embedder are configured. ' +
             'Creating memory without semantic recall. ' +
             'To use semantic recall, configure a vector store and embedder in your Mastra instance.',
         );
 
-        const adjustedOptions = { ...memoryConfig.options, semanticRecall: false };
+        const adjustedOptions = { ...options, semanticRecall: false };
         const sharedConfig: SharedMemoryConfig = {
           storage: this.mastra.getStorage(),
           vector,
@@ -536,7 +865,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const sharedConfig: SharedMemoryConfig = {
         storage: this.mastra.getStorage(),
         vector,
-        options: memoryConfig.options,
+        options,
         embedder: memoryConfig.embedder,
         embedderOptions: memoryConfig.embedderOptions,
       };
@@ -589,50 +918,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
-  }
-
-  private findProcessor(processorKey: string): Processor<any> | undefined {
-    if (!this.mastra) return undefined;
-
-    try {
-      return this.mastra.getProcessor(processorKey);
-    } catch {
-      try {
-        return this.mastra.getProcessorById(processorKey);
-      } catch {
-        this.logger?.warn(`Processor "${processorKey}" referenced in stored agent but not registered in Mastra`);
-        return undefined;
-      }
-    }
-  }
-
-  private resolveStoredInputProcessors(storedProcessors?: string[]): InputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: InputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (processor && (processor.processInput || processor.processInputStep)) {
-        resolved.push(processor as InputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
-  private resolveStoredOutputProcessors(storedProcessors?: string[]): OutputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: OutputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (
-        processor &&
-        (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)
-      ) {
-        resolved.push(processor as OutputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
   }
 
   // ============================================================================
@@ -703,17 +988,16 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const workflowKeys = Object.keys(workflows || {});
 
     // 5. Extract sub-agent keys
-    const agents = await agent.listAgents({ requestContext });
-    const agentKeys = Object.keys(agents || {});
+    const agentsResolved = await agent.listAgents({ requestContext });
+    const agentKeys = Object.keys(agentsResolved || {});
 
     // 6. Extract memory config
     const memory = await agent.getMemory({ requestContext });
     const memoryConfig = memory?.getConfig();
 
-    // 7. Extract input/output processor IDs
-    const { inputProcessorIds, outputProcessorIds } = await agent.getConfiguredProcessorIds(requestContext);
-    const inputProcessorKeys = inputProcessorIds.length > 0 ? inputProcessorIds : undefined;
-    const outputProcessorKeys = outputProcessorIds.length > 0 ? outputProcessorIds : undefined;
+    // 7. Processors from code-defined agents cannot be automatically serialized
+    // to a StoredProcessorGraph (requires provider ID + config). Processors must
+    // be configured via the editor UI after cloning.
 
     // 8. Extract scorer keys with sampling config
     let storedScorers: Record<string, StorageScorerConfig> | undefined;
@@ -753,11 +1037,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       instructions: instructionsStr,
       model,
       tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
-      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
-      agents: agentKeys.length > 0 ? agentKeys : undefined,
+      workflows: workflowKeys.length > 0 ? Object.fromEntries(workflowKeys.map(key => [key, {}])) : undefined,
+      agents: agentKeys.length > 0 ? Object.fromEntries(agentKeys.map(key => [key, {}])) : undefined,
       memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,
@@ -773,5 +1055,137 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     return resolved;
+  }
+
+  // ============================================================================
+  // Workspace Resolution
+  // ============================================================================
+
+  /**
+   * Resolve a stored workspace reference to a runtime Workspace instance.
+   * Handles both ID-based references (looked up from editor.workspace) and
+   * inline workspace configurations (hydrated directly).
+   *
+   * When a skillSource is provided (from resolveAgentSkillSource), it is passed
+   * to the workspace hydration so the workspace uses versioned blob-backed skills
+   * instead of filesystem-based discovery.
+   */
+  private async resolveStoredWorkspace(
+    workspaceRef: StorageWorkspaceRef | undefined,
+    skillSource?: SkillSource,
+  ): Promise<Workspace<any, any, any> | undefined> {
+    if (!workspaceRef) return undefined;
+
+    const workspaceNs = this.editor.workspace;
+    if (!workspaceNs) {
+      this.logger?.warn('[resolveStoredWorkspace] No workspace namespace available on editor');
+      return undefined;
+    }
+
+    const hydrateOptions = skillSource ? { skillSource } : undefined;
+
+    if (workspaceRef.type === 'id') {
+      // Look up the stored workspace by ID and hydrate it to a runtime Workspace
+      const resolved = await workspaceNs.getById(workspaceRef.workspaceId);
+      if (!resolved) {
+        this.logger?.warn(
+          `[resolveStoredWorkspace] Workspace '${workspaceRef.workspaceId}' not found in storage, skipping`,
+        );
+        return undefined;
+      }
+      // getById returns StorageResolvedWorkspaceType — we need to hydrate it
+      return workspaceNs.hydrateSnapshotToWorkspace(workspaceRef.workspaceId, resolved, hydrateOptions);
+    }
+
+    if (workspaceRef.type === 'inline') {
+      // Use a deterministic ID based on config content to avoid leaking
+      // duplicate workspace instances on repeated calls.
+      const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
+      return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolve agent-level skill configurations into a CompositeVersionedSkillSource.
+   *
+   * For each skill in the agent's `skills` map, checks the resolution strategy:
+   * - `pin: '<versionId>'` → reads the specific version's tree from the DB
+   * - `strategy: 'latest'` → reads the skill's active version tree
+   * - `strategy: 'live'` or no strategy → skips (uses filesystem-based discovery)
+   *
+   * Returns a CompositeVersionedSkillSource if any versioned skills were resolved,
+   * or undefined if all skills use filesystem-based discovery.
+   */
+  private async resolveAgentSkillSource(skills: StorageResolvedAgentType['skills']): Promise<SkillSource | undefined> {
+    if (!skills || typeof skills !== 'object') return undefined;
+
+    // Resolve conditional field to a plain record
+    const skillConfigs = Array.isArray(skills) ? undefined : (skills as Record<string, StorageSkillConfig>);
+    if (!skillConfigs || Object.keys(skillConfigs).length === 0) return undefined;
+
+    const storage = this.mastra?.getStorage();
+    if (!storage) return undefined;
+
+    const skillStore = await storage.getStore('skills');
+    if (!skillStore) return undefined;
+
+    const blobStore = await this.editor.resolveBlobStore();
+    if (!blobStore) return undefined;
+
+    const versionedEntries: VersionedSkillEntry[] = [];
+
+    for (const [skillId, config] of Object.entries(skillConfigs)) {
+      if (!config) continue;
+
+      // Determine if this skill should use versioned resolution
+      const isPinned = !!config.pin;
+      const isLatest = config.strategy === 'latest';
+
+      if (!isPinned && !isLatest) {
+        // 'live' strategy or no strategy — skip, use filesystem
+        continue;
+      }
+
+      try {
+        let version;
+        let dirName: string;
+
+        if (isPinned) {
+          // Look up the specific pinned version
+          version = await skillStore.getVersion(config.pin!);
+          dirName = version?.name || skillId;
+        } else {
+          // strategy: 'latest' — resolve using activeVersionId (honors rollback)
+          const resolved = await skillStore.getByIdResolved(skillId);
+          if (resolved?.activeVersionId) {
+            version = await skillStore.getVersion(resolved.activeVersionId);
+          }
+          if (!version) {
+            version = await skillStore.getLatestVersion(skillId);
+          }
+          dirName = resolved?.name || version?.name || skillId;
+        }
+
+        if (!version?.tree) {
+          this.logger?.warn(
+            `[resolveAgentSkillSource] Skill '${skillId}' version has no tree manifest, skipping versioned resolution`,
+          );
+          continue;
+        }
+        versionedEntries.push({
+          dirName,
+          tree: version.tree,
+          versionCreatedAt: version.createdAt,
+        });
+      } catch (error) {
+        this.logger?.warn(`[resolveAgentSkillSource] Failed to resolve version for skill '${skillId}': ${error}`);
+      }
+    }
+
+    if (versionedEntries.length === 0) return undefined;
+
+    return new CompositeVersionedSkillSource(versionedEntries, blobStore);
   }
 }

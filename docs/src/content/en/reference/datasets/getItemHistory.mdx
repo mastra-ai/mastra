@@ -1,0 +1,109 @@
+---
+title: "Reference: dataset.getItemHistory() | Datasets"
+description: "Documentation for the `dataset.getItemHistory()` method, which retrieves the full SCD-2 change history of a dataset item."
+packages:
+  - "@mastra/core"
+---
+
+# dataset.getItemHistory()
+
+**Added in:** `@mastra/core@1.4.0`
+
+Retrieves the full SCD-2 (Slowly Changing Dimension Type 2) history of a specific item across all dataset versions.
+
+## Usage example
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+const history = await dataset.getItemHistory({ itemId: "item-id" });
+
+for (const row of history) {
+  console.log(`Version ${row.datasetVersion}: ${row.isDeleted ? "deleted" : "active"}`);
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "itemId",
+      type: "string",
+      description: "ID of the item to retrieve history for.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<DatasetItemRow[]>",
+      description: "Array of versioned item rows, ordered by version.",
+      properties: [{
+        type: "DatasetItemRow",
+        parameters: [
+          {
+            name: "id",
+            type: "string",
+            description: "Unique row identifier.",
+          },
+          {
+            name: "datasetId",
+            type: "string",
+            description: "ID of the parent dataset.",
+          },
+          {
+            name: "datasetVersion",
+            type: "number",
+            description: "Dataset version for this row.",
+          },
+          {
+            name: "validTo",
+            type: "number | null",
+            description: "Version at which this row was superseded, or `null` if still current.",
+          },
+          {
+            name: "isDeleted",
+            type: "boolean",
+            description: "Whether this row represents a deletion.",
+          },
+          {
+            name: "input",
+            type: "unknown",
+            description: "Input data at this version.",
+          },
+          {
+            name: "groundTruth",
+            type: "unknown",
+            isOptional: true,
+            description: "Ground truth at this version.",
+          },
+          {
+            name: "metadata",
+            type: "Record<string, unknown>",
+            isOptional: true,
+            description: "Metadata at this version.",
+          },
+          {
+            name: "createdAt",
+            type: "Date",
+            description: "When this row was created.",
+          },
+          {
+            name: "updatedAt",
+            type: "Date",
+            description: "When this row was last updated.",
+          },
+        ],
+      }],
+    },
+  ]}
+/>

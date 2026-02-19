@@ -79,6 +79,9 @@ export class TokenCounter {
                 `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
               );
             }
+          } else if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+            // Skip data-* parts (e.g. data-om-activation, data-om-buffering-start, etc.)
+            // These are OM metadata parts that are never sent to the LLM.
           } else {
             tokenString += JSON.stringify(part);
           }
@@ -92,7 +95,7 @@ export class TokenCounter {
     }
 
     // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return this.encoder.encode(tokenString, 'all').length + overhead;
+    return Math.round(this.encoder.encode(tokenString, 'all').length + overhead);
   }
 
   /**

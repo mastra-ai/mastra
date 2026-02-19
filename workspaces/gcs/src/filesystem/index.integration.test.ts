@@ -11,7 +11,12 @@
  * - GCS_ENDPOINT: Endpoint URL for fake-gcs emulator (optional)
  */
 
-import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import {
+  createFilesystemTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
+import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
@@ -136,11 +141,142 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
 });
 
 /**
- * Shared Filesystem Conformance Tests
+ * Prefix Isolation Tests
  *
- * These tests verify GCSFilesystem conforms to the WorkspaceFilesystem interface.
- * They use the shared test suite from @internal/workspace-test-utils.
+ * Verifies that two GCSFilesystem instances with different prefixes on the
+ * same bucket cannot see each other's files.
  */
+describe.skipIf(!canRunGCSTests)('GCSFilesystem Prefix Isolation', () => {
+  const testBucket = process.env.TEST_GCS_BUCKET!;
+  const basePrefix = `prefix-iso-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  let fsA: GCSFilesystem;
+  let fsB: GCSFilesystem;
+
+  beforeEach(() => {
+    const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+      ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+      : undefined;
+    fsA = new GCSFilesystem({
+      bucket: testBucket,
+      credentials,
+      prefix: `${basePrefix}-a`,
+      endpoint: process.env.GCS_ENDPOINT,
+    });
+    fsB = new GCSFilesystem({
+      bucket: testBucket,
+      credentials,
+      prefix: `${basePrefix}-b`,
+      endpoint: process.env.GCS_ENDPOINT,
+    });
+  });
+
+  afterEach(async () => {
+    for (const fs of [fsA, fsB]) {
+      try {
+        const files = await fs.readdir('/');
+        for (const file of files) {
+          if (file.type === 'file') await fs.deleteFile(`/${file.name}`, { force: true });
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('file written via prefix A is not visible via prefix B', async () => {
+    await fsA.writeFile('/isolated.txt', 'only in A');
+
+    expect(await fsA.exists('/isolated.txt')).toBe(true);
+    expect(await fsB.exists('/isolated.txt')).toBe(false);
+  });
+
+  it('readdir via prefix A does not include files from prefix B', async () => {
+    await fsA.writeFile('/a-file.txt', 'A content');
+    await fsB.writeFile('/b-file.txt', 'B content');
+
+    const entriesA = await fsA.readdir('/');
+    const namesA = entriesA.map(e => e.name);
+    expect(namesA).toContain('a-file.txt');
+    expect(namesA).not.toContain('b-file.txt');
+
+    const entriesB = await fsB.readdir('/');
+    const namesB = entriesB.map(e => e.name);
+    expect(namesB).toContain('b-file.txt');
+    expect(namesB).not.toContain('a-file.txt');
+  });
+
+  it('delete via prefix A does not affect prefix B', async () => {
+    await fsA.writeFile('/shared-name.txt', 'A version');
+    await fsB.writeFile('/shared-name.txt', 'B version');
+
+    await fsA.deleteFile('/shared-name.txt');
+
+    expect(await fsA.exists('/shared-name.txt')).toBe(false);
+    expect(await fsB.exists('/shared-name.txt')).toBe(true);
+
+    const content = await fsB.readFile('/shared-name.txt', { encoding: 'utf-8' });
+    expect(content).toBe('B version');
+  });
+
+  it('stat via prefix B fails for file only in prefix A', async () => {
+    await fsA.writeFile('/only-a.txt', 'A content');
+
+    const statA = await fsA.stat('/only-a.txt');
+    expect(statA.type).toBe('file');
+
+    await expect(fsB.stat('/only-a.txt')).rejects.toThrow();
+  });
+});
+
+/**
+ * CompositeFilesystem Integration Tests
+ *
+ * These tests verify CompositeFilesystem behavior with two GCS mounts
+ * (same provider, different prefixes). No sandbox needed.
+ */
+if (canRunGCSTests) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'GCS CompositeFilesystem Integration',
+    testTimeout: 30000,
+    testScenarios: {
+      // Sandbox scenarios off (no sandbox)
+      fileSync: false,
+      concurrentOperations: false,
+      largeFileHandling: false,
+      writeReadConsistency: false,
+      // Composite API scenarios on
+      mountRouting: true,
+      crossMountApi: true,
+      virtualDirectory: true,
+      mountIsolation: true,
+    },
+    createWorkspace: () => {
+      const testBucket = process.env.TEST_GCS_BUCKET!;
+      const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+        ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+        : undefined;
+      const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Workspace({
+        mounts: {
+          '/mount-a': new GCSFilesystem({
+            bucket: testBucket,
+            credentials,
+            prefix: `${prefix}-a`,
+            endpoint: process.env.GCS_ENDPOINT,
+          }),
+          '/mount-b': new GCSFilesystem({
+            bucket: testBucket,
+            credentials,
+            prefix: `${prefix}-b`,
+            endpoint: process.env.GCS_ENDPOINT,
+          }),
+        },
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
+
 if (canRunGCSTests) {
   createFilesystemTestSuite({
     suiteName: 'GCSFilesystem Conformance',

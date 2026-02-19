@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.0.1-alpha.0",
+  "version": "1.0.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -59,7 +59,7 @@
     "@vitest/ui": "catalog:",
     "ai": "^5.0.60",
     "eslint": "^9.37.0",
-    "hono": "^4.11.3",
+    "hono": "^4.11.9",
     "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

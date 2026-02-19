@@ -4,3 +4,11 @@
             - link "Agents":
                 - /url: /agents
                 - img
+                - text: ''
+        - separator:
+            - img
+        - listitem:
+            - combobox:
+                - img
+                - text: Weather Agent
+                - img

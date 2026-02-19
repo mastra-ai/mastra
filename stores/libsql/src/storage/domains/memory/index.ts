@@ -1283,7 +1283,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
-        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
         metadata: {
           ...metadata,
           clone: cloneMetadata,
@@ -1303,7 +1303,7 @@ export class MemoryLibSQL extends MemoryStorage {
           args: [
             newThread.id,
             newThread.resourceId,
-            newThread.title || null,
+            newThread.title ?? '',
             JSON.stringify(newThread.metadata),
             nowStr,
             nowStr,
@@ -1859,11 +1859,11 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET 
-          "pendingMessageTokens" = "pendingMessageTokens" + ?, 
+          "pendingMessageTokens" = ?, 
           "updatedAt" = ? 
         WHERE id = ?`,
         args: [tokenCount, new Date().toISOString(), id],
@@ -1871,7 +1871,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       if (result.rowsAffected === 0) {
         throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          id: createStorageErrorId('LIBSQL', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
           text: `Observational memory record not found: ${id}`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -1884,7 +1884,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },

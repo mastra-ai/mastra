@@ -138,6 +138,29 @@ Below is an example of events that may be emitted. Each event always includes a 
 }
 ```
 
+### Foreach progress events
+
+When a workflow uses `.foreach()`, each iteration emits a `workflow-step-progress` event. You can use these to track real-time progress:
+
+```typescript
+for await (const chunk of stream) {
+  if (chunk.type === 'workflow-step-progress') {
+    console.log(
+      `${chunk.payload.id}: ${chunk.payload.completedCount}/${chunk.payload.totalCount} — ${chunk.payload.iterationStatus}`
+    );
+  }
+}
+```
+
+Each progress event includes:
+
+- **`id`**: The step ID of the foreach step
+- **`completedCount`**: Number of iterations completed so far
+- **`totalCount`**: Total number of iterations
+- **`currentIndex`**: Index of the iteration that just completed
+- **`iterationStatus`**: Status of the iteration (`success`, `failed`, or `suspended`)
+- **`iterationOutput`**: Output of the iteration (when successful)
+
 ## Inspecting agent networks
 
 When using multi-agent collaboration with `agent.network()`, iterate over the stream to track how tasks are delegated and executed across agents, workflows, and tools.

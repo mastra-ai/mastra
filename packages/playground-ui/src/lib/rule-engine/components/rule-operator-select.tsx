@@ -1,5 +1,18 @@
 import * as React from 'react';
-import { Equal, EqualNot, Text, TextSearch, ChevronRight, ChevronLeft, List, ListX } from 'lucide-react';
+import {
+  Equal,
+  EqualNot,
+  Text,
+  TextSearch,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+  ChevronsLeft,
+  List,
+  ListX,
+  Check,
+  Ban,
+} from 'lucide-react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
@@ -19,8 +32,12 @@ const OPERATOR_ICONS: Record<ConditionOperator, React.ReactNode> = {
   not_contains: <Text />,
   greater_than: <ChevronRight />,
   less_than: <ChevronLeft />,
+  greater_than_or_equal: <ChevronsRight />,
+  less_than_or_equal: <ChevronsLeft />,
   in: <List />,
   not_in: <ListX />,
+  exists: <Check />,
+  not_exists: <Ban />,
 };
 
 /**

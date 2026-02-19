@@ -89,6 +89,23 @@ async function listScorersFromSystem({
     // Silently ignore if storage is not configured - not all setups have storage
   }
 
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list();
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
+  }
+
   for (const [workflowId, workflow] of Object.entries(workflows)) {
     const scorers =
       (await workflow.listScorers({

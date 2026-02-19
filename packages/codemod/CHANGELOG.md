@@ -1,5 +1,31 @@
 # @mastra/codemod
 
+## 1.0.3
+
+### Patch Changes
+
+- Update internal dependency `@clack/prompts` to v1 ([#13095](https://github.com/mastra-ai/mastra/pull/13095))
+
+## 1.0.3-alpha.0
+
+### Patch Changes
+
+- Update internal dependency `@clack/prompts` to v1 ([#13095](https://github.com/mastra-ai/mastra/pull/13095))
+
+## 1.0.2
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
 ## 1.0.1
 
 ### Patch Changes

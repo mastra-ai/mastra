@@ -3,6 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
+import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -21,6 +22,11 @@ export interface StorageColumn {
     table: string;
     column: string;
   };
+}
+
+export interface StorageTableConfig {
+  columns: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
 }
 export interface WorkflowRuns {
   runs: WorkflowRun[];
@@ -273,14 +279,30 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
 export interface StorageToolConfig {
   /** Custom description override for this tool in this agent context */
   description?: string;
+  /** Conditional rules for when this tool should be available */
+  rules?: RuleGroup;
+}
+
+/**
+ * Per-MCP-client tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client are enabled and their overrides.
+ * When `tools` is omitted, all tools from the MCP client/server are included.
+ */
+export interface StorageMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StorageToolConfig>;
 }
 
 /**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
+  /** Custom description override for this scorer in this agent context */
+  description?: string;
   /** Sampling configuration for this scorer */
   sampling?: ScoringSamplingConfig;
+  /** Conditional rules for when this scorer should be active */
+  rules?: RuleGroup;
 }
 
 /**
@@ -379,23 +401,32 @@ export interface StorageAgentSnapshotType {
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */
   defaultOptions?: StorageConditionalField<StorageDefaultOptions>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry — static or conditional on request context */
-  workflows?: StorageConditionalField<string[]>;
-  /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
-  agents?: StorageConditionalField<string[]>;
+  /** Workflow keys with optional per-workflow config — static or conditional on request context */
+  workflows?: StorageConditionalField<Record<string, StorageToolConfig>>;
+  /** Agent keys with optional per-agent config — static or conditional on request context */
+  agents?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /**
-   * Array of specific integration tool IDs selected for this agent.
-   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   * Map of tool provider IDs to their tool configurations.
+   * Keys are provider IDs (e.g., "composio"), values configure which tools from that provider to include.
+   * Static or conditional on request context.
    */
-  integrationTools?: string[];
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  inputProcessors?: StorageConditionalField<string[]>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  outputProcessors?: StorageConditionalField<string[]>;
+  integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /** Processor graph for input processing — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
+  /** Processor graph for output processing — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Memory configuration object — static or conditional on request context */
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
+  mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /** Workspace reference — ID of a stored workspace or inline config — static or conditional on request context */
+  workspace?: StorageConditionalField<StorageWorkspaceRef>;
+  /** Skill entity IDs with optional per-skill overrides — static or conditional on request context */
+  skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
+  /** Skill format for system message injection (default: 'xml') */
+  skillsFormat?: 'xml' | 'json' | 'markdown';
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }
@@ -423,7 +454,11 @@ export interface StorageAgentType {
  * Resolved agent type that combines the thin agent record with version snapshot config.
  * Returned by getAgentByIdResolved and listAgentsResolved.
  */
-export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
+export type StorageResolvedAgentType = StorageAgentType &
+  StorageAgentSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new agent. Flat union of thin record fields
@@ -481,6 +516,11 @@ export type StorageListAgentsInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter agents by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -532,12 +572,12 @@ export interface Rule {
  * Mid-level groups (depth 1) may contain Rules or depth-2 groups.
  * Top-level groups (depth 0, exported as `RuleGroup`) may contain Rules or depth-1 groups.
  */
-interface RuleGroupDepth2 {
+export interface RuleGroupDepth2 {
   operator: 'AND' | 'OR';
   conditions: Rule[];
 }
 
-interface RuleGroupDepth1 {
+export interface RuleGroupDepth1 {
   operator: 'AND' | 'OR';
   conditions: (Rule | RuleGroupDepth2)[];
 }
@@ -545,6 +585,53 @@ interface RuleGroupDepth1 {
 export interface RuleGroup {
   operator: 'AND' | 'OR';
   conditions: (Rule | RuleGroupDepth1)[];
+}
+
+// ============================================================================
+// Stored Processor Graph Types
+// ============================================================================
+
+/**
+ * A single processor step in a stored processor graph.
+ * Each step references a ProcessorProvider by ID and stores its configuration.
+ */
+export interface ProcessorGraphStep {
+  /** Unique ID for this step within the graph */
+  id: string;
+  /** The ProcessorProvider ID that created this processor */
+  providerId: string;
+  /** Configuration matching the provider's configSchema, validated at creation time */
+  config: Record<string, unknown>;
+  /** Which processor phases to enable (subset of the provider's availablePhases) */
+  enabledPhases: ProcessorPhase[];
+}
+
+/**
+ * A condition for branching within a processor graph.
+ * Uses RuleGroup (evaluated against the previous step's output) to decide which branch to take.
+ */
+export interface ProcessorGraphCondition {
+  /** The steps to execute if this condition's rules match */
+  steps: ProcessorGraphEntry[];
+  /** Rules to evaluate against the previous step's output. If absent, this is the default branch. */
+  rules?: RuleGroup;
+}
+
+/**
+ * An entry in a stored processor graph.
+ * Simplified version of SerializedStepFlowEntry, supporting only step, parallel, and conditional.
+ */
+export type ProcessorGraphEntry =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntry[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphCondition[] };
+
+/**
+ * A stored processor graph representing a pipeline of processors.
+ * The entries are ordered: sequential flow is array order, with parallel/conditional branching.
+ */
+export interface StoredProcessorGraph {
+  steps: ProcessorGraphEntry[];
 }
 
 /**
@@ -582,7 +669,10 @@ export interface StoragePromptBlockSnapshotType {
 }
 
 /** Resolved prompt block: thin record merged with active version snapshot */
-export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+export type StorageResolvedPromptBlockType = StoragePromptBlockType &
+  StoragePromptBlockSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /** Input for creating a new prompt block */
 export type StorageCreatePromptBlockInput = {
@@ -628,6 +718,11 @@ export type StorageListPromptBlocksInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter prompt blocks by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 /** Paginated list output for thin prompt block records */
@@ -714,7 +809,11 @@ export interface StorageScorerDefinitionType {
  * Resolved stored scorer type that combines the thin record with version snapshot config.
  * Returned by getScorerDefinitionByIdResolved and listScorerDefinitionsResolved.
  */
-export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType & StorageScorerDefinitionSnapshotType;
+export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType &
+  StorageScorerDefinitionSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new stored scorer. Flat union of thin record fields
@@ -766,6 +865,11 @@ export type StorageListScorerDefinitionsInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter scorers by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 /** Paginated list output for thin stored scorer records */
@@ -1162,6 +1266,537 @@ export interface CreateReflectionGenerationInput {
 }
 
 // ============================================
+// MCP Client Storage Types
+// ============================================
+
+/**
+ * Serializable MCP server transport definition for storage.
+ * Only includes fields that can be safely serialized to JSON.
+ * Non-serializable fields (fetch, authProvider, logger, etc.) must be
+ * provided via code-defined MCP clients.
+ */
+export interface StorageMCPServerConfig {
+  /** Transport type discriminator */
+  type: 'stdio' | 'http';
+  /** Command to execute (stdio transport) */
+  command?: string;
+  /** Arguments to pass to the command (stdio transport) */
+  args?: string[];
+  /** Environment variables for the subprocess (stdio transport) */
+  env?: Record<string, string>;
+  /** URL of the MCP server endpoint (http transport) — stored as string */
+  url?: string;
+  /** Timeout in milliseconds for server operations */
+  timeout?: number;
+  /**
+   * Optional tool selection/filtering at the server level.
+   * When provided, only tools listed here are exposed by this server.
+   * When omitted, all tools from the server are exposed.
+   */
+  tools?: Record<string, StorageToolConfig>;
+}
+
+/**
+ * MCP client version snapshot containing ALL configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the MCP client record.
+ */
+export interface StorageMCPClientSnapshotType {
+  /** Display name of the MCP client configuration */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** MCP servers keyed by server name */
+  servers: Record<string, StorageMCPServerConfig>;
+}
+
+/**
+ * Thin stored MCP client record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageMCPClientSnapshotType).
+ */
+export interface StorageMCPClientType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Client status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to mcp_client_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored MCP client type that combines the thin record with version snapshot config.
+ * Returned by getMCPClientByIdResolved and listMCPClientsResolved.
+ */
+export type StorageResolvedMCPClientType = StorageMCPClientType &
+  StorageMCPClientSnapshotType & {
+    resolvedVersionId?: string;
+  };
+
+/**
+ * Input for creating a new stored MCP client. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateMCPClientInput = {
+  /** Unique identifier for the MCP client */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+} & StorageMCPClientSnapshotType;
+
+/**
+ * Input for updating a stored MCP client. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateMCPClientInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+  /** FK to mcp_client_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Client status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageMCPClientSnapshotType>;
+
+export type StorageListMCPClientsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter MCP clients by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter MCP clients by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+  /**
+   * Filter MCP clients by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
+};
+
+/** Paginated list output for thin stored MCP client records */
+export type StorageListMCPClientsOutput = PaginationInfo & {
+  mcpClients: StorageMCPClientType[];
+};
+
+/** Paginated list output for resolved stored MCP clients */
+export type StorageListMCPClientsResolvedOutput = PaginationInfo & {
+  mcpClients: StorageResolvedMCPClientType[];
+};
+
+// ============================================
+// Workspace Storage Types
+// ============================================
+
+/**
+ * Serializable filesystem configuration for storage.
+ * References a provider type string that the editor resolves at hydration time.
+ */
+export interface StorageFilesystemConfig {
+  /** Provider type identifier (e.g., 's3', 'gcs', 'local') — resolved by the editor's filesystem registry */
+  provider: string;
+  /** Provider-specific configuration (bucket, basePath, etc.) */
+  config: Record<string, unknown>;
+  /** Whether the filesystem is read-only */
+  readOnly?: boolean;
+}
+
+/**
+ * Serializable sandbox configuration for storage.
+ * References a provider type string that the editor resolves at hydration time.
+ */
+export interface StorageSandboxConfig {
+  /** Provider type identifier (e.g., 'e2b') — resolved by the editor's sandbox registry */
+  provider: string;
+  /** Provider-specific configuration */
+  config: Record<string, unknown>;
+}
+
+/**
+ * Serializable search configuration for storage.
+ * References vector store and embedder by provider/name rather than runtime instances.
+ */
+export interface StorageSearchConfig {
+  /** Vector store provider identifier (e.g., 'pg', 'pinecone') */
+  vectorProvider?: string;
+  /** Vector store provider-specific configuration */
+  vectorConfig?: Record<string, unknown>;
+  /** Embedder provider identifier (e.g., 'openai', 'fastembed') */
+  embedderProvider?: string;
+  /** Embedder model name */
+  embedderModel?: string;
+  /** Embedder provider-specific configuration */
+  embedderConfig?: Record<string, unknown>;
+  /** BM25 keyword search config — true for defaults, or object for custom params */
+  bm25?: boolean | { k1?: number; b?: number };
+  /** Custom index name for the vector store */
+  searchIndexName?: string;
+  /** Paths to auto-index on init */
+  autoIndexPaths?: string[];
+}
+
+/**
+ * Serializable per-tool configuration for workspace tools.
+ */
+export interface StorageWorkspaceToolConfig {
+  /** Whether the tool is enabled (default: true) */
+  enabled?: boolean;
+  /** Whether the tool requires user approval before execution (default: false) */
+  requireApproval?: boolean;
+  /** For write tools: require reading a file before writing to it */
+  requireReadBeforeWrite?: boolean;
+}
+
+/**
+ * Serializable workspace tools configuration for storage.
+ */
+export interface StorageWorkspaceToolsConfig {
+  /** Default: whether all tools are enabled (default: true) */
+  enabled?: boolean;
+  /** Default: whether all tools require user approval (default: false) */
+  requireApproval?: boolean;
+  /** Per-tool overrides, keyed by workspace tool name */
+  tools?: Record<string, StorageWorkspaceToolConfig>;
+}
+
+/**
+ * Workspace version snapshot type containing ALL workspace configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the workspace record.
+ */
+export interface StorageWorkspaceSnapshotType {
+  /** Display name of the workspace */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Primary filesystem configuration */
+  filesystem?: StorageFilesystemConfig;
+  /** Sandbox configuration */
+  sandbox?: StorageSandboxConfig;
+  /** Mounted filesystems keyed by mount path */
+  mounts?: Record<string, StorageFilesystemConfig>;
+  /** Search configuration (vector, embedder, BM25) */
+  search?: StorageSearchConfig;
+  /** Skill entity IDs assigned to this workspace */
+  skills?: string[];
+  /** Workspace tool configuration */
+  tools?: StorageWorkspaceToolsConfig;
+  /** Auto-sync between fs and sandbox (default: false) */
+  autoSync?: boolean;
+  /** Timeout for individual operations in milliseconds */
+  operationTimeout?: number;
+}
+
+/**
+ * Thin workspace record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageWorkspaceSnapshotType).
+ */
+export interface StorageWorkspaceType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Workspace status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to workspace_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the workspace */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved workspace type that combines the thin record with version snapshot config.
+ * Returned by getWorkspaceByIdResolved and listWorkspacesResolved.
+ */
+export type StorageResolvedWorkspaceType = StorageWorkspaceType &
+  StorageWorkspaceSnapshotType & {
+    resolvedVersionId?: string;
+  };
+
+/**
+ * Input for creating a new workspace. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateWorkspaceInput = {
+  /** Unique identifier for the workspace */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the workspace */
+  metadata?: Record<string, unknown>;
+} & StorageWorkspaceSnapshotType;
+
+/**
+ * Input for updating a workspace. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateWorkspaceInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the workspace */
+  metadata?: Record<string, unknown>;
+  /** FK to workspace_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Workspace status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageWorkspaceSnapshotType>;
+
+export type StorageListWorkspacesInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter workspaces by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter workspaces by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin workspace records */
+export type StorageListWorkspacesOutput = PaginationInfo & {
+  workspaces: StorageWorkspaceType[];
+};
+
+/** Paginated list output for resolved workspaces */
+export type StorageListWorkspacesResolvedOutput = PaginationInfo & {
+  workspaces: StorageResolvedWorkspaceType[];
+};
+
+// ============================================
+// Skill Storage Types
+// ============================================
+
+/**
+ * Serializable content source for skill storage.
+ * Mirrors the runtime ContentSource but stored as plain JSON.
+ */
+export type StorageContentSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill version snapshot type containing ALL skill definition fields.
+ * These fields live exclusively in version snapshot rows, not on the skill record.
+ */
+export interface StorageSkillSnapshotType {
+  /** Skill name (1-64 chars, lowercase, hyphens only) */
+  name: string;
+  /** Description of what the skill does and when to use it */
+  description: string;
+  /** Markdown instructions from SKILL.md body */
+  instructions: string;
+  /** Optional license identifier */
+  license?: string;
+  /** Optional compatibility requirements */
+  compatibility?: unknown;
+  /** Source of the skill */
+  source?: StorageContentSource;
+  /** List of reference file paths */
+  references?: string[];
+  /** List of script file paths */
+  scripts?: string[];
+  /** List of asset file paths */
+  assets?: string[];
+  /** Optional arbitrary metadata */
+  metadata?: Record<string, unknown>;
+  /** Content-addressable file tree manifest for this skill version */
+  tree?: SkillVersionTree;
+}
+
+/**
+ * Thin skill record type containing only metadata fields.
+ * All definition content lives in version snapshots (StorageSkillSnapshotType).
+ */
+export interface StorageSkillType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Skill status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to skill_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved skill type that combines the thin record with version snapshot content.
+ * Returned by getSkillByIdResolved and listSkillsResolved.
+ */
+export type StorageResolvedSkillType = StorageSkillType &
+  StorageSkillSnapshotType & {
+    resolvedVersionId?: string;
+  };
+
+/**
+ * Input for creating a new skill. Flat union of thin record fields
+ * and initial content (used to create version 1).
+ */
+export type StorageCreateSkillInput = {
+  /** Unique identifier for the skill */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+} & StorageSkillSnapshotType;
+
+/**
+ * Input for updating a skill. Includes metadata-level fields and optional content fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateSkillInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** FK to skill_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Skill status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageSkillSnapshotType>;
+
+export type StorageListSkillsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter skills by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter skills by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin skill records */
+export type StorageListSkillsOutput = PaginationInfo & {
+  skills: StorageSkillType[];
+};
+
+/** Paginated list output for resolved skills */
+export type StorageListSkillsResolvedOutput = PaginationInfo & {
+  skills: StorageResolvedSkillType[];
+};
+
+/**
+ * Per-skill configuration stored in agent snapshots.
+ * Allows overriding skill description and instructions for a specific agent context.
+ */
+export interface StorageSkillConfig {
+  /** Custom description override for this skill in this agent context */
+  description?: string;
+  /** Custom instructions override for this skill in this agent context */
+  instructions?: string;
+  /** Pin to a specific version ID. Takes precedence over strategy. */
+  pin?: string;
+  /** Resolution strategy: 'latest' = latest published version, 'live' = read from filesystem */
+  strategy?: 'latest' | 'live';
+}
+
+/**
+ * A single entry in a skill version's file tree manifest.
+ * Maps a file path to its content-addressable blob hash.
+ */
+export interface SkillVersionTreeEntry {
+  /** SHA-256 hash of the file content (content-addressable key) */
+  blobHash: string;
+  /** File size in bytes */
+  size: number;
+  /** Optional MIME type */
+  mimeType?: string;
+  /**
+   * Content encoding used in the blob store.
+   * - 'utf-8' (default): content stored as UTF-8 text
+   * - 'base64': content stored as base64-encoded string (for binary files like images)
+   */
+  encoding?: 'utf-8' | 'base64';
+}
+
+/**
+ * Complete file tree manifest for a skill version.
+ * Maps relative file paths to their blob entries.
+ * This is stored as JSONB on the skill version row.
+ *
+ * Example:
+ * {
+ *   "SKILL.md": { blobHash: "abc123...", size: 1024, mimeType: "text/markdown" },
+ *   "references/api.md": { blobHash: "def456...", size: 512, mimeType: "text/markdown" },
+ *   "scripts/setup.sh": { blobHash: "ghi789...", size: 256, mimeType: "text/x-shellscript" }
+ * }
+ */
+export interface SkillVersionTree {
+  entries: Record<string, SkillVersionTreeEntry>;
+}
+
+/**
+ * A stored blob entry in the content-addressable blob store.
+ */
+export interface StorageBlobEntry {
+  /** SHA-256 hash of the content (primary key) */
+  hash: string;
+  /** The file content (text) */
+  content: string;
+  /** File size in bytes */
+  size: number;
+  /** Optional MIME type */
+  mimeType?: string;
+  /** When the blob was first stored */
+  createdAt: Date;
+}
+
+/**
+ * Workspace reference configuration stored in agent snapshots.
+ * Can reference a stored workspace by ID or provide inline workspace config.
+ */
+export type StorageWorkspaceRef =
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: StorageWorkspaceSnapshotType };
+
+// ============================================
 // Workflow Storage Types
 // ============================================
 
@@ -1263,4 +1898,234 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
   }
 
   return result as Record<keyof Shape & string, StorageColumn>;
+}
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItemRow {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  validTo: number | null;
+  isDeleted: boolean;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetVersion {
+  id: string;
+  datasetId: string;
+  version: number;
+  createdAt: Date;
+}
+
+// Dataset CRUD Input/Output Types
+
+export interface CreateDatasetInput {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface UpdateDatasetInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface AddDatasetItemInput {
+  datasetId: string;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetItemInput {
+  id: string;
+  datasetId: string;
+  input?: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListDatasetsInput {
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetsOutput {
+  datasets: DatasetRecord[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetItemsInput {
+  datasetId: string;
+  version?: number;
+  search?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetItemsOutput {
+  items: DatasetItem[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetVersionsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetVersionsOutput {
+  versions: DatasetVersion[];
+  pagination: PaginationInfo;
+}
+
+export interface BatchInsertItemsInput {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface BatchDeleteItemsInput {
+  datasetId: string;
+  itemIds: string[];
+}
+
+// ============================================
+// Experiment Types (Dataset Experiments)
+// ============================================
+
+export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Experiment {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: TargetType;
+  targetId: string;
+  status: ExperimentStatus;
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ExperimentResult {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId: string | null;
+  createdAt: Date;
+}
+
+export interface CreateExperimentInput {
+  id?: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: TargetType;
+  targetId: string;
+  totalItems: number;
+}
+
+export interface UpdateExperimentInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  status?: ExperimentStatus;
+  succeededCount?: number;
+  failedCount?: number;
+  skippedCount?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface AddExperimentResultInput {
+  id?: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId?: string | null;
+}
+
+export interface ListExperimentsInput {
+  datasetId?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListExperimentsOutput {
+  experiments: Experiment[];
+  pagination: PaginationInfo;
+}
+
+export interface ListExperimentResultsInput {
+  experimentId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListExperimentResultsOutput {
+  results: ExperimentResult[];
+  pagination: PaginationInfo;
 }

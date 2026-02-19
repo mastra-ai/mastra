@@ -437,7 +437,7 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
       "permanent": true
     },
     {
@@ -608,6 +608,11 @@
     {
       "source": "/reference/tools/client",
       "destination": "/reference/tools/mcp-client",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
       "permanent": true
     }
   ]

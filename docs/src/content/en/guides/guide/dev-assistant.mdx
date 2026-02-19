@@ -1,0 +1,273 @@
+---
+title: "Guide: Building a Dev Assistant"
+description: Build a complete development assistant that combines filesystem, sandbox, skills, and search to write code, run tests, and maintain documentation.
+---
+
+# Building a Dev Assistant
+
+In this guide, you'll build a complete development assistant that combines all workspace features:
+- [Filesystem](/docs/workspace/filesystem) for file management
+- [Sandbox](/docs/workspace/sandbox) for code execution
+- [Skills](/docs/workspace/skills) for coding standards
+- [Search](/docs/workspace/search) for finding examples
+
+You'll set up a workspace with a sample project, add coding standards as a skill, and create an agent that writes code following TDD practices. By the end, you'll have an agent that can read existing code, write new implementations, run tests in a sandbox, and iterate based on results.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+
+### Install vitest
+
+The dev assistant will use [Vitest](https://vitest.dev/) to run tests inside the workspace sandbox. Install it as a dev dependency in your project:
+
+```bash npm2yarn
+npm install -D vitest
+```
+
+## Set up the workspace
+
+The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory. In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class), [`LocalFilesystem`](/reference/workspace/local-filesystem), and [`LocalSandbox`](/reference/workspace/local-sandbox) classes.
+
+Additionally, enable BM25 search indexing and load skills from the `skills` directory.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+// highlight-start
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+// highlight-end
+
+// highlight-start
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
+  skills: ['/skills'],
+  bm25: true,
+  autoIndexPaths: ['/docs', '/src'],
+});
+// highlight-end
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  workspace,
+});
+```
+
+At the root of your project, create a new folder called `workspace`. This is where all files will be stored and managed by the agent.
+
+## Add sample project files
+
+The workspace uses the following folder structure:
+
+- `workspace/src/`: Source code for the sample project
+- `workspace/tests/`: Test files
+- `workspace/docs/`: Project documentation
+- `workspace/skills/`: Coding standards and guidelines as [Agent Skills](https://agentskills.io)
+
+Get started by creating a `workspace/src/utils/string-helpers.ts` file with some utility functions, and a corresponding test file in `workspace/tests/string-helpers.test.ts`.
+
+```typescript title="workspace/src/utils/string-helpers.ts"
+export function capitalize(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+```
+
+```typescript title="workspace/tests/string-helpers.test.ts"
+import { describe, it, expect } from 'vitest';
+import { capitalize, slugify } from '../src/utils/string-helpers';
+
+describe('String Helpers', () => {
+  describe('capitalize', () => {
+    it('capitalizes first letter', () => {
+      expect(capitalize('hello')).toBe('Hello');
+    });
+  });
+
+  describe('slugify', () => {
+    it('converts to lowercase and replaces spaces', () => {
+      expect(slugify('Hello World')).toBe('hello-world');
+    });
+  });
+});
+```
+
+Create a skill definition at `workspace/skills/coding-standards/SKILL.md`. This tells the agent how to write and test code:
+
+```markdown title="workspace/skills/coding-standards/SKILL.md"
+---
+name: coding-standards
+description: Project coding standards and testing guidelines
+---
+
+# Coding Standards
+
+## Code Quality
+- Functions under 50 lines
+- Use descriptive variable names
+- Always add TypeScript types
+
+## Testing
+- Test all exported functions
+- Use AAA pattern: Arrange, Act, Assert
+- Cover happy paths and edge cases
+
+## Before Committing
+1. Write implementation
+2. Write comprehensive tests
+3. Run tests: `npm test`
+4. All tests must pass
+```
+
+Create a reference file at `workspace/skills/coding-standards/references/testing-guide.md` with detailed testing patterns:
+
+````markdown title="workspace/skills/coding-standards/references/testing-guide.md"
+# Testing Guide
+
+## AAA Pattern
+
+```typescript
+it('descriptive test name', () => {
+  // Arrange: Set up test data
+  const input = 'test';
+
+  // Act: Execute the function
+  const result = doSomething(input);
+
+  // Assert: Verify the result
+  expect(result).toBe('expected');
+});
+```
+
+## What to Test
+
+- Happy paths (normal inputs)
+- Edge cases (empty, null, boundary values)
+- Error cases (invalid inputs, exceptions)
+````
+
+## Create the dev assistant
+
+With the workspace set up, it's time to create the development assistant agent. This agent will have instructions for adding new features using test-driven development (TDD).
+
+Create a new file `src/mastra/agents/dev-assistant.ts` and define the agent:
+
+```typescript title="src/mastra/agents/dev-assistant.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const devAssistant = new Agent({
+  id: 'dev-assistant',
+  name: 'Dev Assistant',
+  instructions: `You are a development assistant.
+
+When adding features:
+1. Activate 'coding-standards' skill
+2. Search workspace for similar code examples
+3. Write the implementation following standards
+4. Write comprehensive tests. Leave existing tests in place, only add your new tests
+5. Execute the command \`npx vitest run\` to validate that all tests pass
+6. Update documentation if needed
+
+For every new feature: Write code → Write tests → Run tests → Update docs
+
+Always explain your reasoning and steps.`,
+  model: 'openai/gpt-4o',
+});
+```
+
+Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+// highlight-next-line
+import { devAssistant } from './agents/dev-assistant';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
+  skills: ['/skills'],
+  bm25: true,
+  autoIndexPaths: ['/docs', '/src'],
+});
+
+export const mastra = new Mastra({
+  workspace,
+  // highlight-next-line
+  agents: { devAssistant },
+});
+```
+
+## Test the assistant
+
+Start Mastra Studio and interact with the agent to see it in action.
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111) and navigate to the dev assistant.
+
+Try asking the agent to add a new function using TDD:
+
+```text
+Add a 'truncate' function to string-helpers.ts that shortens strings to a max length. Add '...' if truncated.
+
+Follow TDD: write tests first, then implementation.
+```
+
+Since agent responses are non-deterministic, the exact output will vary. However, you should see the agent follow a process similar to this:
+
+1. Activate the coding-standards skill
+1. Search the workspace for similar code patterns
+1. Write tests first, for example:
+
+    ```typescript
+    describe('truncate', () => {
+      it('truncates long strings', () => {
+        expect(truncate('Hello World', 5)).toBe('He...');
+      });
+
+      it('keeps short strings unchanged', () => {
+        expect(truncate('Hi', 10)).toBe('Hi');
+      });
+
+      it('handles edge cases', () => {
+        expect(truncate('', 5)).toBe('');
+      });
+    });
+    ```
+
+1. Write the implementation, for example:
+
+    ```typescript
+    export function truncate(str: string, maxLength: number): string {
+      if (!str || maxLength < 0) return str;
+      if (str.length <= maxLength) return str;
+      if (maxLength === 0) return '...';
+      return str.slice(0, maxLength - 3) + '...';
+    }
+    ```
+
+1. Run tests and verify they pass
+
+## Next steps
+
+You can extend this assistant to:
+
+- Add more skills for different languages or frameworks
+- Create specialized agents for backend, frontend, or DevOps
+- Integrate with GitHub for automated PR reviews
+- Build CI/CD automation
+- Add multi-agent workflows

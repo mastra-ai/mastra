@@ -274,6 +274,20 @@ describe('SkillsProcessor', () => {
       expect(result.tools).toHaveProperty('my-tool');
       expect(result.tools).toHaveProperty('skill-activate');
     });
+
+    it('should load skills based on request context', async () => {
+      const requestContext = { userId: 'test-user', sessionId: '123' };
+
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext,
+      } as any);
+
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
+    });
   });
 
   describe('skill-activate tool', () => {
@@ -628,6 +642,64 @@ describe('SkillsProcessor', () => {
       // Should preserve existing tools and not add skill tools
       expect(result.tools).toHaveProperty('existingTool');
       expect(result.tools).not.toHaveProperty('skill-activate');
+    });
+  });
+
+  describe('needsApprovalFn on skill tools', () => {
+    it('should set needsApprovalFn that returns false on skill-activate and skill-search', async () => {
+      const result = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      const activateTool = result.tools['skill-activate'] as any;
+      expect(activateTool.needsApprovalFn).toBeDefined();
+      expect(activateTool.needsApprovalFn()).toBe(false);
+
+      const searchTool = result.tools['skill-search'] as any;
+      expect(searchTool.needsApprovalFn).toBeDefined();
+      expect(searchTool.needsApprovalFn()).toBe(false);
+    });
+
+    it('should set needsApprovalFn that returns false on skill-read-* tools after activation', async () => {
+      // Activate a skill first
+      const result1 = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+      const activateTool = result1.tools['skill-activate'] as any;
+      await activateTool.execute({ name: 'code-review' });
+
+      // Process again to get read tools
+      mockMessageList.addSystem.mockClear();
+      const result2 = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      const refTool = result2.tools['skill-read-reference'] as any;
+      expect(refTool.needsApprovalFn).toBeDefined();
+      expect(refTool.needsApprovalFn()).toBe(false);
+
+      const scriptTool = result2.tools['skill-read-script'] as any;
+      expect(scriptTool.needsApprovalFn).toBeDefined();
+      expect(scriptTool.needsApprovalFn()).toBe(false);
+
+      const assetTool = result2.tools['skill-read-asset'] as any;
+      expect(assetTool.needsApprovalFn).toBeDefined();
+      expect(assetTool.needsApprovalFn()).toBe(false);
+    });
+
+    it('should not expose skill-read-* tools when no skills are activated', async () => {
+      const result = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      // Read tools should not exist when no skills are activated
+      expect(result.tools['skill-read-reference']).toBeUndefined();
+      expect(result.tools['skill-read-script']).toBeUndefined();
+      expect(result.tools['skill-read-asset']).toBeUndefined();
     });
   });
 

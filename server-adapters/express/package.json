@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.1.2-alpha.1",
+  "version": "1.1.4",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -47,7 +47,7 @@
     "express": "^5.1.0",
     "@types/express": "^5.0.5",
     "@types/cors": "^2.8.19",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "@ai-sdk/openai": "^2.0.62",
     "zod": "^3.25.0",
     "swagger-ui-express": "^5.0.1",

@@ -445,38 +445,38 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
     });
 
-    describe('addPendingMessageTokens', () => {
-      it('should add pending tokens to the record', async () => {
+    describe('setPendingMessageTokens', () => {
+      it('should set pending tokens on the record', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
 
-        await memoryStorage.addPendingMessageTokens(record.id, 100);
+        await memoryStorage.setPendingMessageTokens(record.id, 100);
 
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
         expect(updated?.pendingMessageTokens).toBe(100);
       });
 
-      it('should accumulate pending tokens across multiple calls', async () => {
+      it('should overwrite pending tokens on subsequent calls', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
 
-        await memoryStorage.addPendingMessageTokens(record.id, 50);
-        await memoryStorage.addPendingMessageTokens(record.id, 75);
+        await memoryStorage.setPendingMessageTokens(record.id, 50);
+        await memoryStorage.setPendingMessageTokens(record.id, 75);
 
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
-        expect(updated?.pendingMessageTokens).toBe(125);
+        expect(updated?.pendingMessageTokens).toBe(75);
       });
 
       it('should throw error for non-existent record', async () => {
-        await expect(memoryStorage.addPendingMessageTokens('non-existent-id', 100)).rejects.toThrow(/not found/);
+        await expect(memoryStorage.setPendingMessageTokens('non-existent-id', 100)).rejects.toThrow(/not found/);
       });
 
       it('should reset pending tokens when observations are updated', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
 
-        // Add pending tokens
-        await memoryStorage.addPendingMessageTokens(record.id, 100);
+        // Set pending tokens
+        await memoryStorage.setPendingMessageTokens(record.id, 100);
 
         // Update observations
         await memoryStorage.updateActiveObservations({

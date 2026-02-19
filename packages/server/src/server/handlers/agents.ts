@@ -159,6 +159,9 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
+  activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -333,6 +336,11 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
         }
       }
+
+      // Grep tool (filesystem-based, not BM25/vector)
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+      }
     }
 
     // Search tools (available if BM25 or vector search is enabled)
@@ -474,6 +482,16 @@ async function formatAgentList({
     },
   }));
 
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      logger.error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -494,7 +512,19 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
+    ...(agent.toRawConfig()?.activeVersionId
+      ? { activeVersionId: agent.toRawConfig()!.activeVersionId as string }
+      : {}),
+    hasDraft: !!(
+      agent.toRawConfig()?.resolvedVersionId &&
+      agent.toRawConfig()?.activeVersionId &&
+      agent.toRawConfig()!.resolvedVersionId !== agent.toRawConfig()!.activeVersionId
+    ),
   };
 }
 
@@ -696,6 +726,9 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
   };
 }
 
@@ -752,7 +785,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
-              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
 
               const serialized = await formatAgentList({

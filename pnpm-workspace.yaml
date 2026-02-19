@@ -1,4 +1,5 @@
 packages:
+  - mastracode
   - docs
   - packages/_vendored/*
   - packages/*
@@ -21,12 +22,12 @@ packages:
   - e2e-tests/workspace-compat
 
 catalog:
-  '@microsoft/api-extractor': '^7.56.0'
-  '@vitest/coverage-v8': 4.0.12
-  '@vitest/ui': 4.0.12
+  "@microsoft/api-extractor": "^7.56.3"
+  "@vitest/coverage-v8": 4.0.12
+  "@vitest/ui": 4.0.12
   vitest: 4.0.16
   typescript: ^5.9.3
   zod: ^4.3.6
 
 patchedDependencies:
-  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
+  "@changesets/get-dependents-graph": patches/@changesets__get-dependents-graph.patch

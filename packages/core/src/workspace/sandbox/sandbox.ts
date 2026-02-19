@@ -26,7 +26,7 @@
 
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
-import type { Lifecycle } from '../lifecycle';
+import type { SandboxLifecycle } from '../lifecycle';
 
 import type { MountManager } from './mount-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
@@ -44,15 +44,14 @@ import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types'
  * Sandboxes provide isolated environments for running untrusted code.
  * They may have their own filesystem that's separate from the workspace FS.
  *
- * Lifecycle methods (from Lifecycle interface) are all optional:
- * - init(): One-time setup (provision templates, install deps)
+ * Lifecycle methods (from SandboxLifecycle interface) are all optional:
  * - start(): Begin operation (spin up instance)
  * - stop(): Pause operation (pause instance)
  * - destroy(): Clean up resources (terminate instance)
  * - isReady(): Check if ready for operations
  * - getInfo(): Get status and metadata
  */
-export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
+export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   /** Unique identifier for this sandbox instance */
   readonly id: string;
 

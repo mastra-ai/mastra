@@ -302,11 +302,11 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Add to the pending message token count.
-   * Called when messages are processed but observation hasn't triggered yet.
-   * This allows accumulating tokens across multiple sessions.
+   * Set the pending message token count.
+   * Called at the end of each OM processing step to persist the current
+   * context window token count so the UI can display it on page load.
    */
-  async addPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 

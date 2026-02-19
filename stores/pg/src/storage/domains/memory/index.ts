@@ -20,6 +20,19 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+
+/**
+ * Try to import the OM schema statically. On older @mastra/core versions that
+ * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
+ * and getExportDDL / init() will simply skip the OM table.
+ */
+let _omTableSchema: Record<string, Record<string, any>> | undefined;
+try {
+  const storage = require('@mastra/core/storage');
+  _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
+} catch {
+  // OM not available in this version of core
+}
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -42,7 +55,15 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import {
+  PgDB,
+  resolvePgConfig,
+  generateTableSQL,
+  generateIndexSQL,
+  getSchemaName as dbGetSchemaName,
+  getTableName as dbGetTableName,
+} from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 // Database row type that includes timezone-aware columns
@@ -156,9 +177,9 @@ export class MemoryPG extends MemoryStorage {
 
   /**
    * Returns default index definitions for the memory domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
         name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
@@ -171,6 +192,63 @@ export class MemoryPG extends MemoryStorage {
         columns: ['thread_id', 'createdAt DESC'],
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables (threads, messages, resources, OM), indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+    const quotedSchemaName = dbGetSchemaName(schemaName);
+
+    // Tables: threads, messages, resources
+    for (const tableName of [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    // Observational memory table (if schema available in this version of core)
+    const omSchema = _omTableSchema?.[OM_TABLE];
+    if (omSchema) {
+      statements.push(
+        generateTableSQL({
+          tableName: OM_TABLE as any,
+          schema: omSchema,
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+      // idx_om_lookup_key index
+      const fullOmTableName = dbGetTableName({ indexName: OM_TABLE, schemaName: quotedSchemaName });
+      const idxPrefix = schemaPrefix ? `${schemaPrefix}` : '';
+      statements.push(
+        `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
+      );
+    }
+
+    // Default indexes
+    for (const idx of MemoryPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return MemoryPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
@@ -1460,7 +1538,7 @@ export class MemoryPG extends MemoryStorage {
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
-          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
           metadata: {
             ...metadata,
             clone: cloneMetadata,
@@ -1789,8 +1867,8 @@ export class MemoryPG extends MemoryStorage {
           input.observations,
           lastObservedAtStr,
           lastObservedAtStr,
-          input.tokenCount,
-          input.tokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.tokenCount),
           observedMessageIdsJson,
           nowStr,
           nowStr,
@@ -1885,8 +1963,8 @@ export class MemoryPG extends MemoryStorage {
           nowStr, // lastReflectionAt
           nowStr, // lastReflectionAtZ
           record.pendingMessageTokens,
-          record.totalTokensObserved,
-          record.observationTokenCount,
+          Math.round(record.totalTokensObserved),
+          Math.round(record.observationTokenCount),
           false, // isObserving
           false, // isReflecting
           false, // isBufferingObservation
@@ -2002,7 +2080,7 @@ export class MemoryPG extends MemoryStorage {
 
       if (lastBufferedAtTokens !== undefined) {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`;
-        values = [isBuffering, lastBufferedAtTokens, nowStr, nowStr, id];
+        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id];
       } else {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`;
         values = [isBuffering, nowStr, nowStr, id];
@@ -2093,7 +2171,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2102,16 +2180,16 @@ export class MemoryPG extends MemoryStorage {
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET 
-          "pendingMessageTokens" = "pendingMessageTokens" + $1, 
+          "pendingMessageTokens" = $1, 
           "updatedAt" = $2,
           "updatedAtZ" = $3
         WHERE id = $4`,
-        [tokenCount, nowStr, nowStr, id],
+        [Math.round(tokenCount), nowStr, nowStr, id],
       );
 
       if (result.rowCount === 0) {
         throw new MastraError({
-          id: createStorageErrorId('PG', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          id: createStorageErrorId('PG', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
           text: `Observational memory record not found: ${id}`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -2124,7 +2202,7 @@ export class MemoryPG extends MemoryStorage {
       }
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          id: createStorageErrorId('PG', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
@@ -2151,9 +2229,9 @@ export class MemoryPG extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
-        tokenCount: input.chunk.tokenCount,
+        tokenCount: Math.round(input.chunk.tokenCount),
         messageIds: input.chunk.messageIds,
-        messageTokens: input.chunk.messageTokens,
+        messageTokens: Math.round(input.chunk.messageTokens ?? 0),
         lastObservedAt: input.chunk.lastObservedAt,
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
@@ -2297,8 +2375,8 @@ export class MemoryPG extends MemoryStorage {
 
       // Combine activated observations
       const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedTokens = Math.round(activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0));
+      const activatedMessageTokens = Math.round(activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0));
       const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
       const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
       const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
@@ -2399,8 +2477,8 @@ export class MemoryPG extends MemoryStorage {
         WHERE id = $7`,
         [
           input.reflection,
-          input.tokenCount,
-          input.inputTokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.inputTokenCount),
           input.reflectedObservationLineCount,
           nowStr,
           nowStr,

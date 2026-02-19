@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 
 import {
   AdapterTestContext,
@@ -75,16 +75,21 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/workspaces/:workspaceId/skills-sh/install',
       '/workspaces/:workspaceId/skills-sh/remove',
       '/workspaces/:workspaceId/skills-sh/update',
-      // observational memory route requires OM-enabled agent configuration
+      // observational memory routes require OM-enabled agent configuration
       '/memory/observational-memory',
+      '/memory/observational-memory/buffer-status',
+      // skill publish requires blob storage not available in InMemoryStore
+      '/stored/skills/:storedSkillId/publish',
     ];
-    const activeRoutes = SERVER_ROUTES.filter(
-      r =>
-        !r.deprecated &&
-        r.responseType !== 'mcp-http' &&
-        r.responseType !== 'mcp-sse' &&
-        !routesRequiringExternalDeps.includes(r.path),
-    );
+    // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
+    const excludedPrefixes = ['/datasets'];
+    const isExcluded = (r: ServerRoute) =>
+      r.deprecated ||
+      r.responseType === 'mcp-http' ||
+      r.responseType === 'mcp-sse' ||
+      routesRequiringExternalDeps.includes(r.path) ||
+      excludedPrefixes.some(prefix => r.path.startsWith(prefix));
+    const activeRoutes = SERVER_ROUTES.filter(r => !isExcluded(r));
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
       describe(testName, () => {
@@ -377,7 +382,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
       // Test array query parameters for ALL GET routes
-      const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !r.deprecated);
+      const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !isExcluded(r));
       getRoutes.forEach(route => {
         it(`should handle array query parameters for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route);
@@ -436,15 +441,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
       });
 
-      // Test empty body for ALL POST routes with body schema (excluding MCP transport routes)
-      const postRoutesWithBody = SERVER_ROUTES.filter(
-        r =>
-          r.method === 'POST' &&
-          r.bodySchema &&
-          !r.deprecated &&
-          r.responseType !== 'mcp-http' &&
-          r.responseType !== 'mcp-sse',
-      );
+      // Test empty body for ALL POST routes with body schema
+      const postRoutesWithBody = SERVER_ROUTES.filter(r => r.method === 'POST' && r.bodySchema && !isExcluded(r));
       postRoutesWithBody.forEach(route => {
         it(`should handle empty body for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route);

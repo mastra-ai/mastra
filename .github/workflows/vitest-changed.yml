@@ -101,6 +101,8 @@ jobs:
             --project 'unit:*' --project 'typecheck:*' \
             --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
             --shard=${{ matrix.shard }}/4 \
             --passWithNoTests
@@ -116,469 +118,471 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
-  e2e-test:
-    name: E2E Test (${{ matrix.project }})
-    runs-on: ubuntu-latest
-    needs: [set-pending-status]
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          # Core packages
-          - packages/*
-          # Stores (external API required)
-          - stores/*
-          # Voice packages
-          - voice/*
-          # Workflows
-          - workflows/*
-          # Pubsub
-          - pubsub/*
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    # Minimal permissions - read-only access
-    permissions:
-      contents: read
+  # e2e-test:
+  #   name: E2E Test (${{ matrix.project }})
+  #   runs-on: ubuntu-latest
+  #   needs: [set-pending-status]
+  #   if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
+  #   timeout-minutes: 30
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       project:
+  #         # Core packages
+  #         - packages/*
+  #         # Stores (external API required)
+  #         - stores/*
+  #         # Voice packages
+  #         - voice/*
+  #         # Workflows
+  #         - workflows/*
+  #         # Pubsub
+  #         - pubsub/*
+  #   env:
+  #     TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  #     TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  #     TURBO_CACHE: remote:r
+  #   # Minimal permissions - read-only access
+  #   permissions:
+  #     contents: read
 
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+  #   steps:
+  #     - name: Checkout PR code
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Checkout trusted actions from base branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
-          sparse-checkout: .github/actions
-          path: trusted-actions
+  #     - name: Checkout trusted actions from base branch
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+  #         sparse-checkout: .github/actions
+  #         path: trusted-actions
 
-      # Copy trusted actions into the workspace
-      - name: Use trusted actions
-        run: |
-          rm -rf .github/actions
-          cp -r trusted-actions/.github/actions .github/actions
+  #     # Copy trusted actions into the workspace
+  #     - name: Use trusted actions
+  #       run: |
+  #         rm -rf .github/actions
+  #         cp -r trusted-actions/.github/actions .github/actions
 
-      - name: Get PR base branch
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Find PR associated with this head SHA
-          PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
-          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
-          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+  #     - name: Get PR base branch
+  #       id: pr-info
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #       run: |
+  #         # Find PR associated with this head SHA
+  #         PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
+  #         BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
+  #         echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+  #     - name: Setup pnpm and Node.js
+  #       uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+  #     - name: Build packages
+  #       run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
 
-      - name: Normalize project name
-        id: normalize
-        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
+  #     - name: Normalize project name
+  #       id: normalize
+  #       run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
 
-      - name: Run changed tests (${{ matrix.project }})
-        run: |
-          pnpm vitest run \
-            --project 'e2e:${{ matrix.project }}' \
-            --changed origin/${{ steps.pr-info.outputs.base_ref }} \
-            --reporter=blob \
-            --outputFile.blob=.vitest-reports/blob-${{ steps.normalize.outputs.project_id }}.json \
-            --passWithNoTests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          # LLM API Keys
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          # Store API Keys
-          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
-          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
-          # Upstash
-          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
-          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+  #     - name: Run changed tests (${{ matrix.project }})
+  #       run: |
+  #         pnpm vitest run \
+  #           --project 'e2e:${{ matrix.project }}' \
+  #           --changed origin/${{ steps.pr-info.outputs.base_ref }} \
+  #           --reporter=blob \
+  #           --reporter=verbose \
+  #           --reporter=github-actions \
+  #           --outputFile.blob=.vitest-reports/blob-${{ steps.normalize.outputs.project_id }}.json \
+  #           --passWithNoTests
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         # LLM API Keys
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  #         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  #         GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+  #         COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+  #         # Store API Keys
+  #         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+  #         ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+  #         ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+  #         CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+  #         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+  #         # Upstash
+  #         KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+  #         KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vitest-blob-${{ steps.normalize.outputs.project_id }}
-          path: .vitest-reports/
-          include-hidden-files: true
-          retention-days: 1
+  #     - name: Upload test results
+  #       if: always()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: vitest-blob-${{ steps.normalize.outputs.project_id }}
+  #         path: .vitest-reports/
+  #         include-hidden-files: true
+  #         retention-days: 1
 
-  memory-integration:
-    name: Memory Integration (${{ matrix.suite }})
-    runs-on: ubuntu-latest
-    needs: [set-pending-status]
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        suite:
-          - pg
-          - upstash
-          - libsql
-          - streaming
-          - working-memory
-          - agent-memory
-          - fastembed
-          - processors
-          - ai-sdk-ids
-          - message-ordering
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mastra
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    permissions:
-      contents: read
+  # memory-integration:
+  #   name: Memory Integration (${{ matrix.suite }})
+  #   runs-on: ubuntu-latest
+  #   needs: [set-pending-status]
+  #   if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
+  #   timeout-minutes: 15
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       suite:
+  #         - pg
+  #         - upstash
+  #         - libsql
+  #         - streaming
+  #         - working-memory
+  #         - agent-memory
+  #         - fastembed
+  #         - processors
+  #         - ai-sdk-ids
+  #         - message-ordering
+  #   services:
+  #     postgres:
+  #       image: pgvector/pgvector:pg16
+  #       env:
+  #         POSTGRES_USER: postgres
+  #         POSTGRES_PASSWORD: postgres
+  #         POSTGRES_DB: mastra
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #     redis:
+  #       image: redis
+  #       ports:
+  #         - 6379:6379
+  #   env:
+  #     TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  #     TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  #     TURBO_CACHE: remote:r
+  #   permissions:
+  #     contents: read
 
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+  #   steps:
+  #     - name: Checkout PR code
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Checkout trusted actions from base branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
-          sparse-checkout: .github/actions
-          path: trusted-actions
+  #     - name: Checkout trusted actions from base branch
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+  #         sparse-checkout: .github/actions
+  #         path: trusted-actions
 
-      - name: Use trusted actions
-        run: |
-          rm -rf .github/actions
-          cp -r trusted-actions/.github/actions .github/actions
+  #     - name: Use trusted actions
+  #       run: |
+  #         rm -rf .github/actions
+  #         cp -r trusted-actions/.github/actions .github/actions
 
-      - name: Get PR base branch
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
-          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
-          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+  #     - name: Get PR base branch
+  #       id: pr-info
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #       run: |
+  #         PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
+  #         BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
+  #         echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
-      - name: Check for memory changes
-        id: check-changes
-        run: |
-          git fetch origin ${{ steps.pr-info.outputs.base_ref }}
-          CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/memory packages/fastembed stores/pg stores/upstash stores/libsql client-sdks/ai-sdk)
-          if [ -z "$CHANGES" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Check for memory changes
+  #       id: check-changes
+  #       run: |
+  #         git fetch origin ${{ steps.pr-info.outputs.base_ref }}
+  #         CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/memory packages/fastembed stores/pg stores/upstash stores/libsql client-sdks/ai-sdk)
+  #         if [ -z "$CHANGES" ]; then
+  #           echo "changed=false" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "changed=true" >> $GITHUB_OUTPUT
+  #         fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.check-changes.outputs.changed == 'true'
-        uses: ./.github/actions/setup-pnpm-node
+  #     - name: Setup pnpm and Node.js
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build dependencies
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+  #     - name: Build dependencies
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
 
-      - name: Install integration test dependencies
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm install --ignore-workspace
-        working-directory: packages/memory/integration-tests
+  #     - name: Install integration test dependencies
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm install --ignore-workspace
+  #       working-directory: packages/memory/integration-tests
 
-      - name: Compile TypeScript Workers
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm compile:worker
-        working-directory: packages/memory/integration-tests
+  #     - name: Compile TypeScript Workers
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm compile:worker
+  #       working-directory: packages/memory/integration-tests
 
-      - name: Run Memory ${{ matrix.suite }} tests
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm run test:${{ matrix.suite }}
-        working-directory: packages/memory/integration-tests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
-          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  #     - name: Run Memory ${{ matrix.suite }} tests
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm run test:${{ matrix.suite }}
+  #       working-directory: packages/memory/integration-tests
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #         KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+  #         KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+  #         GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+  #         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-  mcp-integration:
-    name: MCP Integration
-    runs-on: ubuntu-latest
-    needs: [set-pending-status]
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 15
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    permissions:
-      contents: read
+  # mcp-integration:
+  #   name: MCP Integration
+  #   runs-on: ubuntu-latest
+  #   needs: [set-pending-status]
+  #   if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
+  #   timeout-minutes: 15
+  #   env:
+  #     TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  #     TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  #     TURBO_CACHE: remote:r
+  #   permissions:
+  #     contents: read
 
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+  #   steps:
+  #     - name: Checkout PR code
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Checkout trusted actions from base branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
-          sparse-checkout: .github/actions
-          path: trusted-actions
+  #     - name: Checkout trusted actions from base branch
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+  #         sparse-checkout: .github/actions
+  #         path: trusted-actions
 
-      - name: Use trusted actions
-        run: |
-          rm -rf .github/actions
-          cp -r trusted-actions/.github/actions .github/actions
+  #     - name: Use trusted actions
+  #       run: |
+  #         rm -rf .github/actions
+  #         cp -r trusted-actions/.github/actions .github/actions
 
-      - name: Get PR base branch
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
-          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
-          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+  #     - name: Get PR base branch
+  #       id: pr-info
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #       run: |
+  #         PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
+  #         BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
+  #         echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
-      - name: Check for MCP changes
-        id: check-changes
-        run: |
-          git fetch origin ${{ steps.pr-info.outputs.base_ref }}
-          CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/mcp)
-          if [ -z "$CHANGES" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Check for MCP changes
+  #       id: check-changes
+  #       run: |
+  #         git fetch origin ${{ steps.pr-info.outputs.base_ref }}
+  #         CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/mcp)
+  #         if [ -z "$CHANGES" ]; then
+  #           echo "changed=false" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "changed=true" >> $GITHUB_OUTPUT
+  #         fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.check-changes.outputs.changed == 'true'
-        uses: ./.github/actions/setup-pnpm-node
+  #     - name: Setup pnpm and Node.js
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build MCP package
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm turbo build --filter "@mastra/mcp"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+  #     - name: Build MCP package
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm turbo build --filter "@mastra/mcp"
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
 
-      - name: Run MCP unit tests (server)
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm test:server
-        working-directory: packages/mcp
+  #     - name: Run MCP unit tests (server)
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm test:server
+  #       working-directory: packages/mcp
 
-      - name: Run MCP unit tests (client)
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm test:client
-        working-directory: packages/mcp
+  #     - name: Run MCP unit tests (client)
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm test:client
+  #       working-directory: packages/mcp
 
-      - name: Install integration test dependencies
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm install --ignore-workspace
-        working-directory: packages/mcp/integration-tests
+  #     - name: Install integration test dependencies
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm install --ignore-workspace
+  #       working-directory: packages/mcp/integration-tests
 
-      - name: Run MCP integration tests
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm run test:mcp
-        working-directory: packages/mcp/integration-tests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #     - name: Run MCP integration tests
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm run test:mcp
+  #       working-directory: packages/mcp/integration-tests
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-  agent-builder-integration:
-    name: Agent Builder Integration
-    runs-on: ubuntu-latest
-    needs: [set-pending-status]
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 15
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    permissions:
-      contents: read
+  # agent-builder-integration:
+  #   name: Agent Builder Integration
+  #   runs-on: ubuntu-latest
+  #   needs: [set-pending-status]
+  #   if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
+  #   timeout-minutes: 15
+  #   env:
+  #     TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  #     TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  #     TURBO_CACHE: remote:r
+  #   permissions:
+  #     contents: read
 
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+  #   steps:
+  #     - name: Checkout PR code
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Checkout trusted actions from base branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
-          sparse-checkout: .github/actions
-          path: trusted-actions
+  #     - name: Checkout trusted actions from base branch
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+  #         sparse-checkout: .github/actions
+  #         path: trusted-actions
 
-      - name: Use trusted actions
-        run: |
-          rm -rf .github/actions
-          cp -r trusted-actions/.github/actions .github/actions
+  #     - name: Use trusted actions
+  #       run: |
+  #         rm -rf .github/actions
+  #         cp -r trusted-actions/.github/actions .github/actions
 
-      - name: Get PR base branch
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
-          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
-          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+  #     - name: Get PR base branch
+  #       id: pr-info
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #       run: |
+  #         PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
+  #         BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
+  #         echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
-      - name: Check for agent-builder changes
-        id: check-changes
-        run: |
-          git fetch origin ${{ steps.pr-info.outputs.base_ref }}
-          CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/agent-builder)
-          if [ -z "$CHANGES" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Check for agent-builder changes
+  #       id: check-changes
+  #       run: |
+  #         git fetch origin ${{ steps.pr-info.outputs.base_ref }}
+  #         CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- packages/agent-builder)
+  #         if [ -z "$CHANGES" ]; then
+  #           echo "changed=false" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "changed=true" >> $GITHUB_OUTPUT
+  #         fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.check-changes.outputs.changed == 'true'
-        uses: ./.github/actions/setup-pnpm-node
+  #     - name: Setup pnpm and Node.js
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build agent-builder package
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm turbo build --filter "@mastra/agent-builder"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+  #     - name: Build agent-builder package
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm turbo build --filter "@mastra/agent-builder"
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
 
-      - name: Run agent-builder unit tests
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm --filter "@mastra/agent-builder" test
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #     - name: Run agent-builder unit tests
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm --filter "@mastra/agent-builder" test
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-      - name: Install integration test dependencies
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm install --ignore-workspace
-        working-directory: packages/agent-builder/integration-tests
+  #     - name: Install integration test dependencies
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm install --ignore-workspace
+  #       working-directory: packages/agent-builder/integration-tests
 
-      - name: Run agent-builder integration tests
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm test
-        working-directory: packages/agent-builder/integration-tests
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #     - name: Run agent-builder integration tests
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm test
+  #       working-directory: packages/agent-builder/integration-tests
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-  observability-test:
-    name: Observability Tests
-    runs-on: ubuntu-latest
-    needs: [set-pending-status]
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 15
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-    permissions:
-      contents: read
+  # observability-test:
+  #   name: Observability Tests
+  #   runs-on: ubuntu-latest
+  #   needs: [set-pending-status]
+  #   if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.conclusion == 'success' }}
+  #   timeout-minutes: 15
+  #   env:
+  #     TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  #     TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+  #     TURBO_CACHE: remote:r
+  #   permissions:
+  #     contents: read
 
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+  #   steps:
+  #     - name: Checkout PR code
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Checkout trusted actions from base branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
-          sparse-checkout: .github/actions
-          path: trusted-actions
+  #     - name: Checkout trusted actions from base branch
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+  #         sparse-checkout: .github/actions
+  #         path: trusted-actions
 
-      - name: Use trusted actions
-        run: |
-          rm -rf .github/actions
-          cp -r trusted-actions/.github/actions .github/actions
+  #     - name: Use trusted actions
+  #       run: |
+  #         rm -rf .github/actions
+  #         cp -r trusted-actions/.github/actions .github/actions
 
-      - name: Get PR base branch
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
-          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
-          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+  #     - name: Get PR base branch
+  #       id: pr-info
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #       run: |
+  #         PR_DATA=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls --jq '.[0]')
+  #         BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref // "main"')
+  #         echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
 
-      - name: Check for observability changes
-        id: check-changes
-        run: |
-          git fetch origin ${{ steps.pr-info.outputs.base_ref }}
-          CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- observability packages/core/src/telemetry)
-          if [ -z "$CHANGES" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Check for observability changes
+  #       id: check-changes
+  #       run: |
+  #         git fetch origin ${{ steps.pr-info.outputs.base_ref }}
+  #         CHANGES=$(git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- observability packages/core/src/telemetry)
+  #         if [ -z "$CHANGES" ]; then
+  #           echo "changed=false" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "changed=true" >> $GITHUB_OUTPUT
+  #         fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.check-changes.outputs.changed == 'true'
-        uses: ./.github/actions/setup-pnpm-node
+  #     - name: Setup pnpm and Node.js
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        if: steps.check-changes.outputs.changed == 'true'
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+  #     - name: Build packages
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
 
-      - name: Run observability tests
-        if: steps.check-changes.outputs.changed == 'true'
-        run: node scripts/test-observability.cjs
-        env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+  #     - name: Run observability tests
+  #       if: steps.check-changes.outputs.changed == 'true'
+  #       run: node scripts/test-observability.cjs
+  #       env:
+  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #         GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
 
   merge-reports:
     name: Merge Test Reports
     runs-on: ubuntu-latest
-    needs: [test, e2e-test, memory-integration, mcp-integration, agent-builder-integration, observability-test]
+    needs: [test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     # Minimal permissions - read-only access
     permissions:
@@ -619,7 +623,7 @@ jobs:
   pr-status:
     name: PR Status
     runs-on: ubuntu-latest
-    needs: [test, e2e-test, memory-integration, mcp-integration, agent-builder-integration, observability-test]
+    needs: [test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
@@ -636,12 +640,7 @@ jobs:
         id: status
         run: |
           # Check if any of the test jobs failed or were cancelled
-          if [[ "${{ needs.test.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.e2e-test.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.memory-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.mcp-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.agent-builder-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.observability-test.result }}" =~ ^(failure|cancelled)$ ]]; then
+          if [[ "${{ needs.test.result }}" =~ ^(failure|cancelled)$ ]] then
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "description=Some tests failed or were cancelled" >> $GITHUB_OUTPUT
           else

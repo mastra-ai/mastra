@@ -57,7 +57,7 @@
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
     "@mastra/core": "*",
-    "@testing-library/react": "^16.3.0",
+    "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^27.0.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.7",

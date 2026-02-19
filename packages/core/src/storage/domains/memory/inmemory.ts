@@ -1180,13 +1180,13 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.observationalMemory.delete(key);
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    record.pendingMessageTokens = (record.pendingMessageTokens ?? 0) + tokenCount;
+    record.pendingMessageTokens = tokenCount;
     record.updatedAt = new Date();
   }
 
