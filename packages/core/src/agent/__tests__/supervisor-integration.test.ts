@@ -1554,3 +1554,441 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     expect(hookMock).toHaveBeenCalled();
   });
 });
+
+/**
+ * Completion feedback tests for the supervisor pattern.
+ * Tests scorer strategies, suppressFeedback flag, and multi-iteration callbacks.
+ *
+ * Key differences from agent-network.test.ts:
+ * - Supervisor uses completion-check-step.ts (stream-based scorers).
+ * - `suppressFeedback` stores a flag in the completion-check chunk payload and in the
+ *   feedback message's metadata; it does NOT prevent the message from being added to
+ *   the messageList or from being sent to the model in the next iteration.
+ * - maxSteps does NOT terminate the loop when a completion scorer keeps failing
+ *   (unlike the network flow).  Always ensure a scorer eventually passes to avoid
+ *   an infinite loop.
+ */
+describe('Supervisor Pattern - Completion feedback', () => {
+  it('should require all scorers to pass with "all" strategy', async () => {
+    const passingScorer = {
+      id: 'passing-scorer',
+      name: 'Passing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+    };
+
+    let adaptiveScorerCallCount = 0;
+    const adaptiveScorer = {
+      id: 'adaptive-scorer',
+      name: 'Adaptive Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        adaptiveScorerCallCount++;
+        return adaptiveScorerCallCount === 1
+          ? { score: 0, reason: 'Not yet complete' }
+          : { score: 1, reason: 'Now complete' };
+      }),
+    };
+
+    let modelCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'all-strategy-supervisor',
+      name: 'All Strategy Supervisor',
+      instructions: 'You complete tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          modelCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: `Response ${modelCallCount}`,
+            content: [{ type: 'text' as const, text: `Response ${modelCallCount}` }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          modelCallCount++;
+          const iter = modelCallCount;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${iter}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: `Response ${iter}` },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+    const stream = await supervisorAgent.stream('Complete a task', {
+      maxSteps: 5,
+      completion: {
+        scorers: [passingScorer as any, adaptiveScorer as any],
+        strategy: 'all',
+      },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    // Iter 1: adaptiveScorer fails → overall passed=false (strategy 'all' requires all to pass)
+    expect(completionCheckEvents[0].payload.passed).toBe(false);
+    expect(completionCheckEvents[0].payload.results).toHaveLength(2);
+
+    // Iter 2: both scorers pass → overall passed=true
+    expect(completionCheckEvents[1].payload.passed).toBe(true);
+    expect(completionCheckEvents.length).toBe(2);
+
+    expect(passingScorer.run).toHaveBeenCalledTimes(2);
+    expect(adaptiveScorer.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('should pass with one scorer using "any" strategy', async () => {
+    const passingScorer = {
+      id: 'passing-scorer',
+      name: 'Passing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+    };
+
+    const failingScorer = {
+      id: 'failing-scorer',
+      name: 'Failing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Failed' }),
+    };
+
+    const supervisorAgent = new Agent({
+      id: 'any-strategy-supervisor',
+      name: 'Any Strategy Supervisor',
+      instructions: 'You complete tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+    const stream = await supervisorAgent.stream('Complete a task', {
+      completion: {
+        scorers: [passingScorer as any, failingScorer as any],
+        strategy: 'any',
+      },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    // With 'any' strategy, one passing scorer is enough
+    expect(completionCheckEvents).toHaveLength(1);
+    expect(completionCheckEvents[0].payload.passed).toBe(true);
+    expect(completionCheckEvents[0].payload.results).toHaveLength(2);
+    expect(passingScorer.run).toHaveBeenCalled();
+    expect(failingScorer.run).toHaveBeenCalled();
+  });
+
+  it('should include scorer results and reason in completion-check event', async () => {
+    const mockScorer = {
+      id: 'detailed-scorer',
+      name: 'Detailed Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task clearly completed with all requirements met' }),
+    };
+
+    const supervisorAgent = new Agent({
+      id: 'scorer-results-supervisor',
+      name: 'Scorer Results Supervisor',
+      instructions: 'You complete tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Task done',
+          content: [{ type: 'text' as const, text: 'Task done' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Task done' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+
+    let completionCheckEvent: any;
+    const stream = await supervisorAgent.stream('Do the task', {
+      completion: { scorers: [mockScorer as any] },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvent = chunk;
+      }
+    }
+
+    expect(completionCheckEvent).toBeDefined();
+    expect(completionCheckEvent.payload.results).toHaveLength(1);
+    // ScorerResult uses scorerId/scorerName (not id/name)
+    expect(completionCheckEvent.payload.results[0].scorerId).toBe('detailed-scorer');
+    expect(completionCheckEvent.payload.results[0].reason).toBe('Task clearly completed with all requirements met');
+    expect(completionCheckEvent.payload.passed).toBe(true);
+  });
+
+  it('should report suppressFeedback: true in completion-check event when configured', async () => {
+    const passingScorer = {
+      id: 'scorer',
+      name: 'Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Done' }),
+    };
+
+    const makeStreamModel = () =>
+      new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+    // With suppressFeedback: true
+    const agentWithSuppression = new Agent({
+      id: 'suppress-feedback-supervisor',
+      name: 'Suppress Feedback Supervisor',
+      instructions: 'You complete tasks.',
+      model: makeStreamModel(),
+      memory: new MockMemory(),
+    });
+
+    let chunkWithSuppression: any;
+    const stream1 = await agentWithSuppression.stream('Do task', {
+      completion: { scorers: [passingScorer as any], suppressFeedback: true },
+    });
+    for await (const chunk of stream1.fullStream) {
+      if (chunk.type === 'completion-check') chunkWithSuppression = chunk;
+    }
+    expect(chunkWithSuppression.payload.suppressFeedback).toBe(true);
+
+    // Without suppressFeedback (default: false)
+    const agentDefault = new Agent({
+      id: 'default-feedback-supervisor',
+      name: 'Default Feedback Supervisor',
+      instructions: 'You complete tasks.',
+      model: makeStreamModel(),
+      memory: new MockMemory(),
+    });
+
+    let chunkDefault: any;
+    const stream2 = await agentDefault.stream('Do task', {
+      completion: { scorers: [passingScorer as any] },
+    });
+    for await (const chunk of stream2.fullStream) {
+      if (chunk.type === 'completion-check') chunkDefault = chunk;
+    }
+    expect(chunkDefault.payload.suppressFeedback).toBe(false);
+  });
+
+  it('should call onIterationComplete for each iteration in multi-iteration run', async () => {
+    const iterationCallbacks: any[] = [];
+    let scorerCallCount = 0;
+
+    // Scorer fails on calls 1 and 2, passes on call 3
+    const mockScorer = {
+      id: 'multi-iter-scorer',
+      name: 'Multi Iteration Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount < 3) {
+          return { score: 0, reason: `Attempt ${scorerCallCount} not complete` };
+        }
+        return { score: 1, reason: 'Finally complete' };
+      }),
+    };
+
+    let modelCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'multi-iter-callback-supervisor',
+      name: 'Multi Iteration Callback Supervisor',
+      instructions: 'You complete tasks iteratively.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          modelCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: `Response ${modelCallCount}`,
+            content: [{ type: 'text' as const, text: `Response ${modelCallCount}` }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          modelCallCount++;
+          const iter = modelCallCount;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${iter}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: `Response ${iter}` },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const stream = await supervisorAgent.stream('Complete a complex task', {
+      maxSteps: 5,
+      completion: { scorers: [mockScorer as any] },
+      onIterationComplete: context => {
+        iterationCallbacks.push({ ...context });
+      },
+    });
+
+    for await (const _chunk of stream.fullStream) {
+      // consume stream
+    }
+
+    // Scorer fails 2x then passes → 3 iterations total
+    expect(iterationCallbacks).toHaveLength(3);
+
+    // First two iterations are not final
+    expect(iterationCallbacks[0].isFinal).toBe(false);
+    expect(iterationCallbacks[1].isFinal).toBe(false);
+
+    // Last iteration is final (scorer passed → loop stops)
+    expect(iterationCallbacks[2].isFinal).toBe(true);
+
+    // Iteration numbers are 1-based (accumulatedSteps.length after push)
+    expect(iterationCallbacks[0].iteration).toBe(1);
+    expect(iterationCallbacks[1].iteration).toBe(2);
+    expect(iterationCallbacks[2].iteration).toBe(3);
+  });
+
+  it('should report maxIterationReached in completion-check when iteration equals maxSteps', async () => {
+    // Scorer fails on first call, passes on second — with maxSteps:2 the second iteration
+    // has currentIteration (2) >= maxSteps (2), so maxIterationReached should be true.
+    let scorerCallCount = 0;
+    const mockScorer = {
+      id: 'max-iter-scorer',
+      name: 'Max Iteration Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        return scorerCallCount === 1
+          ? { score: 0, reason: 'Not yet done' }
+          : { score: 1, reason: 'Done on second attempt' };
+      }),
+    };
+
+    let modelCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'max-iter-supervisor',
+      name: 'Max Iteration Supervisor',
+      instructions: 'You complete tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          modelCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: `Response ${modelCallCount}`,
+            content: [{ type: 'text' as const, text: `Response ${modelCallCount}` }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          modelCallCount++;
+          const iter = modelCallCount;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${iter}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: `Response ${iter}` },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+    const stream = await supervisorAgent.stream('Complete a task', {
+      maxSteps: 2,
+      completion: { scorers: [mockScorer as any] },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    expect(completionCheckEvents).toHaveLength(2);
+    // First iteration (currentIteration=1): 1 >= 2 is false
+    expect(completionCheckEvents[0].payload.maxIterationReached).toBe(false);
+    // Second iteration (currentIteration=2): 2 >= 2 is true
+    expect(completionCheckEvents[1].payload.maxIterationReached).toBe(true);
+  });
+});
