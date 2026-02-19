@@ -16,7 +16,7 @@ This file provides guidance to coding agents when working with code in this repo
   - `@docs/`
   - `@integrations/`
   - `@observability/`
-  - `@packasges/`
+  - `@packages/`
   - `@pubsub/`
   - `@server-adapters/`
   - `@stores/`
