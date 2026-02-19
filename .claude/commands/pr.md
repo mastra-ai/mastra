@@ -35,7 +35,9 @@ pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--p
 - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
 - For larger, more substantial changes, also answer the "Why" behind the changes
 
-If the changes span multiple packages (e.g. `@mastra/core`, `@mastra/memory`, `mastra`, so 3 packages) and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups are. Example: The majority of the main feature was changed in `@mastra/memory` and only supporting changes were done in `@mastra/core` and `mastra`. Then `@mastra/memory` needs its own changeset separate from the others. You can achieve this by running the CLI multiple times and selecting the appropriate packages for each changeset.
+If the changes span multiple packages (e.g. `@mastra/core`, `@mastra/memory`, `mastra`, so 3 packages) and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist. Example: The majority of the main feature was changed in `@mastra/memory` and only supporting changes were done in `@mastra/core` and `mastra`. Then `@mastra/memory` needs its own changeset separate from the others. You can achieve this by running the CLI multiple times and selecting the appropriate packages for each changeset.
+
+**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.
 
 ## Open a PR using the GitHub CLI
 
