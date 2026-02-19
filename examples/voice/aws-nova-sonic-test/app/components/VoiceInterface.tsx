@@ -7,7 +7,6 @@ type Message = {
   role: 'user' | 'assistant';
   text: string;
   timestamp: Date;
-  isFinal?: boolean; // true once the first FINAL text has been applied (to distinguish replace vs append)
 };
 
 export default function VoiceInterface() {
@@ -163,22 +162,22 @@ export default function VoiceInterface() {
             return;
           }
 
-          // Nova Sonic sends multiple text events per assistant turn:
-          //   1. USER FINAL — ASR transcription of what the user said
-          //   2. One or more ASSISTANT SPECULATIVE — preview of planned speech segments
-          //      (Nova Sonic splits long responses into multiple content blocks, each
-          //       with its own SPECULATIVE text. These should all go into ONE bubble.)
-          //   3. One or more ASSISTANT FINAL — transcript of what was actually spoken
-          //      (one per content block, arrives after all audio)
+          // Nova Sonic event flow per content block:
+          //   SPECULATIVE text → audio chunks → FINAL text
+          // For long responses with N content blocks this repeats N times:
+          //   SPEC1 → audio1 → FINAL1 → SPEC2 → audio2 → FINAL2 → ... → completionEnd
           //
-          // To avoid duplicate bubbles:
-          // - ASSISTANT SPECULATIVE → create new on role change, APPEND on same role
-          //   (but if previous assistant msg is already finalized, start new — it's a new turn)
-          // - ASSISTANT FINAL → first FINAL replaces speculative text (sets isFinal),
-          //   subsequent FINALs append to build the full transcript
-          // - USER text → create on role change, replace on same role
+          // Key insight: FINAL arrives BETWEEN SPECULATIVEs of successive blocks.
+          // Using FINAL for any state tracking (like isFinal) breaks SPECULATIVE
+          // appending for subsequent blocks. So we ignore FINAL entirely for display
+          // and rely purely on role change for turn boundaries.
+          //
+          // Rules:
+          // - ASSISTANT SPECULATIVE → create on role change, append if last is assistant
+          // - ASSISTANT FINAL → ignore (speculative text is the real-time preview)
+          // - USER (any stage) → create on role change, replace on same role
 
-          // New assistant content means a new response is starting — clear barge-in suppression
+          // New assistant content → clear barge-in audio suppression
           if (role === 'assistant' && generationStage === 'SPECULATIVE') {
             suppressAudioRef.current = false;
           }
@@ -186,50 +185,35 @@ export default function VoiceInterface() {
           setMessages(prev => {
             const lastMessage = prev[prev.length - 1];
 
-            // ASSISTANT FINAL: first FINAL replaces speculative text, subsequent FINALs append
+            // ASSISTANT FINAL: skip — speculative text already matches the audio.
+            // Using FINAL would either erase accumulated text or break turn tracking.
             if (role === 'assistant' && generationStage === 'FINAL') {
-              const lastAssistantIdx = prev.findLastIndex(m => m.role === 'assistant');
-              if (lastAssistantIdx >= 0) {
-                const lastAssistant = prev[lastAssistantIdx];
-                if (lastAssistant.isFinal) {
-                  // Already finalized — append (another FINAL block in same turn)
-                  return prev.map((msg, idx) =>
-                    idx === lastAssistantIdx ? { ...msg, text: msg.text + text } : msg
-                  );
-                }
-                // First FINAL — replace speculative text and mark as finalized
-                return prev.map((msg, idx) =>
-                  idx === lastAssistantIdx ? { ...msg, text, isFinal: true } : msg
-                );
-              }
-              // No existing assistant message — create one
-              return [...prev, { role: 'assistant' as const, text, timestamp: new Date(), isFinal: true }];
+              return prev;
             }
 
-            // ASSISTANT SPECULATIVE: create on role change or new turn, append within same turn
-            if (role === 'assistant' && generationStage === 'SPECULATIVE') {
-              if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.isFinal) {
-                // Same turn, still speculative — append
+            // ASSISTANT SPECULATIVE: create on role change, append within same turn
+            if (role === 'assistant') {
+              if (lastMessage && lastMessage.role === 'assistant') {
+                // Same turn — append text to existing bubble
                 return prev.map((msg, idx) =>
                   idx === prev.length - 1 ? { ...msg, text: msg.text + text } : msg
                 );
               }
-              // Role change OR previous assistant message was finalized (new turn) — create new
+              // Role change — new assistant bubble
               return [...prev, { role: 'assistant' as const, text, timestamp: new Date() }];
             }
 
-            // USER text (SPECULATIVE or FINAL): create on role change, replace on same role
+            // USER text: create on role change, replace on same role
             if (role === 'user') {
               if (!lastMessage || lastMessage.role !== 'user') {
                 return [...prev, { role: 'user' as const, text, timestamp: new Date() }];
               }
-              // Same role user → replace (speculative → final transcription)
               return prev.map((msg, idx) =>
                 idx === prev.length - 1 ? { ...msg, text } : msg
               );
             }
 
-            // Fallback for unknown generationStage: role change → new, same → replace
+            // Fallback
             if (!lastMessage || lastMessage.role !== role) {
               return [...prev, { role: role as 'user' | 'assistant', text, timestamp: new Date() }];
             }
