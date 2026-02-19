@@ -43,6 +43,9 @@ export async function getAwsCredentials(
 
     return credentials;
   } catch (error) {
+    if (error instanceof NovaSonicError) {
+      throw error;
+    }
     throw new NovaSonicError(
       NovaSonicErrorCode.AUTHENTICATION_FAILED,
       `Failed to load AWS credentials: ${error instanceof Error ? error.message : 'Unknown error'}`,

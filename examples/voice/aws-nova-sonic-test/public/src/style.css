@@ -275,38 +275,6 @@ button:disabled,
   background-color: #fd7e4a;
 }
 
-.thinking-dots {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  height: 20px;
-  margin-left: 5px;
-  vertical-align: middle;
-}
-
-.thinking-text {
-  display: inline-block;
-  margin-right: 4px;
-  font-style: italic;
-}
-
-.thinking-dots .dot {
-  width: 8px;
-  height: 8px;
-  background-color: #888;
-  border-radius: 50%;
-  display: inline-block;
-  animation: pulse 1.5s infinite ease-in-out;
-}
-
-.message.user .thinking-dots .dot {
-  background-color: #4a76fd;
-}
-
-.message.assistant .thinking-dots .dot {
-  background-color: #fd7e4a;
-}
-
 .thinking-dots .dot:nth-child(2) {
   animation-delay: 0.2s;
 }
