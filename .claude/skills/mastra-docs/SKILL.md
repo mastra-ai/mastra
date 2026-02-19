@@ -17,5 +17,9 @@ Instructions and styleguides for writing and maintaining Mastra documentation. T
 Follow the general styleguide at `@docs/styleguides/STYLEGUIDE.md` for all documentation. Additionally, refer to these specific styleguides when writing different types of documentation:
 
 - `@docs/styleguides/DOC.md` - For any file inside `@docs/src/content/en/docs/`
-- `@docs/styleguides/GUIDE.md` - For any file inside `@docs/src/content/en/guides/`
+- For any file inside `@docs/src/content/en/guides/` choose the correct styleguide based on content:
+  - `@docs/styleguides/GUIDE_QUICKSTART.md` - For quickstart guides that get the reader to a working result as fast as possible with a specific library/framework.
+  - `@docs/styleguides/GUIDE_TUTORIAL.md` - For tutorial guides that teach the reader how to build something specific with Mastra, going deeper into concepts.
+  - `@docs/styleguides/GUIDE_INTEGRATION.md` - For integration guides that provide a comprehensive reference for using Mastra with a specific external library or ecosystem.
+  - `@docs/styleguides/GUIDE_DEPLOYMENT.md` - For deployment guides that walk the reader through deploying their Mastra application to a specific platform.
 - `@docs/styleguides/REFERENCE.md` - For any file inside `@docs/src/content/en/reference/`

@@ -27,7 +27,11 @@ All documentation should be written in English and placed in the appropriate sec
 Always follow the general styleguide at `@styleguides/STYLEGUIDE.md` when writing or editing documentation. Additionally, refer to these styleguides for specific types of documentation:
 
 - `src/content/en/docs/` - `@styleguides/DOC.md`
-- `src/content/en/guides/` - `@styleguides/GUIDE.md`
+- For any file inside `@docs/src/content/en/guides/` choose the correct styleguide based on content:
+  - `@docs/styleguides/GUIDE_QUICKSTART.md` - For quickstart guides that get the reader to a working result as fast as possible with a specific library/framework.
+  - `@docs/styleguides/GUIDE_TUTORIAL.md` - For tutorial guides that teach the reader how to build something specific with Mastra, going deeper into concepts.
+  - `@docs/styleguides/GUIDE_INTEGRATION.md` - For integration guides that provide a comprehensive reference for using Mastra with a specific external library or ecosystem.
+  - `@docs/styleguides/GUIDE_DEPLOYMENT.md` - For deployment guides that walk the reader through deploying their Mastra application to a specific platform.
 - `src/content/en/reference/` - `@styleguides/REFERENCE.md`
 
 Refer to the `@CONTRIBUTING.md` file for instructions on how to set frontmatter and use available MDX components.
