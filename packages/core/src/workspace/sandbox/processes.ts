@@ -3,12 +3,14 @@
  *
  * Abstract base class and local implementation for sandbox process management.
  * The base class handles lifecycle (ensureRunning), handle tracking, and
- * common operations (list, get, killAll). Subclasses implement doSpawn().
+ * common operations (list, get, killAll). Subclasses override spawn().
  */
 
 import * as childProcess from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
+import type { LocalSandbox } from './local-sandbox';
+import type { MastraSandbox } from './mastra-sandbox';
 import type { ProcessHandle, CommandResult, ProcessInfo, SpawnProcessOptions } from './types';
 
 // =============================================================================
@@ -23,10 +25,11 @@ import type { ProcessHandle, CommandResult, ProcessInfo, SpawnProcessOptions } f
  * - Tracking spawned processes by PID
  * - Common operations: list, get, killAll
  *
- * Subclasses only need to implement `doSpawn()` with their platform-specific logic.
+ * Subclasses override `spawn()` with their platform-specific logic.
+ * The base class constructor wraps it with ensureRunning + handle tracking.
  *
- * @typeParam TSandbox - The sandbox type, must have `ensureRunning()`.
- *   Subclasses can require additional properties (e.g. `workingDirectory`, `instance`).
+ * @typeParam TSandbox - The sandbox type. Subclasses narrow this to access
+ *   sandbox-specific properties (e.g. `workingDirectory`, `instance`).
  *
  * @example
  * ```typescript
@@ -38,26 +41,36 @@ import type { ProcessHandle, CommandResult, ProcessInfo, SpawnProcessOptions } f
  * await proc?.kill();
  * ```
  */
-export abstract class SandboxProcessManager<
-  TSandbox extends { ensureRunning(): Promise<void> } = { ensureRunning(): Promise<void> },
-> {
+export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = MastraSandbox> {
   protected readonly sandbox: TSandbox;
   private readonly _handles = new Map<number, ProcessHandle>();
 
   constructor(sandbox: TSandbox) {
     this.sandbox = sandbox;
+
+    // Wrap the subclass's spawn() with ensureRunning + handle tracking.
+    // `this.spawn` resolves to the subclass override via prototype chain.
+    const implSpawn = this.spawn.bind(this);
+    this.spawn = async (
+      command: string,
+      args: string[] = [],
+      options: SpawnProcessOptions = {},
+    ): Promise<ProcessHandle> => {
+      await this.sandbox.ensureRunning();
+      const handle = await implSpawn(command, args, options);
+      this._handles.set(handle.pid, handle);
+      return handle;
+    };
   }
 
-  /** Spawn a background process. Auto-starts the sandbox if needed. */
-  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    await this.sandbox.ensureRunning();
-    const handle = await this.doSpawn(command, args, options);
-    this._handles.set(handle.pid, handle);
-    return handle;
+  /**
+   * Spawn a background process.
+   * Subclasses override this with platform-specific logic.
+   * The base class wraps it with ensureRunning + handle tracking automatically.
+   */
+  async spawn(_command: string, _args: string[] = [], _options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
+    throw new Error(`${this.constructor.name} must implement spawn()`);
   }
-
-  /** Platform-specific spawn logic. Called after ensureRunning(). */
-  protected abstract doSpawn(command: string, args: string[], options: SpawnProcessOptions): Promise<ProcessHandle>;
 
   /** List all tracked background processes. */
   async list(): Promise<ProcessInfo[]> {
@@ -187,18 +200,12 @@ class LocalProcessHandle implements ProcessHandle {
 // Local Process Manager
 // =============================================================================
 
-/** Subset of LocalSandbox that the process manager needs. */
-interface LocalSandboxRef {
-  ensureRunning(): Promise<void>;
-  readonly workingDirectory: string;
-}
-
 /**
  * Local implementation of SandboxProcessManager.
  * Spawns processes via child_process.spawn.
  */
-export class LocalProcessManager extends SandboxProcessManager<LocalSandboxRef> {
-  protected async doSpawn(command: string, args: string[], options: SpawnProcessOptions): Promise<ProcessHandle> {
+export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
+  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const env = {
       PATH: process.env.PATH,

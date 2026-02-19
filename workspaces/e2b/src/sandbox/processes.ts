@@ -9,6 +9,8 @@ import type { ProcessHandle as MastraProcessHandle, CommandResult, SpawnProcessO
 import { SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandHandle as E2BCommandHandle, Sandbox } from 'e2b';
 
+import type { E2BSandbox } from './index';
+
 import { shellQuote } from '../utils/shell-quote';
 
 // =============================================================================
@@ -97,29 +99,19 @@ class E2BProcessHandle implements MastraProcessHandle {
 // E2B Process Manager
 // =============================================================================
 
-/** Subset of E2BSandbox that the process manager needs. */
-interface E2BSandboxRef {
-  ensureRunning(): Promise<void>;
-  readonly instance: Sandbox;
-}
-
 /**
  * E2B implementation of SandboxProcessManager.
  * Uses the E2B SDK's commands.run() with background: true.
  */
-export class E2BProcessManager extends SandboxProcessManager<E2BSandboxRef> {
+export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
   private readonly _env: Record<string, string>;
 
-  constructor(sandbox: E2BSandboxRef, env: Record<string, string> = {}) {
+  constructor(sandbox: E2BSandbox, env: Record<string, string> = {}) {
     super(sandbox);
     this._env = env;
   }
 
-  protected async doSpawn(
-    command: string,
-    args: string[],
-    options: SpawnProcessOptions,
-  ): Promise<MastraProcessHandle> {
+  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraProcessHandle> {
     const e2b = this.sandbox.instance;
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 
