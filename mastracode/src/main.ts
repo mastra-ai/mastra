@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Main entry point for Mastra Code TUI.
  */
@@ -9,17 +10,19 @@ import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
-const { harness, mcpManager } = createMastraCode();
+const { harness, mcpManager, hookManager, authStorage } = createMastraCode();
 
 const tui = new MastraTUI({
   harness,
+  hookManager,
+  authStorage,
   appName: 'Mastra Code',
   version: '0.1.0',
   inlineQuestions: true,
 });
 
 async function main() {
-  if (mcpManager.hasServers()) {
+  if (mcpManager?.hasServers()) {
     await mcpManager.init();
     const statuses = mcpManager.getServerStatuses();
     const connected = statuses.filter(s => s.connected);
@@ -56,22 +59,22 @@ async function main() {
   });
 }
 
-process.on('beforeExit', async () => {
-  await Promise.all([mcpManager.disconnect(), harness.stopHeartbeats()]);
-});
-
-const cleanup = () => {
-  harness.releaseCurrentThreadLock();
+const asyncCleanup = async () => {
   releaseAllThreadLocks();
+  await Promise.allSettled([mcpManager?.disconnect(), harness.stopHeartbeats()]);
 };
-process.on('exit', cleanup);
+
+process.on('beforeExit', () => {
+  void asyncCleanup();
+});
+process.on('exit', () => {
+  releaseAllThreadLocks();
+});
 process.on('SIGINT', () => {
-  cleanup();
-  process.exit(0);
+  void asyncCleanup().finally(() => process.exit(0));
 });
 process.on('SIGTERM', () => {
-  cleanup();
-  process.exit(0);
+  void asyncCleanup().finally(() => process.exit(0));
 });
 
 main().catch(error => {

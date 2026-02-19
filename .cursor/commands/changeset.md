@@ -20,7 +20,7 @@ pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--p
 
 - The CLI auto-detects changed packages from git and defaults them to `patch` bumps
 - You can override the bump type by specifying `--major` or `--minor` for specific packages
-- Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor @mastra/cli`
+- Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor mastra`
 
 ## Version Bump Types
 
@@ -38,4 +38,7 @@ pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--p
 - If the change is a breaking change or is adding a new feature, ensure that a code example is provided. This code example should show the public API usage (the before and after). Do not show code examples of internal implementation details.
 - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
 - For larger, more substantial changes, also answer the "Why" behind the changes
-- If changes span multiple packages with different purposes, run the CLI multiple times to create separate changesets for each logical group of changes.
+
+If the changes span multiple packages (e.g. `@mastra/core`, `@mastra/memory`, `mastra`, so 3 packages) and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist. Example: The majority of the main feature was changed in `@mastra/memory` and only supporting changes were done in `@mastra/core` and `mastra`. Then `@mastra/memory` needs its own changeset separate from the others. You can achieve this by running the CLI multiple times and selecting the appropriate packages for each changeset.
+
+**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.

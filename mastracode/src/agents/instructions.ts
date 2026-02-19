@@ -1,10 +1,10 @@
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { stateSchema } from '../schema.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
 export function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
-  const harnessContext = requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined;
+  const harnessContext = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
   const state = harnessContext?.state;
   const modeId = harnessContext?.modeId ?? 'build';
 

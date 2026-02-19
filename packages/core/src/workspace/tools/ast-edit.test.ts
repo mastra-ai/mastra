@@ -192,6 +192,95 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(result).toContain('No changes');
     });
 
+    it('should merge named import into existing import with aliases', async () => {
+      const code = `import { foo as bar } from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['baz'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      expect(content).toContain('foo as bar');
+      expect(content).toContain('baz');
+    });
+
+    it('should add default import with additional named imports', async () => {
+      const code = `const x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'express', names: ['express', 'Router', 'Request'], isDefault: true },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      expect(content).toContain("import express, { Router, Request } from 'express';");
+    });
+
+    it('should insert new value import when only a type-only import exists', async () => {
+      const code = `import type { Foo } from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['bar'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      // Original type import preserved, new value import added
+      expect(content).toContain("import type { Foo } from 'utils';");
+      expect(content).toContain("import { bar } from 'utils';");
+    });
+
+    it('should insert new value import when only a namespace import exists', async () => {
+      const code = `import * as utils from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['bar'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      // Original namespace import preserved, new named import added
+      expect(content).toContain("import * as utils from 'utils';");
+      expect(content).toContain("import { bar } from 'utils';");
+    });
+
     it('should error when importSpec missing', async () => {
       await fs.writeFile(path.join(tempDir, 'test.ts'), 'const x = 1;');
 
@@ -254,9 +343,9 @@ describeIfAstGrep('workspace_ast_edit', () => {
   });
 
   // ===========================================================================
-  // Rename Function
+  // Rename
   // ===========================================================================
-  describe('rename-function transform', () => {
+  describe('rename transform', () => {
     it('should rename function declaration and call sites', async () => {
       const code = `function greet(name: string) {\n  return "Hello " + name;\n}\n\ngreet("world");\ngreet("foo");`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
@@ -268,7 +357,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.ts',
-        transform: 'rename-function',
+        transform: 'rename',
         targetName: 'greet',
         newName: 'sayHello',
       });
@@ -283,29 +372,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(content).not.toMatch(/\bgreet\b/);
     });
 
-    it('should error when targetName or newName missing', async () => {
-      await fs.writeFile(path.join(tempDir, 'test.ts'), 'function foo() {}');
-
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
-        path: '/test.ts',
-        transform: 'rename-function',
-        targetName: 'foo',
-      });
-
-      expect(result).toContain('newName');
-    });
-  });
-
-  // ===========================================================================
-  // Rename Variable
-  // ===========================================================================
-  describe('rename-variable transform', () => {
-    it('should rename all identifier occurrences', async () => {
+    it('should rename variable declarations and all references', async () => {
       const code = `const count = 0;\nconst total = count + 1;\nconsole.log(count);`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
 
@@ -316,7 +383,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.ts',
-        transform: 'rename-variable',
+        transform: 'rename',
         targetName: 'count',
         newName: 'counter',
       });
@@ -330,6 +397,23 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(content).toContain('console.log(counter)');
       // 'count' appears as substring of 'counter', so use word boundary check
       expect(content).not.toMatch(/\bcount\b/);
+    });
+
+    it('should error when targetName or newName missing', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.ts'), 'function foo() {}');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'rename',
+        targetName: 'foo',
+      });
+
+      expect(result).toContain('newName');
     });
   });
 
@@ -354,25 +438,123 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       expect(result).not.toContain('No changes');
     });
+
+    it('should handle TSX files with JSX syntax', async () => {
+      const code = `const App = () => <div>hello</div>;`;
+      await fs.writeFile(path.join(tempDir, 'test.tsx'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.tsx',
+        transform: 'rename',
+        targetName: 'App',
+        newName: 'MyApp',
+      });
+
+      expect(result).not.toContain('No changes');
+      const content = await fs.readFile(path.join(tempDir, 'test.tsx'), 'utf-8');
+      expect(content).toContain('MyApp');
+    });
+
+    it('should handle JSX files with JSX syntax', async () => {
+      const code = `const App = () => <div>hello</div>;`;
+      await fs.writeFile(path.join(tempDir, 'test.jsx'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.jsx',
+        transform: 'rename',
+        targetName: 'App',
+        newName: 'MyApp',
+      });
+
+      expect(result).not.toContain('No changes');
+      const content = await fs.readFile(path.join(tempDir, 'test.jsx'), 'utf-8');
+      expect(content).toContain('MyApp');
+    });
+
+    it('should handle CSS files', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.css'), '.foo { color: red; }');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.css',
+        pattern: '.foo {}',
+        replacement: '.bar {}',
+      });
+
+      // CSS grammar is recognized — the key thing is it doesn't error with "Unsupported file type"
+      expect(result).not.toContain('Unsupported file type');
+    });
+
+    it('should handle HTML files', async () => {
+      const code = `<div class="foo">hello</div>`;
+      await fs.writeFile(path.join(tempDir, 'test.html'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.html',
+        pattern: '<div class="foo">$CONTENT</div>',
+        replacement: '<section class="foo">$CONTENT</section>',
+      });
+
+      // HTML pattern matching may not match depending on ast-grep's HTML grammar;
+      // the key thing is it doesn't error with "Unsupported file type"
+      expect(result).not.toContain('Unsupported file type');
+    });
+
+    it('should return error for unsupported file types', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.py'), 'print("hello")');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.py',
+        pattern: 'print($ARG)',
+        replacement: 'log($ARG)',
+      });
+
+      expect(result).toContain('Unsupported file type');
+    });
   });
 
   // ===========================================================================
   // Error Cases
   // ===========================================================================
   describe('error handling', () => {
-    it('should throw for non-existent file', async () => {
+    it('should return error message for non-existent file', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       const tools = createWorkspaceTools(workspace);
 
-      await expect(
-        tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
-          path: '/nonexistent.ts',
-          pattern: 'foo',
-          replacement: 'bar',
-        }),
-      ).rejects.toThrow();
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/nonexistent.ts',
+        pattern: 'foo',
+        replacement: 'bar',
+      });
+
+      expect(result).toContain('File not found');
+      expect(result).toContain('write_file');
     });
   });
 });

@@ -13,8 +13,8 @@ import { z } from 'zod';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
+import { FileNotFoundError, WorkspaceReadOnlyError } from '../errors';
+import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 
 // =============================================================================
 // Types
@@ -29,6 +29,7 @@ interface Replacement {
 interface TransformResult {
   content: string;
   count: number;
+  error?: string;
 }
 
 interface ImportSpec {
@@ -37,32 +38,58 @@ interface ImportSpec {
   isDefault?: boolean;
 }
 
+/**
+ * Minimal interface for an ast-grep SgNode.
+ * Avoids importing @ast-grep/napi types directly since it's an optional dep.
+ */
+interface SgNode {
+  text(): string;
+  range(): { start: { index: number }; end: { index: number } };
+  findAll(config: { rule: Record<string, unknown> }): SgNode[];
+  getMatch(name: string): SgNode | null;
+}
+
+/** Minimal interface for the ast-grep Lang enum values. */
+type LangValue = unknown;
+
+/** The subset of @ast-grep/napi we use after dynamic import. */
+interface AstGrepModule {
+  parse(lang: LangValue, content: string): { root(): SgNode };
+  Lang: Record<string, LangValue>;
+}
+
 // =============================================================================
 // Dynamic Import
 // =============================================================================
 
 // Cache the import result so we only try once
-let astGrepModule: { parse: any; Lang: any } | null | undefined;
+let astGrepModule: AstGrepModule | null | undefined;
+let loadingPromise: Promise<AstGrepModule | null> | undefined;
 
 /**
  * Try to load @ast-grep/napi. Returns null if not available.
  * Uses dynamic import to avoid compile-time dependency.
+ * Concurrent callers share the same in-flight promise.
  */
-export async function loadAstGrep(): Promise<{ parse: any; Lang: any } | null> {
+export async function loadAstGrep(): Promise<AstGrepModule | null> {
   if (astGrepModule !== undefined) {
     return astGrepModule;
   }
-
-  try {
-    // Dynamic import with string concatenation to prevent bundlers from resolving at build time
-    const moduleName = '@ast-grep' + '/napi';
-    const mod = await import(/* webpackIgnore: true */ moduleName);
-    astGrepModule = { parse: mod.parse, Lang: mod.Lang };
-    return astGrepModule;
-  } catch {
-    astGrepModule = null;
-    return null;
+  if (!loadingPromise) {
+    loadingPromise = (async () => {
+      try {
+        // Dynamic import with string concatenation to prevent bundlers from resolving at build time
+        const moduleName = '@ast-grep' + '/napi';
+        const mod = await import(/* webpackIgnore: true */ moduleName);
+        astGrepModule = { parse: mod.parse, Lang: mod.Lang };
+        return astGrepModule;
+      } catch {
+        astGrepModule = null;
+        return null;
+      }
+    })();
   }
+  return loadingPromise;
 }
 
 /**
@@ -89,15 +116,20 @@ export function isAstGrepAvailable(): boolean {
 
 /**
  * Map file extension to ast-grep Lang enum.
+ *
+ * Only languages with built-in tree-sitter grammars in @ast-grep/napi are
+ * supported. Python, Go, Rust, etc. require separate @ast-grep/lang-* packages
+ * which are not currently integrated.
  */
-export function getLanguageFromPath(filePath: string, Lang: any): any {
+export function getLanguageFromPath(filePath: string, Lang: Record<string, LangValue>): LangValue | null {
   const ext = filePath.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'ts':
-    case 'tsx':
       return Lang.TypeScript;
-    case 'js':
+    case 'tsx':
     case 'jsx':
+      return Lang.Tsx;
+    case 'js':
       return Lang.JavaScript;
     case 'html':
       return Lang.Html;
@@ -121,7 +153,7 @@ function escapeRegex(str: string): string {
  * Rename all identifier occurrences matching `oldName` to `newName`.
  * Not scope-aware: renames all occurrences regardless of scope.
  */
-function renameIdentifiers(content: string, root: any, oldName: string, newName: string): TransformResult {
+function renameIdentifiers(content: string, root: SgNode, oldName: string, newName: string): TransformResult {
   let modifiedContent = content;
   let count = 0;
 
@@ -157,11 +189,6 @@ function renameIdentifiers(content: string, root: any, oldName: string, newName:
 // =============================================================================
 
 /**
- * Add an import statement to the file.
- * Inserts after the last existing import, or at the beginning if none exist.
- * If the module is already imported, returns content unchanged.
- */
-/**
  * Build an import statement string from its parts.
  */
 function buildImportStatement(defaultName: string | null, namedImports: string[], moduleStr: string): string {
@@ -180,11 +207,14 @@ function buildImportStatement(defaultName: string | null, namedImports: string[]
  */
 function mergeIntoExistingImport(
   content: string,
-  existingImport: any,
+  existingImport: SgNode,
   names: string[],
   isDefault?: boolean,
 ): string | null {
   const text = existingImport.text();
+
+  // Namespace imports (import * as X from 'mod') cannot be merged into
+  if (/^import\s+\*\s+as\s+/.test(text)) return null;
 
   // Parse existing structure from the import text
   // Matches: import [default] [, { named }] from 'module'
@@ -193,11 +223,11 @@ function mergeIntoExistingImport(
   const moduleMatch = text.match(/(["'][^"']+["'])\s*;?\s*$/);
 
   if (!moduleMatch) return null;
-  const moduleStr = moduleMatch[1];
+  const moduleStr = moduleMatch[1] ?? '';
 
-  let existingDefault = defaultMatch ? defaultMatch[1] : null;
+  let existingDefault = defaultMatch ? (defaultMatch[1] ?? null) : null;
   const existingNamed = namedMatch
-    ? namedMatch[1]
+    ? (namedMatch[1] ?? '')
         .split(',')
         .map((s: string) => s.trim())
         .filter(Boolean)
@@ -209,7 +239,7 @@ function mergeIntoExistingImport(
   if (isDefault && names.length > 0) {
     // First name is the default import
     if (!existingDefault) {
-      newDefault = names[0];
+      newDefault = names[0] ?? null;
     }
     // Remaining names are named imports
     for (const name of names.slice(1)) {
@@ -235,14 +265,22 @@ function mergeIntoExistingImport(
   return content.slice(0, range.start.index) + importStatement + content.slice(range.end.index);
 }
 
-export function addImport(content: string, root: any, importSpec: ImportSpec): string {
+/**
+ * Add an import statement to the file.
+ * Inserts after the last existing import, or at the beginning if none exist.
+ * If the module is already imported, merges new names into it.
+ */
+export function addImport(content: string, root: SgNode, importSpec: ImportSpec): string {
   const { module, names, isDefault } = importSpec;
 
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
-  // Check if import from this module already exists
-  const existingImport = imports.find((imp: any) => {
+  // Check if a mergeable import from this module already exists.
+  // Skip type-only and namespace imports — they can't be merged with value imports.
+  const existingImport = imports.find(imp => {
     const text = imp.text();
+    if (/^import\s+type\s/.test(text)) return false;
+    if (/^import\s+\*\s+as\s+/.test(text)) return false;
     return text.includes(`'${module}'`) || text.includes(`"${module}"`);
   });
 
@@ -260,8 +298,8 @@ export function addImport(content: string, root: any, importSpec: ImportSpec): s
   );
 
   // Insert after last import or at file start
-  if (imports.length > 0) {
-    const lastImport = imports[imports.length - 1];
+  const lastImport = imports.at(-1);
+  if (lastImport) {
     const pos = lastImport.range().end.index;
     return content.slice(0, pos) + '\n' + importStatement + content.slice(pos);
   } else {
@@ -273,7 +311,7 @@ export function addImport(content: string, root: any, importSpec: ImportSpec): s
  * Remove an import by module name.
  * Matches against the import source string.
  */
-export function removeImport(content: string, root: any, targetName: string): string {
+export function removeImport(content: string, root: SgNode, targetName: string): string {
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
   for (const imp of imports) {
@@ -292,29 +330,11 @@ export function removeImport(content: string, root: any, targetName: string): st
 }
 
 /**
- * Rename a function — updates declarations, expressions, arrow functions, and call sites.
- * Not scope-aware: renames all occurrences regardless of scope.
- */
-export function renameFunction(content: string, root: any, oldName: string, newName: string): TransformResult {
-  return renameIdentifiers(content, root, oldName, newName);
-}
-
-/**
- * Rename a variable — replaces all identifier occurrences matching the name.
- * Not scope-aware: renames all occurrences regardless of scope.
- */
-export function renameVariable(content: string, root: any, oldName: string, newName: string): TransformResult {
-  return renameIdentifiers(content, root, oldName, newName);
-}
-
-/**
  * Pattern-based replacement using AST metavariables.
  * Pattern uses $VARNAME placeholders that match any AST node.
  * Replacement substitutes matched text back in.
- *
- * Falls back to regex if AST pattern matching fails.
  */
-export function patternReplace(content: string, root: any, pattern: string, replacement: string): TransformResult {
+export function patternReplace(content: string, root: SgNode, pattern: string, replacement: string): TransformResult {
   let modifiedContent = content;
   let count = 0;
 
@@ -322,12 +342,11 @@ export function patternReplace(content: string, root: any, pattern: string, repl
     const matches = root.findAll({ rule: { pattern } });
     const replacements: Replacement[] = [];
 
+    // Extract metavariables from the pattern once (constant across all matches)
+    const metaVars = [...pattern.matchAll(/\$(\w+)/g)].map(m => m[1]).filter((v): v is string => v !== undefined);
+
     for (const match of matches) {
       const range = match.range();
-
-      // Extract metavariables from the pattern
-      const metaVarRegex = /\$(\w+)/g;
-      const metaVars = [...pattern.matchAll(metaVarRegex)].map(m => m[1]);
 
       // Build replacement text with variable substitution
       let replacementText = replacement;
@@ -347,8 +366,12 @@ export function patternReplace(content: string, root: any, pattern: string, repl
     for (const { start, end, text } of replacements) {
       modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
     }
-  } catch {
-    // AST pattern matching failed — don't fall back to regex (unsafe + surprising)
+  } catch (err) {
+    return {
+      content: modifiedContent,
+      count: 0,
+      error: err instanceof Error ? err.message : 'Pattern matching failed',
+    };
   }
 
   return { content: modifiedContent, count };
@@ -371,10 +394,8 @@ Transforms:
   { transform: "add-import", importSpec: { module: "express", names: ["express", "Router"], isDefault: true } } → import express, { Router } from 'express'
 - remove-import: Remove an import by module name.
   { transform: "remove-import", targetName: "lodash" }
-- rename-function: Rename function declarations and all call sites.
-  { transform: "rename-function", targetName: "oldName", newName: "newName" }
-- rename-variable: Rename variable declarations and all references.
-  { transform: "rename-variable", targetName: "oldVar", newName: "newVar" }
+- rename: Rename all occurrences of an identifier (not scope-aware).
+  { transform: "rename", targetName: "oldName", newName: "newName" }
 
 Pattern replace (for everything else):
   { pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
@@ -389,22 +410,22 @@ Pattern replace (for everything else):
       .optional()
       .describe('Replacement pattern (can use captured $VARIABLES, e.g., "logger.debug($ARG)")'),
     transform: z
-      .enum(['add-import', 'remove-import', 'rename-function', 'rename-variable'])
+      .enum(['add-import', 'remove-import', 'rename'])
       .optional()
       .describe('Structured transformation to apply'),
     targetName: z
       .string()
       .optional()
-      .describe('Target name for rename/remove transforms (e.g., the current function name)'),
-    newName: z.string().optional().describe('New name for rename transforms'),
+      .describe('Required for remove-import and rename transforms. The current name to target.'),
+    newName: z.string().optional().describe('Required for rename transform. The new name to replace targetName with.'),
     importSpec: z
       .object({
         module: z.string().describe('Module to import from'),
-        names: z.array(z.string()).min(1).describe('Names to import'),
+        names: z.array(z.string()).min(1).describe('Names to import. For default imports, put the default name first.'),
         isDefault: z.boolean().optional().describe('Whether the first name is a default import'),
       })
       .optional()
-      .describe('Import specification for add-import transform'),
+      .describe('Required for add-import transform. Specifies the module and names to import.'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
     const { filesystem } = requireFilesystem(context);
@@ -422,7 +443,15 @@ Pattern replace (for everything else):
     const { parse, Lang } = astGrep;
 
     // Read current content
-    const content = await filesystem.readFile(path, { encoding: 'utf-8' });
+    let content: string | Buffer;
+    try {
+      content = await filesystem.readFile(path, { encoding: 'utf-8' });
+    } catch (error) {
+      if (error instanceof FileNotFoundError) {
+        return `File not found: ${path}. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} to create it first.`;
+      }
+      throw error;
+    }
 
     if (typeof content !== 'string') {
       return `Cannot perform AST edits on binary files. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} instead.`;
@@ -459,30 +488,27 @@ Pattern replace (for everything else):
           break;
         }
 
-        case 'rename-function': {
+        case 'rename': {
           if (!targetName || !newName) {
-            return 'Error: targetName and newName are required for rename-function transform';
+            return 'Error: targetName and newName are required for rename transform';
           }
-          const funcResult = renameFunction(content, root, targetName, newName);
-          modifiedContent = funcResult.content;
-          changes.push(`Renamed function '${targetName}' to '${newName}' (${funcResult.count} occurrences)`);
-          break;
-        }
-
-        case 'rename-variable': {
-          if (!targetName || !newName) {
-            return 'Error: targetName and newName are required for rename-variable transform';
-          }
-          const varResult = renameVariable(content, root, targetName, newName);
-          modifiedContent = varResult.content;
-          changes.push(`Renamed variable '${targetName}' to '${newName}' (${varResult.count} occurrences)`);
+          const renameResult = renameIdentifiers(content, root, targetName, newName);
+          modifiedContent = renameResult.content;
+          changes.push(`Renamed '${targetName}' to '${newName}' (${renameResult.count} occurrences)`);
           break;
         }
       }
     } else if (pattern && replacement !== undefined) {
       const result = patternReplace(content, root, pattern, replacement);
+      if (result.error) {
+        return `Error: AST pattern matching failed: ${result.error}`;
+      }
       modifiedContent = result.content;
       changes.push(`Replaced ${result.count} occurrences of pattern`);
+    } else if (pattern && replacement === undefined) {
+      return 'Error: replacement is required when pattern is provided';
+    } else if (!pattern && replacement !== undefined) {
+      return 'Error: pattern is required when replacement is provided';
     } else {
       return 'Error: Must provide either transform or pattern/replacement';
     }
@@ -497,8 +523,6 @@ Pattern replace (for everything else):
       return `No changes made to ${path} (${changes.join('; ')})`;
     }
 
-    let output = `${path}: ${changes.join('; ')}`;
-    output += await getEditDiagnosticsText(filesystem, path, modifiedContent);
-    return output;
+    return `${path}: ${changes.join('; ')}`;
   },
 });

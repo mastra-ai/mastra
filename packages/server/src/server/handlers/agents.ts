@@ -312,7 +312,8 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       // Older core version without workspace module — fall through
     }
 
-    // Fallback: inlined logic for older core versions
+    // Fallback: inlined logic for older core versions.
+    // Does not include AST_EDIT — only available via createWorkspaceTools above.
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();

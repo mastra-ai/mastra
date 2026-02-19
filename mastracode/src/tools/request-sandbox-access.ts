@@ -4,9 +4,9 @@
  */
 
 import * as path from 'node:path';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import { z } from 'zod';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 let requestCounter = 0;
@@ -20,7 +20,7 @@ export const requestSandboxAccessTool = createTool({
   }),
   execute: async ({ path: requestedPath, reason }, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 
       // Resolve to absolute path
       const absolutePath = path.isAbsolute(requestedPath) ? requestedPath : path.resolve(process.cwd(), requestedPath);

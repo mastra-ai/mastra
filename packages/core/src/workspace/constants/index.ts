@@ -24,6 +24,7 @@ export const WORKSPACE_TOOLS = {
     MKDIR: `${WORKSPACE_TOOLS_PREFIX}_mkdir` as const,
     AST_EDIT: `${WORKSPACE_TOOLS_PREFIX}_ast_edit` as const,
     GREP: `${WORKSPACE_TOOLS_PREFIX}_grep` as const,
+    AST_EDIT: `${WORKSPACE_TOOLS_PREFIX}_ast_edit` as const,
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${WORKSPACE_TOOLS_PREFIX}_execute_command` as const,

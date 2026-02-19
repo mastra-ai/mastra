@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "",
   "type": "module",
   "files": [
@@ -18,6 +18,9 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "mastracode": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": {
@@ -27,6 +30,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./tui": {
+      "import": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.js"
+      },
+      "require": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.cjs"
       }
     },
     "./package.json": "./package.json"
