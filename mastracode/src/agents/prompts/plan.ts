@@ -70,4 +70,4 @@ The user will see the plan rendered inline and can:
 - **Request changes** — provides feedback for you to revise and resubmit
 
 Do NOT start implementing until the plan is approved. If rejected with feedback, revise the plan and call \`submit_plan\` again.
-`
+`;
