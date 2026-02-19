@@ -24,7 +24,6 @@ export * from './components/agent-layout';
 export * from './components/agent-cms-blocks';
 export * from './components/agent-edit-page/utils/form-validation';
 export * from './components/agent-edit-page';
-export * from './components/agent-create-content';
 export * from './components/agent-cms-sidebar';
 export * from './components/agent-cms-layout';
 export * from './components/agent-cms-pages';

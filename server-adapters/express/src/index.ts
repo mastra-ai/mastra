@@ -96,10 +96,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     };
   }
   async stream(route: ServerRoute, res: Response, result: { fullStream: ReadableStream }): Promise<void> {
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Transfer-Encoding', 'chunked');
-
     const streamFormat = route.streamFormat || 'stream';
+
+    if (streamFormat === 'sse') {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+    } else {
+      res.setHeader('Content-Type', 'text/plain');
+    }
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.flushHeaders();
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
