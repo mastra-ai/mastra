@@ -4747,6 +4747,90 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await resultObject.consumeStream();
     });
 
+    it('should include tool-error chunks when a tool throws', async () => {
+      const messageList2 = createMessageListWithUserMessage();
+      const errorChunks: Array<ChunkType> = [];
+
+      let responseCount = 0;
+      const resultObject = await loopFn({
+        methodType: 'stream',
+        runId,
+        agentId: 'agent-id',
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'failingTool',
+                          input: `{ "value": "test" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Tool failed' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage2,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          failingTool: {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => {
+              throw new Error('Tool execution failed');
+            },
+          },
+        },
+        messageList: messageList2,
+        stopWhen: stepCountIs(3),
+        options: {
+          onChunk(chunk) {
+            errorChunks.push(chunk);
+          },
+        },
+      });
+
+      await resultObject.consumeStream();
+
+      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-error');
+      expect(toolErrorChunks).toHaveLength(1);
+      expect(toolErrorChunks[0]).toMatchObject({
+        type: 'tool-error',
+        from: 'AGENT',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'failingTool',
+          error: expect.any(Error),
+        }),
+      });
+    });
+
     it('should return events in order', async () => {
       expect(result).toMatchInlineSnapshot(`
         [
@@ -4861,16 +4945,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             "type": "text-delta",
           },
           {
-            "chunk": {
-              "input": {
+            "from": "AGENT",
+            "payload": {
+              "args": {
                 "value": "test",
               },
-              "output": "test-result",
               "providerExecuted": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
+              "result": "test-result",
               "toolCallId": "2",
               "toolName": "tool1",
-              "type": "tool-result",
             },
+            "runId": "test-run-id",
+            "type": "tool-result",
           },
         ]
       `);
