@@ -13,6 +13,27 @@ import type { HookManager } from "../hooks/index.js"
 import type { MCPManager } from "../mcp/index.js"
 
 // =============================================================================
+// Heartbeat Handlers
+// =============================================================================
+
+/**
+ * A periodic task that the Harness runs on a timer.
+ * Heartbeat handlers start during `init()` and are cleaned up on `stopHeartbeats()`.
+ */
+export interface HeartbeatHandler {
+	/** Unique identifier for this handler (used for dedup and logging) */
+	id: string
+	/** Interval in milliseconds between invocations */
+	intervalMs: number
+	/** The function to run on each tick */
+	handler: () => void | Promise<void>
+	/** Whether to run the handler immediately on start (default: true) */
+	immediate?: boolean
+	/** Called when the handler is removed or all heartbeats are stopped */
+	shutdown?: () => void | Promise<void>
+}
+
+// =============================================================================
 // Harness Configuration
 // =============================================================================
 
@@ -182,6 +203,12 @@ export interface HarnessConfig<
 	 * If provided, MCP-provided tools are available to agents.
 	 */
 	mcpManager?: MCPManager
+
+	/**
+	 * Periodic heartbeat handlers started during `init()`.
+	 * Use for background tasks like gateway sync, cache refresh, etc.
+	 */
+	heartbeatHandlers?: HeartbeatHandler[]
 }
 
 // =============================================================================

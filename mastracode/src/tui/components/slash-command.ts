@@ -4,8 +4,8 @@
  * expanded with ctrl+e. The full content is still sent to the assistant.
  */
 
-import chalk from "chalk"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
+import chalk from "chalk"
 import { mastra } from "../theme.js"
 
 const MAX_COLLAPSED_LINES = 3

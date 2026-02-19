@@ -7,7 +7,28 @@ import { Workspace } from "@mastra/core/workspace"
 import type { WorkspaceConfig } from "@mastra/core/workspace"
 import type { z } from "zod"
 
+import {
+	AuthStorage,
+	getOAuthProviders
+	
+	
+} from "../auth/index.js"
+import type {OAuthProviderInterface, OAuthLoginCallbacks} from "../auth/index.js";
+import type { HookManager } from "../hooks/index.js"
+import type { MCPManager } from "../mcp/index.js"
+import {
+	
+	
+	SessionGrants,
+	resolveApproval,
+	createDefaultRules,
+	getToolCategory
+} from "../permissions.js"
+import type {PermissionRules, ToolCategory} from "../permissions.js";
+import { parseError  } from "../utils/errors.js"
+import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
 import type {
+	HeartbeatHandler,
 	HarnessConfig,
 	HarnessEvent,
 	HarnessEventListener,
@@ -19,22 +40,6 @@ import type {
 	HarnessStateSchema,
 	HarnessThread,
 } from "./types"
-import {
-	AuthStorage,
-	getOAuthProviders,
-	type OAuthProviderInterface,
-	type OAuthLoginCallbacks,
-} from "../auth/index.js"
-import { parseError, type ParsedError } from "../utils/errors.js"
-import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
-import {
-	type PermissionRules,
-	type ToolCategory,
-	SessionGrants,
-	resolveApproval,
-	createDefaultRules,
-	getToolCategory,
-} from "../permissions.js"
 
 // =============================================================================
 /**
@@ -137,10 +142,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		  }) => Promise<Workspace | undefined> | Workspace | undefined)
 		| undefined = undefined
 	private workspaceInitialized = false
-	private hookManager: import("../hooks/index.js").HookManager | undefined
-	private mcpManager: import("../mcp/index.js").MCPManager | undefined
+	private hookManager: HookManager | undefined
+	private mcpManager: MCPManager | undefined
 	private sessionGrants = new SessionGrants()
 	private streamDebug = !!process.env.MASTRA_STREAM_DEBUG
+	private heartbeatTimers = new Map<
+		string,
+		{ timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }
+	>()
 	private pendingQuestions = new Map<string, (answer: string) => void>()
 	private pendingPlanApprovals = new Map<
 		string,
@@ -258,6 +267,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				})
 			}
 		}
+
+		// Start heartbeat handlers
+		this.startHeartbeats()
 	}
 
 	/**
@@ -382,14 +394,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	/**
 	 * Get the hook manager (if configured).
 	 */
-	getHookManager(): import("../hooks/index.js").HookManager | undefined {
+	getHookManager(): HookManager | undefined {
 		return this.hookManager
 	}
 
 	/**
 	 * Get the MCP manager (if configured).
 	 */
-	getMcpManager(): import("../mcp/index.js").MCPManager | undefined {
+	getMcpManager(): MCPManager | undefined {
 		return this.mcpManager
 	}
 
@@ -1082,7 +1094,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - token persistence is not critical
 		}
 	}
@@ -1109,7 +1121,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings persistence is not critical
 		}
 	}
@@ -1136,7 +1148,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings removal is not critical
 		}
 	}
@@ -1239,7 +1251,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 			// Load OM progress from storage record
 			await this.loadOMProgress()
-		} catch (error) {
+		} catch {
 			this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 		}
 	}
@@ -2883,6 +2895,96 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	isWorkspaceReady(): boolean {
 		if (this.workspaceFn) return true
 		return this.workspaceInitialized && this.workspace !== undefined
+	}
+
+	// ===========================================================================
+	// Heartbeat Handlers
+	// ===========================================================================
+
+	/**
+	 * Start all configured heartbeat handlers.
+	 * Called automatically during `init()`.
+	 */
+	private startHeartbeats(): void {
+		const handlers = this.config.heartbeatHandlers
+		if (!handlers?.length) return
+
+		for (const hb of handlers) {
+			if (this.heartbeatTimers.has(hb.id)) continue
+
+			const run = async () => {
+				try {
+					await hb.handler()
+				} catch (error) {
+					console.error(`[Heartbeat:${hb.id}] failed:`, error)
+				}
+			}
+
+			if (hb.immediate !== false) {
+				run()
+			}
+
+			const timer = setInterval(run, hb.intervalMs)
+			timer.unref()
+			this.heartbeatTimers.set(hb.id, { timer, shutdown: hb.shutdown })
+		}
+	}
+
+	/**
+	 * Register a heartbeat handler dynamically (after init).
+	 * If a handler with the same id already exists, it is replaced.
+	 */
+	registerHeartbeat(handler: HeartbeatHandler): void {
+		this.removeHeartbeat(handler.id)
+
+		const run = async () => {
+			try {
+				await handler.handler()
+			} catch (error) {
+				console.error(`[Heartbeat:${handler.id}] failed:`, error)
+			}
+		}
+
+		if (handler.immediate !== false) {
+			run()
+		}
+
+		const timer = setInterval(run, handler.intervalMs)
+		timer.unref()
+		this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown })
+	}
+
+	/**
+	 * Remove a heartbeat handler by id. Calls its shutdown hook if present.
+	 */
+	async removeHeartbeat(id: string): Promise<void> {
+		const entry = this.heartbeatTimers.get(id)
+		if (entry) {
+			clearInterval(entry.timer)
+			this.heartbeatTimers.delete(id)
+			try {
+				await entry.shutdown?.()
+			} catch (error) {
+				console.error(`[Heartbeat:${id}] shutdown failed:`, error)
+			}
+		}
+	}
+
+	/**
+	 * Stop all heartbeat handlers and run their shutdown hooks. Call during shutdown.
+	 */
+	async stopHeartbeats(): Promise<void> {
+		const entries = [...this.heartbeatTimers.entries()]
+		this.heartbeatTimers.clear()
+
+		for (const [id, entry] of entries) {
+			clearInterval(entry.timer)
+			try {
+				await entry.shutdown?.()
+			} catch (error) {
+				console.error(`[Heartbeat:${id}] shutdown failed:`, error)
+			}
+		}
 	}
 
 	/**

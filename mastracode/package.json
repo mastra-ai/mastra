@@ -34,7 +34,7 @@
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
@@ -76,6 +76,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
+    "typescript-eslint": "^8.51.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

@@ -1,7 +1,7 @@
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { describe, it, expect, afterAll, afterEach } from "vitest"
 import { sharedFileEditor } from "../file-editor.js"
-import * as fs from "fs"
-import * as path from "path"
 
 const projectRoot = path.resolve(import.meta.dirname, "../../..")
 const tmpDir = path.join(projectRoot, ".test-tmp-editor")

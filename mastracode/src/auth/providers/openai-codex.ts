@@ -9,7 +9,8 @@
  */
 
 // NEVER convert to top-level imports - breaks browser/Vite builds (web-ui)
-let _randomBytes: typeof import("node:crypto").randomBytes | null = null
+let _randomBytes: ((size: number) => Buffer) | null = null
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _http: typeof import("node:http") | null = null
 if (
 	typeof process !== "undefined" &&

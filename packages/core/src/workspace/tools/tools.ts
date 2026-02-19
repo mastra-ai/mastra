@@ -17,6 +17,7 @@ import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
 import { executeCommandTool } from './execute-command';
 import { fileStatTool } from './file-stat';
+import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
@@ -194,6 +195,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
     addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
+    addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
   }
 
   // Search tools

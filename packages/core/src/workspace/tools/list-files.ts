@@ -12,15 +12,15 @@ The output is displayed to the user as a tree-like structure in the tool result.
 Options mirror common tree command flags for familiarity.
 
 Examples:
-- List root: { path: "/" }
-- Deep listing: { path: "/src", maxDepth: 5 }
-- Directories only: { path: "/", dirsOnly: true }
-- Exclude node_modules: { path: "/", exclude: "node_modules" }
-- Find TypeScript files: { path: "/src", pattern: "**/*.ts" }
-- Find config files: { path: "/", pattern: "*.config.{js,ts}" }
-- Multiple patterns: { path: "/", pattern: ["**/*.ts", "**/*.tsx"] }`,
+- List root: { path: "./" }
+- Deep listing: { path: "./src", maxDepth: 5 }
+- Directories only: { path: "./", dirsOnly: true }
+- Exclude node_modules: { path: "./", exclude: "node_modules" }
+- Find TypeScript files: { path: "./src", pattern: "**/*.ts" }
+- Find config files: { path: "./", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: "./", pattern: ["**/*.ts", "**/*.tsx"] }`,
   inputSchema: z.object({
-    path: z.string().default('/').describe('Directory path to list'),
+    path: z.string().default('./').describe('Directory path to list'),
     maxDepth: z
       .number()
       .optional()
@@ -45,7 +45,7 @@ Examples:
         'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
       ),
   }),
-  execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
+  execute: async ({ path = './', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
     const { filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
