@@ -397,6 +397,103 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       expect(result).not.toContain('No changes');
     });
+
+    it('should handle TSX files with JSX syntax', async () => {
+      const code = `const App = () => <div>hello</div>;`;
+      await fs.writeFile(path.join(tempDir, 'test.tsx'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.tsx',
+        transform: 'rename-variable',
+        targetName: 'App',
+        newName: 'MyApp',
+      });
+
+      expect(result).not.toContain('No changes');
+      const content = await fs.readFile(path.join(tempDir, 'test.tsx'), 'utf-8');
+      expect(content).toContain('MyApp');
+    });
+
+    it('should handle JSX files with JSX syntax', async () => {
+      const code = `const App = () => <div>hello</div>;`;
+      await fs.writeFile(path.join(tempDir, 'test.jsx'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.jsx',
+        transform: 'rename-variable',
+        targetName: 'App',
+        newName: 'MyApp',
+      });
+
+      expect(result).not.toContain('No changes');
+      const content = await fs.readFile(path.join(tempDir, 'test.jsx'), 'utf-8');
+      expect(content).toContain('MyApp');
+    });
+
+    it('should handle CSS files', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.css'), '.foo { color: red; }');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.css',
+        pattern: '.foo {}',
+        replacement: '.bar {}',
+      });
+
+      // CSS grammar is recognized — the key thing is it doesn't error with "Unsupported file type"
+      expect(result).not.toContain('Unsupported file type');
+    });
+
+    it('should handle HTML files', async () => {
+      const code = `<div class="foo">hello</div>`;
+      await fs.writeFile(path.join(tempDir, 'test.html'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.html',
+        pattern: '<div class="foo">$CONTENT</div>',
+        replacement: '<section class="foo">$CONTENT</section>',
+      });
+
+      // HTML pattern matching may not match depending on ast-grep's HTML grammar;
+      // the key thing is it doesn't error with "Unsupported file type"
+      expect(result).not.toContain('Unsupported file type');
+    });
+
+    it('should return error for unsupported file types', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.py'), 'print("hello")');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.py',
+        pattern: 'print($ARG)',
+        replacement: 'log($ARG)',
+      });
+
+      expect(result).toContain('Unsupported file type');
+    });
   });
 
   // ===========================================================================

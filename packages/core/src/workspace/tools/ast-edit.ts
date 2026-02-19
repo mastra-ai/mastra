@@ -38,18 +38,38 @@ interface ImportSpec {
   isDefault?: boolean;
 }
 
+/**
+ * Minimal interface for an ast-grep SgNode.
+ * Avoids importing @ast-grep/napi types directly since it's an optional dep.
+ */
+interface SgNode {
+  text(): string;
+  range(): { start: { index: number }; end: { index: number } };
+  findAll(config: { rule: Record<string, unknown> }): SgNode[];
+  getMatch(name: string): SgNode | null;
+}
+
+/** Minimal interface for the ast-grep Lang enum values. */
+type LangValue = unknown;
+
+/** The subset of @ast-grep/napi we use after dynamic import. */
+interface AstGrepModule {
+  parse(lang: LangValue, content: string): { root(): SgNode };
+  Lang: Record<string, LangValue>;
+}
+
 // =============================================================================
 // Dynamic Import
 // =============================================================================
 
 // Cache the import result so we only try once
-let astGrepModule: { parse: any; Lang: any } | null | undefined;
+let astGrepModule: AstGrepModule | null | undefined;
 
 /**
  * Try to load @ast-grep/napi. Returns null if not available.
  * Uses dynamic import to avoid compile-time dependency.
  */
-export async function loadAstGrep(): Promise<{ parse: any; Lang: any } | null> {
+export async function loadAstGrep(): Promise<AstGrepModule | null> {
   if (astGrepModule !== undefined) {
     return astGrepModule;
   }
@@ -95,15 +115,15 @@ export function isAstGrepAvailable(): boolean {
  * supported. Python, Go, Rust, etc. require separate @ast-grep/lang-* packages
  * which are not currently integrated.
  */
-export function getLanguageFromPath(filePath: string, Lang: any): any {
+export function getLanguageFromPath(filePath: string, Lang: Record<string, LangValue>): LangValue | null {
   const ext = filePath.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'ts':
       return Lang.TypeScript;
     case 'tsx':
+    case 'jsx':
       return Lang.Tsx;
     case 'js':
-    case 'jsx':
       return Lang.JavaScript;
     case 'html':
       return Lang.Html;
@@ -127,7 +147,7 @@ function escapeRegex(str: string): string {
  * Rename all identifier occurrences matching `oldName` to `newName`.
  * Not scope-aware: renames all occurrences regardless of scope.
  */
-function renameIdentifiers(content: string, root: any, oldName: string, newName: string): TransformResult {
+function renameIdentifiers(content: string, root: SgNode, oldName: string, newName: string): TransformResult {
   let modifiedContent = content;
   let count = 0;
 
@@ -181,11 +201,14 @@ function buildImportStatement(defaultName: string | null, namedImports: string[]
  */
 function mergeIntoExistingImport(
   content: string,
-  existingImport: any,
+  existingImport: SgNode,
   names: string[],
   isDefault?: boolean,
 ): string | null {
   const text = existingImport.text();
+
+  // Namespace imports (import * as X from 'mod') cannot be merged into
+  if (/^import\s+\*\s+as\s+/.test(text)) return null;
 
   // Parse existing structure from the import text
   // Matches: import [default] [, { named }] from 'module'
@@ -241,7 +264,7 @@ function mergeIntoExistingImport(
  * Inserts after the last existing import, or at the beginning if none exist.
  * If the module is already imported, merges new names into it.
  */
-export function addImport(content: string, root: any, importSpec: ImportSpec): string {
+export function addImport(content: string, root: SgNode, importSpec: ImportSpec): string {
   const { module, names, isDefault } = importSpec;
 
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
@@ -279,7 +302,7 @@ export function addImport(content: string, root: any, importSpec: ImportSpec): s
  * Remove an import by module name.
  * Matches against the import source string.
  */
-export function removeImport(content: string, root: any, targetName: string): string {
+export function removeImport(content: string, root: SgNode, targetName: string): string {
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
   for (const imp of imports) {
@@ -302,7 +325,7 @@ export function removeImport(content: string, root: any, targetName: string): st
  * Pattern uses $VARNAME placeholders that match any AST node.
  * Replacement substitutes matched text back in.
  */
-export function patternReplace(content: string, root: any, pattern: string, replacement: string): TransformResult {
+export function patternReplace(content: string, root: SgNode, pattern: string, replacement: string): TransformResult {
   let modifiedContent = content;
   let count = 0;
 
@@ -310,12 +333,11 @@ export function patternReplace(content: string, root: any, pattern: string, repl
     const matches = root.findAll({ rule: { pattern } });
     const replacements: Replacement[] = [];
 
+    // Extract metavariables from the pattern once (constant across all matches)
+    const metaVars = [...pattern.matchAll(/\$(\w+)/g)].map(m => m[1]);
+
     for (const match of matches) {
       const range = match.range();
-
-      // Extract metavariables from the pattern
-      const metaVarRegex = /\$(\w+)/g;
-      const metaVars = [...pattern.matchAll(metaVarRegex)].map(m => m[1]);
 
       // Build replacement text with variable substitution
       let replacementText = replacement;
