@@ -3203,21 +3203,21 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.harness.switchObserverModel(modelId);
+            await this.harness.setState({ observerModelId: modelId } as any);
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.harness.switchReflectorModel(modelId);
+            await this.harness.setState({ reflectorModelId: modelId } as any);
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
-            this.harness.setObservationThreshold(value);
+            this.harness.setState({ observationThreshold: value } as any);
             this.omProgress.threshold = value;
             this.omProgress.thresholdPercent = value > 0 ? (this.omProgress.pendingTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onReflectionThresholdChange: value => {
-            this.harness.setReflectionThreshold(value);
+            this.harness.setState({ reflectionThreshold: value } as any);
             this.omProgress.reflectionThreshold = value;
             this.omProgress.reflectionThresholdPercent =
               value > 0 ? (this.omProgress.observationTokens / value) * 100 : 0;
@@ -3302,7 +3302,7 @@ ${instructions}`,
     const config = {
       notifications: (state?.notifications ?? 'off') as NotificationMode,
       yolo: state?.yolo === true,
-      thinkingLevel: this.harness.getThinkingLevel(),
+      thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
       escapeAsCancel: this.editor.escapeEnabled,
     };
 
@@ -3317,7 +3317,7 @@ ${instructions}`,
           this.updateStatusLine();
         },
         onThinkingLevelChange: async level => {
-          await this.harness.setThinkingLevel(level);
+          await this.harness.setState({ thinkingLevel: level } as any);
           this.updateStatusLine();
         },
         onEscapeAsCancelChange: async enabled => {
@@ -3587,7 +3587,7 @@ ${modeList}`);
         return true;
       }
       case 'think': {
-        const currentLevel = this.harness.getThinkingLevel();
+        const currentLevel = ((this.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
         const levels = [
           { label: 'Off', id: 'off' },
           { label: 'Minimal', id: 'minimal' },
@@ -3598,7 +3598,7 @@ ${modeList}`);
         const currentIdx = levels.findIndex(l => l.id === currentLevel);
         const nextIdx = (currentIdx + 1) % levels.length;
         const next = levels[nextIdx]!;
-        await this.harness.setThinkingLevel(next.id);
+        await this.harness.setState({ thinkingLevel: next.id } as any);
         this.showInfo(`Thinking: ${next.label}`);
         this.updateStatusLine();
         return true;
