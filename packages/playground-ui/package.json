@@ -122,7 +122,7 @@
     "react-resizable-panels": "^4.0.15",
     "react-syntax-highlighter": "^15.6.6",
     "remark-gfm": "^4.0.1",
-    "semver": "^7.7.2",
+    "semver": "^7.7.4",
     "shiki": "^1.29.2",
     "sonner": "^2.0.5",
     "superjson": "^2.2.2",

@@ -16,7 +16,7 @@
     "path-to-regexp": "^8.3.0",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "semver": "^7.7.2",
+    "semver": "^7.7.4",
     "tsc-files": "^1.1.4",
     "turbo": "^2.5.8",
     "typescript": "catalog:",

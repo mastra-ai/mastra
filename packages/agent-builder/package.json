@@ -41,7 +41,7 @@
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.57",
     "@mastra/memory": "workspace:*",
     "ignore": "^7.0.5",
-    "semver": "^7.7.2",
+    "semver": "^7.7.4",
     "swpm": "^2.6.0"
   },
   "devDependencies": {
