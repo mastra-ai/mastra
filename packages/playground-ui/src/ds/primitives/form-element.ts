@@ -2,6 +2,7 @@ export const formElementSizes = {
   sm: 'h-form-sm',
   md: 'h-form-md',
   lg: 'h-form-lg',
+  default: 'h-form-default',
 } as const;
 
 // Enhanced focus states with glow effect and smooth transition

@@ -5,8 +5,8 @@
  * but configured for InngestAgent with Inngest infrastructure.
  */
 
-import { createDurableAgentTestSuite } from '@internal/durable-agent-test-utils';
-import type { CreateAgentConfig, DurableAgentLike } from '@internal/durable-agent-test-utils';
+import { createDurableAgentTestSuite } from '@internal/workflow-test-utils';
+import type { CreateAgentConfig, DurableAgentLike } from '@internal/workflow-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { DurableStepIds } from '@mastra/core/agent/durable';
 import { vi } from 'vitest';

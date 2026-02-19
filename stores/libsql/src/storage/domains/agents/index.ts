@@ -24,6 +24,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -48,6 +49,11 @@ export class AgentsLibSQL extends AgentsStorage {
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
       ifNotExists: ['status', 'authorId'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: AGENT_VERSIONS_SCHEMA,
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -469,7 +475,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -492,8 +498,10 @@ export class AgentsLibSQL extends AgentsStorage {
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
-      conditions.push('status = ?');
-      queryParams.push(status);
+      if (status) {
+        conditions.push('status = ?');
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
@@ -516,7 +524,7 @@ export class AgentsLibSQL extends AgentsStorage {
         }
       }
 
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#client.execute({
@@ -538,7 +546,7 @@ export class AgentsLibSQL extends AgentsStorage {
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
       const result = await this.#client.execute({
-        sql: `SELECT * FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_AGENTS)} FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 
@@ -595,6 +603,9 @@ export class AgentsLibSQL extends AgentsStorage {
           scorers: input.scorers ?? null,
           mcpClients: input.mcpClients ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
+          workspace: input.workspace ?? null,
+          skills: input.skills ?? null,
+          skillsFormat: input.skillsFormat ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -897,6 +908,9 @@ export class AgentsLibSQL extends AgentsStorage {
       scorers: this.parseJson(row.scorers, 'scorers'),
       mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
       requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
+      workspace: this.parseJson(row.workspace, 'workspace'),
+      skills: this.parseJson(row.skills, 'skills'),
+      skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

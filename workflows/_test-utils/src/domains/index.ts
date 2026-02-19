@@ -1,9 +1,13 @@
 /**
- * Domain test creators for DurableAgent
+ * Domain test creators for DurableAgent and Workflows
  *
- * These tests focus on observable behavior, not implementation details.
+ * DurableAgent tests focus on observable behavior, not implementation details.
  * Tests should work for both DurableAgent and InngestDurableAgent.
+ *
+ * Workflow tests are designed to work across all workflow engines (default, evented, inngest).
  */
+
+// === DurableAgent domain test creators ===
 
 export { createConstructorTests } from './constructor';
 export { createPrepareTests } from './prepare';
@@ -51,3 +55,33 @@ export { createSkillsWithCustomProcessorsTests } from './skills-with-custom-proc
 export { createTitleGenerationTests } from './title-generation';
 export { createSaveAndErrorsTests } from './save-and-errors';
 export { createMemoryMetadataTests } from './memory-metadata';
+
+// === Workflow domain test creators ===
+
+export { createBasicExecutionTests, createBasicExecutionWorkflows } from './basic-execution';
+export { createVariableResolutionTests, createVariableResolutionWorkflows } from './variable-resolution';
+export { createSimpleConditionsTests, createSimpleConditionsWorkflows } from './simple-conditions';
+export { createComplexConditionsTests, createComplexConditionsWorkflows } from './complex-conditions';
+export { createErrorHandlingTests, createErrorHandlingWorkflows } from './error-handling';
+export { createLoopsTests, createLoopsWorkflows } from './loops';
+export { createForeachTests, createForeachWorkflows } from './foreach';
+export { createBranchingTests, createBranchingWorkflows } from './branching';
+export { createSchemaValidationTests, createSchemaValidationWorkflows } from './schema-validation';
+export { createMultipleChainsTests, createMultipleChainsWorkflows } from './multiple-chains';
+export { createRetryTests, createRetryWorkflows } from './retry';
+export { createSuspendResumeTests, createSuspendResumeWorkflows } from './suspend-resume';
+export { createTimeTravelTests, createTimeTravelWorkflows } from './time-travel';
+export { createNestedWorkflowsTests, createNestedWorkflowsWorkflows } from './nested-workflows';
+export { createAgentStepTests, createAgentStepWorkflows } from './agent-step';
+export { createDependencyInjectionTests, createDependencyInjectionWorkflows } from './dependency-injection';
+export { createAbortTests, createAbortWorkflows } from './abort';
+export { createInteroperabilityTests, createInteroperabilityWorkflows } from './interoperability';
+export { createWorkflowRunsTests, createWorkflowRunsWorkflows } from './workflow-runs';
+export { createCallbacksTests, createCallbacksWorkflows } from './callbacks';
+export { createStreamingTests, createStreamingWorkflows } from './streaming';
+export { createRestartTests, createRestartWorkflows } from './restart';
+export { createPerStepTests, createPerStepWorkflows } from './per-step';
+export { createTracingTests, createTracingWorkflows } from './tracing';
+export { createStorageTests, createStorageWorkflows } from './storage';
+export { createRunCountTests, createRunCountWorkflows } from './run-count';
+export { createCloneTests, createCloneWorkflows } from './clone';

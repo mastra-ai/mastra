@@ -1,9 +1,9 @@
-version: '3'
+name: mastra-workflow-tests
 
 services:
   inngest:
     container_name: inngest-durable-poc
-    image: inngest/inngest:v1.12.1
+    image: inngest/inngest:v1.16.1
     command: inngest dev -p 4100 -u http://host.docker.internal:4101/inngest/api --poll-interval=1
     ports:
       - '4100:4100'

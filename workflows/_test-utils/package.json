@@ -1,7 +1,7 @@
 {
-  "name": "@internal/durable-agent-test-utils",
+  "name": "@internal/workflow-test-utils",
   "version": "0.0.1",
-  "description": "Shared test utilities for DurableAgent across execution engines",
+  "description": "Shared test utilities for workflows and DurableAgent across execution engines",
   "type": "module",
   "main": "src/index.ts",
   "private": true,
@@ -20,11 +20,13 @@
   },
   "devDependencies": {
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.0"
+    "zod": "^3.25.76"
   }
 }

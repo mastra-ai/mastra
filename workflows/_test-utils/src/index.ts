@@ -1,11 +1,11 @@
 /**
- * @internal/durable-agent-test-utils
+ * @internal/workflow-test-utils
  *
- * Shared test utilities for DurableAgent across execution engines.
+ * Shared test utilities for DurableAgent and Workflows across execution engines.
  *
  * @example
  * ```typescript
- * import { createDurableAgentTestSuite } from '@internal/durable-agent-test-utils';
+ * import { createDurableAgentTestSuite } from '@internal/workflow-test-utils';
  * import { EventEmitterPubSub } from '@mastra/core/events';
  *
  * // Create a test suite with EventEmitterPubSub (default execution engine)
@@ -28,6 +28,8 @@
  * });
  * ```
  */
+
+// === DurableAgent exports ===
 
 // Main factory
 export { createDurableAgentTestSuite } from './factory';
@@ -91,3 +93,22 @@ export {
   createSaveAndErrorsTests,
   createMemoryMetadataTests,
 } from './domains';
+
+// === Workflow exports ===
+
+export { createWorkflowTestSuite } from './factory';
+export { MockRegistry, globalMockRegistry, type MockFn, type MockFactory } from './mock-registry';
+export type {
+  WorkflowTestConfig,
+  WorkflowTestContext,
+  WorkflowTestDomain,
+  WorkflowResult,
+  StepResult,
+  ExecuteWorkflowOptions,
+  ResumeWorkflowOptions,
+  TimeTravelWorkflowOptions,
+  CreateStepFn,
+  CreateWorkflowFn,
+  WorkflowRegistry,
+  WorkflowRegistryEntry,
+} from './types';

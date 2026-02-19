@@ -21,33 +21,42 @@ const selectTriggerSizeClasses = {
   sm: `${formElementSizes.sm} px-2 text-ui-sm`,
   md: `${formElementSizes.md} px-3 text-ui-sm`,
   lg: `${formElementSizes.lg} px-3 text-ui-sm`,
+  default: `${formElementSizes.default} text-ui-md`,
 };
 
 export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
-  size?: FormElementSize;
+  size?: FormElementSize | 'default';
+  variant?: 'default' | 'experimental';
 };
 
 const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, SelectTriggerProps>(
-  ({ className, children, size = 'md', ...props }, ref) => (
-    <SelectPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        'flex w-full items-center justify-between border border-border1 bg-transparent py-2 shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-        formElementRadius,
-        formElementFocus,
-        transitions.all,
-        'hover:border-neutral2',
-        selectTriggerSizeClasses[size],
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDown className={cn('h-4 w-4 text-neutral3', transitions.colors)} />
-      </SelectPrimitive.Icon>
-    </SelectPrimitive.Trigger>
-  ),
+  ({ className, children, size = 'md', variant = 'default', ...props }, ref) => {
+    const isExperimentalVariant = ['experimental'].includes(variant);
+
+    return (
+      <SelectPrimitive.Trigger
+        ref={ref}
+        className={cn(
+          'flex w-full items-center justify-between placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+          isExperimentalVariant
+            ? 'bg-white/5 gap-[1em] text-white/70 ring-2 pl-[1.2em] pr-[.8em] ring-inset ring-white/10 font-light'
+            : 'border border-border1 bg-transparent py-2 shadow-sm',
+          isExperimentalVariant ? 'rounded' : formElementRadius,
+          isExperimentalVariant ? '' : formElementFocus,
+          transitions.all,
+          isExperimentalVariant ? '' : 'hover:border-neutral2',
+          selectTriggerSizeClasses[size],
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className={cn('h-4 w-4 text-neutral3', transitions.colors)} />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+    );
+  },
 );
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
