@@ -16,9 +16,8 @@ For general topic searches without page constraints, omit pageStart/pageEnd.`,
     documentId: z.string().optional().describe('Filter by specific document ID (from list-documents tool)'),
     pageStart: z.number().optional().describe('Start of page range (inclusive)'),
     pageEnd: z.number().optional().describe('End of page range (inclusive)'),
-    chunksPerPage: z.number().default(3).describe('Number of chunks to retrieve per page (default: 3)'),
   }),
-  execute: async ({ queryText, documentId, pageStart, pageEnd, chunksPerPage = 3 }) => {
+  execute: async ({ queryText, documentId, pageStart, pageEnd }) => {
     // Generate embedding for the query using Mastra's model router
     const embeddingModel = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
     const { embeddings } = await embeddingModel.doEmbed({ values: [queryText] });
