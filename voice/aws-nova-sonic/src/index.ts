@@ -90,6 +90,10 @@ export class NovaSonicVoice extends MastraVoice<
   private client?: BedrockRuntimeClient;
   private stream?: AsyncIterable<any>;
   private inputStream?: PassThrough; // Input stream for sending events to AWS
+  private _eventQueue?: Array<{ event: any }>;
+  private _signalQueue?: () => void;
+  private _closeSignal?: () => void;
+  private _promptName?: string;
   private state: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
   private events: EventMap;
   private instructions?: string;
@@ -456,9 +460,9 @@ export class NovaSonicVoice extends MastraVoice<
       };
       
       // Store the queue and signal function for use in sendClientEvent
-      (this as any)._eventQueue = eventQueue;
-      (this as any)._signalQueue = signalQueue;
-      (this as any)._closeSignal = () => { closeSignal = true; signalQueue(); };
+      this._eventQueue = eventQueue;
+      this._signalQueue = signalQueue;
+      this._closeSignal = () => { closeSignal = true; signalQueue(); };
       
       // CRITICAL: Pre-populate queue with sessionStart and promptStart events BEFORE calling send()
       // AWS requires both sessionStart and promptStart in the initial connection sequence
@@ -467,7 +471,7 @@ export class NovaSonicVoice extends MastraVoice<
       
       // Generate promptName for this session
       const promptName = randomUUID();
-      (this as any)._promptName = promptName;
+      this._promptName = promptName;
       
       // 1. Session start event
       // Build sessionStart event with all available parameters from sessionConfig
@@ -1387,8 +1391,8 @@ export class NovaSonicVoice extends MastraVoice<
 
     try {
       // Add event to queue and signal (following AWS sample pattern)
-      const eventQueue = (this as any)._eventQueue as Array<{ event: any }> | undefined;
-      const signalQueue = (this as any)._signalQueue as (() => void) | undefined;
+      const eventQueue = this._eventQueue;
+      const signalQueue = this._signalQueue;
       
       if (!eventQueue || !signalQueue) {
         throw new NovaSonicError(
@@ -1433,7 +1437,7 @@ export class NovaSonicVoice extends MastraVoice<
     }
 
     // Signal close to the async iterable
-    const closeSignal = (this as any)._closeSignal as (() => void) | undefined;
+    const closeSignal = this._closeSignal;
     if (closeSignal) {
       closeSignal();
     }
@@ -1507,7 +1511,7 @@ export class NovaSonicVoice extends MastraVoice<
     // Send text input event
     // Note: textInput in speak() is a simplified version for backward compatibility
     // For full control, use send() with proper contentStart/textInput/contentEnd sequence
-    const promptName = (this as any)._promptName as string;
+    const promptName = this._promptName;
     if (!promptName) {
       throw new NovaSonicError(
         ErrorCode.NOT_CONNECTED,
@@ -1633,7 +1637,13 @@ export class NovaSonicVoice extends MastraVoice<
 
     // Send AUDIO contentStart on first send() call if not already sent
     // We don't send it during connection to avoid AWS waiting for audio when using text input
-    const promptName = (this as any)._promptName as string;
+    const promptName = this._promptName;
+    if (!promptName) {
+      throw new NovaSonicError(
+        ErrorCode.NOT_CONNECTED,
+        'Prompt name not initialized. Connection may not be fully established.',
+      );
+    }
     if (!this.audioContentStarted) {
       // First time sending audio - need to send contentStart first
       const audioContentId = randomUUID();
@@ -1738,8 +1748,8 @@ export class NovaSonicVoice extends MastraVoice<
       return;
     }
     
-    if (this.audioContentStarted && this.audioContentName) {
-      const promptName = (this as any)._promptName as string;
+    if (this.audioContentStarted && this.audioContentName && this._promptName) {
+      const promptName = this._promptName;
       this.log('[endAudioInput] Sending contentEnd for audio input');
       await this.sendClientEvent({
         contentEnd: {
@@ -1759,7 +1769,7 @@ export class NovaSonicVoice extends MastraVoice<
    * This is called automatically before the first user input
    */
   private async startPrompt(): Promise<void> {
-    const promptName = (this as any)._promptName as string;
+    const promptName = this._promptName;
     if (!promptName) {
       throw new NovaSonicError(
         ErrorCode.NOT_CONNECTED,

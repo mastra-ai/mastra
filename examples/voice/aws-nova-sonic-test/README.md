@@ -248,7 +248,7 @@ The application consists of:
 
 The agent instance is shared across API routes to maintain the connection state.
 
-## Learn More
+## Additional resources
 
 - [AWS Nova 2 Sonic Documentation](https://docs.aws.amazon.com/nova/latest/nova2-userguide/using-conversational-speech.html)
 - [@mastra/voice-aws-nova-sonic Package](../../../voice/aws-nova-sonic/README.md)
