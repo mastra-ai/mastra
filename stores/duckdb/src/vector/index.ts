@@ -191,6 +191,12 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
 
+    if (!queryVector) {
+      throw new Error(
+        'queryVector is required for DuckDB queries. Metadata-only queries are not supported by this vector store.',
+      );
+    }
+
     // Validate topK parameter
     validateTopK('DUCKDB', topK);
 

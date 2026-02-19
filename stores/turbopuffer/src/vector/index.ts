@@ -215,6 +215,16 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     filter,
     includeVector,
   }: TurbopufferQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: 'VECTOR_TURBOPUFFER_QUERY_MISSING_VECTOR',
+        text: 'queryVector is required for Turbopuffer queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     let createIndex;
     try {
       const schemaConfig = this.opts.schemaConfigForIndex?.(indexName);
