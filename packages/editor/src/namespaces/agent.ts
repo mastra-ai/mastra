@@ -30,14 +30,15 @@ import type {
   StorageDefaultOptions,
   StorageModelConfig,
   AgentInstructionBlock,
+  StoredProcessorGraph,
   StorageWorkspaceRef,
 } from '@mastra/core/storage';
 
 import { RequestContext } from '@mastra/core/request-context';
-import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
+import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
@@ -82,7 +83,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           if (!version) return null;
 
           const {
-            id: _vId,
+            id: versionId,
             agentId: _aId,
             versionNumber: _vn,
             changedFields: _cf,
@@ -90,9 +91,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             createdAt: _ca,
             ...snapshotConfig
           } = version;
-          return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
+          return { ...agent, ...snapshotConfig, resolvedVersionId: versionId } as StorageResolvedAgentType;
         }
-        return store.getByIdResolved(id);
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },
       update: input => store.update(input),
       delete: id => store.delete(id),
@@ -288,29 +289,41 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       tools = { ...registryTools, ...mcpTools, ...integrationTools };
     }
 
-    // Workflows (record): accumulate by merging all matching variants
+    // Workflows: variant values may be string[] or Record<string, StorageToolConfig>
     const workflows = hasConditionalWorkflows
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.workflows as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
+          const variants = storedAgent.workflows as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredWorkflows(resolved);
         }
-      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | undefined);
+      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | string[] | undefined);
 
-    // Agents (record): accumulate by merging all matching variants
+    // Agents: variant values may be string[] or Record<string, StorageToolConfig>
     const agents = hasConditionalAgents
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.agents as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
+          const variants = storedAgent.agents as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredAgents(resolved);
         }
-      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | undefined);
+      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
     // Memory (object): accumulate by merging config from all matching variants
     const memory = hasConditionalMemory
@@ -336,29 +349,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
 
-    // Input processors (array): accumulate by concatenating all matching variants
+    // Input processors (graph): first-match from conditional variants, then hydrate
+    const processorProviders = this.editor.getProcessorProviders();
+    const hydrationCtx = { providers: processorProviders, mastra: this.mastra, logger: this.logger };
+
     const inputProcessors = hasConditionalInputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.inputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.inputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredInputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'input', hydrationCtx);
         }
-      : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.inputProcessors as StoredProcessorGraph | undefined, 'input', hydrationCtx);
 
-    // Output processors (array): accumulate by concatenating all matching variants
+    // Output processors (graph): first-match from conditional variants, then hydrate
     const outputProcessors = hasConditionalOutputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.outputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.outputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredOutputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'output', hydrationCtx);
         }
-      : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.outputProcessors as StoredProcessorGraph | undefined, 'output', hydrationCtx);
 
     // Model (object): accumulate by merging config from all matching variants
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
@@ -740,16 +756,23 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   private resolveStoredWorkflows(
-    storedWorkflows?: Record<string, StorageToolConfig>,
+    storedWorkflows?: Record<string, StorageToolConfig> | string[],
   ): Record<string, Workflow<any, any, any, any, any, any, any>> {
-    if (!storedWorkflows) return {};
+    if (
+      !storedWorkflows ||
+      (Array.isArray(storedWorkflows) ? storedWorkflows.length === 0 : Object.keys(storedWorkflows).length === 0)
+    ) {
+      return {};
+    }
     if (!this.mastra) return {};
 
-    const keys = Object.keys(storedWorkflows);
-    if (keys.length === 0) return {};
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedWorkflows)
+      ? Object.fromEntries(storedWorkflows.map(key => [key, {}]))
+      : storedWorkflows;
 
     const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
-    for (const workflowKey of keys) {
+    for (const workflowKey of Object.keys(normalized)) {
       try {
         resolvedWorkflows[workflowKey] = this.mastra.getWorkflow(workflowKey);
       } catch {
@@ -763,15 +786,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedWorkflows;
   }
 
-  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig>): Record<string, Agent<any>> {
-    if (!storedAgents) return {};
+  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig> | string[]): Record<string, Agent<any>> {
+    if (
+      !storedAgents ||
+      (Array.isArray(storedAgents) ? storedAgents.length === 0 : Object.keys(storedAgents).length === 0)
+    ) {
+      return {};
+    }
     if (!this.mastra) return {};
 
-    const keys = Object.keys(storedAgents);
-    if (keys.length === 0) return {};
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedAgents)
+      ? Object.fromEntries(storedAgents.map(key => [key, {}]))
+      : storedAgents;
 
     const resolvedAgents: Record<string, Agent<any>> = {};
-    for (const agentKey of keys) {
+    for (const agentKey of Object.keys(normalized)) {
       try {
         resolvedAgents[agentKey] = this.mastra.getAgent(agentKey);
       } catch {
@@ -890,50 +920,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
   }
 
-  private findProcessor(processorKey: string): Processor<any> | undefined {
-    if (!this.mastra) return undefined;
-
-    try {
-      return this.mastra.getProcessor(processorKey);
-    } catch {
-      try {
-        return this.mastra.getProcessorById(processorKey);
-      } catch {
-        this.logger?.warn(`Processor "${processorKey}" referenced in stored agent but not registered in Mastra`);
-        return undefined;
-      }
-    }
-  }
-
-  private resolveStoredInputProcessors(storedProcessors?: string[]): InputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: InputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (processor && (processor.processInput || processor.processInputStep)) {
-        resolved.push(processor as InputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
-  private resolveStoredOutputProcessors(storedProcessors?: string[]): OutputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: OutputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (
-        processor &&
-        (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)
-      ) {
-        resolved.push(processor as OutputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
   // ============================================================================
   // Clone
   // ============================================================================
@@ -1009,10 +995,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const memory = await agent.getMemory({ requestContext });
     const memoryConfig = memory?.getConfig();
 
-    // 7. Extract input/output processor IDs
-    const { inputProcessorIds, outputProcessorIds } = await agent.getConfiguredProcessorIds(requestContext);
-    const inputProcessorKeys = inputProcessorIds.length > 0 ? inputProcessorIds : undefined;
-    const outputProcessorKeys = outputProcessorIds.length > 0 ? outputProcessorIds : undefined;
+    // 7. Processors from code-defined agents cannot be automatically serialized
+    // to a StoredProcessorGraph (requires provider ID + config). Processors must
+    // be configured via the editor UI after cloning.
 
     // 8. Extract scorer keys with sampling config
     let storedScorers: Record<string, StorageScorerConfig> | undefined;
@@ -1055,8 +1040,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       workflows: workflowKeys.length > 0 ? Object.fromEntries(workflowKeys.map(key => [key, {}])) : undefined,
       agents: agentKeys.length > 0 ? Object.fromEntries(agentKeys.map(key => [key, {}])) : undefined,
       memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,

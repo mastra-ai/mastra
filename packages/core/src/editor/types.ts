@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
 import type {
@@ -115,6 +116,8 @@ export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
   toolProviders?: Record<string, ToolProvider>;
+  /** Processor providers for configurable processors (e.g., moderation, token limiter) */
+  processorProviders?: Record<string, ProcessorProvider>;
   /**
    * Additional filesystem providers beyond the built-in ones.
    * Built-in providers (local) are always available.
@@ -141,6 +144,11 @@ export interface GetByIdOptions {
   versionId?: string;
   /** Retrieve a specific version by number. */
   versionNumber?: number;
+  /** Controls which version is resolved when no versionId/versionNumber is given.
+   *  - `'draft'` — always resolves the latest version.
+   *  - `'published'` (default) — resolves the active version, falling back to latest.
+   */
+  status?: 'draft' | 'published' | 'archived';
 }
 
 // ============================================================================
@@ -276,4 +284,9 @@ export interface IMastraEditor {
   getToolProvider(id: string): ToolProvider | undefined;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
+
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined;
+  /** List all registered processor providers */
+  getProcessorProviders(): Record<string, ProcessorProvider>;
 }

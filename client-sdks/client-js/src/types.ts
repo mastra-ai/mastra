@@ -33,6 +33,7 @@ import type {
   RuleGroup,
   StorageConditionalVariant,
   StorageConditionalField,
+  StoredProcessorGraph,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -127,7 +128,9 @@ export interface GetAgentResponse {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -807,8 +810,8 @@ export interface StoredAgentResponse {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
@@ -878,8 +881,8 @@ export interface CreateStoredAgentParams {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
@@ -905,8 +908,8 @@ export interface UpdateStoredAgentParams {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
@@ -1164,8 +1167,8 @@ export interface AgentVersionResponse {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
@@ -1226,6 +1229,70 @@ export type AgentVersionDiff = VersionDiff;
 export interface CompareVersionsResponse {
   fromVersion: AgentVersionResponse;
   toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
+}
+
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+export interface ScorerVersionResponse {
+  id: string;
+  scorerDefinitionId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateScorerVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CompareScorerVersionsResponse {
+  fromVersion: ScorerVersionResponse;
+  toVersion: ScorerVersionResponse;
   diffs: VersionDiff[];
 }
 
@@ -1757,6 +1824,40 @@ export interface ListToolProviderToolsResponse {
 export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
 
 // ============================================================================
+// Processor Provider Types
+// ============================================================================
+
+/**
+ * Provider phase names as returned by the server (prefixed form).
+ * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
+ */
+export type ProcessorProviderPhase =
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
+
+export interface ProcessorProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+}
+
+export interface GetProcessorProvidersResponse {
+  providers: ProcessorProviderInfo[];
+}
+
+export interface GetProcessorProviderResponse {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+  configSchema: Record<string, unknown>;
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -1817,8 +1918,8 @@ export interface DatasetRecord {
   name: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;

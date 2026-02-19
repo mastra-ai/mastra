@@ -100,6 +100,11 @@ export class AgentsPG extends AgentsStorage {
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
       ifNotExists: ['status', 'authorId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+    });
 
     // Migrate tools field from string[] to JSONB format
     await this.#migrateToolsToJsonbFormat();
@@ -569,7 +574,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -595,8 +600,10 @@ export class AgentsPG extends AgentsStorage {
       const queryParams: any[] = [];
       let paramIdx = 1;
 
-      conditions.push(`status = $${paramIdx++}`);
-      queryParams.push(status);
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
@@ -608,7 +615,7 @@ export class AgentsPG extends AgentsStorage {
         queryParams.push(JSON.stringify(metadata));
       }
 
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#db.client.one(

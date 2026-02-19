@@ -3,6 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
+import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -410,10 +411,10 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  inputProcessors?: StorageConditionalField<string[]>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  outputProcessors?: StorageConditionalField<string[]>;
+  /** Processor graph for input processing — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
+  /** Processor graph for output processing — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Memory configuration object — static or conditional on request context */
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
@@ -453,7 +454,11 @@ export interface StorageAgentType {
  * Resolved agent type that combines the thin agent record with version snapshot config.
  * Returned by getAgentByIdResolved and listAgentsResolved.
  */
-export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
+export type StorageResolvedAgentType = StorageAgentType &
+  StorageAgentSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new agent. Flat union of thin record fields
@@ -582,6 +587,53 @@ export interface RuleGroup {
   conditions: (Rule | RuleGroupDepth1)[];
 }
 
+// ============================================================================
+// Stored Processor Graph Types
+// ============================================================================
+
+/**
+ * A single processor step in a stored processor graph.
+ * Each step references a ProcessorProvider by ID and stores its configuration.
+ */
+export interface ProcessorGraphStep {
+  /** Unique ID for this step within the graph */
+  id: string;
+  /** The ProcessorProvider ID that created this processor */
+  providerId: string;
+  /** Configuration matching the provider's configSchema, validated at creation time */
+  config: Record<string, unknown>;
+  /** Which processor phases to enable (subset of the provider's availablePhases) */
+  enabledPhases: ProcessorPhase[];
+}
+
+/**
+ * A condition for branching within a processor graph.
+ * Uses RuleGroup (evaluated against the previous step's output) to decide which branch to take.
+ */
+export interface ProcessorGraphCondition {
+  /** The steps to execute if this condition's rules match */
+  steps: ProcessorGraphEntry[];
+  /** Rules to evaluate against the previous step's output. If absent, this is the default branch. */
+  rules?: RuleGroup;
+}
+
+/**
+ * An entry in a stored processor graph.
+ * Simplified version of SerializedStepFlowEntry, supporting only step, parallel, and conditional.
+ */
+export type ProcessorGraphEntry =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntry[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphCondition[] };
+
+/**
+ * A stored processor graph representing a pipeline of processors.
+ * The entries are ordered: sequential flow is array order, with parallel/conditional branching.
+ */
+export interface StoredProcessorGraph {
+  steps: ProcessorGraphEntry[];
+}
+
 /**
  * Thin prompt block record (metadata only).
  * All configuration lives in version snapshots (StoragePromptBlockSnapshotType).
@@ -617,7 +669,10 @@ export interface StoragePromptBlockSnapshotType {
 }
 
 /** Resolved prompt block: thin record merged with active version snapshot */
-export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+export type StorageResolvedPromptBlockType = StoragePromptBlockType &
+  StoragePromptBlockSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /** Input for creating a new prompt block */
 export type StorageCreatePromptBlockInput = {
@@ -754,7 +809,11 @@ export interface StorageScorerDefinitionType {
  * Resolved stored scorer type that combines the thin record with version snapshot config.
  * Returned by getScorerDefinitionByIdResolved and listScorerDefinitionsResolved.
  */
-export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType & StorageScorerDefinitionSnapshotType;
+export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType &
+  StorageScorerDefinitionSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new stored scorer. Flat union of thin record fields
@@ -1273,7 +1332,10 @@ export interface StorageMCPClientType {
  * Resolved stored MCP client type that combines the thin record with version snapshot config.
  * Returned by getMCPClientByIdResolved and listMCPClientsResolved.
  */
-export type StorageResolvedMCPClientType = StorageMCPClientType & StorageMCPClientSnapshotType;
+export type StorageResolvedMCPClientType = StorageMCPClientType &
+  StorageMCPClientSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new stored MCP client. Flat union of thin record fields
@@ -1467,7 +1529,10 @@ export interface StorageWorkspaceType {
  * Resolved workspace type that combines the thin record with version snapshot config.
  * Returned by getWorkspaceByIdResolved and listWorkspacesResolved.
  */
-export type StorageResolvedWorkspaceType = StorageWorkspaceType & StorageWorkspaceSnapshotType;
+export type StorageResolvedWorkspaceType = StorageWorkspaceType &
+  StorageWorkspaceSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new workspace. Flat union of thin record fields
@@ -1594,7 +1659,10 @@ export interface StorageSkillType {
  * Resolved skill type that combines the thin record with version snapshot content.
  * Returned by getSkillByIdResolved and listSkillsResolved.
  */
-export type StorageResolvedSkillType = StorageSkillType & StorageSkillSnapshotType;
+export type StorageResolvedSkillType = StorageSkillType &
+  StorageSkillSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new skill. Flat union of thin record fields
@@ -1887,8 +1955,8 @@ export interface CreateDatasetInput {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetInput {
@@ -1896,8 +1964,8 @@ export interface UpdateDatasetInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemInput {
