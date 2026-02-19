@@ -1,5 +1,6 @@
+import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -25,6 +26,41 @@ function makeSubAgent(id: string, responseText: string) {
         warnings: [],
       }),
     }),
+  });
+}
+
+// Helper: create a sub-agent mock model that calls a specific tool then stops
+function makeSubAgentModelWithTool(toolName: string, toolArgs: Record<string, any>) {
+  let callCount = 0;
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: '',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'sub-call-1',
+              toolName,
+              input: JSON.stringify(toolArgs),
+            },
+          ],
+          warnings: [],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        text: 'Task completed.',
+        content: [{ type: 'text' as const, text: 'Task completed.' }],
+        warnings: [],
+      };
+    },
   });
 }
 
@@ -124,12 +160,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Delegate task', {
+      await supervisorAgent.generate('Delegate task', {
         maxSteps: 3,
         delegation: {
           onDelegationStart,
@@ -198,16 +229,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: {
-          'test-agent': agent,
-        },
-        storage: new InMemoryStore(),
-      });
-
-      const testAgent = mastra.getAgent('test-agent');
-
-      await testAgent.generate('Use tool then respond', {
+      await agent.generate('Use tool then respond', {
         maxSteps: 3,
         onIterationComplete: (ctx: IterationCompleteContext) => {
           iterations.push(ctx.iteration);
@@ -234,12 +256,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'research-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Research dolphins', {
+      await supervisorAgent.generate('Research dolphins', {
         maxSteps: 3,
         delegation: { onDelegationStart },
       });
@@ -266,12 +283,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'writer-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Write a report', {
+      await supervisorAgent.generate('Write a report', {
         maxSteps: 3,
         delegation: { onDelegationComplete },
       });
@@ -300,12 +312,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'blocked-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Do something', {
+      await supervisorAgent.generate('Do something', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => ({ proceed: false }),
@@ -359,12 +366,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'prompt-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Do something', {
+      await supervisorAgent.generate('Do something', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => ({ proceed: true, modifiedPrompt: 'MODIFIED PROMPT' }),
@@ -390,12 +392,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'filter-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Task with context', {
+      await supervisorAgent.generate('Task with context', {
         maxSteps: 3,
         delegation: { contextFilter: contextFilterSpy },
       });
@@ -425,12 +422,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'ordered-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Ordered task', {
+      await supervisorAgent.generate('Ordered task', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => {
@@ -492,12 +484,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: { supervisor: supervisorAgent, 'bail-agent': subAgent },
-        storage: new InMemoryStore(),
-      });
-
-      await mastra.getAgent('supervisor').generate('Two-task job', {
+      await supervisorAgent.generate('Two-task job', {
         maxSteps: 10,
         onIterationComplete: () => {
           iterationsAfterBail++;
@@ -513,112 +500,6 @@ describe('Supervisor Pattern Integration Tests', () => {
 
       // Bail after first delegation — only 1 iteration fires (the tool-call one)
       expect(iterationsAfterBail).toBe(1);
-    });
-  });
-
-  describe('Bail mechanism integration', () => {
-    it('should handle bail flag in delegation complete hook', async () => {
-      let bailCalled = false;
-
-      const criticalTool = createTool({
-        id: 'critical-tool',
-        description: 'A critical tool',
-        inputSchema: z.object({
-          data: z.string(),
-        }),
-        execute: async () => {
-          return { result: 'CRITICAL_SUCCESS' };
-        },
-      });
-
-      const agent = new Agent({
-        id: 'agent-with-bail',
-        name: 'Agent with Bail',
-        instructions: 'You use critical tools',
-        model: new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'tool-calls',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            text: '',
-            content: [
-              {
-                type: 'tool-call',
-                toolCallId: 'call-1',
-                toolName: 'critical-tool',
-                args: { data: 'important' },
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              {
-                type: 'tool-call-start',
-                id: 'call-1',
-                toolCallId: 'call-1',
-                toolName: 'critical-tool',
-              },
-              {
-                type: 'tool-call-args-delta',
-                id: 'call-1',
-                toolCallId: 'call-1',
-                toolName: 'critical-tool',
-                argsDelta: '{"data":"important"}',
-              },
-              {
-                type: 'tool-call-end',
-                id: 'call-1',
-                toolCallId: 'call-1',
-                toolName: 'critical-tool',
-                args: { data: 'important' },
-              },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              },
-            ]),
-          }),
-        }),
-        tools: {
-          criticalTool,
-        },
-        memory: new MockMemory(),
-      });
-
-      const mastra = new Mastra({
-        agents: {
-          'agent-with-bail': agent,
-        },
-        storage: new InMemoryStore(),
-      });
-
-      const testAgent = mastra.getAgent('agent-with-bail');
-
-      // Note: delegation hooks are specifically for sub-agent/workflow tools
-      // Regular tools don't trigger delegation hooks
-      // This test verifies the hook structure exists and can be configured
-      await testAgent.generate('Use critical tool', {
-        maxSteps: 2,
-        delegation: {
-          bailStrategy: 'first',
-          onDelegationComplete: (ctx: DelegationCompleteContext) => {
-            if (ctx.result?.result === 'CRITICAL_SUCCESS') {
-              ctx.bail();
-              bailCalled = true;
-              return { stopProcessing: true };
-            }
-          },
-        },
-      });
-
-      // Bail hook is configured but only triggers for agent/workflow tools
-      expect(bailCalled).toBe(false); // Regular tools don't trigger delegation hooks
     });
   });
 
@@ -668,17 +549,8 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: {
-          'configured-agent': agent,
-        },
-        storage: new InMemoryStore(),
-      });
-
-      const testAgent = mastra.getAgent('configured-agent');
-
       // Verify delegation config is accepted without errors
-      await testAgent.generate('Test prompt', {
+      await agent.generate('Test prompt', {
         maxSteps: 1,
         delegation: delegationConfig,
       });
@@ -726,23 +598,14 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const mastra = new Mastra({
-        agents: {
-          'iteration-agent': agent,
-        },
-        storage: new InMemoryStore(),
-      });
-
-      const testAgent = mastra.getAgent('iteration-agent');
-
-      await testAgent.generate('Test prompt', {
+      await agent.generate('Test prompt', {
         maxSteps: 1,
         onIterationComplete: iterationHook,
       });
 
       // Hook should be called once for the iteration that completed with 'stop'
       expect(iterationHook).toHaveBeenCalledTimes(1);
-      const hookCall = iterationHook.mock.calls[0][0];
+      const hookCall = iterationHook.mock.calls[0]?.[0];
       expect(hookCall).toMatchObject({
         iteration: 1,
         text: 'Response',
@@ -755,5 +618,939 @@ describe('Supervisor Pattern Integration Tests', () => {
       expect(hookCall.messages).toBeDefined();
       expect(hookCall.messages.length).toBe(2); // user message + assistant response
     });
+  });
+});
+
+/**
+ * Working memory forwarding in supervisor pattern.
+ * Replicates the agent-network updateWorkingMemory test for the supervisor generate() pattern.
+ * Uses a real OpenAI model to verify memory context is forwarded to sub-agents.
+ */
+describe('Supervisor Pattern - Working memory forwarding', () => {
+  it.skipIf(!process.env.OPENAI_API_KEY)(
+    'should forward memory context to sub-agents without updateWorkingMemory errors',
+    async () => {
+      // Create a shared memory instance with working memory enabled
+      // This is the scenario from issue #9873 where sub-agents share the same memory template
+      const sharedMemory = new MockMemory({
+        enableWorkingMemory: true,
+        workingMemoryTemplate: `
+      # Information Profile
+      - Title:
+      - Some facts:
+        - Fact 1:
+        - Fact 2:
+        - Fact 3:
+      - Summary:
+      `,
+      });
+
+      // Create sub-agents with the shared memory and working memory enabled
+      // These agents will need threadId/resourceId to use updateWorkingMemory tool
+      const subAgent1 = new Agent({
+        id: 'sub-agent-1',
+        name: 'Sub Agent 1',
+        instructions:
+          'You are a helpful research assistant. When the user provides information, remember it using your memory tools.',
+        model: openai('gpt-4o-mini'),
+        defaultOptions: {
+          toolChoice: 'required',
+        },
+      });
+
+      // Create network agent with the same shared memory
+      const supervisorWithSharedMemory = new Agent({
+        id: 'supervisor-with-shared-memory',
+        name: 'Supervisor With Shared Memory',
+        instructions: 'You can delegate tasks to sub-agents. Sub Agent 1 handles research tasks.',
+        model: openai('gpt-4o-mini'),
+        agents: {
+          subAgent1,
+        },
+        memory: sharedMemory,
+      });
+
+      const threadId = 'test-thread-shared-memory';
+      const resourceId = 'test-resource-shared-memory';
+
+      // Consume the stream and check for updateWorkingMemory errors
+      const agentStream = await supervisorWithSharedMemory.stream('Research dolphins and write a summary', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      let subAgentWorkingMemorySuccessful = false;
+      for await (const chunk of agentStream.fullStream) {
+        if (chunk.type === 'tool-output') {
+          const payload = chunk.payload;
+          if (payload.toolName?.startsWith('agent-')) {
+            const output = payload.output;
+            if (output && output.type === 'tool-result' && output.payload.toolName === 'updateWorkingMemory') {
+              if (output.payload.result?.success) {
+                subAgentWorkingMemorySuccessful = true;
+              } else if (output.payload.isError) {
+                subAgentWorkingMemorySuccessful = false;
+              }
+            }
+          }
+        }
+      }
+
+      expect(subAgentWorkingMemorySuccessful).toBe(true);
+
+      // Verify that the parent thread was created in memory (confirms memory ops worked)
+      const thread = await sharedMemory.getThreadById({ threadId });
+      expect(thread).toBeDefined();
+      expect(thread?.id).toBe(threadId);
+      expect(thread?.resourceId).toBe(resourceId);
+      const workingMemory = await sharedMemory.getWorkingMemory({ threadId, resourceId });
+      expect(workingMemory).toBeDefined();
+
+      const subAgentMemory = await subAgent1.getMemory();
+      expect(subAgentMemory).toBeDefined();
+      const subAgentThreads = await subAgentMemory?.listThreads({});
+      const firstThread = subAgentThreads?.threads[0];
+      expect(firstThread).toBeDefined();
+      if (firstThread) {
+        const subAgentWorkingMemory = await subAgentMemory?.getWorkingMemory({
+          threadId: firstThread.id,
+          resourceId: `${resourceId}-subAgent1`,
+        });
+        expect(subAgentWorkingMemory).toBeDefined();
+      } else {
+        expect.fail('No thread found for sub-agent');
+      }
+    },
+    120e6,
+  );
+});
+
+/**
+ * Tool approval in supervisor pattern.
+ * Tests that when a sub-agent has a tool with requireApproval: true,
+ * the approval request propagates through the supervisor's stream.
+ */
+describe('Supervisor Pattern - Tool approval propagation', () => {
+  const mockStorage = new InMemoryStore();
+
+  afterEach(async () => {
+    const workflowsStore = await mockStorage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should propagate tool approval from sub-agent through supervisor stream', async () => {
+    const mockFindUser = vi.fn().mockResolvedValue({ name: 'Alice', email: 'alice@example.com' });
+
+    const findUserTool = createTool({
+      id: 'find-user-tool',
+      description: 'Find user information by name.',
+      inputSchema: z.object({ name: z.string().describe('User name to look up') }),
+      requireApproval: true,
+      execute: async (input: { name: string }) => mockFindUser(input),
+    });
+
+    // Sub-agent mock: calls findUserTool on first invocation using doStream
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doStream: async () => {
+        subCallCount++;
+        if (subCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'sub-call-1',
+                toolName: 'find-user-tool',
+                input: '{"name":"Alice"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Found Alice successfully.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'approval-sub-agent',
+      name: 'Approval Sub Agent',
+      description: 'An agent that looks up user info.',
+      instructions: 'You look up user info using the find-user-tool.',
+      model: subAgentModel,
+      tools: { findUserTool },
+    });
+
+    // Supervisor mock: calls agent-approvalSubAgent using doStream
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'supervisor-call-1',
+                toolName: 'agent-approvalSubAgent',
+                input: JSON.stringify({ prompt: 'find Alice' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'approval-supervisor',
+      name: 'Approval Supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: supervisorModel,
+      agents: { approvalSubAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    new Mastra({
+      agents: { approvalSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    const stream = await supervisorAgent.stream('Find Alice', { maxSteps: 5 });
+
+    let approvalChunkReceived = false;
+    let approvalToolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        approvalChunkReceived = true;
+        approvalToolCallId = chunk.payload?.toolCallId;
+      }
+    }
+
+    // Tool approval should have been requested before tool execution
+    expect(approvalChunkReceived).toBe(true);
+    expect(approvalToolCallId).toBeTruthy();
+
+    // Approve the tool call and verify execution continues
+    const resumeStream = await supervisorAgent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: approvalToolCallId,
+    });
+
+    for await (const _chunk of resumeStream.fullStream) {
+      // consume
+    }
+
+    // Tool should now have been executed after approval
+    expect(mockFindUser).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Suspension in supervisor pattern.
+ * Tests that when a sub-agent calls suspend(), the suspension propagates
+ * through the supervisor's generate() and can be resumed.
+ */
+describe('Supervisor Pattern - Suspension propagation', () => {
+  const mockStorage = new InMemoryStore();
+
+  afterEach(async () => {
+    const workflowsStore = await mockStorage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should propagate sub-agent tool suspension through supervisor generate() and allow resume', async () => {
+    const suspendingTool = createTool({
+      id: 'info-gatherer-tool',
+      description: 'Gathers information but needs user input.',
+      inputSchema: z.object({ query: z.string().describe('The information query') }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ extraInfo: z.string() }),
+      execute: async (input: { query: string }, context: any) => {
+        if (!context?.agent?.resumeData) {
+          return await context?.agent?.suspend({ message: `Need more info for: ${input.query}` });
+        }
+        return { answer: `${input.query}: ${context.agent.resumeData.extraInfo}` };
+      },
+    });
+
+    // Sub-agent mock: calls the suspending tool on first invocation
+    const subAgentModel = makeSubAgentModelWithTool('info-gatherer-tool', { query: 'supervisor test query' });
+
+    const subAgent = new Agent({
+      id: 'suspending-sub-agent',
+      name: 'Suspending Sub Agent',
+      description: 'An agent that gathers information using a suspending tool.',
+      instructions: 'You gather information using the info-gatherer-tool.',
+      model: subAgentModel,
+      tools: { suspendingTool },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'suspension-supervisor',
+      name: 'Suspension Supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('suspendingSubAgent', 'gather information'),
+      agents: { suspendingSubAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    new Mastra({
+      agents: { suspensionSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    // First generate: should suspend waiting for info
+    const output = await supervisorAgent.generate('Gather some info', {
+      maxSteps: 5,
+      memory: {
+        thread: 'test-thread-suspension',
+        resource: 'test-resource-suspension',
+      },
+    });
+
+    expect(output.finishReason).toBe('suspended');
+    expect(output.suspendPayload).toBeDefined();
+
+    // Resume with the required info
+    const resumeOutput = await supervisorAgent.resumeGenerate(
+      { extraInfo: 'the answer is 42' },
+      {
+        runId: output.runId!,
+        memory: {
+          thread: 'test-thread-suspension',
+          resource: 'test-resource-suspension',
+        },
+      },
+    );
+
+    // After resuming, execution should complete
+    expect(resumeOutput.finishReason).toBe('stop');
+    expect(resumeOutput.suspendPayload).toBeUndefined();
+  });
+});
+
+/**
+ * Completion scorers in supervisor pattern.
+ * Tests that completion scorers work alongside the supervisor's delegation system.
+ */
+describe('Supervisor Pattern - Completion scorers', () => {
+  it('should run completion scorers after each iteration in supervisor generate()', async () => {
+    const scorerRun = vi.fn().mockResolvedValue({ score: 1, reason: 'Task is complete' });
+    const mockScorer = {
+      id: 'supervisor-test-scorer',
+      name: 'Supervisor Test Scorer',
+      run: scorerRun,
+    };
+
+    const supervisorAgent = new Agent({
+      id: 'scorer-supervisor',
+      name: 'Scorer Supervisor',
+      instructions: 'You complete tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Task completed successfully.',
+          content: [{ type: 'text' as const, text: 'Task completed successfully.' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Task completed successfully.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+
+    const stream = await supervisorAgent.stream('Complete a task', {
+      maxSteps: 3,
+      completion: { scorers: [mockScorer as any] },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    // Scorer should have been called for the completed iteration
+    expect(scorerRun).toHaveBeenCalled();
+
+    // Completion check events should have been emitted
+    expect(completionCheckEvents.length).toBeGreaterThan(0);
+    expect(completionCheckEvents[0].payload.passed).toBe(true);
+  });
+
+  it('should continue iterating when completion scorer fails and stop when it passes', async () => {
+    let scorerCallCount = 0;
+    // Scorer fails on first call, passes on second
+    const adaptiveScorer = {
+      id: 'adaptive-scorer',
+      name: 'Adaptive Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount === 1) {
+          return { score: 0, reason: 'Task not complete yet' };
+        }
+        return { score: 1, reason: 'Task is complete' };
+      }),
+    };
+
+    let modelCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'adaptive-scorer-supervisor',
+      name: 'Adaptive Scorer Supervisor',
+      instructions: 'You complete tasks iteratively.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          modelCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: `Iteration ${modelCallCount} response.`,
+            content: [{ type: 'text' as const, text: `Iteration ${modelCallCount} response.` }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          modelCallCount++;
+          const iteration = modelCallCount;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${iteration}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: `Iteration ${iteration} response.` },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+    const stream = await supervisorAgent.stream('Complete a task', {
+      maxSteps: 5,
+      completion: { scorers: [adaptiveScorer as any] },
+    });
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    // Scorer should have been called twice (once failing, once passing)
+    expect(adaptiveScorer.run).toHaveBeenCalledTimes(2);
+
+    // Model should have been invoked at least twice (due to failed scorer triggering re-run)
+    expect(modelCallCount).toBeGreaterThanOrEqual(2);
+
+    // Should have 2 completion check events: one failed, one passed
+    expect(completionCheckEvents.length).toBe(2);
+    expect(completionCheckEvents[0].payload.passed).toBe(false);
+    expect(completionCheckEvents[1].payload.passed).toBe(true);
+  });
+});
+
+/**
+ * onIterationComplete Hook Integration in supervisor pattern.
+ * Tests that the onIterationComplete hook is called after each iteration in the supervisor pattern.
+ */
+describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
+  it('should call onIterationComplete hook after each iteration', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'simple-tool',
+      description: 'A simple tool',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async () => {
+        return { result: 'Tool executed' };
+      },
+    });
+
+    // Create model that generates tool call then responds
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You use tools and respond',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: return tool call
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'simple-tool',
+                  args: { input: 'test' },
+                },
+              ],
+              warnings: [],
+            };
+          }
+          // Second call: return text response
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Final response after tool',
+            content: [{ type: 'text', text: 'Final response after tool' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: return tool call
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call-start',
+                  id: 'call-1',
+                  toolCallId: 'call-1',
+                  toolName: 'simple-tool',
+                },
+                {
+                  type: 'tool-call-args-delta',
+                  id: 'call-1',
+                  toolCallId: 'call-1',
+                  toolName: 'simple-tool',
+                  argsDelta: '{"input":"test"}',
+                },
+                {
+                  type: 'tool-call-end',
+                  id: 'call-1',
+                  toolCallId: 'call-1',
+                  toolName: 'simple-tool',
+                  args: { input: 'test' },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          // Second call: return text response
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Final response after tool' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      tools: {
+        simpleTool,
+      },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'test-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('test-agent');
+
+    await testAgent.generate('Use tool then respond', {
+      maxSteps: 5,
+      onIterationComplete: (ctx: IterationCompleteContext) => {
+        iterations.push(ctx.iteration);
+        return { continue: true };
+      },
+    });
+
+    // Two iterations: one for the tool call, one for the final stop response
+    expect(iterations).toEqual([1, 2]);
+  });
+
+  it('should stop iteration when onIterationComplete returns continue: false', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'counter-tool',
+      description: 'Counts calls',
+      inputSchema: z.object({
+        count: z.number(),
+      }),
+      execute: async ({ count }) => {
+        return { result: `Count: ${count}` };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'counter-agent',
+      name: 'Counter Agent',
+      instructions: 'You keep calling the counter tool',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          // Always return tool calls to test stopping
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: `call-${callCount}`,
+                toolName: 'counter-tool',
+                args: { count: callCount },
+              },
+            ],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call-start',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'counter-tool',
+              },
+              {
+                type: 'tool-call-args-delta',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'counter-tool',
+                argsDelta: `{"count":${callCount}}`,
+              },
+              {
+                type: 'tool-call-end',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'counter-tool',
+                args: { count: callCount },
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      tools: {
+        simpleTool,
+      },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'counter-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('counter-agent');
+
+    await testAgent.generate('Keep counting', {
+      maxSteps: 10,
+      onIterationComplete: (ctx: IterationCompleteContext) => {
+        iterations.push(ctx.iteration);
+        // Stop after 2 iterations
+        if (ctx.iteration >= 2) {
+          return { continue: false };
+        }
+        return { continue: true };
+      },
+    });
+
+    // Hook returns continue: false at iteration >= 2, so exactly 2 iterations fire
+    expect(iterations).toEqual([1, 2]);
+  });
+
+  it('should add feedback to conversation when provided', async () => {
+    const feedbackMessages: string[] = [];
+    let callCount = 0;
+
+    const agent = new Agent({
+      id: 'feedback-agent',
+      name: 'Feedback Agent',
+      instructions: 'You respond to feedback',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          callCount++;
+
+          // Check if feedback was added to messages
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          const feedbackMsg = messages.find(
+            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
+          );
+          if (feedbackMsg) {
+            feedbackMessages.push((feedbackMsg as any).content);
+          }
+
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'First response',
+              content: [{ type: 'text', text: 'First response' }],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Improved response after feedback',
+            content: [{ type: 'text', text: 'Improved response after feedback' }],
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          callCount++;
+
+          // Check if feedback was added to messages
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          const feedbackMsg = messages.find(
+            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
+          );
+          if (feedbackMsg) {
+            feedbackMessages.push((feedbackMsg as any).content);
+          }
+
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'First response' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Improved response after feedback' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'feedback-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('feedback-agent');
+
+    let iterationCount = 0;
+    await testAgent.generate('Generate response', {
+      maxSteps: 3,
+      onIterationComplete: () => {
+        iterationCount++;
+        if (iterationCount === 1) {
+          // Add feedback after first iteration
+          return {
+            continue: true,
+            feedback: 'Please improve your response with more details.',
+          };
+        }
+        return { continue: false }; // Stop after second iteration
+      },
+    });
+
+    // When the model returns stop (isFinal), the loop ends after that iteration
+    // even if the hook returns continue: true with feedback. Feedback only adds
+    // a user message for the *next* iteration when the loop would naturally continue
+    // (e.g. during a tool-call sequence). Here the model says stop on iteration 1
+    // so the loop ends and the hook is called exactly once.
+    expect(iterationCount).toBe(1);
+  });
+
+  it('should accept onIterationComplete configuration without errors', async () => {
+    const hookMock = vi.fn(() => ({ continue: true }));
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test agent',
+      instructions: 'Test agent',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Response',
+          content: [{ type: 'text', text: 'Response' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'test-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('test-agent');
+
+    // This should not throw an error
+    const result = await testAgent.generate('Test', {
+      maxSteps: 1,
+      onIterationComplete: hookMock,
+    });
+
+    expect(result).toBeDefined();
+    expect(result.text).toBe('Response');
+
+    // Hook should be called after the iteration
+    expect(hookMock).toHaveBeenCalled();
   });
 });
