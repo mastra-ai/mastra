@@ -47,8 +47,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
     : undefined;
 
-  // Helper function to process a chunk through output processors and enqueue it
-  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
+  // Helper function to process a chunk through output processors and enqueue it.
+  // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
     if (processorRunner && rest.processorStates) {
       const {
         part: processed,
@@ -77,15 +78,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             processorId,
           },
         } as ChunkType<OUTPUT>);
-        return;
+        return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
+        return processed as ChunkType<OUTPUT>;
       }
+
+      return null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
+      return chunk;
     }
   }
 
@@ -137,8 +142,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 providerMetadata: toolCall.providerMetadata,
               },
             };
-            await processAndEnqueueChunk(chunk);
-            await rest.options?.onChunk?.(chunk);
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
           }
 
           const msg: MastraDBMessage = {
@@ -198,8 +203,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   providerExecuted: toolCall.providerExecuted,
                 },
               };
-              await processAndEnqueueChunk(chunk);
-              await rest.options?.onChunk?.(chunk);
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
             }
 
             const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -278,8 +283,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             },
           };
 
-          await processAndEnqueueChunk(chunk);
-          await rest.options?.onChunk?.(chunk);
+          const processed = await processAndEnqueueChunk(chunk);
+          if (processed) await rest.options?.onChunk?.(processed);
         }
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
