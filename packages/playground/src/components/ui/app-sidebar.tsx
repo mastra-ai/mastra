@@ -9,6 +9,7 @@ import {
   MessagesSquareIcon,
   FolderIcon,
   Cpu,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -91,6 +92,13 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
+        isExperimental: true,
       },
     ],
   },

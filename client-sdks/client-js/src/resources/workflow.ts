@@ -7,7 +7,12 @@ import type {
   GetWorkflowRunByIdResponse,
 } from '../types';
 
-import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
+import {
+  parseClientRequestContext,
+  base64RequestContext,
+  requestContextQueryString,
+  parseSuperJsonString,
+} from '../utils';
 import { BaseResource } from './base';
 import { Run } from './run';
 
@@ -128,6 +133,23 @@ export class Workflow extends BaseResource {
     return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
       method: 'DELETE',
     });
+  }
+
+  /**
+   * Retrieves the input/output schema for the workflow
+   * @returns Promise containing parsed inputSchema and outputSchema, or null if not defined
+   */
+  async getSchema(): Promise<{
+    inputSchema: Record<string, unknown> | null;
+    outputSchema: Record<string, unknown> | null;
+  }> {
+    const details = await this.details();
+    return {
+      inputSchema: details.inputSchema ? (parseSuperJsonString(details.inputSchema) as Record<string, unknown>) : null,
+      outputSchema: details.outputSchema
+        ? (parseSuperJsonString(details.outputSchema) as Record<string, unknown>)
+        : null,
+    };
   }
 
   /**

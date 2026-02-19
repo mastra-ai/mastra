@@ -8,12 +8,10 @@ import StepItem from "@site/src/components/StepItem";
 
 # Deploy Mastra to Netlify
 
-Use `@mastra/deployer-netlify` to deploy your mastra server as serverless functions on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/#netlifyv1functions), ready to deploy.
+Use `@mastra/deployer-netlify` to deploy your Mastra server as serverless functions on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/#netlifyv1functions), ready to deploy.
 
 :::info
-
-If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
-
+This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 ## Before you begin
@@ -50,7 +48,7 @@ Create a `netlify.toml` file with the following contents in your project root:
   command = "mastra build"
 ```
 
-## Usage
+## Deploy
 
 After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
 
@@ -73,7 +71,7 @@ Once you're ready, click the **Deploy** button and wait for the first deployment
 </StepItem>
 <StepItem>
 
-Try out your newly deployed function by going to `https://<random-slug>.netlify.app/api/agents`. You should get a JSON response listing all available agents.
+Verify your deployment at `https://<random-slug>.netlify.app/api/agents`, which should return a JSON list of your agents.
 
 Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
 
@@ -88,10 +86,8 @@ Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.
 
 You can now call your Mastra endpoints over HTTP.
 
-:::note
-
+:::warning
 Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
-
 :::
 
 </StepItem>

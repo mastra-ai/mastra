@@ -17,7 +17,11 @@ import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-met
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
-import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
+import CodeMirror, { EditorView } from '@uiw/react-codemirror';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
+import { githubDarkInit } from '@uiw/codemirror-theme-github';
+import { extractPrompt } from '../../utils/extractPrompt';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -202,7 +206,22 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">
-        <PromptEnhancer agentId={agentId} />
+        <CodeMirror
+          className="border border-border1 rounded-md"
+          value={extractPrompt(agent.instructions)}
+          editable={false}
+          extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
+          theme={githubDarkInit({
+            settings: {
+              caret: '#c6c6c6',
+              fontFamily: 'monospace',
+              background: 'transparent',
+              gutterBackground: 'transparent',
+              gutterForeground: '#939393',
+              gutterBorder: 'none',
+            },
+          })}
+        />
       </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
@@ -340,7 +359,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-icon6 border border-border1">Active</TooltipContent>
+                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (

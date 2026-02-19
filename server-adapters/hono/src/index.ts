@@ -128,10 +128,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     };
   }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
-    res.header('Content-Type', 'text/plain');
-    res.header('Transfer-Encoding', 'chunked');
-
     const streamFormat = route.streamFormat || 'stream';
+
+    if (streamFormat === 'sse') {
+      res.header('Content-Type', 'text/event-stream');
+      res.header('Cache-Control', 'no-cache');
+      res.header('Connection', 'keep-alive');
+      res.header('X-Accel-Buffering', 'no');
+    } else {
+      res.header('Content-Type', 'text/plain');
+    }
+    res.header('Transfer-Encoding', 'chunked');
 
     return stream(
       res,
@@ -160,7 +167,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
 
-          await stream.write('data: [DONE]\n\n');
+          if (streamFormat === 'sse') {
+            await stream.write('data: [DONE]\n\n');
+          }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
@@ -184,7 +193,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -438,7 +447,28 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Check for direct status property (HTTPException)
             if ('status' in error) {
               const status = (error as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
+              let safeCause: { failingItems: unknown[] } | undefined;
+              try {
+                const raw = error instanceof Error ? error.cause : undefined;
+                if (
+                  raw &&
+                  typeof raw === 'object' &&
+                  !Array.isArray(raw) &&
+                  'failingItems' in raw &&
+                  Array.isArray((raw as any).failingItems)
+                ) {
+                  safeCause = { failingItems: (raw as any).failingItems };
+                }
+              } catch {
+                // serialization or access error — omit cause
+              }
+              return c.json(
+                {
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  ...(safeCause ? { cause: safeCause } : {}),
+                },
+                status,
+              );
             }
             // Check for MastraError with status in details
             if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
@@ -450,6 +480,30 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       },
     );
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (!routes || routes.length === 0) return;
+
+    for (const route of routes) {
+      const handler =
+        'handler' in route && route.handler
+          ? route.handler
+          : 'createHandler' in route
+            ? await route.createHandler({ mastra: this.mastra })
+            : undefined;
+      if (!handler) continue;
+
+      const middlewares: MiddlewareHandler[] = [];
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+
+      const allHandlers = [...middlewares, handler];
+      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
+      this.app[method](route.path, allHandlers[0]!, ...allHandlers.slice(1));
+    }
   }
 
   registerContextMiddleware(): void {

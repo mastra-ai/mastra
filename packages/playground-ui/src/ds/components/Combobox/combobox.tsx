@@ -103,7 +103,7 @@ export function Combobox({
                     <span className={comboboxStyles.optionContent}>
                       {option.start}
                       <span className={comboboxStyles.optionText}>
-                        <span>{option.label}</span>
+                        <span className={comboboxStyles.optionLabel}>{option.label}</span>
                         {option.description && (
                           <span className={comboboxStyles.optionDescription}>{option.description}</span>
                         )}

@@ -1,10 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod/v4';
-import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
@@ -44,8 +42,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   // Get tracing context from modelSpanTracker if available
   const tracingContext = rest.modelSpanTracker?.getTracingContext();
 
-  // Helper function to process a chunk through output processors and enqueue it
-  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
+  // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
+  const streamWriter = rest.outputWriter
+    ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
+    : undefined;
+
+  // Helper function to process a chunk through output processors and enqueue it.
+  // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
     if (processorRunner && rest.processorStates) {
       const {
         part: processed,
@@ -59,6 +63,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         tracingContext,
         rest.requestContext,
         rest.messageList,
+        0,
+        streamWriter,
       );
 
       if (blocked) {
@@ -72,15 +78,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             processorId,
           },
         } as ChunkType<OUTPUT>);
-        return;
+        return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
+        return processed as ChunkType<OUTPUT>;
       }
+
+      return null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
+      return chunk;
     }
   }
 
@@ -90,6 +100,28 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
+
+      // Compute toModelOutput for a successful tool call and return providerMetadata
+      // with the result stored at mastra.modelOutput
+      async function getProviderMetadataWithModelOutput(toolCall: {
+        toolName: string;
+        result?: unknown;
+        providerMetadata?: Record<string, unknown>;
+      }) {
+        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        let modelOutput: unknown;
+        if (tool?.toModelOutput && toolCall.result != null) {
+          modelOutput = await tool.toModelOutput(toolCall.result);
+        }
+
+        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
+        const providerMetadata = {
+          ...toolCall.providerMetadata,
+          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+        };
+        const hasMetadata = Object.keys(providerMetadata).length > 0;
+        return hasMetadata ? providerMetadata : undefined;
+      }
 
       if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
@@ -110,7 +142,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               },
             };
-            await processAndEnqueueChunk(chunk);
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
           }
 
           const msg: MastraDBMessage = {
@@ -137,6 +170,83 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             createdAt: new Date(),
           };
           rest.messageList.add(msg, 'response');
+        }
+
+        // When tool errors occur, continue the agentic loop so the model can see the
+        // error and self-correct (e.g., retry with different args, or respond to the user).
+        // The error messages are already added to the messageList above, so the model
+        // will see them on the next turn. This handles both tool-not-found errors
+        // (hallucinated tool names) and tool execution errors (tool throws).
+        //
+        // Check for pending HITL tool calls (tools with no result and no error).
+        // In mixed turns with errors and pending HITL tools,
+        // the HITL suspension path should take priority over continuing the loop.
+        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error);
+
+        if (errorResults?.length > 0 && !hasPendingHITL) {
+          // Process any successful tool results from this turn before continuing.
+          // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
+          // results need their chunks emitted and messages added to the messageList.
+          const successfulResults = inputData.filter(tc => tc.result !== undefined);
+          if (successfulResults.length) {
+            for (const toolCall of successfulResults) {
+              const chunk: ChunkType<OUTPUT> = {
+                type: 'tool-result',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result: toolCall.result,
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                },
+              };
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
+            }
+
+            const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+            const successMessage: MastraDBMessage = {
+              id: successMessageId || '',
+              role: 'assistant' as const,
+              content: {
+                format: 2,
+                parts: await Promise.all(
+                  successfulResults.map(async toolCall => {
+                    const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                    return {
+                      type: 'tool-invocation' as const,
+                      toolInvocation: {
+                        state: 'result' as const,
+                        toolCallId: toolCall.toolCallId,
+                        toolName: toolCall.toolName,
+                        args: toolCall.args,
+                        result: toolCall.result,
+                      },
+                      ...(providerMetadata ? { providerMetadata } : {}),
+                    };
+                  }),
+                ),
+              },
+              createdAt: new Date(),
+            };
+            rest.messageList.add(successMessage, 'response');
+          }
+
+          // Continue the loop — the error messages are already in the messageList,
+          // so the model will see them and can retry with correct tool names
+          initialResult.stepResult.isContinued = true;
+          initialResult.stepResult.reason = 'tool-calls';
+          return {
+            ...initialResult,
+            messages: {
+              all: rest.messageList.get.all.aiV5.model(),
+              user: rest.messageList.get.input.aiV5.model(),
+              nonUser: rest.messageList.get.response.aiV5.model(),
+            },
+          };
         }
 
         // Only set isContinued = false if this is NOT a retry scenario
@@ -173,15 +283,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             },
           };
 
-          await processAndEnqueueChunk(chunk);
-
-          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
-            await rest.options?.onChunk?.({
-              chunk: convertMastraChunkToAISDKv5({
-                chunk,
-              }),
-            } as any);
-          }
+          const processed = await processAndEnqueueChunk(chunk);
+          if (processed) await rest.options?.onChunk?.(processed);
         }
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -191,21 +294,22 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: inputData.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                  result: toolCall.result,
-                },
-                ...(toolCall.providerMetadata
-                  ? { providerMetadata: toolCall.providerMetadata as ProviderMetadata }
-                  : {}),
-              };
-            }),
+            parts: await Promise.all(
+              inputData.map(async toolCall => {
+                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                return {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.result,
+                  },
+                  ...(providerMetadata ? { providerMetadata } : {}),
+                };
+              }),
+            ),
           },
           createdAt: new Date(),
         };

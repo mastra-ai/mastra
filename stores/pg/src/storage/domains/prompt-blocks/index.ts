@@ -22,7 +22,8 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -45,15 +46,53 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     this.#indexes = indexes?.filter(idx => (PromptBlocksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  /**
+   * Returns default index definitions for the prompt blocks domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_prompt_block_versions_block_version',
+        name: `${schemaPrefix}idx_prompt_block_versions_block_version`,
         table: TABLE_PROMPT_BLOCK_VERSIONS,
         columns: ['blockId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Tables
+    for (const tableName of PromptBlocksPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    // Indexes
+    for (const idx of PromptBlocksPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return PromptBlocksPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -213,55 +252,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-      let versionCreated = false;
-
-      // Check if any snapshot config fields are present
-      const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
-
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NO_VERSIONS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `No versions found for prompt block ${id}`,
-            details: { blockId: id },
-          });
-        }
-
-        const {
-          id: _versionId,
-          blockId: _blockId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = SNAPSHOT_FIELDS.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        if (changedFields.length > 0) {
-          versionCreated = true;
-          const newVersionId = crypto.randomUUID();
-          await this.createVersion({
-            id: newVersionId,
-            blockId: id,
-            versionNumber: latestVersion.versionNumber + 1,
-            ...newConfig,
-            changedFields: [...changedFields],
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Update metadata fields on the block record
       const setClauses: string[] = [];
@@ -276,11 +267,6 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (status === undefined) {
-          setClauses.push(`status = $${paramIndex++}`);
-          values.push('published');
-        }
       }
 
       if (status !== undefined) {
@@ -303,13 +289,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      // Always update the record (at minimum updatedAt/updatedAtZ are set)
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       const updatedBlock = await this.getById(id);
       if (!updatedBlock) {
@@ -356,7 +337,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -382,6 +363,9 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const queryParams: any[] = [];
       let paramIdx = 1;
 
+      conditions.push(`status = $${paramIdx++}`);
+      queryParams.push(status);
+
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
@@ -392,7 +376,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         queryParams.push(JSON.stringify(metadata));
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await this.#db.client.one(

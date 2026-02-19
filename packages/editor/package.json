@@ -1,18 +1,50 @@
 {
   "name": "@mastra/editor",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./composio": {
+      "import": {
+        "types": "./dist/composio.d.ts",
+        "default": "./dist/composio.js"
+      },
+      "require": {
+        "types": "./dist/composio.d.ts",
+        "default": "./dist/composio.cjs"
+      }
+    },
+    "./arcade": {
+      "import": {
+        "types": "./dist/arcade.d.ts",
+        "default": "./dist/arcade.js"
+      },
+      "require": {
+        "types": "./dist/arcade.d.ts",
+        "default": "./dist/arcade.cjs"
+      }
+    }
+  },
   "files": [
     "dist",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/composio.ts src/arcade.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts --format cjs,esm --dts --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -28,6 +60,9 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
+    "@arcadeai/arcadejs": "^2.2.0",
+    "@composio/core": "^0.6.3",
+    "@composio/mastra": "^0.6.3",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"
   },
@@ -44,7 +79,13 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/mcp": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/mcp": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22.13.0"

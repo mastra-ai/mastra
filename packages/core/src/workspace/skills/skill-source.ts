@@ -35,6 +35,8 @@ export interface SkillSourceEntry {
   name: string;
   /** Entry type */
   type: 'file' | 'directory';
+  /** Whether this entry is a symbolic link */
+  isSymlink?: boolean;
 }
 
 /**

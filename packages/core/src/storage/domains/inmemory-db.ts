@@ -2,17 +2,28 @@ import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type {
   StorageAgentType,
+  StorageMCPClientType,
   StorageMessageType,
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageWorkspaceType,
+  StorageSkillType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
+  DatasetRecord,
+  DatasetItemRow,
+  DatasetVersion,
+  Experiment,
+  ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
+import type { MCPClientVersion } from './mcp-clients';
 import type { TraceEntry } from './observability';
 import type { PromptBlockVersion } from './prompt-blocks';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
+import type { SkillVersion } from './skills';
+import type { WorkspaceVersion } from './workspaces';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -34,8 +45,23 @@ export class InMemoryDB {
   readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
   readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
   readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
+  readonly mcpClients = new Map<string, StorageMCPClientType>();
+  readonly mcpClientVersions = new Map<string, MCPClientVersion>();
+  readonly workspaces = new Map<string, StorageWorkspaceType>();
+  readonly workspaceVersions = new Map<string, WorkspaceVersion>();
+  readonly skills = new Map<string, StorageSkillType>();
+  readonly skillVersions = new Map<string, SkillVersion>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
+
+  // Dataset domain maps
+  readonly datasets = new Map<string, DatasetRecord>();
+  readonly datasetItems = new Map<string, DatasetItemRow[]>();
+  readonly datasetVersions = new Map<string, DatasetVersion>();
+
+  // Experiment domain maps
+  readonly experiments = new Map<string, Experiment>();
+  readonly experimentResults = new Map<string, ExperimentResult>();
 
   /**
    * Clears all data from all collections.
@@ -54,6 +80,17 @@ export class InMemoryDB {
     this.promptBlockVersions.clear();
     this.scorerDefinitions.clear();
     this.scorerDefinitionVersions.clear();
+    this.mcpClients.clear();
+    this.mcpClientVersions.clear();
+    this.workspaces.clear();
+    this.workspaceVersions.clear();
+    this.skills.clear();
+    this.skillVersions.clear();
     this.observationalMemory.clear();
+    this.datasets.clear();
+    this.datasetItems.clear();
+    this.datasetVersions.clear();
+    this.experiments.clear();
+    this.experimentResults.clear();
   }
 }

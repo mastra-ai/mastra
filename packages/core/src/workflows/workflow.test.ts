@@ -5,8 +5,8 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z as zv4 } from 'zod';
-import { z } from 'zod/v3';
+import { z } from 'zod';
+import { z as zv4 } from 'zod/v4';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
@@ -8729,7 +8729,7 @@ describe('Workflow', () => {
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
         );
       }
 
@@ -8746,7 +8746,7 @@ describe('Workflow', () => {
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
         );
       }
     });
@@ -8857,7 +8857,7 @@ describe('Workflow', () => {
         expect(result.error).toBeDefined();
         expect(result.error).not.toBeInstanceOf(Error);
         expect((result.error as any).message).toContain('Step input validation failed');
-        expect((result.error as any).message).toContain('start: Required');
+        expect((result.error as any).message).toContain('start: Invalid input: expected string, received undefined');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -8884,7 +8884,7 @@ describe('Workflow', () => {
         error: expect.any(Error),
       });
       expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
-      expect(((step2Result as any)?.error as Error).message).toContain('start: Required');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Invalid input: expected string, received undefined');
     });
 
     it('should preserve ZodError as cause when input validation fails', async () => {
@@ -9086,7 +9086,7 @@ describe('Workflow', () => {
         expect(result.error).toBeDefined();
         expect(result.error).not.toBeInstanceOf(Error);
         expect((result.error as any).message).toContain('Step input validation failed');
-        expect((result.error as any).message).toContain('start: Expected string, received number');
+        expect((result.error as any).message).toContain('start: Invalid input: expected string, received number');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -9113,7 +9113,7 @@ describe('Workflow', () => {
         error: expect.any(Error),
       });
       expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
-      expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Invalid input: expected string, received number');
     });
 
     it('should properly validate input schema when .map is used after .foreach. bug #11313', async () => {
@@ -9272,7 +9272,7 @@ describe('Workflow', () => {
         });
       } catch (error) {
         const errMessage = (error as { message: string })?.message;
-        expect(errMessage).toBe('Invalid resume data: \n- value: Required');
+        expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
       }
 
       const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
@@ -9475,7 +9475,7 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
       // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].error.message).toContain(
-        'Step input validation failed: \n- newValue: Required',
+        'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
       // @ts-expect-error - testing dynamic workflow result
@@ -9716,7 +9716,9 @@ describe('Workflow', () => {
       // error is now an Error instance
       const stepError = (errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error;
       expect(stepError).toBeInstanceOf(Error);
-      expect((stepError as Error).message).toBe('Step input validation failed: \n- c: Required');
+      expect((stepError as Error).message).toBe(
+        'Step input validation failed: \n- c: Invalid input: expected string, received undefined',
+      );
 
       const distinctTypeStep = createStep({
         id: 'distinct-type-step',
@@ -9745,7 +9747,7 @@ describe('Workflow', () => {
       const stepError2 = (errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error;
       expect(stepError2).toBeInstanceOf(Error);
       expect((stepError2 as Error).message).toBe(
-        'Step input validation failed: \n- : Expected string, received object',
+        'Step input validation failed: \n- : Invalid input: expected string, received object',
       );
     });
   });
@@ -14052,7 +14054,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
 
       await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
-        'Invalid inputData: \n- step1Result: Required',
+        'Invalid inputData: \n- step1Result: Invalid input: expected number, received undefined',
       );
     });
 
@@ -19162,7 +19164,6 @@ describe('Workflow', () => {
         step: resumedResult.suspended[0],
         resumeData: new Date('2024-12-31'),
       });
-
       expect(finalResult.status).toBe('success');
       expect(secondItemDateAction).toHaveBeenCalledTimes(2);
 
@@ -19186,6 +19187,114 @@ describe('Workflow', () => {
         processed: 'second',
         date: new Date('2024-12-31'),
       });
+    });
+
+    it('should pass correct inputData to branch condition when resuming after map', async () => {
+      const localTestStorage = new MockStore();
+
+      const conditionSpy = vi.fn();
+
+      // Helper to build the workflow (simulates reconstruction after server restart)
+      const buildWorkflow = () => {
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) {
+              await suspend({ prompt: 'Please provide an answer' });
+              return { result: '' };
+            }
+            return { result: `processed: ${inputData.mappedValue}, answer: ${resumeData.answer}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-wf-with-suspend',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const fallbackStep = createStep({
+          id: 'fallback-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            return { result: `fallback: ${inputData.mappedValue}` };
+          },
+        });
+
+        const mainWorkflow = createWorkflow({
+          id: 'map-branch-suspend-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .map(async ({ inputData }) => {
+            return { mappedValue: inputData.value * 2 };
+          })
+          .branch([
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue > 10;
+              },
+              nestedWorkflow,
+            ],
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue <= 10;
+              },
+              fallbackStep,
+            ],
+          ])
+          .commit();
+
+        return { mainWorkflow, nestedWorkflow };
+      };
+
+      // First construction: start the workflow
+      const { mainWorkflow: wf1, nestedWorkflow: nwf1 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf1, 'nested-wf-with-suspend': nwf1 },
+      });
+
+      const run1 = await wf1.createRun();
+      const initialResult = await run1.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+      conditionSpy.mockClear();
+
+      // Second construction: simulate server restart (new workflow objects, new map step UUIDs)
+      const { mainWorkflow: wf2, nestedWorkflow: nwf2 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf2, 'nested-wf-with-suspend': nwf2 },
+      });
+
+      // Resume using the NEW workflow instance (simulating server restart)
+      const run2 = await wf2.createRun({ runId: run1.runId });
+      const resumedResult = await run2.resume({
+        step: initialResult.suspended[0],
+        resumeData: { answer: 'hello' },
+      });
+
+      // Branch conditions should NOT be re-evaluated during resume.
+      // The resume path from suspendedPaths already identifies the correct branch.
+      // Re-evaluating conditions was the cause of issue #12982: the map step output
+      // uses a non-deterministic UUID as key, so after workflow reconstruction the
+      // condition would receive undefined inputData.
+      expect(conditionSpy).not.toHaveBeenCalled();
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
     });
 
     it('should maintain correct step status after resuming in branching workflows - #6419', async () => {

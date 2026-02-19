@@ -22,6 +22,11 @@ function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string
       ctx.jsonSchema.type = 'string';
       ctx.jsonSchema.format = 'date-time';
     }
+    // Add additionalProperties: false for object types to match Zod v3 behavior
+    // This is required for OpenAI strict mode function calling
+    if (zodSchema?.type === 'object') {
+      ctx.jsonSchema.additionalProperties = false;
+    }
   }
   return undefined;
 }

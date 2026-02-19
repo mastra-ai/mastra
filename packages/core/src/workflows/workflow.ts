@@ -1837,7 +1837,7 @@ export class Workflow<
 
   dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: LoopConditionFunction<TState, any, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',
@@ -1874,7 +1874,7 @@ export class Workflow<
 
   dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: LoopConditionFunction<TState, any, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',

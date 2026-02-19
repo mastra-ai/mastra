@@ -7,6 +7,15 @@ import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './type
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
+ * Marker to identify Mastra tools even when `instanceof` fails.
+ * This can happen in environments like Vite SSR where the same module
+ * may be loaded multiple times, creating different class instances.
+ * Uses Symbol.for() so the same symbol is shared across module copies.
+ * Follows the naming convention: <org>.<product>.<category>.<className>
+ */
+export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
+
+/**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
  * @template TSchemaIn - Input schema type
@@ -130,6 +139,12 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
    * Optional MCP-specific properties including annotations and metadata.
    * Only relevant when the tool is being used in an MCP context.
    * @example
@@ -164,6 +179,7 @@ export class Tool<
    * ```
    */
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+    (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
@@ -174,6 +190,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
 
     // Tools receive two parameters:

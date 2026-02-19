@@ -12,6 +12,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
@@ -99,7 +101,10 @@ describe('Express Server Adapter', () => {
         // Check if stream response
         const contentType = response.headers.get('content-type') || '';
         const transferEncoding = response.headers.get('transfer-encoding') || '';
-        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+        const isStream =
+          contentType.includes('text/plain') ||
+          contentType.includes('text/event-stream') ||
+          transferEncoding === 'chunked';
 
         if (isStream && response.body) {
           // Return stream response
@@ -389,6 +394,136 @@ describe('Express Server Adapter', () => {
     });
   });
 
+  describe('SSE Headers', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('should set Content-Type to text/event-stream for SSE streams', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-headers',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-headers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // SSE streams MUST use text/event-stream Content-Type
+      // This signals to proxies, CDNs, and clients that the response should not be buffered
+      const contentType = response.headers.get('content-type');
+      expect(contentType).toBe('text/event-stream');
+
+      // SSE streams should include Cache-Control: no-cache to prevent proxy buffering
+      const cacheControl = response.headers.get('cache-control');
+      expect(cacheControl).toBe('no-cache');
+
+      // SSE streams should include Connection: keep-alive
+      const connection = response.headers.get('connection');
+      expect(connection).toBe('keep-alive');
+
+      // SSE streams should include X-Accel-Buffering: no for nginx reverse proxies
+      const xAccelBuffering = response.headers.get('x-accel-buffering');
+      expect(xAccelBuffering).toBe('no');
+
+      // Consume the stream to avoid hanging
+      await consumeSSEStream(response.body);
+    });
+
+    it('should keep Content-Type as text/plain for non-SSE streams', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Use 'stream' format (not 'sse') — this should keep text/plain
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/plain-stream',
+        responseType: 'stream',
+        streamFormat: 'stream',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/plain-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Non-SSE streams should keep text/plain
+      const contentType = response.headers.get('content-type');
+      expect(contentType).toBe('text/plain');
+
+      // Consume the stream to avoid hanging
+      const reader = response.body?.getReader();
+      if (reader) {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
+    });
+  });
+
   describe('Abort Signal', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
@@ -558,5 +693,96 @@ describe('Express Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use(middleware);
     },
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
   });
 });

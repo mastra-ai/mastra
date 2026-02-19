@@ -236,6 +236,7 @@ export class CoreToolBuilder extends MastraBase {
               this.logType,
             )
           : undefined,
+        toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
@@ -350,7 +351,7 @@ export class CoreToolBuilder extends MastraBase {
             mastra: wrappedMastra,
             memory: options.memory,
             runId: options.runId,
-            requestContext: options.requestContext ?? new RequestContext(),
+            requestContext: execOptions.requestContext ?? options.requestContext ?? new RequestContext(),
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
@@ -532,7 +533,7 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
-        return mastraError;
+        throw mastraError;
       }
     };
   }
@@ -686,6 +687,7 @@ export class CoreToolBuilder extends MastraBase {
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
+      toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
     } as unknown as CoreTool;
   }
 }

@@ -1,3 +1,4 @@
-export { E2BSandbox, type E2BSandboxOptions, type SandboxRuntime } from './sandbox';
+export { E2BSandbox, type E2BSandboxOptions } from './sandbox';
 export { createDefaultMountableTemplate, type TemplateSpec, type MountableTemplateResult } from './utils/template';
 export { type E2BS3MountConfig, type E2BGCSMountConfig, type E2BMountConfig } from './sandbox/mounts';
+export { e2bSandboxProvider } from './provider';

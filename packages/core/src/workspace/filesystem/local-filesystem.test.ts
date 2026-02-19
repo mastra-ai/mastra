@@ -516,6 +516,234 @@ describe('LocalFilesystem', () => {
   });
 
   // ===========================================================================
+  // allowedPaths
+  // ===========================================================================
+  describe('allowedPaths', () => {
+    let outsideDir: string;
+
+    beforeEach(async () => {
+      // Create a directory outside tempDir to use as an allowed path
+      outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-fs-allowed-'));
+      await fs.writeFile(path.join(outsideDir, 'external.txt'), 'external content');
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(outsideDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    describe('constructor', () => {
+      it('should default to empty allowedPaths', () => {
+        expect(localFs.allowedPaths).toEqual([]);
+      });
+
+      it('should accept allowedPaths in options', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [outsideDir],
+        });
+        expect(fsWithAllowed.allowedPaths).toEqual([outsideDir]);
+      });
+
+      it('should resolve relative allowedPaths to absolute', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: ['./relative-dir'],
+        });
+        expect(path.isAbsolute(fsWithAllowed.allowedPaths[0])).toBe(true);
+      });
+    });
+
+    describe('setAllowedPaths', () => {
+      it('should set paths from array', () => {
+        localFs.setAllowedPaths([outsideDir]);
+        expect(localFs.allowedPaths).toEqual([outsideDir]);
+      });
+
+      it('should set paths from updater callback', () => {
+        localFs.setAllowedPaths([outsideDir]);
+        const anotherDir = '/some/other/dir';
+        localFs.setAllowedPaths(prev => [...prev, anotherDir]);
+        expect(localFs.allowedPaths).toContain(outsideDir);
+        expect(localFs.allowedPaths).toContain(anotherDir);
+      });
+
+      it('should clear paths with empty array', () => {
+        localFs.setAllowedPaths([outsideDir]);
+        expect(localFs.allowedPaths.length).toBe(1);
+        localFs.setAllowedPaths([]);
+        expect(localFs.allowedPaths).toEqual([]);
+      });
+
+      it('should resolve paths to absolute', () => {
+        localFs.setAllowedPaths(['./foo']);
+        expect(path.isAbsolute(localFs.allowedPaths[0])).toBe(true);
+      });
+    });
+
+    describe('file operations with allowedPaths', () => {
+      it('should read files from an allowed path using absolute path', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should write files to an allowed path', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        await fsWithAllowed.writeFile(path.join(outsideDir, 'new-file.txt'), 'new content');
+
+        const content = await fs.readFile(path.join(outsideDir, 'new-file.txt'), 'utf-8');
+        expect(content).toBe('new content');
+      });
+
+      it('should block path traversal even with allowedPaths', async () => {
+        const restrictedFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Path traversal escapes all roots → PermissionError
+        await expect(restrictedFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
+      });
+
+      it('should still allow basePath access when allowedPaths are set', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        await fsWithAllowed.writeFile('/local-file.txt', 'local content');
+        const content = await fsWithAllowed.readFile('/local-file.txt', { encoding: 'utf-8' });
+        expect(content).toBe('local content');
+      });
+
+      it('should respect dynamically added allowedPaths', async () => {
+        const dynamicFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+        });
+
+        // Initially blocked — absolute path outside basePath gets treated as virtual,
+        // resolves to basePath/var/... which doesn't exist
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+
+        // Add allowedPath dynamically
+        dynamicFs.setAllowedPaths([outsideDir]);
+
+        // Now accessible
+        const content = await dynamicFs.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should block access after removing allowedPaths', async () => {
+        const dynamicFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Initially accessible
+        const content = await dynamicFs.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+
+        // Remove allowed paths
+        dynamicFs.setAllowedPaths([]);
+
+        // Now blocked — path no longer within any root, treated as virtual
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+      });
+
+      it('should check exists() against allowedPaths', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        expect(await fsWithAllowed.exists(path.join(outsideDir, 'external.txt'))).toBe(true);
+        expect(await fsWithAllowed.exists(path.join(outsideDir, 'nonexistent.txt'))).toBe(false);
+      });
+
+      it('should check stat() against allowedPaths', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const stat = await fsWithAllowed.stat(path.join(outsideDir, 'external.txt'));
+        expect(stat.type).toBe('file');
+        expect(stat.size).toBe('external content'.length);
+      });
+
+      it('should allow readdir on allowed path', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const entries = await fsWithAllowed.readdir(outsideDir);
+        expect(entries.some(e => e.name === 'external.txt')).toBe(true);
+      });
+    });
+
+    describe('getInfo with allowedPaths', () => {
+      it('should not include allowedPaths in metadata when empty', () => {
+        const info = localFs.getInfo();
+        expect(info.metadata?.allowedPaths).toBeUndefined();
+      });
+
+      it('should include allowedPaths in metadata when set', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [outsideDir],
+        });
+        const info = fsWithAllowed.getInfo();
+        expect(info.metadata?.allowedPaths).toEqual([outsideDir]);
+      });
+    });
+
+    describe('getInstructions with allowedPaths', () => {
+      it('should not mention allowedPaths when empty', () => {
+        const instructions = localFs.getInstructions();
+        expect(instructions).not.toContain('Additionally');
+      });
+
+      it('should mention allowedPaths when set', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [outsideDir],
+        });
+        const instructions = fsWithAllowed.getInstructions();
+        expect(instructions).toContain('Additionally');
+        expect(instructions).toContain(outsideDir);
+      });
+    });
+  });
+
+  // ===========================================================================
   // MIME Type Detection
   // ===========================================================================
   describe('mime type detection', () => {
