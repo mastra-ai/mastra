@@ -505,7 +505,7 @@ export class Agent<
         // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as Parameters<typeof createStep>[0]);
+        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
       }
       workflow = workflow.then(step);
     }

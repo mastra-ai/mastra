@@ -4,22 +4,22 @@
  */
 
 export interface PromptContext {
-	projectPath: string
-	projectName: string
-	gitBranch?: string
-	platform: string
-	date: string
-	mode: string
-	activePlan?: { title: string; plan: string; approvedAt: string } | null
+  projectPath: string;
+  projectName: string;
+  gitBranch?: string;
+  platform: string;
+  date: string;
+  mode: string;
+  activePlan?: { title: string; plan: string; approvedAt: string } | null;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
-	return `You are Mastra Code, an interactive CLI coding agent that helps users with software engineering tasks.
+  return `You are Mastra Code, an interactive CLI coding agent that helps users with software engineering tasks.
 
 # Environment
 Working directory: ${ctx.projectPath}
 Project: ${ctx.projectName}
-${ctx.gitBranch ? `Git branch: ${ctx.gitBranch}` : "Not a git repository"}
+${ctx.gitBranch ? `Git branch: ${ctx.gitBranch}` : 'Not a git repository'}
 Platform: ${ctx.platform}
 Date: ${ctx.date}
 Current mode: ${ctx.mode}
@@ -154,5 +154,5 @@ Use \`gh pr create\`. Include a summary of what changed and a test plan.
 # File Access & Sandbox
 
 By default, you can only access files within the current project directory. If you get a "Permission denied" or "Access denied" error when trying to read, write, or access files outside the project root, do NOT keep retrying. Instead, tell the user to run the \`/sandbox\` command to add the external directory to the allowed paths for this thread. Once they do, you will be able to access it.
-`
+`;
 }
