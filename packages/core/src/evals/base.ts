@@ -427,16 +427,19 @@ class MastraScorer<
     });
 
     if (workflowResult.status === 'failed') {
-      throw new MastraError({
-        id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
-        domain: ErrorDomain.SCORER,
-        category: ErrorCategory.USER,
-        text: `Scorer Run Failed: ${workflowResult.error}`,
-        details: {
-          scorerId: this.config.id ?? this.config.name,
-          steps: this.steps.map(s => s.name).join(', '),
+      throw new MastraError(
+        {
+          id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
+          domain: ErrorDomain.SCORER,
+          category: ErrorCategory.USER,
+          text: `Scorer Run Failed: ${typeof workflowResult.error === 'string' ? workflowResult.error : workflowResult.error.message}`,
+          details: {
+            scorerId: this.config.id ?? this.config.name,
+            steps: this.steps.map(s => s.name).join(', '),
+          },
         },
-      });
+        workflowResult.error instanceof Error ? workflowResult.error : undefined,
+      );
     }
 
     return this.transformToScorerResult({ workflowResult, originalInput: run });

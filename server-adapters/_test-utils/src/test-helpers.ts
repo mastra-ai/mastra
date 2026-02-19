@@ -464,6 +464,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+      clearCache: vi.fn(),
+    },
+    mcp: {
+      clearCache: vi.fn(),
     },
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
@@ -555,7 +559,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored scorer for stored scorers routes
     const scorers = await storage.getStore('scorerDefinitions');
     if (scorers) {
-      await scorers.create({
+      const storedScorer = await scorers.create({
         scorerDefinition: {
           id: 'test-stored-scorer',
           name: 'Test Stored Scorer',
