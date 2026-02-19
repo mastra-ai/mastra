@@ -115,40 +115,38 @@ function FolderNode({
 
   return (
     <Tree.Folder open={isOpen} onOpenChange={setIsOpen}>
-      <Tree.FolderTrigger>
+      <Tree.FolderTrigger
+        actions={
+          allowCreate && (
+            <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <IconButton
+                tooltip="New file"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setIsOpen(true);
+                  onStartCreate('file', node.path);
+                }}
+              >
+                <Plus />
+              </IconButton>
+              <IconButton
+                tooltip="New folder"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setIsOpen(true);
+                  onStartCreate('folder', node.path);
+                }}
+              >
+                <FolderPlus />
+              </IconButton>
+            </span>
+          )
+        }
+      >
         <Tree.Icon>{getFileIcon(node.entry, isOpen)}</Tree.Icon>
         <Tree.Label>{node.entry.name}</Tree.Label>
-        {allowCreate && (
-          <span
-            className="ml-auto flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={e => e.stopPropagation()}
-          >
-            <IconButton
-              tooltip="New file"
-              size="sm"
-              variant="ghost"
-              onClick={e => {
-                e.stopPropagation();
-                setIsOpen(true);
-                onStartCreate('file', node.path);
-              }}
-            >
-              <Plus />
-            </IconButton>
-            <IconButton
-              tooltip="New folder"
-              size="sm"
-              variant="ghost"
-              onClick={e => {
-                e.stopPropagation();
-                setIsOpen(true);
-                onStartCreate('folder', node.path);
-              }}
-            >
-              <FolderPlus />
-            </IconButton>
-          </span>
-        )}
       </Tree.FolderTrigger>
       <Tree.FolderContent>
         {creating?.parentPath === node.path && (
@@ -215,6 +213,7 @@ export const WorkspaceTree = React.forwardRef<HTMLDivElement, WorkspaceTreeProps
 
         if (creating.type === 'file') {
           writeFile.mutate({ workspaceId, path: fullPath, content: '' });
+          setSelectedPath(fullPath);
           onCreateFile?.(fullPath);
         } else {
           createDir.mutate({ workspaceId, path: fullPath, recursive: true });

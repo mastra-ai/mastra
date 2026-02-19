@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { WorkspaceProvider, type WorkspaceContextValue } from './workspace-context';
 
 export interface WorkspaceRootProps {
@@ -35,7 +34,7 @@ export const WorkspaceRoot = React.forwardRef<HTMLDivElement, WorkspaceRootProps
 
     return (
       <WorkspaceProvider value={contextValue}>
-        <div ref={ref} className={cn('flex gap-4', className)}>
+        <div ref={ref} className={className}>
           {children}
         </div>
       </WorkspaceProvider>

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Drill } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -10,6 +10,7 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/compo
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import type { SkillFormValue } from '../agent-edit-page/utils/form-validation';
 import { SkillEditDialog } from './skill-edit-dialog';
+import { EmptyState } from '@/ds/components/EmptyState';
 
 export function SkillsPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -58,22 +59,24 @@ export function SkillsPage() {
     setEditingSkill(undefined);
   }, []);
 
+  const showAddButton = !readOnly && skills.length > 0;
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6">
-        <SectionHeader
-          title="Skills"
-          subtitle={`Define skills for this agent.${skills.length > 0 ? ` (${skills.length} configured)` : ''}`}
-        />
+        <div className="flex items-center justify-between">
+          <SectionHeader
+            title="Skills"
+            subtitle={`Give your agent specialized knowledge by using skills.${skills.length > 0 ? ` (${skills.length} configured)` : ''}`}
+          />
 
-        {!readOnly && (
-          <div>
+          {showAddButton && (
             <Button variant="outline" size="sm" onClick={handleAdd}>
               <Plus className="size-3" />
               Add a skill
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         {skills.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -100,7 +103,19 @@ export function SkillsPage() {
         )}
 
         {skills.length === 0 && (
-          <p className="text-sm text-neutral3">No skills configured yet. Add a skill to get started.</p>
+          <div className="py-12">
+            <EmptyState
+              iconSlot={<Drill height={40} width={40} />}
+              titleSlot="No skills configured yet"
+              descriptionSlot="Skills are used to define the behavior of the agent. You can add a skill to get started."
+              actionSlot={
+                <Button variant="outline" size="sm" onClick={handleAdd}>
+                  <Plus className="size-3" />
+                  Add a skill
+                </Button>
+              }
+            />
+          </div>
         )}
       </div>
 

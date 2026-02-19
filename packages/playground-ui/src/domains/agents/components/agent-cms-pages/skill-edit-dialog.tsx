@@ -7,6 +7,8 @@ import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
 import { Combobox } from '@/ds/components/Combobox/combobox';
+import { Workspace } from '@/ds/components/Workspace';
+import { useWorkspaceContext } from '@/ds/components/Workspace/workspace-context';
 import { useWorkspaces } from '@/domains/workspace/hooks';
 
 import type { SkillFormValue, InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -48,15 +50,119 @@ function findFileName(nodes: InMemoryFileNode[], fileId: string): string | undef
   return undefined;
 }
 
+interface SkillWorkspaceContentProps {
+  files: InMemoryFileNode[];
+  onChange: (files: InMemoryFileNode[]) => void;
+  readOnly?: boolean;
+  workspaceOptions: { value: string; label: string }[];
+  workspaceId: string;
+  setWorkspaceId: (workspaceId: string) => void;
+}
+
+function SkillWorkspaceContent({
+  files,
+  onChange,
+  readOnly,
+  workspaceOptions,
+  workspaceId,
+  setWorkspaceId,
+}: SkillWorkspaceContentProps) {
+  const { selectedPath, setSelectedPath } = useWorkspaceContext();
+
+  const handleFileContentChange = useCallback(
+    (content: string) => {
+      if (!selectedPath) return;
+      onChange(updateNodeContent(files, selectedPath, content));
+    },
+    [selectedPath, files, onChange],
+  );
+
+  const selectedFileContent = useMemo(() => {
+    if (!selectedPath) return undefined;
+    return findFileContent(files, selectedPath);
+  }, [files, selectedPath]);
+
+  const selectedFileName = useMemo(() => {
+    if (!selectedPath) return undefined;
+    return findFileName(files, selectedPath);
+  }, [files, selectedPath]);
+
+  const editorLanguage = useMemo(() => {
+    if (!selectedFileName) return undefined;
+    if (selectedFileName.endsWith('.md')) return 'markdown';
+    if (selectedFileName.endsWith('.json')) return 'json';
+    return undefined;
+  }, [selectedFileName]);
+
+  const isFileSelected = selectedPath !== null && selectedFileContent !== undefined;
+  const isImage = isImageContent(selectedFileContent);
+
+  return (
+    <div className="grid grid-cols-[300px_1fr] h-full">
+      <div className="overflow-y-auto h-full border-r border-border1 p-4">
+        <div className="flex flex-col gap-1.5 pb-4">
+          <Txt as="label" variant="ui-sm" className="text-neutral3">
+            Workspace
+          </Txt>
+          <Combobox
+            options={workspaceOptions}
+            value={workspaceId}
+            onValueChange={setWorkspaceId}
+            placeholder="Select a workspace..."
+            disabled={readOnly}
+            variant="default"
+          />
+        </div>
+
+        <SkillFileTree
+          files={files}
+          onChange={onChange}
+          selectedFileId={selectedPath}
+          onSelectFile={setSelectedPath}
+          readOnly={readOnly}
+        />
+      </div>
+
+      <div className="h-full p-4">
+        {isFileSelected ? (
+          <>
+            {isImage ? (
+              <div className="flex items-center justify-center flex-1 p-4 bg-surface2">
+                <img
+                  src={selectedFileContent}
+                  alt={selectedFileName}
+                  className="max-w-full max-h-[300px] rounded-md object-contain"
+                />
+              </div>
+            ) : (
+              <CodeEditor
+                key={selectedPath}
+                language={editorLanguage}
+                value={selectedFileContent}
+                onChange={readOnly ? undefined : val => handleFileContentChange(val ?? '')}
+                showCopyButton={false}
+                autoFocus
+                className="h-full"
+              />
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-full text-xs text-neutral3">
+            Select a file to edit its content
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnly }: SkillEditDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [localId, setLocalId] = useState('');
   const prevNameRef = useRef('');
-
   const { data: workspacesData } = useWorkspaces();
   const workspaceOptions = useMemo(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
@@ -80,7 +186,6 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
         setLocalId(uuid());
         prevNameRef.current = '';
       }
-      setSelectedFileId(null);
     }
   }, [isOpen, initialSkill, workspaceOptions]);
 
@@ -111,51 +216,30 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
     });
   }, [localId, name, description, workspaceId, files, onSave]);
 
-  const handleFileContentChange = useCallback(
-    (content: string) => {
-      if (!selectedFileId) return;
-      setFiles(prev => updateNodeContent(prev, selectedFileId, content));
-    },
-    [selectedFileId],
-  );
-
-  const selectedFileContent = useMemo(() => {
-    if (!selectedFileId) return undefined;
-    return findFileContent(files, selectedFileId);
-  }, [files, selectedFileId]);
-
-  const selectedFileName = useMemo(() => {
-    if (!selectedFileId) return undefined;
-    return findFileName(files, selectedFileId);
-  }, [files, selectedFileId]);
-
-  const editorLanguage = useMemo(() => {
-    if (!selectedFileName) return undefined;
-    if (selectedFileName.endsWith('.md')) return 'markdown';
-    if (selectedFileName.endsWith('.json')) return 'json';
-    return undefined;
-  }, [selectedFileName]);
-
-  const isFileSelected = selectedFileId !== null && selectedFileContent !== undefined;
-  const isImage = isImageContent(selectedFileContent);
-
   return (
     <SideDialog
       dialogTitle={initialSkill ? 'Edit Skill' : 'Add Skill'}
       dialogDescription="Configure skill details and workspace files"
       isOpen={isOpen}
       onClose={onClose}
+      className="h-full"
     >
       <SideDialog.Top>
         <span className="flex-1">{initialSkill ? 'Edit Skill' : 'New Skill'}</span>
         {!readOnly && (
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim() || !workspaceId} className="mr-6">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={!name.trim() || !workspaceId}
+            className="mr-6"
+          >
             Save
           </Button>
         )}
       </SideDialog.Top>
 
-      <SideDialog.Content className="grid grid-cols-1 gap-6 overflow-y-auto">
+      <SideDialog.Content className="overflow-y-auto h-full grid-rows-[auto_1fr]">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Txt as="label" variant="ui-sm" className="text-neutral3">
@@ -180,71 +264,18 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
               disabled={readOnly}
             />
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
-              Workspace
-            </Txt>
-            <Combobox
-              options={workspaceOptions}
-              value={workspaceId}
-              onValueChange={setWorkspaceId}
-              placeholder="Select a workspace..."
-              disabled={readOnly}
-              variant="default"
-            />
-          </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <Txt as="h3" variant="ui-lg" className="text-neutral5 font-medium">
-            Workspace Files
-          </Txt>
-
-          <div className="grid grid-cols-[minmax(180px,_1fr)_2fr] gap-4 min-h-[200px]">
-            <div className="border border-border1 rounded-md p-2 overflow-y-auto">
-              <SkillFileTree
-                files={files}
-                onChange={setFiles}
-                selectedFileId={selectedFileId}
-                onSelectFile={setSelectedFileId}
-                readOnly={readOnly}
-              />
-            </div>
-
-            <div className="border border-border1 rounded-md overflow-hidden">
-              {isFileSelected ? (
-                <div className="flex flex-col h-full">
-                  <div className="flex items-center px-3 py-1.5">
-                    <Txt variant="ui-sm" className="text-neutral3 truncate">
-                      {selectedFileName}
-                    </Txt>
-                  </div>
-                  {isImage ? (
-                    <div className="flex items-center justify-center flex-1 p-4 bg-surface2">
-                      <img
-                        src={selectedFileContent}
-                        alt={selectedFileName}
-                        className="max-w-full max-h-[300px] rounded-md object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <CodeEditor
-                      language={editorLanguage}
-                      value={selectedFileContent}
-                      onChange={readOnly ? undefined : val => handleFileContentChange(val ?? '')}
-                      className="flex-1 min-h-[160px] border-none"
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-xs text-neutral3">
-                  Select a file to edit its content
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <Workspace className="h-full border border-border1 rounded-lg">
+          <SkillWorkspaceContent
+            files={files}
+            onChange={setFiles}
+            readOnly={readOnly}
+            workspaceOptions={workspaceOptions}
+            workspaceId={workspaceId}
+            setWorkspaceId={setWorkspaceId}
+          />
+        </Workspace>
       </SideDialog.Content>
     </SideDialog>
   );

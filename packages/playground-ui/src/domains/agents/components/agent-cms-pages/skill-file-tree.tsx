@@ -140,16 +140,8 @@ export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, con
 
 function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () => void }) {
   return (
-    <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-      <IconButton
-        size="sm"
-        variant="ghost"
-        tooltip={tooltip}
-        onClick={e => {
-          e.stopPropagation();
-          onClick();
-        }}
-      >
+    <span className="opacity-0 group-hover:opacity-100">
+      <IconButton size="sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
         <Plus />
       </IconButton>
     </span>
@@ -318,10 +310,11 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
                 open={openFolders.references}
                 onOpenChange={open => setFolderOpen('references', open)}
               >
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={!readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('references')} />}
+                >
                   <Tree.Icon>{getFolderIcon(openFolders.references)}</Tree.Icon>
                   <Tree.Label>references</Tree.Label>
-                  {!readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('references')} />}
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <UserFileList
@@ -341,10 +334,11 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
                 open={openFolders.scripts}
                 onOpenChange={open => setFolderOpen('scripts', open)}
               >
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={!readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('scripts')} />}
+                >
                   <Tree.Icon>{getFolderIcon(openFolders.scripts)}</Tree.Icon>
                   <Tree.Label>scripts</Tree.Label>
-                  {!readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('scripts')} />}
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <UserFileList
@@ -364,10 +358,11 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
                 open={openFolders.assets}
                 onOpenChange={open => setFolderOpen('assets', open)}
               >
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={!readOnly && <FolderAddAction tooltip="Add image" onClick={handleAddImage} />}
+                >
                   <Tree.Icon>{getFolderIcon(openFolders.assets)}</Tree.Icon>
                   <Tree.Label>assets</Tree.Label>
-                  {!readOnly && <FolderAddAction tooltip="Add image" onClick={handleAddImage} />}
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <UserFileList
