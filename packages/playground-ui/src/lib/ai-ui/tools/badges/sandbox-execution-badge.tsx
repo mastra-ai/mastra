@@ -1,7 +1,8 @@
 import { MastraUIMessage } from '@mastra/react';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuiState } from '@assistant-ui/react';
 import { cn } from '@/lib/utils';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { IconButton } from '@/ds/components/IconButton';
@@ -10,21 +11,24 @@ import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 
-interface SandboxInfo {
+// Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
+interface WorkspaceMetadata {
+  toolName?: string;
   id?: string;
   name?: string;
-  provider?: string;
   status?: string;
-}
-
-interface WorkspaceInfo {
-  id?: string;
-  name?: string;
-}
-
-interface ExecutionMetadata {
-  workspace?: WorkspaceInfo;
-  sandbox?: SandboxInfo;
+  sandbox?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
+  filesystem?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
 }
 
 // Get status dot color based on sandbox status
@@ -51,16 +55,6 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   args: Record<string, unknown> | string;
   result: any;
   metadata?: MastraUIMessage['metadata'];
-  toolOutput?: Array<{
-    type: string;
-    data?: string;
-    timestamp?: number;
-    metadata?: ExecutionMetadata;
-    exitCode?: number;
-    success?: boolean;
-    executionTimeMs?: number;
-  }>;
-  suspendPayload?: any;
   toolCalled?: boolean;
 }
 
@@ -146,44 +140,23 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   );
 };
 
-// Extract error message from various possible locations
-// Priority: error.message > error (string) > message > stderr (for failed commands)
-const extractErrorMessage = (result: any): string | null => {
-  if (!result || Array.isArray(result)) return null;
-
-  // Direct error property
-  if (result.error?.message) return result.error.message;
-  if (typeof result.error === 'string') return result.error;
-  // Only treat result.message as an error when there's an explicit failure signal
-  if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
-    return result.message;
-  }
-
-  // If command failed (non-zero exit, success=false) and has stderr but no stdout
-  if (result.success === false && result.stderr && !result.stdout) {
-    return result.stderr;
-  }
-
-  // If exitCode is non-zero/negative and no other output, indicate failure
-  if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
-    return `Command failed with exit code ${result.exitCode}`;
-  }
-
-  return null;
-};
-
 export const SandboxExecutionBadge = ({
   toolName,
   args,
   result,
   metadata,
-  toolOutput,
   toolCallId,
   toolApprovalMetadata,
-  suspendPayload,
   isNetwork,
   toolCalled: toolCalledProp,
 }: SandboxExecutionBadgeProps) => {
+  // Get sandbox streaming data parts from the message
+  const message = useAuiState(s => s.message);
+  const dataParts = useMemo(() => {
+    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
+    return content.filter(part => part.type === 'data');
+  }, [message.content]);
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const { Link } = useLinkComponent();
@@ -201,62 +174,46 @@ export const SandboxExecutionBadge = ({
     commandDisplay = toolName;
   }
 
-  // Filter toolOutput for sandbox stdout/stderr chunks
-  const sandboxChunks =
-    toolOutput?.filter(chunk => chunk.type === 'sandbox-stdout' || chunk.type === 'sandbox-stderr') || [];
-
-  // Extract execution metadata from the most recent chunk (to handle state changes during execution)
-  const chunksWithMetadata = toolOutput?.filter(
+  // Sandbox stdout/stderr chunks scoped to this tool call
+  const sandboxChunks = dataParts.filter(
     chunk =>
-      (chunk.type === 'sandbox-stdout' || chunk.type === 'sandbox-stderr' || chunk.type === 'sandbox-exit') &&
-      chunk.metadata,
-  ) as Array<{ type: string; metadata?: ExecutionMetadata }> | undefined;
-  const execMeta = chunksWithMetadata?.length ? chunksWithMetadata[chunksWithMetadata.length - 1]?.metadata : undefined;
+      (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') && chunk.data?.toolCallId === toolCallId,
+  );
 
-  // Check for sandbox-exit chunk which indicates streaming is complete
-  const exitChunk = toolOutput?.find(chunk => chunk.type === 'sandbox-exit') as
-    | { type: 'sandbox-exit'; exitCode: number; success: boolean; executionTimeMs: number }
+  // Workspace metadata emitted first — scoped to this tool call
+  const workspaceMetaPart = dataParts.find(
+    chunk => chunk.name === 'workspace-metadata' && chunk.data?.toolCallId === toolCallId,
+  );
+  const execMeta = workspaceMetaPart?.data as WorkspaceMetadata | undefined;
+
+  // Exit chunk scoped to this tool call
+  const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
+    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
     | undefined;
 
-  // Check if result is the final execution result (object with exitCode) vs streaming array
-  const hasFinalResult = result && !Array.isArray(result) && typeof result.exitCode === 'number';
-  const finalResult = hasFinalResult ? result : null;
+  // Streaming is complete if we have exit chunk or a final result
+  const isStreamingComplete = !!exitChunk || typeof result === 'string';
 
-  const errorMessage = extractErrorMessage(result);
-  const hasError = !!errorMessage;
+  const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
+  const isRunning = hasStarted && !isStreamingComplete;
+  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
 
-  // Streaming is complete if we have exit chunk, final result, or error
-  const isStreamingComplete = !!exitChunk || hasFinalResult || hasError;
-
-  const hasStreamingOutput = sandboxChunks.length > 0;
-  const isRunning = hasStreamingOutput && !isStreamingComplete;
-  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
+  // Get exit info from data chunks
+  const exitCode = exitChunk?.data?.exitCode;
+  const exitSuccess = exitChunk?.data?.success;
+  const executionTime = exitChunk?.data?.executionTimeMs;
 
   // Combine streaming output into a single string
-  const streamingContent = sandboxChunks.map(chunk => chunk.data || '').join('');
+  const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
 
-  // Get output content for display
-  // Priority: error > final result > streaming output
-  // Once we have a final result or error, prefer that over incomplete streaming
-  let outputContent = '';
-  if (errorMessage) {
-    const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
-    outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
-  } else if (finalResult) {
-    outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
-  } else if (hasStreamingOutput) {
-    outputContent = streamingContent;
-  }
-
-  // Get exit info - treat errors as failures
-  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);
-  const exitSuccess = hasError ? false : (exitChunk?.success ?? finalResult?.success);
-  const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
+  // While running, show live streaming output.
+  // Once the tool completes, show the final result — it's what the LLM saw.
+  const outputContent = typeof result === 'string' ? result : streamingContent;
 
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
 
   // Get start time from first streaming chunk for live timer
-  const firstChunkTime = sandboxChunks[0]?.timestamp;
+  const firstChunkTime = sandboxChunks[0]?.data?.timestamp as number | undefined;
   const elapsedTime = useElapsedTime(isRunning, firstChunkTime);
 
   const onCopy = () => {
@@ -273,17 +230,14 @@ export const SandboxExecutionBadge = ({
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
-          {execMeta?.sandbox?.name && (
+          {execMeta?.sandbox && (
             <Link
-              href={execMeta.workspace?.id ? `/workspaces/${execMeta.workspace.id}` : '/workspaces'}
+              href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
               className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
-              <span>{execMeta.sandbox.name}</span>
-              {execMeta.sandbox.id && (
-                <span className="text-neutral4 text-[10px]">({execMeta.sandbox.id.slice(0, 8)})</span>
-              )}
+              <span>{execMeta.sandbox.name || execMeta.sandbox.provider}</span>
             </Link>
           )}
         </button>

@@ -292,8 +292,8 @@ function DatasetItemPage() {
               </MainHeader.Column>
             </MainHeader>
 
-            <Columns className="grid-cols-[1fr_auto]">
-              <Column withRightSeparator={true}>
+            <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
+              <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
                   <Alert variant="destructive">
                     <AlertTitle>This item was deleted at version v{latestVersion.datasetVersion}</AlertTitle>
@@ -333,18 +333,20 @@ function DatasetItemPage() {
                   )
                 )}
               </Column>
-              <Column>
-                <DatasetItemVersionsPanel
-                  datasetId={datasetId}
-                  itemId={itemId}
-                  onClose={() => {}}
-                  onVersionSelect={handleVersionSelect}
-                  onCompareVersionsClick={(versionIds: string[]) => {
-                    navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
-                  }}
-                  activeVersion={selectedVersion?.datasetVersion ?? null}
-                />
-              </Column>
+              {!isEditing && (
+                <Column>
+                  <DatasetItemVersionsPanel
+                    datasetId={datasetId}
+                    itemId={itemId}
+                    onClose={() => {}}
+                    onVersionSelect={handleVersionSelect}
+                    onCompareVersionsClick={(versionIds: string[]) => {
+                      navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
+                    }}
+                    activeVersion={selectedVersion?.datasetVersion ?? null}
+                  />
+                </Column>
+              )}
             </Columns>
           </div>
         </div>

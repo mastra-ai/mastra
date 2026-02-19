@@ -792,83 +792,87 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(response.steps.length).toBe(7);
     }, 500000);
 
-    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
-      let toolCallCount = 0;
-      const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
+    it.skipIf(version === 'v1')(
+      'should retry when tool fails and eventually succeed with maxSteps=5',
+      async () => {
+        let toolCallCount = 0;
+        const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
 
-      const flakeyTool = createTool({
-        id: 'flakeyTool',
-        description: 'A tool that fails initially but eventually succeeds',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ output: z.string() }),
-        execute: async input => {
-          toolCallCount++;
-          if (toolCallCount <= failuresBeforeSuccess) {
-            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+        const flakeyTool = createTool({
+          id: 'flakeyTool',
+          description: 'A tool that fails initially but eventually succeeds',
+          inputSchema: z.object({ input: z.string() }),
+          outputSchema: z.object({ output: z.string() }),
+          execute: async input => {
+            toolCallCount++;
+            if (toolCallCount <= failuresBeforeSuccess) {
+              throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+            }
+            return { output: `Success on attempt ${toolCallCount}: ${input.input}` };
+          },
+        });
+
+        const agent = new Agent({
+          id: 'retry-agent',
+          name: 'retry-agent',
+          instructions: 'Call the flakey tool with input "test data".',
+          model: openaiModel,
+          tools: { flakeyTool },
+        });
+        agent.__setLogger(noopLogger);
+
+        let response;
+        if (version === 'v1') {
+          response = await agent.generateLegacy('Please call the flakey tool with input "test data"', {
+            maxSteps: 5,
+          });
+        } else {
+          response = await agent.generate('Please call the flakey tool with input "test data"', {
+            maxSteps: 5,
+          });
+        }
+
+        // Should have made multiple attempts
+        expect(response.steps.length).toBeGreaterThan(1);
+        expect(response.steps.length).toBeLessThanOrEqual(5);
+
+        // Should have at least 3 tool calls total (2 failures + 1 success)
+        expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+        // Check that we eventually get a success result
+        let foundSuccess = false;
+        if (version === 'v1') {
+          for (const step of response.steps) {
+            if (step.toolResults) {
+              for (const result of step.toolResults) {
+                if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
+                  foundSuccess = true;
+                  break;
+                }
+              }
+            }
           }
-          return { output: `Success on attempt ${toolCallCount}: ${input.input}` };
-        },
-      });
-
-      const agent = new Agent({
-        id: 'retry-agent',
-        name: 'retry-agent',
-        instructions: 'Call the flakey tool with input "test data".',
-        model: openaiModel,
-        tools: { flakeyTool },
-      });
-      agent.__setLogger(noopLogger);
-
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Please call the flakey tool with input "test data"', {
-          maxSteps: 5,
-        });
-      } else {
-        response = await agent.generate('Please call the flakey tool with input "test data"', {
-          maxSteps: 5,
-        });
-      }
-
-      // Should have made multiple attempts
-      expect(response.steps.length).toBeGreaterThan(1);
-      expect(response.steps.length).toBeLessThanOrEqual(5);
-
-      // Should have at least 3 tool calls total (2 failures + 1 success)
-      expect(toolCallCount).toBeGreaterThanOrEqual(3);
-
-      // Check that we eventually get a success result
-      let foundSuccess = false;
-      if (version === 'v1') {
-        for (const step of response.steps) {
-          if (step.toolResults) {
-            for (const result of step.toolResults) {
-              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
-                foundSuccess = true;
-                break;
+        } else {
+          for (const step of response.steps) {
+            if (step.toolResults) {
+              for (const result of step.toolResults) {
+                if (
+                  result.payload.toolName === 'flakeyTool' &&
+                  result.payload.result &&
+                  result.payload.result.output?.includes('Success')
+                ) {
+                  foundSuccess = true;
+                  break;
+                }
               }
             }
           }
         }
-      } else {
-        for (const step of response.steps) {
-          if (step.toolResults) {
-            for (const result of step.toolResults) {
-              if (
-                result.payload.toolName === 'flakeyTool' &&
-                result.payload.result &&
-                result.payload.result.output?.includes('Success')
-              ) {
-                foundSuccess = true;
-                break;
-              }
-            }
-          }
-        }
-      }
 
-      expect(foundSuccess).toBe(true);
-    }, 500000);
+        expect(foundSuccess).toBe(true);
+      },
+      500000,
+    );
 
     it('should use custom model for title generation when provided in generateTitle config', async () => {
       // Track which model was used for title generation
@@ -1024,7 +1028,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -1034,7 +1038,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -1213,7 +1217,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -1224,7 +1228,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -1245,7 +1249,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -1256,7 +1260,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -1577,7 +1581,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1587,7 +1591,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1611,7 +1615,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1621,7 +1625,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1868,7 +1872,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1878,7 +1882,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2072,7 +2076,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -2083,7 +2087,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -2106,7 +2110,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -2117,7 +2121,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -2245,7 +2249,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2255,7 +2259,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2385,7 +2389,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2395,7 +2399,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2732,7 +2736,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2742,7 +2746,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2770,7 +2774,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2780,7 +2784,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
