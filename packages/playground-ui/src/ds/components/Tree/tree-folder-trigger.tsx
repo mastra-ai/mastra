@@ -6,13 +6,12 @@ import { ChevronRight } from 'lucide-react';
 import { useTreeDepth } from './tree-context';
 
 export interface TreeFolderTriggerProps {
-  action?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }
 
 export const TreeFolderTrigger = React.forwardRef<HTMLButtonElement, TreeFolderTriggerProps>(
-  ({ action, className, children }, ref) => {
+  ({ className, children }, ref) => {
     const depth = useTreeDepth();
 
     return (
@@ -29,7 +28,6 @@ export const TreeFolderTrigger = React.forwardRef<HTMLButtonElement, TreeFolderT
       >
         <ChevronRight className="size-3 shrink-0 text-neutral3" />
         {children}
-        {action && <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">{action}</span>}
       </CollapsibleTrigger>
     );
   },
