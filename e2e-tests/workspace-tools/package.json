@@ -15,7 +15,7 @@
     "globby": "^14.1.0",
     "verdaccio": "^6.2.5",
     "verdaccio-auth-memory": "^10.3.1",
-    "vitest": "catalog:",
-    "typescript": "catalog:"
+    "vitest": "4.0.16",
+    "typescript": "^5.9.3"
   }
 }
