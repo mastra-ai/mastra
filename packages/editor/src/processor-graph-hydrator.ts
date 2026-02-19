@@ -163,11 +163,7 @@ function buildWorkflow(
             return createStep(proc as Parameters<typeof createStep>[0]);
           }
           // Multi-step branch: build a sub-workflow
-          const subWorkflow = buildWorkflow(
-            branchEntries,
-            `${workflowId}-parallel-branch-${branchIdx}`,
-            ctx,
-          );
+          const subWorkflow = buildWorkflow(branchEntries, `${workflowId}-parallel-branch-${branchIdx}`, ctx);
           return subWorkflow;
         })
         .filter(Boolean);
@@ -252,7 +248,9 @@ export function hydrateProcessorGraph(
   // These can't be coerced to the new StoredProcessorGraph format since they
   // reference Mastra.processors by ID, not ProcessorProvider configs.
   if (Array.isArray(graph)) {
-    ctx.logger?.warn('Processor graph is in legacy string[] format and cannot be hydrated. Re-save the agent to migrate.');
+    ctx.logger?.warn(
+      'Processor graph is in legacy string[] format and cannot be hydrated. Re-save the agent to migrate.',
+    );
     return undefined;
   }
 
