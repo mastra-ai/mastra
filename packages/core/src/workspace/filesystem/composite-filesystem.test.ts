@@ -545,10 +545,10 @@ describe('CompositeFilesystem', () => {
       }
     });
 
-    it('should mention sandbox path semantics', () => {
+    it('should not mention sandbox path semantics', () => {
       const cfs = new CompositeFilesystem({ mounts: { '/a': localA } });
       const instructions = cfs.getInstructions();
-      expect(instructions).toContain('sandbox');
+      expect(instructions).not.toContain('sandbox');
     });
   });
 
