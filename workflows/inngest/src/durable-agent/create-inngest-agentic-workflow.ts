@@ -160,7 +160,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     // Step 2: Execute tool calls (if any)
     .map(
       async params => {
-        const { inputData, getInitData, mastra } = params;
+        const { inputData, getInitData, mastra, requestContext } = params;
         const llmOutput = inputData as DurableLLMStepOutput;
         const initData = getInitData() as IterationState;
 
@@ -224,6 +224,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           agentId: initData.agentId,
           messageId: initData.messageId,
           state: llmOutput.state,
+          requestContext,
 
           // Create tool span before execution
           onToolStart: (toolCall: DurableToolCallInput) => {

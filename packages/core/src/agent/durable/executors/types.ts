@@ -1,4 +1,5 @@
 import type { PubSub } from '../../../events/pubsub';
+import type { RequestContext } from '../../../request-context';
 import type { DurableAgenticWorkflowInput } from '../types';
 
 /**
@@ -36,6 +37,7 @@ export interface WorkflowExecutor {
     input: DurableAgenticWorkflowInput,
     pubsub: PubSub,
     runId: string,
+    requestContext?: RequestContext,
   ): Promise<WorkflowExecutionResult>;
 
   /**
@@ -45,6 +47,7 @@ export interface WorkflowExecutor {
    * @param pubsub - PubSub instance for streaming events
    * @param runId - Run ID of the suspended workflow
    * @param resumeData - Data to provide on resume
+   * @param requestContext - Optional request context for tool execution
    * @returns Promise that resolves when resume completes (or starts for async executors)
    */
   resume(
@@ -52,5 +55,6 @@ export interface WorkflowExecutor {
     pubsub: PubSub,
     runId: string,
     resumeData: unknown,
+    requestContext?: RequestContext,
   ): Promise<WorkflowExecutionResult>;
 }

@@ -238,20 +238,30 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
 }
 
 /**
- * Check if a tool requires human approval
+ * Check if a tool requires human approval.
+ *
+ * If the tool has a `needsApprovalFn`, it takes precedence over both the
+ * global `requireToolApproval` flag and the tool-level `requireApproval` flag.
+ * This matches the behavior of the non-durable agent's tool-call-step.
  */
-export function toolRequiresApproval(tool: CoreTool, globalRequireApproval?: boolean): boolean {
-  // Global flag takes precedence
-  if (globalRequireApproval) {
-    return true;
+export async function toolRequiresApproval(
+  tool: CoreTool,
+  globalRequireApproval?: boolean,
+  args?: Record<string, unknown>,
+): Promise<boolean> {
+  let requires = !!(globalRequireApproval || (tool as any).requireApproval);
+
+  // needsApprovalFn overrides all other flags (e.g., skill tools return false)
+  if ((tool as any).needsApprovalFn) {
+    try {
+      requires = await (tool as any).needsApprovalFn(args ?? {});
+    } catch {
+      // On error, default to requiring approval (safe default)
+      requires = true;
+    }
   }
 
-  // Check tool-level flag
-  if ((tool as any).requireApproval) {
-    return true;
-  }
-
-  return false;
+  return requires;
 }
 
 /**

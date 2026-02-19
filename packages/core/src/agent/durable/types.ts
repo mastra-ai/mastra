@@ -10,6 +10,7 @@ import type { z } from 'zod';
 
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MemoryConfig } from '../../memory/types';
+import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
@@ -369,6 +370,8 @@ export interface RunRegistryEntry {
   modelList?: RegistryModelListEntry[];
   /** Workspace for file/sandbox operations (non-serializable) */
   workspace?: Workspace;
+  /** Request context for forwarding auth data, feature flags, etc. to tools */
+  requestContext?: RequestContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
 }

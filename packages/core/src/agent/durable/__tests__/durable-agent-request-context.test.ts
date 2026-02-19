@@ -51,35 +51,6 @@ function createTextModel(text: string) {
   });
 }
 
-/**
- * Creates a model that returns a tool call
- */
-function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        {
-          type: 'tool-call',
-          toolCallType: 'function',
-          toolCallId: 'call-1',
-          toolName,
-          input: JSON.stringify(toolArgs),
-          providerExecuted: false,
-        },
-        {
-          type: 'finish',
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }),
-  });
-}
-
 // ============================================================================
 // DurableAgent RequestContext Tests
 // ============================================================================
@@ -197,15 +168,63 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
   describe('RequestContext with tools', () => {
     it('should pass requestContext to tool execute', async () => {
-      const mockModel = createToolCallModel('contextTool', { data: 'test' });
+      let receivedRequestContext: unknown = undefined;
+
+      // Model that calls a tool on first invocation, then returns text
+      let callCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: 'contextTool',
+                  input: JSON.stringify({ data: 'test' }),
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
 
       const contextTool = createTool({
         id: 'contextTool',
-        description: 'A tool that uses context',
+        description: 'A tool that captures requestContext',
         inputSchema: z.object({ data: z.string() }),
         execute: async (input, context) => {
-          // Tool receives context including requestContext
-          return { data: input.data, hasContext: !!context };
+          // Capture the requestContext passed to the tool
+          receivedRequestContext = context?.requestContext;
+          return { data: input.data };
         },
       });
 
@@ -221,13 +240,18 @@ describe('DurableAgent RequestContext reserved keys', () => {
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-123');
 
-      const result = await durableAgent.prepare('Use the tool', {
+      // Stream to actually execute the tool
+      const { cleanup } = await durableAgent.stream('Use the tool', {
         requestContext,
       });
 
-      // Tool should be registered
-      const tools = durableAgent.runRegistry.getTools(result.runId);
-      expect(tools.contextTool).toBeDefined();
+      // Wait for execution to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+      cleanup();
+
+      // Verify requestContext was passed through to tool.execute()
+      expect(receivedRequestContext).toBeDefined();
+      expect((receivedRequestContext as RequestContext).get('userId')).toBe('user-123');
     });
   });
 

@@ -1,4 +1,5 @@
 import type { PubSub } from '../../../events/pubsub';
+import type { RequestContext } from '../../../request-context';
 import type { DurableAgenticWorkflowInput } from '../types';
 import type { WorkflowExecutor, WorkflowExecutionResult } from './types';
 
@@ -22,11 +23,12 @@ export class LocalWorkflowExecutor implements WorkflowExecutor {
     input: DurableAgenticWorkflowInput,
     pubsub: PubSub,
     runId: string,
+    requestContext?: RequestContext,
   ): Promise<WorkflowExecutionResult> {
     try {
       // Create a run and start it, passing pubsub for streaming
       const run = await workflow.createRun({ runId, pubsub });
-      const result = await run.start({ inputData: input });
+      const result = await run.start({ inputData: input, requestContext });
 
       // Check for errors in result
       if (result?.status === 'failed') {
@@ -53,10 +55,16 @@ export class LocalWorkflowExecutor implements WorkflowExecutor {
   /**
    * Resume a suspended workflow locally.
    */
-  async resume(workflow: any, pubsub: PubSub, runId: string, resumeData: unknown): Promise<WorkflowExecutionResult> {
+  async resume(
+    workflow: any,
+    pubsub: PubSub,
+    runId: string,
+    resumeData: unknown,
+    requestContext?: RequestContext,
+  ): Promise<WorkflowExecutionResult> {
     try {
       const run = await workflow.createRun({ runId, pubsub });
-      const result = await run.resume({ resumeData });
+      const result = await run.resume({ resumeData, requestContext });
 
       if (result?.status === 'failed') {
         return {

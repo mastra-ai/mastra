@@ -254,6 +254,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     // Store workspace for tool execution context
     workspace,
+    // Store request context for forwarding to tools during execution
+    requestContext,
     cleanup: () => {
       // Cleanup resources when run completes
       // Note: SaveQueueManager handles cleanup internally via flushMessages

@@ -381,7 +381,8 @@ export class DurableAgent<
    */
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
-    const result = await this.#executor.execute(workflow, workflowInput, this.pubsub, runId);
+    const requestContext = globalRunRegistry.get(runId)?.requestContext;
+    const result = await this.#executor.execute(workflow, workflowInput, this.pubsub, runId, requestContext);
 
     if (!result.success && result.error) {
       await this.emitError(runId, result.error);
@@ -589,8 +590,9 @@ export class DurableAgent<
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
+    const requestContext = globalRunRegistry.get(runId)?.requestContext;
     ready
-      .then(() => this.#executor.resume(workflow, this.pubsub, runId, resumeData))
+      .then(() => this.#executor.resume(workflow, this.pubsub, runId, resumeData, requestContext))
       .then(result => {
         if (!result.success && result.error) {
           void this.emitError(runId, result.error);

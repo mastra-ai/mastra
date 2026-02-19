@@ -77,7 +77,7 @@ export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
     execute: async params => {
-      const { inputData, mastra, suspend, resumeData } = params;
+      const { inputData, mastra, suspend, resumeData, requestContext } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub;
@@ -107,7 +107,7 @@ export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
       }
 
       // 2. Check if tool requires approval
-      const requiresApproval = toolRequiresApproval(tool, context.options.requireToolApproval);
+      const requiresApproval = await toolRequiresApproval(tool, context.options.requireToolApproval, args);
 
       if (requiresApproval && !resumeData) {
         // Emit suspended event
@@ -166,6 +166,7 @@ export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
           toolCallId,
           messages: [],
           workspace,
+          requestContext,
         });
 
         return {
