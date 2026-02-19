@@ -5,12 +5,12 @@
  * implementation plan. It can read the codebase to understand existing
  * patterns and architecture, but cannot modify anything.
  */
-import type { SubagentDefinition } from "./types.js"
+import type { SubagentDefinition } from './types.js';
 
 export const planSubagent: SubagentDefinition = {
-	id: "plan",
-	name: "Plan",
-	instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
+  id: 'plan',
+  name: 'Plan',
+  instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
 
 ## Rules
 - You have READ-ONLY access. You cannot modify files or run commands.
@@ -38,5 +38,5 @@ Structure your plan as:
 . **Risks**: Potential issues or edge cases (if any)
 
 Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
-	allowedTools: ["view", "search_content", "find_files"],
-}
+  allowedTools: ['view', 'search_content', 'find_files'],
+};

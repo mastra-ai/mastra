@@ -5,12 +5,12 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
-import type { SubagentDefinition } from "./types.js"
+import type { SubagentDefinition } from './types.js';
 
 export const executeSubagent: SubagentDefinition = {
-	id: "execute",
-	name: "Execute",
-	instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
+  id: 'execute',
+  name: 'Execute',
+  instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
 
 ## Rules
 - You have FULL ACCESS to read, write, and execute within your task scope.
@@ -43,18 +43,18 @@ End with a structured summary:
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
 . **Notes**: Follow-up needed (if any)`,
-	allowedTools: [
-		// Read tools
-		"view",
-		"search_content",
-		"find_files",
-		// Write tools
-		"string_replace_lsp",
-		"write_file",
-		// Execution tool
-		"execute_command",
-		// Task tracking
-		"todo_write",
-		"todo_check",
-	],
-}
+  allowedTools: [
+    // Read tools
+    'view',
+    'search_content',
+    'find_files',
+    // Write tools
+    'string_replace_lsp',
+    'write_file',
+    // Execution tool
+    'execute_command',
+    // Task tracking
+    'todo_write',
+    'todo_check',
+  ],
+};

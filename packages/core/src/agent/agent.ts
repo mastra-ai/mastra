@@ -505,7 +505,7 @@ export class Agent<
         // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as Parameters<typeof createStep>[0]);
+        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
       }
       workflow = workflow.then(step);
     }
@@ -1765,6 +1765,14 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+    this.#workspace = workspace;
+    if (this.#mastra && workspace && typeof workspace !== 'function') {
+      workspace.__setLogger(this.logger);
+      this.#mastra.addWorkspace(workspace);
+    }
+  }
+
   /**
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
@@ -2881,7 +2889,7 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
-    return this.formatTools({
+    const allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
@@ -2889,7 +2897,8 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
-    });
+    };
+    return this.formatTools(allTools);
   }
 
   /**
