@@ -24,6 +24,8 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
   StorageResolvedMCPServerType,
   MCPServerBase
 > {
+  private mcpServerCtor: any;
+
   protected override onCacheEvict(_id: string): void {
     // No removeMCPServer API exists on Mastra yet.
     // The server will be re-created on next hydration.
@@ -38,17 +40,18 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
     const agents = this.resolveStoredAgents(resolved.agents);
     const workflows = this.resolveStoredWorkflows(resolved.workflows);
 
-    let MCPServer: any;
-    try {
-      const mod = await import('@mastra/mcp');
-      MCPServer = mod.MCPServer;
-    } catch {
-      throw new Error(
-        '@mastra/mcp is required to hydrate MCP server configurations. Install it with: npm install @mastra/mcp',
-      );
+    if (!this.mcpServerCtor) {
+      try {
+        const mod = await import('@mastra/mcp');
+        this.mcpServerCtor = mod.MCPServer;
+      } catch {
+        throw new Error(
+          '@mastra/mcp is required to hydrate MCP server configurations. Install it with: npm install @mastra/mcp',
+        );
+      }
     }
 
-    const server: MCPServerBase = new MCPServer({
+    const server: MCPServerBase = new this.mcpServerCtor({
       id: resolved.id,
       name: resolved.name,
       version: resolved.version,
