@@ -6,7 +6,7 @@ import type {
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
@@ -249,6 +249,168 @@ interface TextPart {
   text: string;
 }
 
+interface ToolCallState {
+  toolCallId: string;
+  toolName?: string;
+  args?: unknown;
+  argsText?: string;
+  result?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+class StreamOutputAccumulator {
+  private parts: MastraMessagePart[] = [];
+  private toolStates = new Map<string, ToolCallState>();
+  private toolPartIndex = new Map<string, number>();
+
+  addChunk(chunk: ChunkType): void {
+    switch (chunk.type) {
+      case 'text-delta':
+        if (chunk.payload.text) {
+          this.appendText(chunk.payload.text);
+        }
+        return;
+      case 'tool-call-input-streaming-start': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        if (state.argsText === undefined) {
+          state.argsText = '';
+        }
+        this.upsertToolPart(state);
+        return;
+      }
+      case 'tool-call-delta': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.argsText = `${state.argsText || ''}${chunk.payload.argsTextDelta || ''}`;
+        this.upsertToolPart(state);
+        return;
+      }
+      case 'tool-call-input-streaming-end': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        this.ensureToolArgs(state);
+        this.upsertToolPart(state);
+        return;
+      }
+      case 'tool-call': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        if (chunk.payload.args !== undefined) {
+          state.args = chunk.payload.args;
+        } else {
+          this.ensureToolArgs(state);
+        }
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        this.upsertToolPart(state);
+        return;
+      }
+      case 'tool-result': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        state.result = chunk.payload.result;
+        if (state.args === undefined) {
+          this.ensureToolArgs(state);
+        }
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        this.upsertToolPart(state);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  buildResponseMessage(memory?: ProcessorMemoryContext): MastraDBMessage | null {
+    if (this.parts.length === 0) {
+      return null;
+    }
+
+    const textContent = this.parts
+      .filter((p): p is TextPart => p.type === 'text' && 'text' in p)
+      .map(p => p.text)
+      .join('');
+
+    const content: MastraDBMessage['content'] = {
+      format: 2,
+      parts: this.parts,
+      ...(textContent ? { content: textContent } : {}),
+    };
+
+    return {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content,
+      createdAt: new Date(),
+      ...(memory?.threadId && { threadId: memory.threadId }),
+      ...(memory?.resourceId && { resourceId: memory.resourceId }),
+    };
+  }
+
+  private ensureToolState(toolCallId: string): ToolCallState {
+    let state = this.toolStates.get(toolCallId);
+    if (!state) {
+      state = { toolCallId };
+      this.toolStates.set(toolCallId, state);
+    }
+    return state;
+  }
+
+  private ensureToolArgs(state: ToolCallState): void {
+    if (state.args !== undefined || !state.argsText) {
+      return;
+    }
+
+    try {
+      state.args = JSON.parse(state.argsText);
+    } catch {
+      return;
+    }
+  }
+
+  private appendText(text: string): void {
+    const lastPart = this.parts[this.parts.length - 1];
+    if (lastPart && lastPart.type === 'text') {
+      (lastPart as TextPart).text = `${(lastPart as TextPart).text}${text}`;
+      return;
+    }
+    this.parts.push({ type: 'text', text });
+  }
+
+  private upsertToolPart(state: ToolCallState): void {
+    const part = this.buildToolPart(state);
+    const index = this.toolPartIndex.get(state.toolCallId);
+    if (index === undefined) {
+      this.parts.push(part);
+      this.toolPartIndex.set(state.toolCallId, this.parts.length - 1);
+      return;
+    }
+    this.parts[index] = part;
+  }
+
+  private buildToolPart(state: ToolCallState): MastraMessagePart {
+    const hasResult = state.result !== undefined;
+    const toolInvocation: {
+      state: 'call' | 'result';
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      result?: unknown;
+    } = {
+      state: hasResult ? 'result' : 'call',
+      toolCallId: state.toolCallId,
+      toolName: state.toolName || 'unknown',
+      args: state.args ?? {},
+      ...(hasResult ? { result: state.result } : {}),
+    };
+
+    return {
+      type: 'tool-invocation',
+      toolInvocation,
+      ...(state.providerMetadata ? { providerMetadata: state.providerMetadata } : {}),
+    } as MastraMessagePart;
+  }
+}
+
 /**
  * Creates AI SDK middleware that runs Mastra processors on input/output.
  * For a simpler API, use `withMastra` instead.
@@ -463,8 +625,11 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       if (!outputProcessors.length) return { stream, ...rest };
 
       // Transform stream through output processors
+      const outputResultProcessors = outputProcessors.filter(processor => processor.processOutputResult);
+      const streamAccumulator = outputResultProcessors.length ? new StreamOutputAccumulator() : null;
       const processorStates = new Map<string, { streamParts: ChunkType[]; customState: Record<string, unknown> }>();
       const runId = crypto.randomUUID();
+      let streamAborted = false;
 
       const transformedStream = stream.pipeThrough(
         new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
@@ -510,6 +675,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 } catch (error) {
                   if (error instanceof TripWire) {
                     // Emit error and close stream
+                    streamAborted = true;
                     controller.enqueue({
                       type: 'error',
                       error: new Error(error.message),
@@ -522,11 +688,61 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               }
             }
 
+            if (mastraChunk && streamAccumulator) {
+              streamAccumulator.addChunk(mastraChunk);
+            }
+
             // Convert back to AI SDK format and enqueue if not filtered
             if (mastraChunk) {
               const aiChunk = convertMastraChunkToAISDKStreamPart(mastraChunk);
               if (aiChunk) {
                 controller.enqueue(aiChunk);
+              }
+            }
+          },
+          async flush(controller) {
+            if (!streamAccumulator || streamAborted) {
+              return;
+            }
+
+            const messageList = new MessageList({
+              threadId: memory?.threadId,
+              resourceId: memory?.resourceId,
+            });
+
+            for (const msg of params.prompt) {
+              if (msg.role === 'system') {
+                messageList.addSystem(msg.content);
+              } else {
+                messageList.add(msg, 'input');
+              }
+            }
+
+            const responseMessage = streamAccumulator.buildResponseMessage(memory);
+            if (responseMessage) {
+              messageList.add(responseMessage, 'response');
+            }
+
+            for (const processor of outputResultProcessors) {
+              if (!processor.processOutputResult) continue;
+              try {
+                await processor.processOutputResult({
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  requestContext,
+                  abort: (reason?: string): never => {
+                    throw new TripWire(reason || 'Aborted by processor');
+                  },
+                } as ProcessOutputResultArgs);
+              } catch (error) {
+                if (error instanceof TripWire) {
+                  controller.enqueue({
+                    type: 'error',
+                    error: new Error(error.message),
+                  });
+                  return;
+                }
+                throw error;
               }
             }
           },

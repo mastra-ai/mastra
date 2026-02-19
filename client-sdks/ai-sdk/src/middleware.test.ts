@@ -339,6 +339,60 @@ describe('withMastra middleware', () => {
       // Should have counted 2 text-delta chunks ("Test " and "response")
       expect(finalChunkCount).toBe(2);
     });
+
+    it('should run processOutputResult after streaming completes', async () => {
+      let outputText = '';
+
+      const upperCaseProcessor: OutputProcessor = {
+        id: 'upper',
+        async processOutputStream(args: ProcessOutputStreamArgs) {
+          if (args.part.type === 'text-delta') {
+            return {
+              ...args.part,
+              payload: {
+                ...args.part.payload,
+                text: args.part.payload.text.toUpperCase(),
+              },
+            };
+          }
+          return args.part;
+        },
+      };
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          outputText = args.messageList.get.response
+            .db()
+            .map(
+              m =>
+                m.content?.parts
+                  ?.filter((p: any) => p.type === 'text')
+                  .map((p: any) => p.text)
+                  .join('') || '',
+            )
+            .join('');
+          return args.messageList;
+        },
+      };
+
+      const model = withMastra(createMockModel(), {
+        outputProcessors: [upperCaseProcessor, inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'Hello',
+      });
+
+      let fullText = '';
+      for await (const chunk of textStream) {
+        fullText += chunk;
+      }
+
+      expect(fullText).toBe('TEST RESPONSE');
+      expect(outputText).toBe('TEST RESPONSE');
+    });
   });
 
   describe('tripwire/abort functionality', () => {
