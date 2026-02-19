@@ -258,6 +258,12 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async query({ indexName, queryVector, topK = 10, includeVector = false }: QueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new Error(
+        'queryVector is required for Couchbase queries. Metadata-only queries are not supported by this vector store.',
+      );
+    }
+
     try {
       await this.getCollection();
 

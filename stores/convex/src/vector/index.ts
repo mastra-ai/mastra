@@ -134,6 +134,12 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     includeVector = false,
     filter,
   }: QueryVectorParams<VectorFilter>): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new Error(
+        'queryVector is required for Convex queries. Metadata-only queries are not supported by this vector store.',
+      );
+    }
+
     const vectors = await this.callStorage<VectorRecord[]>({
       op: 'queryTable',
       tableName: this.vectorTable(indexName),
