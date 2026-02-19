@@ -22,7 +22,7 @@ async function setupFixture(fixtureName: string, registry: string, tag: string):
   // Point to local registry
   await writeFile(join(fixturePath, '.npmrc'), `registry=${registry}\n`);
 
-  await execa('npm', ['install'], {
+  await execa('pnpm', ['i', '--ignore-workspace'], {
     cwd: fixturePath,
     env: { ...process.env, npm_config_registry: registry },
   });

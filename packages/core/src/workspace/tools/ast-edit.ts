@@ -275,9 +275,12 @@ export function addImport(content: string, root: SgNode, importSpec: ImportSpec)
 
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
-  // Check if import from this module already exists
+  // Check if a mergeable import from this module already exists.
+  // Skip type-only and namespace imports — they can't be merged with value imports.
   const existingImport = imports.find(imp => {
     const text = imp.text();
+    if (/^import\s+type\s/.test(text)) return false;
+    if (/^import\s+\*\s+as\s+/.test(text)) return false;
     return text.includes(`'${module}'`) || text.includes(`"${module}"`);
   });
 

@@ -235,6 +235,52 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(content).toContain("import express, { Router, Request } from 'express';");
     });
 
+    it('should insert new value import when only a type-only import exists', async () => {
+      const code = `import type { Foo } from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['bar'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      // Original type import preserved, new value import added
+      expect(content).toContain("import type { Foo } from 'utils';");
+      expect(content).toContain("import { bar } from 'utils';");
+    });
+
+    it('should insert new value import when only a namespace import exists', async () => {
+      const code = `import * as utils from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['bar'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      // Original namespace import preserved, new named import added
+      expect(content).toContain("import * as utils from 'utils';");
+      expect(content).toContain("import { bar } from 'utils';");
+    });
+
     it('should error when importSpec missing', async () => {
       await fs.writeFile(path.join(tempDir, 'test.ts'), 'const x = 1;');
 
