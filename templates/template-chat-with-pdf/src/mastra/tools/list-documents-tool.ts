@@ -13,7 +13,16 @@ Use this tool when:
   inputSchema: z.object({}),
   execute: async () => {
     try {
-      // Query vectors to find unique documents
+      // HACK: Vector stores don't have a "list all documents" operation, so we use a
+      // workaround: embed an arbitrary word and query for up to 1000 results, then
+      // extract unique documentIds from the metadata. This has known limitations:
+      // - Wastes an embedding API call on a meaningless query
+      // - May miss documents if there are >1000 total chunks
+      // - Uses similarity search when we really want metadata aggregation
+      //
+      // A cleaner approach would be a separate document registry, but this keeps the
+      // template simple with fewer moving parts. For production, consider tracking
+      // indexed documents in your own database.
       const embeddingModel = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
       const { embeddings } = await embeddingModel.doEmbed({ values: ['document'] });
 

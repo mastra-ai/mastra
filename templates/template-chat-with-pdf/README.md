@@ -2,13 +2,13 @@
 
 # Chat with PDF
 
-An AI-powered PDF assistant that lets you chat with any PDF document. Index PDFs from URLs, ask questions about the content, and optionally generate quizzes to test your comprehension. Uses RAG (Retrieval-Augmented Generation) to find relevant passages and provide accurate, sourced answers. Built with [Mastra](https://mastra.ai).
+An AI-powered PDF assistant that lets you chat with any PDF document. Ask questions about the content, get answers with page citations, and optionally generate quizzes to test your comprehension. Uses RAG (Retrieval-Augmented Generation) to find relevant passages and provide accurate, sourced answers. Built with [Mastra](https://mastra.ai).
 
 ## Why we built this
 
-Putting an entire PDF in a context window hits token limits, wastes money on irrelevant tokens, and causes context drift—where the model loses focus as it wades through pages of text that don't matter. Instead, we convert the PDF into vector embeddings: chunk the document, embed each chunk, and store them in a vector database. When you ask a question, we search for the most relevant chunks and include only those in the prompt. This keeps costs down, avoids context limits, and gives the model focused context for better answers.
+Putting an entire PDF in a context window hits token limits, wastes money on irrelevant tokens, and causes context drift—where the model loses focus as it wades through pages of text that don't matter. RAG solves this: the PDF gets chunked into vector embeddings, and when you ask a question, only the most relevant chunks are included in the prompt. This keeps your costs down, avoids context limits, and gives the model focused context for better answers.
 
-This template shows how Mastra's RAG capabilities, vector storage, and agent workflows work together: PDF ingestion with chunking, semantic search over document content, and an agent that answers questions with page-specific citations.
+This template shows how Mastra's RAG capabilities, vector storage, and agent workflows fit together—and gives you a starting point to build your own document chat experience.
 
 ## Demo
 
@@ -18,29 +18,24 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Features
 
-- ✅ PDF ingestion from any URL with automatic text extraction
-- ✅ Vector-based semantic search over document content
-- ✅ Conversational Q&A with page-specific source citations
-- ✅ Quiz generation with multiple question types (multiple choice, short answer, true/false)
-- ✅ Page-specific hints so users can verify answers in the source material
-- ✅ Multi-document support with document selection
+- ✅ **No token limits** — chat with 500-page textbooks as easily as a 5-page memo
+- ✅ **Page citations** — every answer references its source pages so you can verify
+- ✅ **Quiz generation** — active recall quizzes generated from your actual content
 
-## Prerequisites
-
-- [OpenAI API key](https://platform.openai.com/api-keys) — used for embeddings and chat completions
-
-## Quickstart 🚀
+## Quick start
 
 1. **Clone the template**
    - Run `npx create-mastra@latest --template chat-with-pdf` to scaffold the project locally.
-2. **Add your API keys**
+2. **Add your API key**
    - Copy `.env.example` to `.env` and fill in your OpenAI API key.
 3. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-## Making it yours
-
 Open Studio and start chatting with the PDF agent. Provide a PDF URL to index it, then ask questions about the content or request a quiz on specific pages or topics. The agent searches the indexed content, answers questions with page citations, and can generate comprehension quizzes from actual passages.
+
+> Need a PDF to try? Grab our free book, [Principles of Building AI Agents](https://mastra.ai/books/principles-of-building-ai-agents).
+
+## Making it yours
 
 Swap in a different embedding model, adjust the chunking strategy, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). You can also swap out LibSQL for another vector database — Mastra supports [many options](https://mastra.ai/docs/storage/vector-databases) including Pinecone, Qdrant, Chroma, pgvector, and more. The agent, tools, and workflow are all in `src/` — edit them directly to fit your use case.
 
