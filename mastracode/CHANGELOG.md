@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- Added a separate export path for the TUI at `mastracode/tui`, so consumers can cleanly import MastraTUI and related components without reaching into internals. ([#13255](https://github.com/mastra-ai/mastra/pull/13255))
+
+  ```ts
+  import { MastraTUI, type MastraTUIOptions } from 'mastracode/tui';
+  import { theme, setTheme, ModelSelectorComponent } from 'mastracode/tui';
+  ```
+
 ## 0.1.0-alpha.2
 
 ### Patch Changes
