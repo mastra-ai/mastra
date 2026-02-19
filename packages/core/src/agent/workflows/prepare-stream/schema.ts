@@ -34,15 +34,21 @@ export type AgentCapabilities = {
   llm: MastraLLMVNext;
 };
 
-export type CoreTool = {
-  parameters: any;
-  id?: string;
-  description?: string;
-  outputSchema?: any;
-  execute?: (params: any, options: any) => Promise<any>;
-  type?: 'function' | 'provider-defined';
-  args?: Record<string, any>;
-};
+const coreToolSchema = z.object({
+  id: z.string().optional(),
+  description: z.string().optional(),
+  parameters: z.union([
+    z.record(z.string(), z.any()), // JSON Schema as object
+    z.any(), // Zod schema or other schema types - validated at tool execution
+  ]),
+  outputSchema: z.union([z.record(z.string(), z.any()), z.any()]).optional(),
+  execute: z.optional(z.function()),
+  toModelOutput: z.optional(z.function()),
+  type: z.union([z.literal('function'), z.literal('provider-defined'), z.undefined()]).optional(),
+  args: z.record(z.string(), z.any()).optional(),
+});
+
+export type CoreTool = z.infer<typeof coreToolSchema>;
 
 export const storageThreadSchema = z.object({
   id: z.string(),

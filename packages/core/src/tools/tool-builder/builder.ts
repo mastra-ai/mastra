@@ -236,6 +236,7 @@ export class CoreToolBuilder extends MastraBase {
               this.logType,
             )
           : undefined,
+        toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
@@ -686,6 +687,7 @@ export class CoreToolBuilder extends MastraBase {
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
+      toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
     } as unknown as CoreTool;
   }
 }

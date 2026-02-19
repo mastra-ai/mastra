@@ -364,6 +364,7 @@ The adapter reads these settings from `mastra.getServer()`:
 |--------|-------------|
 | `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
+| `onError` | Custom error handler called when an unhandled error occurs in a route handler. See [server.onError](/reference/configuration#serveronerror). |
 
 ### Adapter constructor only
 

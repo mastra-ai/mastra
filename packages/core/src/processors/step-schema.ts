@@ -5,7 +5,185 @@ import type { MastraMessageContentV2, MessageList } from '../agent/message-list'
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema/schema';
+import type { InferSchemaOutput, OutputSchema } from '../stream/base/schema';
 import type { StructuredOutputOptions } from './processors';
+
+// =========================================================================
+// Explicit Type Definitions
+// (Prevents TypeScript from expanding Zod generics in .d.ts output)
+// =========================================================================
+
+export type TextPartType = { type: 'text'; text: string };
+
+export type ImagePartType = { type: 'image'; image: string | URL | Uint8Array; mimeType?: string };
+
+export type FilePartType = { type: 'file'; data: string | URL | Uint8Array; mimeType: string };
+
+export type ToolInvocationPartType = {
+  type: 'tool-invocation';
+  toolInvocation: {
+    toolCallId: string;
+    toolName: string;
+    args?: unknown;
+    state: 'partial-call' | 'call' | 'result';
+    result?: unknown;
+  };
+};
+
+export type ReasoningPartType = {
+  type: 'reasoning';
+  reasoning: string;
+  details: Array<{ type: 'text' | 'redacted'; text?: string; data?: string }>;
+};
+
+export type SourcePartType = {
+  type: 'source';
+  source: { sourceType: string; id: string; url?: string; title?: string };
+};
+
+export type StepStartPartType = { type: 'step-start' };
+
+export type DataPartType = { type: string; id?: string; data?: unknown };
+
+export type MessagePartType =
+  | TextPartType
+  | ImagePartType
+  | FilePartType
+  | ToolInvocationPartType
+  | ReasoningPartType
+  | SourcePartType
+  | StepStartPartType
+  | DataPartType;
+
+export type MessageContentType = {
+  format: 2;
+  parts: MessagePartType[];
+  content?: string;
+  metadata?: Record<string, unknown>;
+  providerMetadata?: Record<string, unknown>;
+};
+
+type SystemMessageTextPartType = { type: 'text'; text: string };
+
+export type SystemMessageType = {
+  role: 'system';
+  content: string | Array<SystemMessageTextPartType>;
+  experimental_providerMetadata?: Record<string, unknown>;
+};
+
+type CoreMessageType = {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: unknown;
+};
+
+export type ProcessorMessageType = {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  createdAt: Date;
+  threadId?: string;
+  resourceId?: string;
+  type?: string;
+  content: MessageContentType;
+};
+
+/**
+ * Model type for processor step schema.
+ * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
+ */
+export type ProcessorStepModelConfig =
+  | LanguageModelV2
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModel;
+
+/**
+ * Tools type for processor step schema.
+ * Accepts both AI SDK ToolSet and generic Record for flexibility.
+ */
+export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
+
+export type ProcessorInputPhaseType = {
+  phase: 'input';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  systemMessages?: CoreMessageType[];
+  retryCount?: number;
+};
+
+export type ProcessorInputStepPhaseType = {
+  phase: 'inputStep';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  stepNumber: number;
+  systemMessages?: CoreMessageType[];
+  retryCount?: number;
+  model?: ProcessorStepModelConfig;
+  tools?: ProcessorStepToolsConfig;
+  toolChoice?: ToolChoice<ToolSet>;
+  activeTools?: string[];
+  providerOptions?: SharedProviderOptions;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  steps?: Array<StepResult<ToolSet>>;
+};
+
+export type ProcessorOutputStreamPhaseType = {
+  phase: 'outputStream';
+  part?: unknown | null;
+  streamParts: unknown[];
+  state: Record<string, unknown>;
+  messageList?: MessageList;
+  retryCount?: number;
+};
+
+export type ProcessorOutputResultPhaseType = {
+  phase: 'outputResult';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  retryCount?: number;
+};
+
+export type ProcessorOutputStepPhaseType = {
+  phase: 'outputStep';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  stepNumber: number;
+  finishReason?: string;
+  toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
+  text?: string;
+  systemMessages?: CoreMessageType[];
+  retryCount?: number;
+};
+
+export type ProcessorStepInputType =
+  | ProcessorInputPhaseType
+  | ProcessorInputStepPhaseType
+  | ProcessorOutputStreamPhaseType
+  | ProcessorOutputResultPhaseType
+  | ProcessorOutputStepPhaseType;
+
+export type ProcessorStepOutputType = {
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+  messages?: ProcessorMessageType[];
+  messageList?: MessageList;
+  systemMessages?: CoreMessageType[];
+  stepNumber?: number;
+  part?: unknown | null;
+  streamParts?: unknown[];
+  state?: Record<string, unknown>;
+  finishReason?: string;
+  toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
+  text?: string;
+  retryCount?: number;
+  model?: MastraLanguageModel;
+  tools?: ProcessorStepToolsConfig;
+  toolChoice?: ToolChoice<ToolSet>;
+  activeTools?: string[];
+  providerOptions?: SharedProviderOptions;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  steps?: Array<StepResult<ToolSet>>;
+};
 
 // =========================================================================
 // Message Part Schemas (for documentation and UI)
@@ -14,7 +192,7 @@ import type { StructuredOutputOptions } from './processors';
 /**
  * Text part in a message
  */
-export const TextPartSchema = z
+export const TextPartSchema: z.ZodType<TextPartType> = z
   .object({
     type: z.literal('text'),
     text: z.string(),
@@ -24,7 +202,7 @@ export const TextPartSchema = z
 /**
  * Image part in a message
  */
-export const ImagePartSchema = z
+export const ImagePartSchema: z.ZodType<ImagePartType> = z
   .object({
     type: z.literal('image'),
     image: z.union([z.string(), z.instanceof(URL), z.instanceof(Uint8Array)]),
@@ -35,7 +213,7 @@ export const ImagePartSchema = z
 /**
  * File part in a message
  */
-export const FilePartSchema = z
+export const FilePartSchema: z.ZodType<FilePartType> = z
   .object({
     type: z.literal('file'),
     data: z.union([z.string(), z.instanceof(URL), z.instanceof(Uint8Array)]),
@@ -46,7 +224,7 @@ export const FilePartSchema = z
 /**
  * Tool invocation part in a message (covers tool-call states)
  */
-export const ToolInvocationPartSchema = z
+export const ToolInvocationPartSchema: z.ZodType<ToolInvocationPartType> = z
   .object({
     type: z.literal('tool-invocation'),
     toolInvocation: z.object({
@@ -62,7 +240,7 @@ export const ToolInvocationPartSchema = z
 /**
  * Reasoning part in a message (for models that support reasoning)
  */
-export const ReasoningPartSchema = z
+export const ReasoningPartSchema: z.ZodType<ReasoningPartType> = z
   .object({
     type: z.literal('reasoning'),
     reasoning: z.string(),
@@ -79,7 +257,7 @@ export const ReasoningPartSchema = z
 /**
  * Source part in a message (for citations/references)
  */
-export const SourcePartSchema = z
+export const SourcePartSchema: z.ZodType<SourcePartType> = z
   .object({
     type: z.literal('source'),
     source: z.object({
@@ -94,7 +272,7 @@ export const SourcePartSchema = z
 /**
  * Step start part (marks the beginning of a step in multi-step responses)
  */
-export const StepStartPartSchema = z
+export const StepStartPartSchema: z.ZodType<StepStartPartType> = z
   .object({
     type: z.literal('step-start'),
   })
@@ -104,7 +282,7 @@ export const StepStartPartSchema = z
  * Custom data part (for data-* custom parts from AI SDK writer.custom())
  * This uses a regex to match any type starting with "data-"
  */
-export const DataPartSchema = z
+export const DataPartSchema: z.ZodType<DataPartType> = z
   .object({
     type: z.string().refine(t => t.startsWith('data-'), { message: 'Type must start with "data-"' }),
     id: z.string().optional(),
@@ -117,7 +295,7 @@ export const DataPartSchema = z
  * Uses passthrough to allow additional fields from the AI SDK.
  * Note: We can't use discriminatedUnion here because DataPartSchema uses a regex pattern.
  */
-export const MessagePartSchema = z.union([
+export const MessagePartSchema: z.ZodType<MessagePartType> = z.union([
   TextPartSchema,
   ImagePartSchema,
   FilePartSchema,
@@ -136,7 +314,7 @@ export const MessagePartSchema = z.union([
  * Message content structure (MastraMessageContentV2 format)
  * This is a documentation-friendly schema with properly typed parts.
  */
-export const MessageContentSchema = z.object({
+export const MessageContentSchema: z.ZodType<MessageContentType> = z.object({
   /** Format version - 2 corresponds to AI SDK v4 UIMessage format */
   format: z.literal(2),
   /** Array of message parts (text, images, tool calls, etc.) */
@@ -157,7 +335,7 @@ export const MessageContentSchema = z.object({
  * Schema for message content in processor workflows.
  * Uses the MessagePartSchema discriminated union for proper UI rendering.
  */
-export const ProcessorMessageContentSchema = z
+export const ProcessorMessageContentSchema: z.ZodType<MessageContentType> = z
   .object({
     /** Format version - 2 corresponds to AI SDK v4 UIMessage format */
     format: z.literal(2),
@@ -185,7 +363,7 @@ export const ProcessorMessageContentSchema = z
  * - type?: string - Message type
  * - content: Message content with parts array
  */
-export const ProcessorMessageSchema = z
+export const ProcessorMessageSchema: z.ZodType<ProcessorMessageType> = z
   .object({
     /** Unique message identifier */
     id: z.string(),
@@ -208,7 +386,7 @@ export const ProcessorMessageSchema = z
  * Type for a processor message - inferred from schema for consistency.
  * Use this type when working with processor messages in TypeScript.
  */
-export type ProcessorMessage = z.infer<typeof ProcessorMessageSchema>;
+export type ProcessorMessage = ProcessorMessageType;
 
 /**
  * Type for message content
@@ -225,7 +403,7 @@ export type MessageContent = MastraMessageContentV2;
  * - { type: 'file', data, mimeType }
  * - { type: 'step-start' }
  */
-export type MessagePart = z.infer<typeof MessagePartSchema>;
+export type MessagePart = MessagePartType;
 
 // =========================================================================
 // Shared schemas for common fields
@@ -247,7 +425,7 @@ const messagesSchema = z.array(ProcessorMessageSchema);
  * Schema for system message content parts (CoreSystemMessage format)
  * System messages can have text parts or experimental provider extensions
  */
-const SystemMessageTextPartSchema = z
+const SystemMessageTextPartSchema: z.ZodType<SystemMessageTextPartType> = z
   .object({
     type: z.literal('text'),
     text: z.string(),
@@ -262,7 +440,7 @@ const SystemMessageTextPartSchema = z
  * The actual systemMessages array in processor args may contain
  * other CoreMessage types depending on the context.
  */
-export const SystemMessageSchema = z
+export const SystemMessageSchema: z.ZodType<SystemMessageType> = z
   .object({
     role: z.literal('system'),
     content: z.union([z.string(), z.array(SystemMessageTextPartSchema)]),
@@ -275,7 +453,7 @@ export const SystemMessageSchema = z
  * Schema for CoreMessage (any message type from AI SDK)
  * This is a more permissive schema for runtime flexibility.
  */
-const CoreMessageSchema = z
+const CoreMessageSchema: z.ZodType<CoreMessageType> = z
   .object({
     role: z.enum(['system', 'user', 'assistant', 'tool']),
     content: z.unknown(),
@@ -318,22 +496,6 @@ export const ProcessorInputPhaseSchema = z.object({
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
 });
-
-/**
- * Model type for processor step schema.
- * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
- */
-export type ProcessorStepModelConfig =
-  | LanguageModelV2
-  | ModelRouterModelId
-  | OpenAICompatibleConfig
-  | MastraLanguageModel;
-
-/**
- * Tools type for processor step schema.
- * Accepts both AI SDK ToolSet and generic Record for flexibility.
- */
-export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
 
 /**
  * Schema for 'inputStep' phase - processInputStep
@@ -419,7 +581,7 @@ export const ProcessorOutputStepPhaseSchema = z.object({
  * - 'outputResult': Process complete output after streaming
  * - 'outputStep': Process output after each LLM response (before tools)
  */
-export const ProcessorStepInputSchema = z.discriminatedUnion('phase', [
+export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.discriminatedUnion('phase', [
   ProcessorInputPhaseSchema,
   ProcessorInputStepPhaseSchema,
   ProcessorOutputStreamPhaseSchema,
@@ -434,7 +596,7 @@ export const ProcessorStepInputSchema = z.discriminatedUnion('phase', [
  * since the output from one phase may need to be passed to another.
  * The workflow engine handles the type narrowing internally.
  */
-export const ProcessorStepOutputSchema = z.object({
+export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.object({
   // Phase field
   phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
 
@@ -480,19 +642,19 @@ export const ProcessorStepOutputSchema = z.object({
  * Combined schema that works for both input and output.
  * Uses the discriminated union for better type inference.
  */
-export const ProcessorStepSchema = ProcessorStepInputSchema;
+export const ProcessorStepSchema: z.ZodType<ProcessorStepInputType> = ProcessorStepInputSchema;
 
 /**
  * Type for processor step data - discriminated union based on phase.
  * Use this for external APIs where type safety is important.
  */
-export type ProcessorStepData = z.infer<typeof ProcessorStepSchema>;
+export type ProcessorStepData = ProcessorStepInputType;
 
 /**
  * Flexible type for internal processor code that needs to access all fields.
  * This is useful when you need to pass data through without knowing the exact phase.
  */
-export type ProcessorStepDataFlexible = z.infer<typeof ProcessorStepOutputSchema>;
+export type ProcessorStepDataFlexible = ProcessorStepOutputType;
 
 /**
  * Input type alias for processor steps.

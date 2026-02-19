@@ -18,6 +18,11 @@ export const TABLE_SCORER_DEFINITIONS = 'mastra_scorer_definitions';
 export const TABLE_SCORER_DEFINITION_VERSIONS = 'mastra_scorer_definition_versions';
 export const TABLE_MCP_CLIENTS = 'mastra_mcp_clients';
 export const TABLE_MCP_CLIENT_VERSIONS = 'mastra_mcp_client_versions';
+export const TABLE_WORKSPACES = 'mastra_workspaces';
+export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
+export const TABLE_SKILLS = 'mastra_skills';
+export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
+export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -44,6 +49,11 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORER_DEFINITION_VERSIONS
   | typeof TABLE_MCP_CLIENTS
   | typeof TABLE_MCP_CLIENT_VERSIONS
+  | typeof TABLE_WORKSPACES
+  | typeof TABLE_WORKSPACE_VERSIONS
+  | typeof TABLE_SKILLS
+  | typeof TABLE_SKILL_VERSIONS
+  | typeof TABLE_SKILL_BLOBS
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
@@ -145,6 +155,9 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   scorers: { type: 'jsonb', nullable: true },
   mcpClients: { type: 'jsonb', nullable: true },
   requestContextSchema: { type: 'jsonb', nullable: true },
+  workspace: { type: 'jsonb', nullable: true },
+  skills: { type: 'jsonb', nullable: true },
+  skillsFormat: { type: 'text', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
@@ -220,6 +233,72 @@ export const MCP_CLIENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   servers: { type: 'jsonb', nullable: false },
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const WORKSPACES_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to workspace_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const WORKSPACE_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  workspaceId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  filesystem: { type: 'jsonb', nullable: true },
+  sandbox: { type: 'jsonb', nullable: true },
+  mounts: { type: 'jsonb', nullable: true },
+  search: { type: 'jsonb', nullable: true },
+  skills: { type: 'jsonb', nullable: true },
+  tools: { type: 'jsonb', nullable: true },
+  autoSync: { type: 'boolean', nullable: true },
+  operationTimeout: { type: 'integer', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
+  authorId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  skillId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: false },
+  instructions: { type: 'text', nullable: false },
+  license: { type: 'text', nullable: true },
+  compatibility: { type: 'jsonb', nullable: true },
+  source: { type: 'jsonb', nullable: true },
+  references: { type: 'jsonb', nullable: true },
+  scripts: { type: 'jsonb', nullable: true },
+  assets: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  tree: { type: 'jsonb', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const SKILL_BLOBS_SCHEMA: Record<string, StorageColumn> = {
+  hash: { type: 'text', nullable: false, primaryKey: true },
+  content: { type: 'text', nullable: false },
+  size: { type: 'integer', nullable: false },
+  mimeType: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -402,6 +481,11 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_SCORER_DEFINITION_VERSIONS]: SCORER_DEFINITION_VERSIONS_SCHEMA,
   [TABLE_MCP_CLIENTS]: MCP_CLIENTS_SCHEMA,
   [TABLE_MCP_CLIENT_VERSIONS]: MCP_CLIENT_VERSIONS_SCHEMA,
+  [TABLE_WORKSPACES]: WORKSPACES_SCHEMA,
+  [TABLE_WORKSPACE_VERSIONS]: WORKSPACE_VERSIONS_SCHEMA,
+  [TABLE_SKILLS]: SKILLS_SCHEMA,
+  [TABLE_SKILL_VERSIONS]: SKILL_VERSIONS_SCHEMA,
+  [TABLE_SKILL_BLOBS]: SKILL_BLOBS_SCHEMA,
   [TABLE_DATASETS]: DATASETS_SCHEMA,
   [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,

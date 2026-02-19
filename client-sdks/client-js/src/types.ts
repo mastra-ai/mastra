@@ -128,7 +128,9 @@ export interface GetAgentResponse {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -1224,6 +1226,70 @@ export interface CompareVersionsResponse {
   diffs: VersionDiff[];
 }
 
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+export interface ScorerVersionResponse {
+  id: string;
+  scorerDefinitionId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateScorerVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CompareScorerVersionsResponse {
+  fromVersion: ScorerVersionResponse;
+  toVersion: ScorerVersionResponse;
+  diffs: VersionDiff[];
+}
+
 export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
@@ -1812,8 +1878,8 @@ export interface DatasetRecord {
   name: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
