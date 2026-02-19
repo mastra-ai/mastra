@@ -91,6 +91,8 @@ function DatasetPage() {
               id: dataset.id,
               name: dataset.name,
               description: dataset?.description || '',
+              inputSchema: dataset.inputSchema,
+              groundTruthSchema: dataset.groundTruthSchema,
             }}
           />
         )}
