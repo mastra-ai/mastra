@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import {
   Database,
@@ -70,7 +70,7 @@ function DatasetItemsComparePage() {
               </Icon>
               Datasets
             </Crumb>
-            <Crumb isCurrent>
+            <Crumb isCurrent as="span">
               <Icon>
                 <ScaleIcon />
               </Icon>
@@ -100,7 +100,7 @@ function DatasetItemsComparePage() {
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
-          <Crumb isCurrent>
+          <Crumb isCurrent as="span">
             <Icon>
               <ScaleIcon />
             </Icon>
@@ -161,9 +161,8 @@ function DatasetItemsComparePage() {
 
           <Columns className="grid-cols-[1fr_3vw_1fr]">
             {itemIds.map((itemId, idx) => (
-              <>
+              <Fragment key={itemId}>
                 <CompareItemColumn
-                  key={idx}
                   datasetId={datasetId}
                   itemId={itemId}
                   Link={FrameworkLink}
@@ -177,7 +176,7 @@ function DatasetItemsComparePage() {
                   }}
                 />
                 {idx == 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')}></div>}
-              </>
+              </Fragment>
             ))}
           </Columns>
           {isDiffView && itemA && itemB && <CodeDiff codeA={itemToText(itemA)} codeB={itemToText(itemB)} />}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import {
   Database,
@@ -187,9 +187,8 @@ function DatasetItemVersionsComparePage() {
 
           <Columns className="grid-cols-[1fr_3vw_1fr]">
             {versionNumbers.map((datasetVersion, idx) => (
-              <>
+              <Fragment key={datasetVersion}>
                 <CompareVersionColumn
-                  key={datasetVersion}
                   datasetId={datasetId}
                   itemId={itemId}
                   datasetVersion={datasetVersion}
@@ -206,7 +205,7 @@ function DatasetItemVersionsComparePage() {
                   }}
                 />
                 {idx === 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')} />}
-              </>
+              </Fragment>
             ))}
           </Columns>
           {isDiffView && versionA && versionB && (
