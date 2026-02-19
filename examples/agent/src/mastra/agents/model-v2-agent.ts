@@ -520,20 +520,30 @@ export const supervisorAgent = new Agent({
       // Stop on first bail() call
       bailStrategy: 'first',
 
-      // Context Filtering - Control what context is passed to sub-agents
-      contextFilter: {
-        maxMessages: 10, // Only pass last 10 messages
-        includeSystem: false, // Don't include system messages
-        includeToolMessages: true, // Include tool invocation messages
-        filter: message => {
-          // Filter out messages with sensitive/confidential data
-          const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-          const hasSensitiveData =
-            content.toLowerCase().includes('confidential') ||
-            content.toLowerCase().includes('secret') ||
-            content.toLowerCase().includes('api_key');
-          return !hasSensitiveData;
-        },
+      // Context Filtering - Control what context is passed to sub-agents.
+      // Receives the full parent message history and delegation metadata.
+      // Returns the messages to forward to the sub-agent.
+      contextFilter: ({ messages, primitiveId, iteration }) => {
+        console.log(`🔍 contextFilter: preparing context for ${primitiveId} (iteration ${iteration})`);
+
+        return (
+          messages
+            // Don't forward system messages to sub-agents
+            .filter(m => m.role !== 'system')
+            // Strip messages containing sensitive data
+            .filter(message => {
+              const content =
+                typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+              const hasSensitiveData =
+                content.toLowerCase().includes('confidential') ||
+                content.toLowerCase().includes('secret') ||
+                content.toLowerCase().includes('api_key');
+              return !hasSensitiveData;
+            })
+            // Analysis agent only needs the last 5 messages — it works on the output of research,
+            // so deep history isn't useful. Research agent gets up to 10.
+            .slice(primitiveId === 'analysis-agent' ? -5 : -10)
+        );
       },
     },
   },
