@@ -102,7 +102,7 @@ function EditLayoutWrapper() {
 
   const activeVersionId = agent?.activeVersionId;
   const latestVersion = versionsData?.versions?.[0];
-  const hasDraft = !!(latestVersion && activeVersionId && latestVersion.id !== activeVersionId);
+  const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -111,7 +111,7 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent]);
 
-  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft } = useAgentCmsForm({
+  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, isDirty } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
@@ -155,7 +155,11 @@ function EditLayoutWrapper() {
             />
             {!selectedVersionId && (
               <>
-                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+                <Button
+                  variant="outline"
+                  onClick={handleSaveDraft}
+                  disabled={!isDirty || isSavingDraft || isSubmitting}
+                >
                   {isSavingDraft ? (
                     <>
                       <Spinner className="h-4 w-4" />
@@ -170,7 +174,11 @@ function EditLayoutWrapper() {
                     </>
                   )}
                 </Button>
-                <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
+                <Button
+                  variant="primary"
+                  onClick={handlePublish}
+                  disabled={!hasDraft || isDirty || isSubmitting || isSavingDraft}
+                >
                   {isSubmitting ? (
                     <>
                       <Spinner className="h-4 w-4" />
