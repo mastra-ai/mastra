@@ -76,10 +76,10 @@ function parseTokenInput(input: string): number | null {
 	if (!trimmed) return null
 
 	// Match patterns like "30k", "30", "30000", "1.5k"
-	const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*k?$/)
-	if (!match) return null
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*k?$/)
+    if (!match) return null
 
-	const num = parseFloat(match[1])
+    const num = parseFloat(match[1]!)
 	if (isNaN(num) || num <= 0) return null
 
 	// "30k" → 30,000

@@ -135,13 +135,13 @@ export function openaiCodexProvider(
 						headers.set(key, value)
 					}
 				})
-			} else if (Array.isArray(init.headers)) {
-				for (const [key, value] of init.headers) {
-					if (key.toLowerCase() !== "authorization" && value !== undefined) {
-						headers.set(key, String(value))
-					}
-				}
-			} else {
+            } else if (Array.isArray(init.headers)) {
+                for (const [key, value] of init.headers) {
+                    if (key!.toLowerCase() !== "authorization" && value !== undefined) {
+                        headers.set(key!, String(value))
+                    }
+                }
+            } else {
 				for (const [key, value] of Object.entries(init.headers)) {
 					if (key.toLowerCase() !== "authorization" && value !== undefined) {
 						headers.set(key, String(value))

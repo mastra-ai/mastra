@@ -368,11 +368,11 @@ export class ToolExecutionComponentEnhanced
 		command = command.replace(cdPattern, "")
 
 		// Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
-		let maxStreamLines: number | undefined
-		const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/)
-		if (tailMatch) {
-			maxStreamLines = Math.abs(parseInt(tailMatch[1], 10))
-		}
+        let maxStreamLines: number | undefined
+        const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/)
+        if (tailMatch) {
+            maxStreamLines = Math.abs(parseInt(tailMatch[1]!, 10))
+        }
 
 		const timeoutSuffix = timeout
 			? theme.fg("muted", ` (timeout ${timeout}s)`)
@@ -667,14 +667,14 @@ export class ToolExecutionComponentEnhanced
 			} else if (trimmed === "Hints:") {
 				currentSeverity = "hint"
 			} else {
-				const match = trimmed.match(/^((?:.*:)?\d+:\d+)\s*-\s*(.+)$/)
-				if (match) {
-					entries.push({
-						severity: currentSeverity,
-						location: match[1],
-						message: match[2],
-					})
-				}
+                const match = trimmed.match(/^((?:.*:)?\d+:\d+)\s*-\s*(.+)$/)
+                if (match) {
+                    entries.push({
+                        severity: currentSeverity,
+                        location: match[1]!,
+                        message: match[2]!,
+                    })
+                }
 			}
 		}
 
@@ -702,14 +702,14 @@ export class ToolExecutionComponentEnhanced
 			} else if (i >= newLines.length) {
 				if (firstChangeIndex === -1) firstChangeIndex = lines.length
 				lines.push(removedColor(oldLines[i]))
-			} else if (oldLines[i] !== newLines[i]) {
-				if (firstChangeIndex === -1) firstChangeIndex = lines.length
-				lines.push(removedColor(oldLines[i]))
-				lines.push(addedColor(newLines[i]))
-			} else {
-				// Context line
-				lines.push(theme.fg("muted", oldLines[i]))
-			}
+            } else if (oldLines[i] !== newLines[i]) {
+                if (firstChangeIndex === -1) firstChangeIndex = lines.length
+                lines.push(removedColor(oldLines[i]!))
+                lines.push(addedColor(newLines[i]!))
+            } else {
+                // Context line
+                lines.push(theme.fg("muted", oldLines[i]!))
+            }
 		}
 
 		return {
@@ -900,10 +900,10 @@ export class ToolExecutionComponentEnhanced
 			error = content
 
 			// Try to create an Error object with better structure
-			const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m)
-			if (errorMatch) {
-				const err = new Error(errorMatch[2])
-				err.name = errorMatch[1]
+            const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m)
+            if (errorMatch) {
+                const err = new Error(errorMatch[2]!)
+                err.name = errorMatch[1]!
 				// Try to extract stack trace
 				const stackMatch = content.match(/\n\s+at\s+.+/g)
 				if (stackMatch) {
@@ -989,15 +989,14 @@ function highlightCode(
 	startLine?: number,
 ): string {
 	let lines = content.split("\n").map((line) => line.trimEnd())
-
-	// Remove "[Truncated N tokens]" and "Here's the result of running `cat -n`..." headers
-	while (
-		lines.length > 0 &&
-		(lines[0].includes("Here's the result of running") ||
-			lines[0].match(/^\[Truncated \d+ tokens\]$/))
-	) {
-		lines = lines.slice(1)
-	}
+    // Remove "[Truncated N tokens]" and "Here's the result of running `cat -n`..." headers
+    while (
+        lines.length > 0 &&
+        (lines[0]!.includes("Here's the result of running") ||
+            lines[0]!.match(/^\[Truncated \d+ tokens\]$/))
+    ) {
+        lines = lines.slice(1)
+    }
 
 	// Strip line numbers - we know they're sequential starting from startLine
 	let expectedLineNum = startLine ?? 1

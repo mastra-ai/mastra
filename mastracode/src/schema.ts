@@ -25,7 +25,7 @@ export const stateSchema = z.object({
             categories: z.record(z.string(), z.enum(["allow", "ask", "deny"])).default({}),
             tools: z.record(z.string(), z.enum(["allow", "ask", "deny"])).default({}),
         })
-        .default({}),
+        .default({ categories: {}, tools: {} }),
     // Smart editing mode — use AST-based analysis for code edits
     smartEditing: z.boolean().default(true),
     // Notification mode — alert when TUI needs user attention

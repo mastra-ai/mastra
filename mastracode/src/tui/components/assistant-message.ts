@@ -89,45 +89,44 @@ export class AssistantMessageComponent extends Container {
 		if (hasVisibleContent) {
 			this.contentContainer.addChild(new Spacer(1))
 		}
+        // Render content in order
+        for (let i = 0; i < message.content.length; i++) {
+            const content = message.content[i]!
 
-		// Render content in order
-		for (let i = 0; i < message.content.length; i++) {
-			const content = message.content[i]
+            if (content.type === "text" && (content as any).text.trim()) {
+                // Assistant text messages - trim the text
+                this.contentContainer.addChild(
+                    new Markdown((content as any).text.trim(), 1, 0, this.markdownTheme),
+                )
+            } else if (content.type === "thinking" && (content as any).thinking.trim()) {
+                // Check if there's text content after this thinking block
+                const hasTextAfter = message.content
+                    .slice(i + 1)
+                    .some((c) => c.type === "text" && (c as any).text.trim())
 
-			if (content.type === "text" && content.text.trim()) {
-				// Assistant text messages - trim the text
-				this.contentContainer.addChild(
-					new Markdown(content.text.trim(), 1, 0, this.markdownTheme),
-				)
-			} else if (content.type === "thinking" && content.thinking.trim()) {
-				// Check if there's text content after this thinking block
-				const hasTextAfter = message.content
-					.slice(i + 1)
-					.some((c) => c.type === "text" && c.text.trim())
-
-				if (this.hideThinkingBlock) {
-					// Show static "Thinking..." label when hidden
-					this.contentContainer.addChild(
-						new Text(
-							theme.italic(theme.fg("thinkingText", "Thinking...")),
-							1,
-							0,
-						),
-					)
-					if (hasTextAfter) {
-						this.contentContainer.addChild(new Spacer(1))
-					}
-				} else {
-					// Thinking traces in thinkingText color, italic
-					this.contentContainer.addChild(
-						new Markdown(content.thinking.trim(), 1, 0, this.markdownTheme, {
-							color: (text: string) => theme.fg("thinkingText", text),
-							italic: true,
-						}),
-					)
-					this.contentContainer.addChild(new Spacer(1))
-				}
-			}
+                if (this.hideThinkingBlock) {
+                    // Show static "Thinking..." label when hidden
+                    this.contentContainer.addChild(
+                        new Text(
+                            theme.italic(theme.fg("thinkingText", "Thinking...")),
+                            1,
+                            0,
+                        ),
+                    )
+                    if (hasTextAfter) {
+                        this.contentContainer.addChild(new Spacer(1))
+                    }
+                } else {
+                    // Thinking traces in thinkingText color, italic
+                    this.contentContainer.addChild(
+                        new Markdown((content as any).thinking.trim(), 1, 0, this.markdownTheme, {
+                            color: (text: string) => theme.fg("thinkingText", text),
+                            italic: true,
+                        }),
+                    )
+                    this.contentContainer.addChild(new Spacer(1))
+                }
+            }
 			// Skip tool_call and tool_result - those are rendered by ToolExecutionComponent
 		}
 

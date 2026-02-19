@@ -41,13 +41,13 @@ export function parseValidationErrors(error: unknown): ValidationError[] {
 		}
 
 		// Try to parse "missing required parameter" errors
-		const missingMatch = error.match(/missing required.*?["`'](\w+)["`']/i)
-		if (missingMatch) {
-			errors.push({
-				field: missingMatch[1],
-				message: "Required parameter is missing",
-			})
-		}
+        const missingMatch = error.match(/missing required.*?["`'](\w+)["`']/i)
+        if (missingMatch) {
+            errors.push({
+                field: missingMatch[1]!,
+                message: "Required parameter is missing",
+            })
+        }
 
 		// Generic fallback
 		if (errors.length === 0) {

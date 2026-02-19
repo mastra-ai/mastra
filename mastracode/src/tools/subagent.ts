@@ -207,17 +207,17 @@ Use this tool when:
 							break
 
 						case "tool-result": {
-							const isErr = chunk.payload.isError ?? false
-							// Update the last matching tool call
-							for (let i = toolCallLog.length - 1; i >= 0; i--) {
-								if (
-									toolCallLog[i].name === chunk.payload.toolName &&
-									toolCallLog[i].isError === undefined
-								) {
-									toolCallLog[i].isError = isErr
-									break
-								}
-							}
+                            const isErr = chunk.payload.isError ?? false
+                            // Update the last matching tool call
+                            for (let i = toolCallLog.length - 1; i >= 0; i--) {
+                                if (
+                                    toolCallLog[i]!.name === chunk.payload.toolName &&
+                                    toolCallLog[i]!.isError === undefined
+                                ) {
+                                    toolCallLog[i]!.isError = isErr
+                                    break
+                                }
+                            }
 							emitEvent?.({
 								type: "subagent_tool_end",
 								toolCallId,
@@ -357,19 +357,18 @@ export function parseSubagentMeta(content: string): {
 		/\n<subagent-meta modelId="([^"]*)" durationMs="(\d+)" tools="([^"]*)" \/>$/,
 	)
 	if (!match) return { text: content }
+    const text = content.slice(0, match.index!)
+    const modelId = match[1]!
+    const durationMs = parseInt(match[2]!, 10)
+    const toolCalls = match[3]
+        ? match[3]
+                .split(",")
+                .filter(Boolean)
+                .map((entry) => {
+                    const [name, status] = entry.split(":")
+                    return { name: name!, isError: status === "err" }
+                })
+        : []
 
-	const text = content.slice(0, match.index!)
-	const modelId = match[1]
-	const durationMs = parseInt(match[2], 10)
-	const toolCalls = match[3]
-		? match[3]
-				.split(",")
-				.filter(Boolean)
-				.map((entry) => {
-					const [name, status] = entry.split(":")
-					return { name, isError: status === "err" }
-				})
-		: []
-
-	return { text, modelId, durationMs, toolCalls }
+    return { text, modelId, durationMs, toolCalls }
 }

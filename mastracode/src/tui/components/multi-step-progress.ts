@@ -249,11 +249,10 @@ export class MultiStepProgressComponent extends Container {
 			return chalk.hex(mastra.purple)(bar) // Mastra purple
 		}
 	}
-
-	private getSpinner(): string {
-		const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-		return frames[this.spinnerFrame]
-	}
+    private getSpinner(): string {
+        const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        return frames[this.spinnerFrame]!
+    }
 
 	private formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000)

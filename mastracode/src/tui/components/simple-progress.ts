@@ -131,11 +131,10 @@ export class SimpleProgressComponent extends Container {
 
 		this.addChild(new Text(text, 0, 0))
 	}
-
-	private getSpinner(): string {
-		const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-		return frames[this.spinnerFrame]
-	}
+    private getSpinner(): string {
+        const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        return frames[this.spinnerFrame]!
+    }
 
 	render(maxWidth: number): string[] {
 		this.rebuild()

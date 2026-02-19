@@ -167,15 +167,15 @@ export class OMOutputComponent extends Container {
 
 			// Collect tail groups from the end until we hit the other half
 			const tailBudget = COLLAPSED_LINES - headLines.length
-			const tailLines: string[] = []
-			let tailGroupStart = groups.length
-			for (let i = groups.length - 1; i >= headGroupCount; i--) {
-				if (
-					tailLines.length + groups[i].length > tailBudget &&
-					tailLines.length > 0
-				)
-					break
-				tailLines.unshift(...groups[i])
+            const tailLines: string[] = []
+            let tailGroupStart = groups.length
+            for (let i = groups.length - 1; i >= headGroupCount; i--) {
+                if (
+                    tailLines.length + groups[i]!.length > tailBudget &&
+                    tailLines.length > 0
+                )
+                    break
+                tailLines.unshift(...groups[i]!)
 				tailGroupStart = i
 			}
 

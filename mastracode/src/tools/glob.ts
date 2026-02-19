@@ -159,16 +159,16 @@ function globToRegex(pattern: string): RegExp {
 				regexStr += pattern.slice(i, end + 1)
 				i = end + 1
 			} else {
-				regexStr += escapeRegex(c)
-				i++
-			}
-		} else {
-			regexStr += escapeRegex(c)
-			i++
-		}
-	}
+                regexStr += escapeRegex(c!)
+                i++
+            }
+        } else {
+            regexStr += escapeRegex(c!)
+            i++
+        }
+    }
 
-	return new RegExp("^" + regexStr + "$")
+    return new RegExp("^" + regexStr + "$")
 }
 
 function escapeRegex(s: string): string {

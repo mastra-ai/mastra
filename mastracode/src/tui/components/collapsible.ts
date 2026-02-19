@@ -134,10 +134,10 @@ export class CollapsibleFileViewer extends CollapsibleComponent {
 		options: Partial<CollapsibleOptions>,
 		ui: TUI,
 	) {
-		let lines = content.split("\n").map((line) => line.trimEnd())
+        let lines = content.split("\n").map((line) => line.trimEnd())
 
-		// Remove "Here's the result of running `cat -n`..." header if present
-		if (lines.length > 0 && lines[0].includes("Here's the result of running")) {
+        // Remove "Here's the result of running `cat -n`..." header if present
+        if (lines.length > 0 && lines[0]!.includes("Here's the result of running")) {
 			lines = lines.slice(1)
 		}
 

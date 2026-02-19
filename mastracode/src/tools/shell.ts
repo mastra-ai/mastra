@@ -114,12 +114,11 @@ Usage notes:
 		execute: async (context, toolContext) => {
 			let { command } = context
 			let extractedTail: number | undefined
-
-			// Extract `| tail -N` or `| tail -n N` from command if present
-			// This allows streaming all output to user while only returning last N lines to agent
-			const tailPipeMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/)
-			if (tailPipeMatch) {
-				const tailLines = Math.abs(parseInt(tailPipeMatch[1], 10))
+            // Extract `| tail -N` or `| tail -n N` from command if present
+            // This allows streaming all output to user while only returning last N lines to agent
+            const tailPipeMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/)
+            if (tailPipeMatch) {
+                const tailLines = Math.abs(parseInt(tailPipeMatch[1]!, 10))
 				if (tailLines > 0) {
 					extractedTail = tailLines
 					// Remove the tail pipe from the command

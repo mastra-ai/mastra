@@ -352,26 +352,26 @@ export class FileEditor {
 				}
 				// this line is equal to the first line in our from replacement. Lets check each following line to see if we match
 				const firstDistance = distance(oldLines[0] || "", normLine || "")
-				const firstPercentDiff = (firstDistance / (normLine?.length || 0)) * 100
-				if (
-					isSingleLineReplacement &&
-					(normLine === oldLines[0] || normLine.includes(oldLines[0]))
-				) {
+                const firstPercentDiff = (firstDistance / (normLine?.length || 0)) * 100
+                if (
+                    isSingleLineReplacement &&
+                    (normLine === oldLines[0] || normLine.includes(oldLines[0]!))
+                ) {
 					bestMatch.start = index
 					bestMatch.type = "replace-in-line"
 					continue
 				}
-				if (oldLines[0] === normLine || firstPercentDiff < 5) {
-					let isMatching = true
-					let matchingLineCount = 0
-					for (const [matchIndex, oldLine] of oldLines.entries()) {
-						const innerNormLine = normFileLines[index + matchIndex]
-						const innerDistance = distance(
-							oldLine,
-							normFileLines[index + matchIndex],
-						)
-						const innerPercentDiff =
-							(innerDistance / innerNormLine.length) * 100
+                if (oldLines[0] === normLine || firstPercentDiff < 5) {
+                    let isMatching = true
+                    let matchingLineCount = 0
+                    for (const [matchIndex, oldLine] of oldLines.entries()) {
+                        const innerNormLine = normFileLines[index + matchIndex]!
+                        const innerDistance = distance(
+                            oldLine,
+                            normFileLines[index + matchIndex]!,
+                        )
+                        const innerPercentDiff =
+                            (innerDistance / innerNormLine.length) * 100
 						const remainingLines = oldLines.length - matchingLineCount
 						const percentLinesRemaining =
 							(remainingLines / oldLines.length) * 100
@@ -432,13 +432,13 @@ ${divergedMessage ? divergedMessage : ``}Try adjusting your input or the file co
 				const [firstNew, ...restNew] = newStr ? newStr.split("\n") : []
 				const newFileLines = [
 					...fileLines.slice(0, bestMatch.start),
-					...(restNew?.length
-						? [firstNew, ...restNew]
-						: [
-								fileLines
-									.at(bestMatch.start)
-									?.replace(oldLinesOriginal[0], firstNew || "") ?? "",
-							]),
+                    ...(restNew?.length
+                        ? [firstNew, ...restNew]
+                        : [
+                                fileLines
+                                    .at(bestMatch.start)
+                                    ?.replace(oldLinesOriginal[0]!, firstNew || "") ?? "",
+                            ]),
 					...fileLines.slice(bestMatch.start + 1),
 				]
 				newFileContent = newFileLines.join("\n")

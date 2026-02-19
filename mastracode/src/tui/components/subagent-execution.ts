@@ -66,19 +66,19 @@ export class SubagentExecutionComponent
 		this.toolCalls.push({ name, args, done: false })
 		this.rebuild()
 	}
-
-	addToolEnd(name: string, result: unknown, isError: boolean): void {
-		for (let i = this.toolCalls.length - 1; i >= 0; i--) {
-			if (this.toolCalls[i].name === name && !this.toolCalls[i].done) {
-				this.toolCalls[i].done = true
-				this.toolCalls[i].isError = isError
-				this.toolCalls[i].result =
-					typeof result === "string" ? result : JSON.stringify(result ?? "")
-				break
-			}
-		}
-		this.rebuild()
-	}
+    addToolEnd(name: string, result: unknown, isError: boolean): void {
+        for (let i = this.toolCalls.length - 1; i >= 0; i--) {
+            const toolCall = this.toolCalls[i]!
+            if (toolCall.name === name && !toolCall.done) {
+                toolCall.done = true
+                toolCall.isError = isError
+                toolCall.result =
+                    typeof result === "string" ? result : JSON.stringify(result ?? "")
+                break
+            }
+        }
+        this.rebuild()
+    }
 
 	finish(isError: boolean, durationMs: number, result?: string): void {
 		this.done = true

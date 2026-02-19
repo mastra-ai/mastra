@@ -5,6 +5,7 @@ import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } fro
 import type { HarnessRuntimeContext } from "../harness/types"
 import type { stateSchema } from "../schema"
 import { getOmScope } from "../utils/project"
+import { resolveModel } from "./model"
 
 
 // Cache for Memory instances by threshold config

@@ -180,13 +180,12 @@ export class OMProgressComponent extends Container {
 			return chalk.hex(mastra.darkGray)(bar) // Mastra dark gray
 		}
 	}
-
-	private spinnerFrame = 0
-	private getSpinner(): string {
-		const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-		this.spinnerFrame = (this.spinnerFrame + 1) % frames.length
-		return frames[this.spinnerFrame]
-	}
+    private spinnerFrame = 0
+    private getSpinner(): string {
+        const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        this.spinnerFrame = (this.spinnerFrame + 1) % frames.length
+        return frames[this.spinnerFrame]!
+    }
 
 	render(maxWidth: number): string[] {
 		this.updateDisplay()

@@ -201,7 +201,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			const lastModelId = config.authStorage?.getLastModelId()
 			const seedModel = lastModelId || defaultMode.defaultModelId
 			if (seedModel) {
-				this.setState({ currentModelId: seedModel } as Partial<z.infer<TState>>)
+				this.setState({ currentModelId: seedModel } as unknown as Partial<z.infer<TState>>)
 			}
 		}
 	}
@@ -288,15 +288,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		const sortedThreads = [...threads].sort(
 			(a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
 		)
+        // Acquire lock on the thread
+        acquireThreadLock(sortedThreads[0]!.id)
+        this.currentThreadId = sortedThreads[0]!.id
 
-		// Acquire lock on the thread
-		acquireThreadLock(sortedThreads[0].id)
-		this.currentThreadId = sortedThreads[0].id
+        // Load token usage and model ID for this thread
+        await this.loadThreadMetadata()
 
-		// Load token usage and model ID for this thread
-		await this.loadThreadMetadata()
-
-		return sortedThreads[0]
+        return sortedThreads[0]!
 	}
 
 	/**
@@ -516,7 +515,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		// Load the incoming mode's model
 		const modeModelId = await this.loadModeModelId(modeId)
 		if (modeModelId) {
-			this.setState({ currentModelId: modeModelId } as Partial<z.infer<TState>>)
+			this.setState({ currentModelId: modeModelId } as unknown as Partial<z.infer<TState>>)
 			this.emit({ type: "model_changed", modelId: modeModelId } as HarnessEvent)
 		}
 
@@ -734,7 +733,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 		// Update current state for immediate effect if this is the current mode
 		if (targetModeId === this.currentModeId) {
-			this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
+			this.setState({ currentModelId: modelId } as unknown as Partial<z.infer<TState>>)
 		}
 
 		// Persist based on scope
@@ -797,7 +796,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param modelId Full model ID (e.g., "google/gemini-2.5-flash")
 	 */
 	async switchObserverModel(modelId: string): Promise<void> {
-		this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>)
+		this.setState({ observerModelId: modelId } as unknown as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("observerModelId", modelId)
 
 		this.emit({
@@ -812,7 +811,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param modelId Full model ID (e.g., "google/gemini-2.5-flash")
 	 */
 	async switchReflectorModel(modelId: string): Promise<void> {
-		this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>)
+		this.setState({ reflectorModelId: modelId } as unknown as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("reflectorModelId", modelId)
 
 		this.emit({
@@ -902,7 +901,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Toggle YOLO mode (auto-approve all tool calls).
 	 */
 	setYoloMode(enabled: boolean): void {
-		this.setState({ yolo: enabled } as Partial<z.infer<TState>>)
+		this.setState({ yolo: enabled } as unknown as Partial<z.infer<TState>>)
 		this.persistThreadSetting("yolo", enabled).catch(() => {})
 		// When toggling YOLO off, reset session grants so user starts fresh
 		if (!enabled) {
@@ -980,18 +979,18 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		category: ToolCategory,
 		policy: "allow" | "ask" | "deny",
 	): void {
-		const rules = this.getPermissionRules()
-		rules.categories[category] = policy
-		this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
+        const rules = this.getPermissionRules()
+        rules.categories[category] = policy
+        this.setState({ permissionRules: rules } as unknown as Partial<z.infer<TState>>)
 	}
 
 	/**
 	 * Update a per-tool policy in the persisted permission rules.
 	 */
 	setPermissionTool(toolName: string, policy: "allow" | "ask" | "deny"): void {
-		const rules = this.getPermissionRules()
-		rules.tools[toolName] = policy
-		this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
+        const rules = this.getPermissionRules()
+        rules.tools[toolName] = policy
+        this.setState({ permissionRules: rules } as unknown as Partial<z.infer<TState>>)
 	}
 
 	/**
@@ -1018,7 +1017,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param level One of: "off", "minimal", "low", "medium", "high"
 	 */
 	async setThinkingLevel(level: string): Promise<void> {
-		this.setState({ thinkingLevel: level } as Partial<z.infer<TState>>)
+		this.setState({ thinkingLevel: level } as unknown as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("thinkingLevel", level)
 	}
 
@@ -1047,7 +1046,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Note: Takes effect on next restart since OM thresholds are set at construction time.
 	 */
 	async setObservationThreshold(value: number): Promise<void> {
-		this.setState({ observationThreshold: value } as Partial<z.infer<TState>>)
+		this.setState({ observationThreshold: value } as unknown as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("observationThreshold", value)
 	}
 
@@ -1056,7 +1055,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Note: Takes effect on next restart since OM thresholds are set at construction time.
 	 */
 	async setReflectionThreshold(value: number): Promise<void> {
-		this.setState({ reflectionThreshold: value } as Partial<z.infer<TState>>)
+		this.setState({ reflectionThreshold: value } as unknown as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("reflectionThreshold", value)
 	}
 
@@ -1238,16 +1237,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					this.emit({
 						type: "mode_changed",
 						modeId: savedModeId,
-						previousModeId:
-							this.config.modes.find((m) => m.default)?.id ||
-							this.config.modes[0].id,
+                        previousModeId:
+                            this.config.modes.find((m) => m.default)?.id ||
+                            this.config.modes[0]!.id,
 					})
 				}
 			}
-
-			if (Object.keys(updates).length > 0) {
-				this.setState(updates as Partial<z.infer<TState>>)
-			}
+            if (Object.keys(updates).length > 0) {
+                this.setState(updates as unknown as Partial<z.infer<TState>>)
+            }
 
 			// Load OM progress from storage record
 			await this.loadOMProgress()
@@ -1501,19 +1499,19 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				const sorted = [...existingThreads].sort(
 					(a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
 				)
-				const prevMeta = sorted[0].metadata as
-					| Record<string, unknown>
-					| undefined
+                const prevMeta = sorted[0]!.metadata as
+                    | Record<string, unknown>
+                    | undefined
 				if (prevMeta) {
 					if (typeof prevMeta.yolo === "boolean") {
 						metadata.yolo = prevMeta.yolo
-						this.setState({ yolo: prevMeta.yolo } as Partial<z.infer<TState>>)
+						this.setState({ yolo: prevMeta.yolo } as unknown as Partial<z.infer<TState>>)
 					}
 					if (typeof prevMeta.escapeAsCancel === "boolean") {
 						metadata.escapeAsCancel = prevMeta.escapeAsCancel
-						this.setState({
-							escapeAsCancel: prevMeta.escapeAsCancel,
-						} as Partial<z.infer<TState>>)
+                        this.setState({
+                            escapeAsCancel: prevMeta.escapeAsCancel,
+                        } as unknown as Partial<z.infer<TState>>)
 					}
 				}
 			}
@@ -1555,7 +1553,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 		// Set the model in state (only if not already set)
 		if (modelId && !currentStateModel) {
-			this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
+			this.setState({ currentModelId: modelId } as unknown as Partial<z.infer<TState>>)
 		}
 
 		// Reset token usage for new thread
@@ -2753,10 +2751,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Tools can access harness state via requestContext.get('harness').
 	 */
 	private async buildRequestContext(): Promise<RequestContext> {
-		const harnessContext: HarnessRuntimeContext<TState> = {
-			harnessId: this.id,
-			state: this.getState(),
-			getState: () => this.getState(),
+        const harnessContext: HarnessRuntimeContext<TState> = {
+            harnessId: this.id,
+            state: this.getState() as z.infer<TState>,
+            getState: () => this.getState() as z.infer<TState>,
 			setState: (updates) => this.setState(updates),
 			threadId: this.currentThreadId,
 			resourceId: this.resourceId,
@@ -2773,15 +2771,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		}
 
 		const requestContext = new RequestContext([["harness", harnessContext]])
+        // Resolve dynamic workspace factory with the built request context
+        if (this.workspaceFn) {
+            harnessContext.workspace = await Promise.resolve(
+                this.workspaceFn({ requestContext: requestContext as any }),
+            )
+        }
 
-		// Resolve dynamic workspace factory with the built request context
-		if (this.workspaceFn) {
-			harnessContext.workspace = await Promise.resolve(
-				this.workspaceFn({ requestContext }),
-			)
-		}
-
-		return requestContext
+        return requestContext as any
 	}
 
 	// ===========================================================================

@@ -170,15 +170,15 @@ export function createWebExtractTool() {
 						}),
 					),
 				}
-			} catch {
-				return {
-					results: [],
-					failedResults: context.urls.map((url) => ({
-						url,
-						error: String(error),
-					})),
-				}
-			}
+            } catch (error) {
+                return {
+                    results: [],
+                    failedResults: context.urls.map((url) => ({
+                        url,
+                        error: String(error),
+                    })),
+                }
+            }
 		},
 	})
 }

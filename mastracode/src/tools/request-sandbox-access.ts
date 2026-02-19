@@ -71,16 +71,15 @@ export const requestSandboxAccessTool = createTool({
 			const approved =
 				answer.toLowerCase().startsWith("y") ||
 				answer.toLowerCase() === "approve"
-
-			if (approved) {
-				// Add to allowed paths
-				const currentAllowed =
-					harnessCtx.getState?.()?.sandboxAllowedPaths ?? []
-				if (!currentAllowed.includes(absolutePath)) {
-					harnessCtx.setState?.({
-						sandboxAllowedPaths: [...currentAllowed, absolutePath],
-					})
-				}
+            if (approved) {
+                // Add to allowed paths
+                const currentAllowed =
+                    (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? []
+                if (!currentAllowed.includes(absolutePath)) {
+                    harnessCtx.setState?.({
+                        sandboxAllowedPaths: [...currentAllowed, absolutePath],
+                    })
+                }
 				return {
 					content: `Access granted: "${absolutePath}" has been added to allowed paths. You can now access files in this directory.`,
 					isError: false,

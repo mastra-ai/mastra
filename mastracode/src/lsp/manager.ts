@@ -31,25 +31,27 @@ class LSPManager {
 					s.languageIds.includes("python") ||
 					s.languageIds.includes("go"),
 			) || servers[0]
+        // Create a unique key for this server + workspace combination
+        if (!serverInfo) {
+            return null
+        }
+        const key = `${serverInfo.name}:${workspaceRoot}`
 
-		// Create a unique key for this server + workspace combination
-		const key = `${serverInfo.name}:${workspaceRoot}`
+        // Return existing client if available
+        if (this.clients.has(key)) {
+            return this.clients.get(key)!
+        }
 
-		// Return existing client if available
-		if (this.clients.has(key)) {
-			return this.clients.get(key)!
-		}
+        // If initialization is in progress, wait for it
+        if (this.initializationPromises.has(key)) {
+            await this.initializationPromises.get(key)
+            return this.clients.get(key) || null
+        }
 
-		// If initialization is in progress, wait for it
-		if (this.initializationPromises.has(key)) {
-			await this.initializationPromises.get(key)
-			return this.clients.get(key) || null
-		}
-
-		// Create and initialize new client with a timeout to prevent indefinite hangs
-		// (e.g., npx resolution issues in pnpm-linked projects)
-		const initPromise = (async () => {
-			const client = new LSPClient(serverInfo, workspaceRoot)
+        // Create and initialize new client with a timeout to prevent indefinite hangs
+        // (e.g., npx resolution issues in pnpm-linked projects)
+        const initPromise = (async () => {
+            const client = new LSPClient(serverInfo, workspaceRoot)
 			await client.initialize()
 			this.clients.set(key, client)
 		})()

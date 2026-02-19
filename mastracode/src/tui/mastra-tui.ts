@@ -376,12 +376,11 @@ export class MastraTUI {
 
 			const modes = this.harness.getModes()
 			if (modes.length <= 1) return
-
-			const currentId = this.harness.getCurrentModeId()
-			const currentIndex = modes.findIndex((m) => m.id === currentId)
-			const nextIndex = (currentIndex + 1) % modes.length
-			const nextMode = modes[nextIndex]
-			await this.harness.switchMode(nextMode.id)
+            const currentId = this.harness.getCurrentModeId()
+            const currentIndex = modes.findIndex((m) => m.id === currentId)
+            const nextIndex = (currentIndex + 1) % modes.length
+            const nextMode = modes[nextIndex]!
+            await this.harness.switchMode(nextMode.id)
 			// The mode_changed event handler will show the info message
 			this.updateStatusLine()
 		})
@@ -507,8 +506,8 @@ export class MastraTUI {
 					// Normal send — fire and forget; events handle the rest
 					this.fireMessage(userInput, images)
 				}
-			} catch {
-				this.showError(error instanceof Error ? error.message : "Unknown error")
+            } catch (error) {
+                this.showError(error instanceof Error ? error.message : "Unknown error")
 			}
 		}
 	}
@@ -647,22 +646,22 @@ export class MastraTUI {
 		const sortedThreads = [...threads].sort(
 			(a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
 		)
-		const mostRecent = sortedThreads[0]
-		// Auto-resume the most recent thread for this directory
-		try {
-			await this.harness.switchThread(mostRecent.id)
-		} catch {
-			if (error instanceof ThreadLockError) {
-				// Defer the lock conflict prompt until after the TUI is started
-				this.pendingNewThread = true
-				this.pendingLockConflict = {
-					threadTitle: mostRecent.title || mostRecent.id,
-					ownerPid: error.ownerPid,
-				}
-				return
-			}
-			throw error
-		}
+        const mostRecent = sortedThreads[0]!
+        // Auto-resume the most recent thread for this directory
+        try {
+            await this.harness.switchThread(mostRecent.id)
+        } catch (error) {
+            if (error instanceof ThreadLockError) {
+                // Defer the lock conflict prompt until after the TUI is started
+                this.pendingNewThread = true
+                this.pendingLockConflict = {
+                    threadTitle: mostRecent.title || mostRecent.id,
+                    ownerPid: error.ownerPid,
+                }
+                return
+            }
+            throw error
+        }
 	}
 	/**
 	 * Extract text content from a harness message.
@@ -2027,14 +2026,14 @@ ${instructions}`,
 	private getTrailingContentParts(
 		message: HarnessMessage,
 	): HarnessMessage["content"] {
-		let lastToolIndex = -1
-		for (let i = message.content.length - 1; i >= 0; i--) {
-			const c = message.content[i]
-			if (c.type === "tool_call" || c.type === "tool_result") {
-				lastToolIndex = i
-				break
-			}
-		}
+        let lastToolIndex = -1
+        for (let i = message.content.length - 1; i >= 0; i--) {
+            const c = message.content[i]!
+            if (c.type === "tool_call" || c.type === "tool_result") {
+                lastToolIndex = i
+                break
+            }
+        }
 		if (lastToolIndex === -1) {
 			// No tool calls — return all content
 			return message.content
@@ -2053,19 +2052,18 @@ ${instructions}`,
 			(c) => c.type === "tool_call" && c.id === toolCallId,
 		)
 		if (idx === -1) return message.content
-
-		// Find the start: after the last tool_call/tool_result that we've already seen
-		let startIdx = 0
-		for (let i = idx - 1; i >= 0; i--) {
-			const c = message.content[i]
-			if (
-				(c.type === "tool_call" && this.seenToolCallIds.has(c.id)) ||
-				(c.type === "tool_result" && this.seenToolCallIds.has(c.id))
-			) {
-				startIdx = i + 1
-				break
-			}
-		}
+        // Find the start: after the last tool_call/tool_result that we've already seen
+        let startIdx = 0
+        for (let i = idx - 1; i >= 0; i--) {
+            const c = message.content[i]!
+            if (
+                (c.type === "tool_call" && "id" in c && this.seenToolCallIds.has(c.id)) ||
+                (c.type === "tool_result" && "id" in c && this.seenToolCallIds.has(c.id))
+            ) {
+                startIdx = i + 1
+                break
+            }
+        }
 
 		return message.content
 			.slice(startIdx, idx)
@@ -2300,21 +2298,20 @@ ${instructions}`,
 
 						// Clear and rebuild with question in the right place
 						this.chatContainer.clear()
+                        // Add all children up to and including the ask_user tool
+                        for (let i = 0; i <= askUserIndex; i++) {
+                            this.chatContainer.addChild(children[i]!)
+                        }
 
-						// Add all children up to and including the ask_user tool
-						for (let i = 0; i <= askUserIndex; i++) {
-							this.chatContainer.addChild(children[i])
-						}
+                        // Add the question component with spacing
+                        this.chatContainer.addChild(new Spacer(1))
+                        this.chatContainer.addChild(questionComponent)
+                        this.chatContainer.addChild(new Spacer(1))
 
-						// Add the question component with spacing
-						this.chatContainer.addChild(new Spacer(1))
-						this.chatContainer.addChild(questionComponent)
-						this.chatContainer.addChild(new Spacer(1))
-
-						// Add remaining children
-						for (let i = askUserIndex + 1; i < children.length; i++) {
-							this.chatContainer.addChild(children[i])
-						}
+                        // Add remaining children
+                        for (let i = askUserIndex + 1; i < children.length; i++) {
+                            this.chatContainer.addChild(children[i]!)
+                        }
 					} else {
 						// Fallback: add at the end
 						this.chatContainer.addChild(new Spacer(1))
@@ -2482,18 +2479,17 @@ ${instructions}`,
 				const submitPlanIndex = children.indexOf(
 					this.lastSubmitPlanComponent as any,
 				)
-
-				if (submitPlanIndex >= 0) {
-					this.chatContainer.clear()
-					for (let i = 0; i <= submitPlanIndex; i++) {
-						this.chatContainer.addChild(children[i])
-					}
-					this.chatContainer.addChild(new Spacer(1))
-					this.chatContainer.addChild(approvalComponent)
-					this.chatContainer.addChild(new Spacer(1))
-					for (let i = submitPlanIndex + 1; i < children.length; i++) {
-						this.chatContainer.addChild(children[i])
-					}
+                if (submitPlanIndex >= 0) {
+                    this.chatContainer.clear()
+                    for (let i = 0; i <= submitPlanIndex; i++) {
+                        this.chatContainer.addChild(children[i]!)
+                    }
+                    this.chatContainer.addChild(new Spacer(1))
+                    this.chatContainer.addChild(approvalComponent)
+                    this.chatContainer.addChild(new Spacer(1))
+                    for (let i = submitPlanIndex + 1; i < children.length; i++) {
+                        this.chatContainer.addChild(children[i]!)
+                    }
 				} else {
 					this.chatContainer.addChild(new Spacer(1))
 					this.chatContainer.addChild(approvalComponent)
@@ -2816,17 +2812,17 @@ ${instructions}`,
 					}
 					try {
 						await this.harness.switchThread(thread.id)
-					} catch {
-						if (error instanceof ThreadLockError) {
-							this.showThreadLockPrompt(
-								thread.title || thread.id,
-								error.ownerPid,
-							)
-							resolve()
-							return
-						}
-						throw error
-					}
+                    } catch (error) {
+                        if (error instanceof ThreadLockError) {
+                            this.showThreadLockPrompt(
+                                thread.title || thread.id,
+                                error.ownerPid,
+                            )
+                            resolve()
+                            return
+                        }
+                        throw error
+                    }
 					this.pendingNewThread = false
 
 					// Clear chat and render existing messages
@@ -3158,11 +3154,11 @@ ${instructions}`,
 				`Skills (${skills.length}):\n${skillLines.join("\n")}\n\n` +
 					"Skills are automatically activated by the agent when relevant.",
 			)
-		} catch {
-			this.showError(
-				`Failed to list skills: ${error instanceof Error ? error.message : String(error)}`,
-			)
-		}
+        } catch (error) {
+            this.showError(
+                `Failed to list skills: ${error instanceof Error ? error.message : String(error)}`,
+            )
+        }
 	}
 
 	// ===========================================================================
@@ -3932,11 +3928,11 @@ ${modeList}`)
 					{ label: "Medium", id: "medium" },
 					{ label: "High", id: "high" },
 				]
-				const currentIdx = levels.findIndex((l) => l.id === currentLevel)
-				const nextIdx = (currentIdx + 1) % levels.length
-				const next = levels[nextIdx]
-				await this.harness.setThinkingLevel(next.id)
-				this.showInfo(`Thinking: ${next.label}`)
+                const currentIdx = levels.findIndex((l) => l.id === currentLevel)
+                const nextIdx = (currentIdx + 1) % levels.length
+                const next = levels[nextIdx]!
+                await this.harness.setThinkingLevel(next.id)
+                this.showInfo(`Thinking: ${next.label}`)
 				this.updateStatusLine()
 				return true
 			}
@@ -4210,10 +4206,10 @@ Keyboard shortcuts:
 						this.showInfo(
 							`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`,
 						)
-					} catch {
-						this.showError(
-							`MCP reload failed: ${error instanceof Error ? error.message : String(error)}`,
-						)
+                    } catch (error) {
+                        this.showError(
+                            `MCP reload failed: ${error instanceof Error ? error.message : String(error)}`,
+                        )
 					}
 					return true
 				}
@@ -4390,10 +4386,10 @@ Keyboard shortcuts:
 			} else {
 				this.showInfo(`Executed //${command.name} (no output)`)
 			}
-		} catch {
-			this.showError(
-				`Error executing //${command.name}: ${error instanceof Error ? error.message : String(error)}`,
-			)
+        } catch (error) {
+            this.showError(
+                `Error executing //${command.name}: ${error instanceof Error ? error.message : String(error)}`,
+            )
 		}
 	}
 
@@ -4418,11 +4414,11 @@ Keyboard shortcuts:
 		const systemReminderMatch = displayText.match(
 			/<system-reminder>([\s\S]*?)<\/system-reminder>/,
 		)
-		if (systemReminderMatch) {
-			const reminderText = systemReminderMatch[1].trim()
-			const reminderComponent = new SystemReminderComponent({
-				message: reminderText,
-			})
+        if (systemReminderMatch) {
+            const reminderText = systemReminderMatch[1]!.trim()
+            const reminderComponent = new SystemReminderComponent({
+                message: reminderText,
+            })
 
 			// System reminders always go at the end (after plan approval)
 			this.chatContainer.addChild(new Spacer(1))
@@ -4435,10 +4431,10 @@ Keyboard shortcuts:
 		const slashCommandMatch = displayText.match(
 			/<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>/,
 		)
-		if (slashCommandMatch) {
-			const commandName = slashCommandMatch[1]
-			const commandContent = slashCommandMatch[2].trim()
-			const slashComp = new SlashCommandComponent(commandName, commandContent)
+        if (slashCommandMatch) {
+            const commandName = slashCommandMatch[1]!
+            const commandContent = slashCommandMatch[2]!.trim()
+            const slashComp = new SlashCommandComponent(commandName, commandContent)
 			this.allSlashCommandComponents.push(slashComp)
 			this.chatContainer.addChild(slashComp)
 			this.ui.requestRender()
@@ -4852,10 +4848,10 @@ Keyboard shortcuts:
 				)
 				this.chatContainer.addChild(component)
 				this.ui.requestRender()
-			} catch {
-				this.showError(
-					error instanceof Error ? error.message : "Failed to get diff",
-				)
+            } catch (error) {
+                this.showError(
+                    error instanceof Error ? error.message : "Failed to get diff",
+                )
 			}
 			return
 		}
@@ -4940,10 +4936,10 @@ Keyboard shortcuts:
 			)
 			this.chatContainer.addChild(component)
 			this.ui.requestRender()
-		} catch {
-			this.showError(
-				error instanceof Error ? error.message : "Shell command failed",
-			)
+        } catch (error) {
+            this.showError(
+                error instanceof Error ? error.message : "Shell command failed",
+            )
 		}
 	}
 	/**

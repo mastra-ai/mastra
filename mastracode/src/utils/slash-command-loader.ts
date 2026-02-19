@@ -47,12 +47,12 @@ export async function parseCommandFile(
 		}
 
 		// Split frontmatter and template
-		const parts = content.split("---")
-		if (parts.length < 3) {
-			return null
-		}
+        const parts = content.split("---")
+        if (parts.length < 3) {
+            return null
+        }
 
-		const frontmatter = parts[1].trim()
+        const frontmatter = parts[1]!.trim()
 		const template = parts.slice(2).join("---").trim()
 
 		// Parse YAML frontmatter

@@ -60,16 +60,15 @@ async function replaceShellOutput(
 	const matches = [...template.matchAll(shellPattern)]
 
 	let result = template
-
-	for (const match of matches) {
-		const [fullMatch, command] = match
-		try {
-			const output = execSync(command, {
-				cwd: workingDir,
-				encoding: "utf-8",
-				timeout: 30000,
-				maxBuffer: 1024 * 1024, // 1MB buffer
-			})
+    for (const match of matches) {
+        const [fullMatch, command] = match
+        try {
+            const output = execSync(command!, {
+                cwd: workingDir,
+                encoding: "utf-8",
+                timeout: 30000,
+                maxBuffer: 1024 * 1024, // 1MB buffer
+            })
 			result = result.replace(fullMatch, output.trim())
 		} catch (error) {
 			console.error(`Error executing shell command "${command}":`, error)
@@ -95,11 +94,10 @@ async function replaceFileReferences(
 	const matches = [...template.matchAll(filePattern)]
 
 	let result = template
-
-	for (const match of matches) {
-		const [fullMatch, filePath] = match
-		try {
-			const fullPath = path.resolve(workingDir, filePath)
+    for (const match of matches) {
+        const [fullMatch, filePath] = match
+        try {
+            const fullPath = path.resolve(workingDir, filePath!)
 			const content = await fs.readFile(fullPath, "utf-8")
 			result = result.replace(fullMatch, content)
 		} catch (error) {

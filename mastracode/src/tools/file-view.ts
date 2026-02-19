@@ -188,36 +188,35 @@ Usage notes:
 
 				// Handle file viewing
 				const fileContent = await readFile(absolutePath)
+                if (view_range) {
+                    const fileLines = fileContent.split("\n")
+                    const nLinesFile = fileLines.length
+                    let [start, end] = view_range as [number, number]
 
-				if (view_range) {
-					const fileLines = fileContent.split("\n")
-					const nLinesFile = fileLines.length
-					let [start, end] = view_range
+                    // Validate start line
+                    if (start < 1 || start > nLinesFile) {
+                        throw new Error(
+                            `Invalid \`view_range\`: ${view_range}. Its first element \`${start}\` should be within the range of lines of the file: [1, ${nLinesFile}]`,
+                        )
+                    }
 
-					// Validate start line
-					if (start < 1 || start > nLinesFile) {
-						throw new Error(
-							`Invalid \`view_range\`: ${view_range}. Its first element \`${start}\` should be within the range of lines of the file: [1, ${nLinesFile}]`,
-						)
-					}
+                    // Handle end line
+                    if (end !== -1) {
+                        if (end > nLinesFile) {
+                            end = nLinesFile
+                        }
+                        if (end < start) {
+                            throw new Error(
+                                `Invalid \`view_range\`: ${view_range}. Its second element \`${end}\` should be larger or equal than its first \`${start}\``,
+                            )
+                        }
+                    }
 
-					// Handle end line
-					if (end !== -1) {
-						if (end > nLinesFile) {
-							end = nLinesFile
-						}
-						if (end < start) {
-							throw new Error(
-								`Invalid \`view_range\`: ${view_range}. Its second element \`${end}\` should be larger or equal than its first \`${start}\``,
-							)
-						}
-					}
-
-					// Extract selected lines
-					const selectedLines =
-						end === -1
-							? fileLines.slice(start - 1)
-							: fileLines.slice(start - 1, end)
+                    // Extract selected lines
+                    const selectedLines =
+                        end === -1
+                            ? fileLines.slice(start - 1)
+                            : fileLines.slice(start - 1, end)
 
 					const output = makeOutput(
 						selectedLines.join("\n"),

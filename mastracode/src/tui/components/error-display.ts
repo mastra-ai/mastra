@@ -54,23 +54,22 @@ function parseErrorInfo(error: Error | string): ErrorInfo {
 		if (nodeErrorMatch) {
 			// Extract stack trace
 			const stackLines = cleanedLines.filter((line) => line.match(/^\s*at\s+/))
-
-			return {
-				name: nodeErrorMatch[1],
-				message: nodeErrorMatch[2],
-				stack: stackLines.length > 0 ? stackLines.join("\n") : undefined,
-			}
+            return {
+                name: nodeErrorMatch[1]!,
+                message: nodeErrorMatch[2]!,
+                stack: stackLines.length > 0 ? stackLines.join("\n") : undefined,
+            }
 		}
 
 		// Match common error patterns
 		const errorMatch = firstLine.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/)
-		if (errorMatch) {
-			return {
-				name: errorMatch[1],
-				message: errorMatch[2],
-				stack: lines.slice(1).join("\n"),
-			}
-		}
+        if (errorMatch) {
+            return {
+                name: errorMatch[1]!,
+                message: errorMatch[2]!,
+                stack: lines.slice(1).join("\n"),
+            }
+        }
 
 		// Extract file location if present
 		const fileMatch = error.match(/at\s+(.+?):(\d+):?(\d+)?/)
