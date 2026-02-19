@@ -130,24 +130,47 @@ const processorGraphStepSchema = z.object({
 });
 
 /**
- * Processor graph entry schema (recursive via lazy).
+ * Processor graph entry schema.
  * Simplified version of SerializedStepFlowEntry, supporting step, parallel, and conditional.
+ *
+ * Uses a fixed nesting depth (3 levels) to avoid infinite recursion
+ * when converting to JSON Schema / OpenAPI.
  */
-const processorGraphEntrySchema: z.ZodType = z.lazy(() =>
-  z.discriminatedUnion('type', [
-    z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
-    z.object({ type: z.literal('parallel'), branches: z.array(z.array(processorGraphEntrySchema)) }),
-    z.object({
-      type: z.literal('conditional'),
-      conditions: z.array(
-        z.object({
-          steps: z.array(processorGraphEntrySchema),
-          rules: ruleGroupSchema.optional(),
-        }),
-      ),
-    }),
-  ]),
-);
+
+/** Depth 3 (leaf): only step entries allowed */
+const processorGraphEntryDepth3 = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+]);
+
+/** Depth 2: step, parallel, and conditional — children limited to depth 3 */
+const processorGraphEntryDepth2 = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+  z.object({ type: z.literal('parallel'), branches: z.array(z.array(processorGraphEntryDepth3)) }),
+  z.object({
+    type: z.literal('conditional'),
+    conditions: z.array(
+      z.object({
+        steps: z.array(processorGraphEntryDepth3),
+        rules: ruleGroupSchema.optional(),
+      }),
+    ),
+  }),
+]);
+
+/** Depth 1 (top-level): step, parallel, and conditional — children limited to depth 2 */
+const processorGraphEntrySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+  z.object({ type: z.literal('parallel'), branches: z.array(z.array(processorGraphEntryDepth2)) }),
+  z.object({
+    type: z.literal('conditional'),
+    conditions: z.array(
+      z.object({
+        steps: z.array(processorGraphEntryDepth2),
+        rules: ruleGroupSchema.optional(),
+      }),
+    ),
+  }),
+]);
 
 /**
  * A stored processor graph representing a pipeline of processors.
