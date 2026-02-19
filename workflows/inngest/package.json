@@ -25,10 +25,10 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
-    "test": "docker-compose up -d && vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**' && docker-compose down",
+    "test": "vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**'",
     "test:unit": "vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**' --exclude='src/index.test.ts'",
-    "test:workflow": "docker-compose up -d && vitest run --no-isolate --retry=1 src/index.test.ts && docker-compose down",
-    "test:integration": "docker-compose up -d && vitest run --no-isolate --retry=1 src/__tests__/adapters/ && docker-compose down",
+    "test:workflow": "vitest run --no-isolate --retry=1 src/index.test.ts",
+    "test:integration": "vitest run --no-isolate --retry=1 src/__tests__/adapters/",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -41,6 +41,7 @@
     "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workflow-test-utils": "workspace:*",
     "@koa/router": "^13.1.1",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",

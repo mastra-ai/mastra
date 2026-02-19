@@ -1,15 +1,6 @@
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
-import {
-  Database,
-  ScaleIcon,
-  ArrowLeft,
-  GitCompareIcon,
-  History,
-  ArrowLeftIcon,
-  DiffIcon,
-  ColumnsIcon,
-} from 'lucide-react';
+import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -71,9 +62,6 @@ function DatasetItemsComparePage() {
               Datasets
             </Crumb>
             <Crumb isCurrent as="span">
-              <Icon>
-                <ScaleIcon />
-              </Icon>
               Compare Items
             </Crumb>
           </Breadcrumb>
@@ -101,9 +89,6 @@ function DatasetItemsComparePage() {
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
-            <Icon>
-              <ScaleIcon />
-            </Icon>
             Compare Items
           </Crumb>
         </Breadcrumb>

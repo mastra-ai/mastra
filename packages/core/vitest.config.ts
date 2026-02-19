@@ -1,9 +1,20 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
+    },
+  },
   test: {
     projects: [
       {
+        resolve: {
+          alias: {
+            '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
+          },
+        },
         test: {
           name: 'unit:packages/core',
           environment: 'node',
