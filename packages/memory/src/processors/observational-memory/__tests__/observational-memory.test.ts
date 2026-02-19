@@ -13,7 +13,12 @@ import {
   hasCurrentTaskSection,
   extractCurrentTask,
 } from '../observer-agent';
-import { buildReflectorPrompt, parseReflectorOutput, validateCompression } from '../reflector-agent';
+import {
+  buildReflectorPrompt,
+  parseReflectorOutput,
+  validateCompression,
+  buildReflectorSystemPrompt,
+} from '../reflector-agent';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -887,6 +892,31 @@ Line 2`;
 // =============================================================================
 
 describe('Reflector Agent Helpers', () => {
+  describe('buildReflectorSystemPrompt', () => {
+    it('should include base reflector instructions', () => {
+      const systemPrompt = buildReflectorSystemPrompt();
+
+      expect(systemPrompt).toContain('observational-memory-instruction');
+      expect(systemPrompt).toContain('observation reflector');
+    });
+
+    it('should include custom instruction when provided', () => {
+      const customInstruction = 'Prioritize consolidating health-related observations together.';
+      const systemPrompt = buildReflectorSystemPrompt(customInstruction);
+
+      expect(systemPrompt).toContain(customInstruction);
+      expect(systemPrompt).toContain('observational-memory-instruction');
+    });
+
+    it('should work without custom instruction', () => {
+      const systemPrompt = buildReflectorSystemPrompt();
+      const systemPromptWithUndefined = buildReflectorSystemPrompt(undefined);
+
+      expect(systemPrompt).toBe(systemPromptWithUndefined);
+      expect(systemPrompt).toContain('observational-memory-instruction');
+    });
+  });
+
   describe('buildReflectorPrompt', () => {
     it('should include observations to reflect on', () => {
       const observations = '- 🔴 User is building a React app';
@@ -2113,6 +2143,209 @@ describe('Scenario: Information should be preserved through observation cycle', 
     // Check for XML-based current task requirement in the system prompt
     expect(systemPrompt).toContain('<current-task>');
     expect(systemPrompt).toContain('MUST use XML tags');
+  });
+
+  it('observer system prompt should include custom instruction when provided', () => {
+    const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
+    const systemPrompt = buildObserverSystemPrompt(false, customInstruction);
+
+    // Should include the custom instruction at the end
+    expect(systemPrompt).toContain(customInstruction);
+    expect(systemPrompt).toContain('<current-task>');
+  });
+
+  it('observer system prompt should work without custom instruction', () => {
+    const systemPrompt = buildObserverSystemPrompt(false);
+    const systemPromptWithUndefined = buildObserverSystemPrompt(false, undefined);
+
+    // Both should be identical
+    expect(systemPrompt).toBe(systemPromptWithUndefined);
+    expect(systemPrompt).toContain('<current-task>');
+  });
+
+  it('multi-thread observer system prompt should include custom instruction', () => {
+    const customInstruction = 'Prioritize cross-thread patterns and recurring topics.';
+    const systemPrompt = buildObserverSystemPrompt(true, customInstruction);
+
+    expect(systemPrompt).toContain(customInstruction);
+    expect(systemPrompt).toContain('<thread id=');
+  });
+});
+
+describe('Instruction property integration', () => {
+  it('should pass observation instruction to observer agent during synchronous observation', async () => {
+    const storage = createInMemoryStorage();
+    const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
+
+    let capturedPrompt: any = null;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- User mentioned they are vegetarian
+</observations>
+<current-task>
+- Primary: Discussing dietary preferences
+</current-task>
+<suggested-response>
+Ask about favorite vegetarian dishes
+</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
+        model: mockModel as any,
+        instruction: customInstruction,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    // Initialize record
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Simulate observation
+    const messages = [
+      createTestMessage('I am vegetarian', 'user', 'msg-1'),
+      createTestMessage('That is great to know!', 'assistant', 'msg-2'),
+    ];
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
+
+    // Verify the custom instruction was passed to the observer agent
+    expect(capturedPrompt).not.toBeNull();
+    const systemMessage = capturedPrompt.find((msg: any) => msg.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage.content).toContain(customInstruction);
+    expect(systemMessage.content).toContain('<current-task>');
+  });
+
+  it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
+    const storage = createInMemoryStorage();
+    const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
+
+    let capturedPrompt: any = null;
+    const mockObserverModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- User likes pizza
+</observations>
+<current-task>
+- Primary: Discussing food preferences
+</current-task>
+<suggested-response>
+Ask about favorite pizza toppings
+</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const mockReflectorModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- User enjoys pizza and Italian food
+</observations>
+<current-task>
+- Primary: Discussing food preferences
+</current-task>
+<suggested-response>
+Ask about favorite Italian dishes
+</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
+        model: mockObserverModel as any,
+      },
+      reflection: {
+        observationTokens: 10, // Low threshold to trigger reflection
+        model: mockReflectorModel as any,
+        instruction: customInstruction,
+      },
+      scope: 'thread',
+    });
+
+    // Initialize record with some existing observations to trigger reflection
+    const record = await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Add existing observations to meet reflection threshold
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: `- Existing observation 1
+- Existing observation 2
+- Existing observation 3`,
+      tokenCount: 50000, // High count to trigger reflection
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate observation which should then trigger reflection
+    const messages = [
+      createTestMessage('I like pizza', 'user', 'msg-1'),
+      createTestMessage('Nice!', 'assistant', 'msg-2'),
+    ];
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
+
+    // Verify the custom instruction was passed to the reflector agent
+    expect(capturedPrompt).not.toBeNull();
+    const systemMessage = capturedPrompt.find((msg: any) => msg.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage.content).toContain(customInstruction);
   });
 });
 

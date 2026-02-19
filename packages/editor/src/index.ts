@@ -7,6 +7,8 @@ import type {
   BlobStoreProvider,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
+import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { BlobStore } from '@mastra/core/storage';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
@@ -47,6 +49,7 @@ export class MastraEditor implements IMastraEditor {
   __logger?: Logger;
 
   private __toolProviders: Record<string, ToolProvider>;
+  private __processorProviders: Record<string, ProcessorProvider>;
 
   /**
    * @internal — exposed for namespace classes to hydrate stored workspace configs.
@@ -81,6 +84,7 @@ export class MastraEditor implements IMastraEditor {
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
+    this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -132,6 +136,15 @@ export class MastraEditor implements IMastraEditor {
     return this.__toolProviders;
   }
 
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined {
+    return this.__processorProviders[id];
+  }
+
+  /** List all registered processor providers */
+  getProcessorProviders(): Record<string, ProcessorProvider> {
+    return this.__processorProviders;
+  }
   /** List all registered filesystem providers */
   getFilesystemProviders(): FilesystemProvider[] {
     return Array.from(this.__filesystems.values());
