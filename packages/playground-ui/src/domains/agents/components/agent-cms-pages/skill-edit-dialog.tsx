@@ -6,6 +6,8 @@ import { Input } from '@/ds/components/Input/input';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
+import { Combobox } from '@/ds/components/Combobox/combobox';
+import { useWorkspaces } from '@/domains/workspace/hooks';
 
 import type { SkillFormValue, InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import {
@@ -49,29 +51,38 @@ function findFileName(nodes: InMemoryFileNode[], fileId: string): string | undef
 export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnly }: SkillEditDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [localId, setLocalId] = useState('');
   const prevNameRef = useRef('');
+
+  const { data: workspacesData } = useWorkspaces();
+  const workspaceOptions = useMemo(
+    () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
+    [workspacesData],
+  );
 
   useEffect(() => {
     if (isOpen) {
       if (initialSkill) {
         setName(initialSkill.name);
         setDescription(initialSkill.description);
+        setWorkspaceId(initialSkill.workspaceId);
         setFiles(initialSkill.files);
         setLocalId(initialSkill.localId);
         prevNameRef.current = initialSkill.name;
       } else {
         setName('');
         setDescription('');
+        setWorkspaceId(workspaceOptions.length === 1 ? workspaceOptions[0].value : '');
         setFiles([]);
         setLocalId(uuid());
         prevNameRef.current = '';
       }
       setSelectedFileId(null);
     }
-  }, [isOpen, initialSkill]);
+  }, [isOpen, initialSkill, workspaceOptions]);
 
   const handleNameChange = useCallback(
     (newName: string) => {
@@ -95,9 +106,10 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
       localId,
       name,
       description,
+      workspaceId,
       files,
     });
-  }, [localId, name, description, files, onSave]);
+  }, [localId, name, description, workspaceId, files, onSave]);
 
   const handleFileContentChange = useCallback(
     (content: string) => {
@@ -137,7 +149,7 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
       <SideDialog.Top>
         <span className="flex-1">{initialSkill ? 'Edit Skill' : 'New Skill'}</span>
         {!readOnly && (
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim()} className="mr-6">
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim() || !workspaceId} className="mr-6">
             Save
           </Button>
         )}
@@ -169,6 +181,19 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
             />
           </div>
 
+          <div className="flex flex-col gap-1.5">
+            <Txt as="label" variant="ui-sm" className="text-neutral3">
+              Workspace
+            </Txt>
+            <Combobox
+              options={workspaceOptions}
+              value={workspaceId}
+              onValueChange={setWorkspaceId}
+              placeholder="Select a workspace..."
+              disabled={readOnly}
+              variant="default"
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -190,7 +215,7 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
             <div className="border border-border1 rounded-md overflow-hidden">
               {isFileSelected ? (
                 <div className="flex flex-col h-full">
-                  <div className="flex items-center px-3 py-1.5 border-b border-border1 bg-surface3">
+                  <div className="flex items-center px-3 py-1.5">
                     <Txt variant="ui-sm" className="text-neutral3 truncate">
                       {selectedFileName}
                     </Txt>
@@ -208,7 +233,7 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
                       language={editorLanguage}
                       value={selectedFileContent}
                       onChange={readOnly ? undefined : val => handleFileContentChange(val ?? '')}
-                      className="flex-1 min-h-[160px]"
+                      className="flex-1 min-h-[160px] border-none"
                     />
                   )}
                 </div>

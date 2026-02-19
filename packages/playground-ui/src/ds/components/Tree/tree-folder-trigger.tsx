@@ -18,7 +18,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLButtonElement, TreeFolderT
       <CollapsibleTrigger
         ref={ref}
         className={cn(
-          'group flex w-full cursor-pointer items-center gap-1.5 rounded-sm px-1 py-0.5',
+          'group flex h-7 min-w-0 w-full cursor-pointer items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
           focusRing.visible,
           'hover:bg-surface4',

@@ -15,6 +15,7 @@ export type SkillFormValue = {
   localId: string;
   name: string;
   description: string;
+  workspaceId: string;
   files: InMemoryFileNode[];
 };
 
@@ -167,6 +168,7 @@ const skillFormValueSchema = z.object({
   localId: z.string(),
   name: z.string().min(1, 'Skill name is required'),
   description: z.string(),
+  workspaceId: z.string().min(1, 'Workspace is required'),
   files: z.array(inMemoryFileNodeSchema),
 });
 
