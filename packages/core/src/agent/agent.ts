@@ -505,7 +505,7 @@ export class Agent<
         // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as Parameters<typeof createStep>[0]);
+        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
       }
       workflow = workflow.then(step);
     }
@@ -1752,8 +1752,8 @@ export class Agent<
           });
         }
       }
-      // If no user message, return a default title for new threads
-      return `New Thread ${new Date().toISOString()}`;
+      // If no user message, return undefined so existing title is preserved
+      return undefined;
     } catch (e) {
       this.logger.error('Error generating title:', e);
       // Return undefined on error so existing title is preserved
@@ -1763,6 +1763,14 @@ export class Agent<
 
   public __setMemory(memory: DynamicArgument<MastraMemory>) {
     this.#memory = memory;
+  }
+
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+    this.#workspace = workspace;
+    if (this.#mastra && workspace && typeof workspace !== 'function') {
+      workspace.__setLogger(this.logger);
+      this.#mastra.addWorkspace(workspace);
+    }
   }
 
   /**
@@ -2881,7 +2889,7 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
-    return this.formatTools({
+    const allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
@@ -2889,7 +2897,8 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
-    });
+    };
+    return this.formatTools(allTools);
   }
 
   /**
@@ -3462,7 +3471,7 @@ export class Agent<
           instructions: titleInstructions,
         } = this.resolveTitleGenerationConfig(config.generateTitle);
 
-        if (shouldGenerate && !threadExists) {
+        if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
             const title = await this.genTitle(

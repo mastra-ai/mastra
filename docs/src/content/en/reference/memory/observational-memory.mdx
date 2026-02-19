@@ -97,6 +97,13 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
       isOptional: true,
     },
     {
+      name: "instruction",
+      type: "string",
+      description:
+        "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
+      isOptional: true,
+    },
+    {
       name: "messageTokens",
       type: "number",
       description:
@@ -156,6 +163,13 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
       type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
       description:
         "Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
+      isOptional: true,
+    },
+    {
+      name: "instruction",
+      type: "string",
+      description:
+        "Custom instruction appended to the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information.",
       isOptional: true,
     },
     {
@@ -312,6 +326,38 @@ export const agent = new Agent({
         },
         reflection: {
           model: "openai/gpt-4o-mini",
+        },
+      },
+    },
+  }),
+});
+```
+
+### Custom instructions
+
+Customize what the Observer and Reflector focus on by providing custom instructions:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "health-assistant",
+  instructions: "You are a health and wellness assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: "google/gemini-2.5-flash",
+        observation: {
+          // Focus observations on health-related preferences and goals
+          instruction:
+            "Prioritize capturing user health goals, dietary restrictions, exercise preferences, and medical considerations. Avoid capturing general chit-chat.",
+        },
+        reflection: {
+          // Guide reflection to consolidate health patterns
+          instruction:
+            "When consolidating, group related health information together. Preserve specific metrics, dates, and medical details.",
         },
       },
     },

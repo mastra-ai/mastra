@@ -459,7 +459,7 @@ export class CompositeFilesystem<
       })
       .join('\n');
 
-    return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
+    return `Mounted filesystems:\n${mountDescriptions}`;
   }
 }
 

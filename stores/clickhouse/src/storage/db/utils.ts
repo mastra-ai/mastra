@@ -20,6 +20,11 @@ import {
   TABLE_SCORER_DEFINITION_VERSIONS,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
+  TABLE_WORKSPACES,
+  TABLE_WORKSPACE_VERSIONS,
+  TABLE_SKILLS,
+  TABLE_SKILL_VERSIONS,
+  TABLE_SKILL_BLOBS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -46,6 +51,11 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SCORER_DEFINITION_VERSIONS]: `MergeTree()`,
   [TABLE_MCP_CLIENTS]: `ReplacingMergeTree()`,
   [TABLE_MCP_CLIENT_VERSIONS]: `MergeTree()`,
+  [TABLE_WORKSPACES]: `ReplacingMergeTree()`,
+  [TABLE_WORKSPACE_VERSIONS]: `MergeTree()`,
+  [TABLE_SKILLS]: `ReplacingMergeTree()`,
+  [TABLE_SKILL_VERSIONS]: `MergeTree()`,
+  [TABLE_SKILL_BLOBS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

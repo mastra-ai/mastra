@@ -26,7 +26,7 @@ export function CopyButton({
   tooltip = 'Copy to clipboard',
   iconSize = 'default',
   className,
-  size = 'tiny',
+  size = 'sm',
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
