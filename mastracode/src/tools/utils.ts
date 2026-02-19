@@ -1,7 +1,7 @@
-import { promises as fs } from "fs"
-import * as path from "path"
-import { ToolError } from "./types.js"
+import { promises as fs } from "node:fs"
+import * as path from "node:path"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator.js"
+import { ToolError } from "./types.js"
 
 // Per-file write queue to serialize concurrent writes
 const fileWriteQueues = new Map<string, Promise<unknown>>()

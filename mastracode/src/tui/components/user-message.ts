@@ -5,9 +5,10 @@
 import {
 	Container,
 	Markdown,
-	type MarkdownTheme,
-	Spacer,
+	
+	Spacer
 } from "@mariozechner/pi-tui"
+import type {MarkdownTheme} from "@mariozechner/pi-tui";
 import { getMarkdownTheme, theme } from "../theme.js"
 
 export class UserMessageComponent extends Container {

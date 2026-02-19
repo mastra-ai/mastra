@@ -7,15 +7,16 @@
 import {
 	Box,
 	Container,
-	type Focusable,
+	
 	getEditorKeybindings,
 	Input,
 	SelectList,
-	type SelectItem,
+	
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, SelectItem, TUI} from "@mariozechner/pi-tui";
 import { theme, getSelectListTheme } from "../theme.js"
 
 export interface AskQuestionInlineOptions {
@@ -51,7 +52,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 		}
 	}
 
-	constructor(options: AskQuestionInlineOptions, ui: TUI) {
+	constructor(options: AskQuestionInlineOptions, _ui: TUI) {
 		super()
 
 		this.onSubmit = options.onSubmit

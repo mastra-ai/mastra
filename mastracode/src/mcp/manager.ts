@@ -7,13 +7,13 @@
  */
 
 import { MCPClient } from "@mastra/mcp"
-import type { McpConfig, McpServerStatus } from "./types.js"
 import {
 	loadMcpConfig,
 	getProjectMcpPath,
 	getGlobalMcpPath,
 	getClaudeSettingsPath,
 } from "./config.js"
+import type { McpConfig, McpServerStatus } from "./types.js"
 
 export class MCPManager {
 	private config: McpConfig

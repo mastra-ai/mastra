@@ -3,6 +3,7 @@
  * Simplified from pi-mono's theme system.
  */
 
+import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from "@mariozechner/pi-tui"
 import chalk from "chalk"
 
 // =============================================================================
@@ -255,7 +256,6 @@ export const theme = {
 // Markdown Theme (for pi-tui Markdown component)
 // =============================================================================
 
-import type { MarkdownTheme, EditorTheme } from "@mariozechner/pi-tui"
 
 export function getMarkdownTheme(): MarkdownTheme {
 	const t = getTheme()
@@ -300,7 +300,6 @@ export function getEditorTheme(): EditorTheme {
 // Settings List Theme (for pi-tui SettingsList component)
 // =============================================================================
 
-import type { SettingsListTheme, SelectListTheme } from "@mariozechner/pi-tui"
 
 export function getSettingsListTheme(): SettingsListTheme {
 	const t = getTheme()
