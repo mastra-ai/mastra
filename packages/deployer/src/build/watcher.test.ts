@@ -1,3 +1,4 @@
+import type { Plugin } from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getInputOptions } from './watcher';
 
@@ -30,6 +31,14 @@ vi.mock('find-workspaces', () => ({
 }));
 vi.mock('empathic/package', () => ({
   up: vi.fn().mockReturnValue('/test/project/package.json'),
+}));
+vi.mock('local-pkg', () => ({
+  resolveModule: vi.fn(),
+}));
+vi.mock('node:fs', () => ({
+  readFileSync: vi.fn().mockImplementation(() => {
+    throw new Error('ENOENT');
+  }),
 }));
 
 describe('watcher', () => {
@@ -133,6 +142,136 @@ describe('watcher', () => {
             isDev: true,
           }),
         );
+      });
+    });
+
+    describe('workspace-source-resolver plugin', () => {
+      it('replaces alias-optimized-deps with workspace-source-resolver', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [
+            { name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin,
+            { name: 'esbuild' } satisfies Plugin,
+          ],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const pluginNames = (result.plugins as Plugin[]).map(p => p.name);
+        expect(pluginNames).toContain('workspace-source-resolver');
+        expect(pluginNames).not.toContain('alias-optimized-deps');
+      });
+
+      it('prefers "source" field from package.json over resolveModule', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        expect(resolver).toBeDefined();
+
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
+        expect(resolved).toEqual({ id: '/workspace/packages/core/src/index.ts', external: false });
+      });
+
+      it('falls back to resolveModule when no "source" field exists', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ main: './dist/index.js' }));
+
+        const { resolveModule } = await import('local-pkg');
+        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/dist/index.js');
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
+        expect(resolved).toEqual({ id: '/workspace/packages/core/dist/index.js', external: false });
+      });
+
+      it('falls back to resolveModule for subpath imports even when "source" field exists', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
+
+        const { resolveModule } = await import('local-pkg');
+        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/src/utils.ts');
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        // Subpath import — "source" field only applies to bare package name
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core/utils');
+        expect(resolved).toEqual({ id: '/workspace/packages/core/src/utils.ts', external: false });
+      });
+
+      it('returns null for non-workspace imports', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        expect(resolver).toBeDefined();
+
+        // lodash is not in the workspaceMap, so should return null
+        const resolved = (resolver!.resolveId as Function).call(null, 'lodash');
+        expect(resolved).toBeNull();
+      });
+
+      it('returns null when resolveModule cannot resolve the import', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockImplementation(() => {
+          throw new Error('ENOENT');
+        });
+
+        const { resolveModule } = await import('local-pkg');
+        vi.mocked(resolveModule).mockReturnValue(undefined);
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
+        expect(resolved).toBeNull();
+      });
+
+      it('preserves other plugins in the chain', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [
+            { name: 'some-other-plugin' } satisfies Plugin,
+            { name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin,
+            { name: 'esbuild' } satisfies Plugin,
+          ],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const pluginNames = (result.plugins as Plugin[]).map(p => p.name);
+        expect(pluginNames).toContain('some-other-plugin');
+        expect(pluginNames).toContain('workspace-source-resolver');
+        expect(pluginNames).toContain('esbuild');
       });
     });
   });
