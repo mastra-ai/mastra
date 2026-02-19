@@ -1,8 +1,29 @@
+import { builtinModules } from 'node:module';
 import { join } from 'node:path';
 import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
+import type { analyzeBundle } from '@mastra/deployer/analyze';
+import type { BundlerOptions } from '@mastra/deployer/bundler';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
+
+/**
+ * Rollup plugin that adds the `node:` prefix to bare Node.js built-in imports.
+ * Deno requires `node:events` instead of `events`, `node:fs` instead of `fs`, etc.
+ */
+function nodeBuiltinPrefix() {
+  const builtins = new Set(builtinModules.filter(m => !m.startsWith('_')));
+  return {
+    name: 'node-builtin-prefix',
+    resolveId(source: string) {
+      const base = source.split('/')[0]!;
+      if (builtins.has(base) && !source.startsWith('node:')) {
+        return { id: `node:${source}`, external: true };
+      }
+      return null;
+    },
+  };
+}
 
 export interface NetlifyDeployerOptions {
   /**
@@ -55,6 +76,26 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
+  protected async getBundlerOptions(
+    serverFile: string,
+    mastraEntryFile: string,
+    analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+    toolsPaths: (string | string[])[],
+    bundlerOptions: BundlerOptions,
+  ) {
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
+      ...bundlerOptions,
+      enableEsmShim: this.target !== 'edge',
+    });
+
+    if (this.target === 'edge' && Array.isArray(inputOptions.plugins)) {
+      // Add node: prefix plugin at the start so it runs before subpathExternalsResolver
+      inputOptions.plugins.unshift(nodeBuiltinPrefix());
+    }
+
+    return inputOptions;
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
@@ -63,7 +104,7 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot, enableEsmShim: true },
+      { outputDirectory, projectRoot, enableEsmShim: this.target !== 'edge' },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
@@ -131,7 +172,7 @@ export class NetlifyDeployer extends Deployer {
     if (hasLibsql) {
       this.logger?.error(
         `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
-        LibSQL with file URLs uses native Node.js bindings that cannot run in ${this.target === 'edge' ? 'edge' : 'serverless'} environments. Use other Mastra Storage options instead.`,
+        LibSQL with file URLs uses native Node.js bindings that cannot run in ${this.target} environments. Use other Mastra Storage options instead.`,
       );
       process.exit(1);
     }
