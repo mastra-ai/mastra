@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     });
 
     const audioPromise = new Promise<Buffer>((resolve) => {
-      const handler = ({ audio }: { audio: Buffer }) => {
+      const handler = ({ audio }: any) => {
         if (audio) {
           audioBuffer = Buffer.from(audio);
           agent.voice.off('speaker', handler);

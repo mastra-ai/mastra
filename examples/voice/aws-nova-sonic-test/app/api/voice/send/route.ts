@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       let collectedAudio: Buffer[] = [];
       let turnCompleteReceived = false;
 
-      const speakingHandler = ({ audio }: { audio: Buffer }) => {
+      const speakingHandler = ({ audio }: any) => {
         if (audio) {
           collectedAudio.push(Buffer.from(audio));
         }

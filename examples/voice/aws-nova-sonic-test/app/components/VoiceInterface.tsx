@@ -7,6 +7,7 @@ type Message = {
   role: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+  isFinal?: boolean; // true once the first FINAL text has been applied (to distinguish replace vs append)
 };
 
 export default function VoiceInterface() {
@@ -162,34 +163,58 @@ export default function VoiceInterface() {
             return;
           }
 
-          // Nova Sonic sends multiple text events per turn:
+          // Nova Sonic sends multiple text events per assistant turn:
           //   1. USER FINAL — ASR transcription of what the user said
-          //   2. ASSISTANT SPECULATIVE — preview of planned speech (arrives before/during audio)
-          //   3. ASSISTANT FINAL — transcript of what was actually spoken (arrives after audio)
+          //   2. One or more ASSISTANT SPECULATIVE — preview of planned speech segments
+          //      (Nova Sonic splits long responses into multiple content blocks, each
+          //       with its own SPECULATIVE text. These should all go into ONE bubble.)
+          //   3. One or more ASSISTANT FINAL — transcript of what was actually spoken
+          //      (one per content block, arrives after all audio)
           //
           // To avoid duplicate bubbles:
-          // - ASSISTANT SPECULATIVE → create new assistant message
-          // - ASSISTANT FINAL → replace last assistant message text (more accurate version)
-          // - USER SPECULATIVE → create/replace user message (live transcription)
-          // - USER FINAL → replace last user message text (final ASR)
+          // - ASSISTANT SPECULATIVE → create new on role change, APPEND on same role
+          //   (but if previous assistant msg is already finalized, start new — it's a new turn)
+          // - ASSISTANT FINAL → first FINAL replaces speculative text (sets isFinal),
+          //   subsequent FINALs append to build the full transcript
+          // - USER text → create on role change, replace on same role
+
+          // New assistant content means a new response is starting — clear barge-in suppression
+          if (role === 'assistant' && generationStage === 'SPECULATIVE') {
+            suppressAudioRef.current = false;
+          }
 
           setMessages(prev => {
             const lastMessage = prev[prev.length - 1];
 
-            // ASSISTANT FINAL: replace the last assistant message (overwrites SPECULATIVE)
+            // ASSISTANT FINAL: first FINAL replaces speculative text, subsequent FINALs append
             if (role === 'assistant' && generationStage === 'FINAL') {
               const lastAssistantIdx = prev.findLastIndex(m => m.role === 'assistant');
               if (lastAssistantIdx >= 0) {
+                const lastAssistant = prev[lastAssistantIdx];
+                if (lastAssistant.isFinal) {
+                  // Already finalized — append (another FINAL block in same turn)
+                  return prev.map((msg, idx) =>
+                    idx === lastAssistantIdx ? { ...msg, text: msg.text + text } : msg
+                  );
+                }
+                // First FINAL — replace speculative text and mark as finalized
                 return prev.map((msg, idx) =>
-                  idx === lastAssistantIdx ? { ...msg, text } : msg
+                  idx === lastAssistantIdx ? { ...msg, text, isFinal: true } : msg
                 );
               }
               // No existing assistant message — create one
-              return [...prev, { role: 'assistant' as const, text, timestamp: new Date() }];
+              return [...prev, { role: 'assistant' as const, text, timestamp: new Date(), isFinal: true }];
             }
 
-            // ASSISTANT SPECULATIVE: always start a new assistant message
+            // ASSISTANT SPECULATIVE: create on role change or new turn, append within same turn
             if (role === 'assistant' && generationStage === 'SPECULATIVE') {
+              if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.isFinal) {
+                // Same turn, still speculative — append
+                return prev.map((msg, idx) =>
+                  idx === prev.length - 1 ? { ...msg, text: msg.text + text } : msg
+                );
+              }
+              // Role change OR previous assistant message was finalized (new turn) — create new
               return [...prev, { role: 'assistant' as const, text, timestamp: new Date() }];
             }
 
@@ -213,7 +238,7 @@ export default function VoiceInterface() {
             );
           });
         } else if (data.type === 'audio') {
-          // After barge-in, suppress incoming audio until the turn ends
+          // After barge-in, suppress remaining audio from the interrupted turn
           if (suppressAudioRef.current) return;
 
           const { audio, isBase64 } = data.data;

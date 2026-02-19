@@ -88,7 +88,7 @@ export function setupEventListeners() {
   });
 
   // Interrupt (barge-in)
-  agent.voice.on('interrupt', ({ type }: { type: string }) => {
+  agent.voice.on('interrupt', ({ type }: any) => {
     console.log('[Events] Interrupt:', type);
     broadcast({ type: 'interrupt', data: { type }, timestamp: Date.now() });
   });
