@@ -101,6 +101,12 @@ export interface SpawnProcessOptions {
 export interface ProcessHandle {
   /** Process ID of the running command */
   readonly pid: number;
+  /** The command that was executed */
+  readonly command: string;
+  /** Arguments passed to the command */
+  readonly args: string[];
+  /** Whether the process is still running */
+  readonly running: boolean;
   /** Accumulated stdout so far */
   readonly stdout: string;
   /** Accumulated stderr so far */
@@ -134,36 +140,6 @@ export interface ProcessInfo {
   stdout: string;
   /** Accumulated stderr */
   stderr: string;
-}
-
-// =============================================================================
-// Process Manager
-// =============================================================================
-
-/**
- * Background process manager for a sandbox.
- *
- * Provides methods to spawn, list, and retrieve background processes.
- * Accessible via `sandbox.processes` when the sandbox supports background execution.
- *
- * @example
- * ```typescript
- * const handle = await sandbox.processes.spawn('node', ['server.js']);
- * console.log(handle.pid, handle.stdout);
- *
- * const all = await sandbox.processes.list();
- * const proc = sandbox.processes.get(handle.pid);
- * await proc?.sendStdin('input\n');
- * await proc?.kill();
- * ```
- */
-export interface SandboxProcessManager {
-  /** Spawn a background process. Returns a handle to interact with it. */
-  spawn(command: string, args?: string[], options?: SpawnProcessOptions): Promise<ProcessHandle>;
-  /** List all tracked background processes. */
-  list(): Promise<ProcessInfo[]>;
-  /** Get a handle to a background process by PID. Returns undefined if not found. */
-  get(pid: number): ProcessHandle | undefined;
 }
 
 // =============================================================================

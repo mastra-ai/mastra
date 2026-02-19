@@ -5,26 +5,21 @@
  * Wraps the E2B SDK's commands API (background mode, sendStdin, kill, list).
  */
 
-import type {
-  ProcessHandle as MastraProcessHandle,
-  CommandResult,
-  ProcessInfo,
-  SandboxProcessManager,
-  SpawnProcessOptions,
-} from '@mastra/core/workspace';
+import type { ProcessHandle as MastraProcessHandle, CommandResult, SpawnProcessOptions } from '@mastra/core/workspace';
+import { SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandHandle as E2BCommandHandle, Sandbox } from 'e2b';
 
 import { shellQuote } from '../utils/shell-quote';
 
 // =============================================================================
-// E2B Command Handle
+// E2B Process Handle
 // =============================================================================
 
 /**
  * Wraps an E2B CommandHandle to conform to Mastra's ProcessHandle interface.
  * Not exported — internal to this module.
  */
-class E2BHandle implements MastraProcessHandle {
+class E2BProcessHandle implements MastraProcessHandle {
   readonly pid: number;
   readonly command: string;
   readonly args: string[];
@@ -96,47 +91,36 @@ class E2BHandle implements MastraProcessHandle {
     }
     await this._sandbox.commands.sendStdin(this.pid, data);
   }
-
-  toProcessInfo(): ProcessInfo {
-    return {
-      pid: this.pid,
-      command: this.command,
-      args: this.args,
-      running: this.running,
-      exitCode: this.exitCode,
-      stdout: this.stdout,
-      stderr: this.stderr,
-    };
-  }
 }
 
 // =============================================================================
 // E2B Process Manager
 // =============================================================================
 
+/** Subset of E2BSandbox that the process manager needs. */
+interface E2BSandboxRef {
+  ensureRunning(): Promise<void>;
+  readonly instance: Sandbox;
+}
+
 /**
  * E2B implementation of SandboxProcessManager.
  * Uses the E2B SDK's commands.run() with background: true.
- * Auto-starts the sandbox when spawn is called.
  */
-export class E2BProcessManager implements SandboxProcessManager {
-  private readonly _sandbox: { ensureRunning(): Promise<void>; readonly instance: Sandbox };
-  private readonly _handles = new Map<number, E2BHandle>();
+export class E2BProcessManager extends SandboxProcessManager<E2BSandboxRef> {
   private readonly _env: Record<string, string>;
 
-  constructor(
-    sandbox: { ensureRunning(): Promise<void>; readonly instance: Sandbox },
-    env: Record<string, string> = {},
-  ) {
-    this._sandbox = sandbox;
+  constructor(sandbox: E2BSandboxRef, env: Record<string, string> = {}) {
+    super(sandbox);
     this._env = env;
   }
 
-  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraProcessHandle> {
-    await this._sandbox.ensureRunning();
-    const e2b = this._sandbox.instance;
-    const startTime = Date.now();
-
+  protected async doSpawn(
+    command: string,
+    args: string[],
+    options: SpawnProcessOptions,
+  ): Promise<MastraProcessHandle> {
+    const e2b = this.sandbox.instance;
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 
     // Merge default env with per-spawn env
@@ -152,27 +136,6 @@ export class E2BProcessManager implements SandboxProcessManager {
       envs,
     });
 
-    const handle = new E2BHandle(e2bHandle, e2b, command, args, startTime);
-    this._handles.set(handle.pid, handle);
-
-    return handle;
-  }
-
-  async list(): Promise<ProcessInfo[]> {
-    return Array.from(this._handles.values()).map(handle => handle.toProcessInfo());
-  }
-
-  get(pid: number): MastraProcessHandle | undefined {
-    return this._handles.get(pid);
-  }
-
-  /** Kill all tracked processes. Used during sandbox destroy. */
-  async killAll(): Promise<void> {
-    for (const handle of this._handles.values()) {
-      if (handle.running) {
-        await handle.kill();
-      }
-    }
-    this._handles.clear();
+    return new E2BProcessHandle(e2bHandle, e2b, command, args, Date.now());
   }
 }

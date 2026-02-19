@@ -29,7 +29,8 @@ import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
 
 import type { MountManager } from './mount-manager';
-import type { CommandResult, ExecuteCommandOptions, SandboxInfo, SandboxProcessManager } from './types';
+import type { SandboxProcessManager } from './processes';
+import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
 // Sandbox Interface
