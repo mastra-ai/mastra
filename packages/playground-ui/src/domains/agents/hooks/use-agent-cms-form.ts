@@ -261,16 +261,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    form,
-    isEdit,
-    client,
-    createStoredAgent,
-    options,
-    agentId,
-    buildSharedParams,
-    queryClient,
-  ]);
+  }, [form, isEdit, client, createStoredAgent, options, agentId, buildSharedParams, queryClient]);
 
   const watched = useWatch({ control: form.control });
 
