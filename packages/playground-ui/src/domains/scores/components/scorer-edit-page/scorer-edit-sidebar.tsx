@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
-import { Check } from 'lucide-react';
+import { Check, Save } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
@@ -18,7 +18,9 @@ import type { ScorerFormValues } from './utils/form-validation';
 interface ScorerEditSidebarProps {
   form: UseFormReturn<ScorerFormValues>;
   onPublish: () => void;
+  onSaveDraft?: () => void;
   isSubmitting?: boolean;
+  isSavingDraft?: boolean;
   formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
 }
@@ -26,7 +28,9 @@ interface ScorerEditSidebarProps {
 export function ScorerEditSidebar({
   form,
   onPublish,
+  onSaveDraft,
   isSubmitting = false,
+  isSavingDraft = false,
   formRef,
   mode = 'create',
 }: ScorerEditSidebarProps) {
@@ -192,21 +196,56 @@ export function ScorerEditSidebar({
 
       {/* Sticky footer */}
       <div className="flex-shrink-0 p-4">
-        <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              {mode === 'edit' ? 'Updating...' : 'Creating...'}
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Check />
-              </Icon>
-              {mode === 'edit' ? 'Update scorer' : 'Create scorer'}
-            </>
-          )}
-        </Button>
+        {mode === 'edit' && onSaveDraft ? (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
+              {isSavingDraft ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Icon>
+                    <Save />
+                  </Icon>
+                  Save
+                </>
+              )}
+            </Button>
+            <Button variant="primary" onClick={onPublish} disabled={isSubmitting || isSavingDraft} className="flex-1">
+              {isSubmitting ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Icon>
+                    <Check />
+                  </Icon>
+                  Publish
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Check />
+                </Icon>
+                Create scorer
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );

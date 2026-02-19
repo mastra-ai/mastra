@@ -10,7 +10,9 @@ export interface AgentCmsFormShellProps {
   mode: 'create' | 'edit';
   agentId?: string;
   isSubmitting: boolean;
+  isSavingDraft?: boolean;
   handlePublish: () => Promise<void>;
+  handleSaveDraft?: () => Promise<void>;
   readOnly?: boolean;
   basePath: string;
   currentPath: string;
@@ -24,7 +26,9 @@ export function AgentCmsFormShell({
   mode,
   agentId,
   isSubmitting,
+  isSavingDraft,
   handlePublish,
+  handleSaveDraft,
   readOnly,
   basePath,
   currentPath,
@@ -38,7 +42,9 @@ export function AgentCmsFormShell({
       mode={mode}
       agentId={agentId}
       isSubmitting={isSubmitting}
+      isSavingDraft={isSavingDraft}
       handlePublish={handlePublish}
+      handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
     >
       <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId}>

@@ -1,5 +1,737 @@
 # @mastra/core
 
+## 1.5.0
+
+### Minor Changes
+
+- Added `allowedPaths` option to `LocalFilesystem` for granting agents access to specific directories outside `basePath` without disabling containment. ([#13054](https://github.com/mastra-ai/mastra/pull/13054))
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({
+      basePath: './workspace',
+      allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    }),
+  });
+  ```
+
+  Allowed paths can be updated at runtime using `setAllowedPaths()`:
+
+  ```typescript
+  workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/new-dir']);
+  ```
+
+  This is the recommended approach for least-privilege access — agents can only reach the specific directories you allow, while containment stays enabled for everything else.
+
+- Added generic Harness class to @mastra/core for orchestrating agents with modes, state management, built-in tools (ask_user, submit_plan), subagent support, Observational Memory integration, model discovery, and permission-aware tool approval. The Harness provides a reusable foundation for building agent-powered applications with features like thread management, heartbeat monitoring, and event-driven architecture. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Added glob pattern support for workspace configuration. The `list_files` tool now accepts a `pattern` parameter for filtering files (e.g., `**/*.ts`, `src/**/*.test.ts`). `autoIndexPaths` accepts glob patterns like `./docs/**/*.md` to selectively index files for BM25 search. Skills paths support globs like `./**/skills` to discover skill directories at any depth, including dot-directories like `.agents/skills`. ([#13023](https://github.com/mastra-ai/mastra/pull/13023))
+
+  **`list_files` tool with pattern:**
+
+  ```typescript
+  // Agent can now use glob patterns to filter files
+  const result = await workspace.tools.workspace_list_files({
+    path: '/',
+    pattern: '**/*.test.ts',
+  });
+  ```
+
+  **`autoIndexPaths` with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    bm25: true,
+    // Only index markdown files under ./docs
+    autoIndexPaths: ['./docs/**/*.md'],
+  });
+  ```
+
+  **Skills paths with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    // Discover any directory named 'skills' within 4 levels of depth
+    skills: ['./**/skills'],
+  });
+  ```
+
+  Note: Skills glob discovery walks up to 4 directory levels deep from the glob's static prefix. Use more specific patterns like `./src/**/skills` to narrow the search scope for large workspaces.
+
+- Added direct skill path discovery — you can now pass a path directly to a skill directory or SKILL.md file in the workspace skills configuration (e.g., `skills: ['/path/to/my-skill']` or `skills: ['/path/to/my-skill/SKILL.md']`). Previously only parent directories were supported. Also improved error handling when a configured skills path is inaccessible (e.g., permission denied), logging a warning instead of breaking discovery for all skills. ([#13031](https://github.com/mastra-ai/mastra/pull/13031))
+
+- Add optional `instruction` field to ObservationalMemory config types ([#13240](https://github.com/mastra-ai/mastra/pull/13240))
+
+  Adds `instruction?: string` to `ObservationalMemoryObservationConfig` and `ObservationalMemoryReflectionConfig` interfaces, allowing external consumers to pass custom instructions to observational memory.
+
+- Added typed workspace providers — `workspace.filesystem` and `workspace.sandbox` now return the concrete types you passed to the constructor, improving autocomplete and eliminating casts. ([#13021](https://github.com/mastra-ai/mastra/pull/13021))
+
+  When mounts are configured, `workspace.filesystem` returns a typed `CompositeFilesystem<TMounts>` with per-key narrowing via `mounts.get()`.
+
+  **Before:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // WorkspaceFilesystem | undefined
+  workspace.sandbox; // WorkspaceSandbox | undefined
+  ```
+
+  **After:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // LocalFilesystem
+  workspace.sandbox; // E2BSandbox
+
+  // Mount-aware workspaces get typed per-key access:
+  const ws = new Workspace({
+    mounts: { '/local': new LocalFilesystem({ basePath: '/tmp' }) },
+  });
+  ws.filesystem.mounts.get('/local'); // LocalFilesystem
+  ```
+
+- Added support for Vercel AI Gateway in the model router. You can now use `model: 'vercel/google/gemini-3-flash'` with agents and it will route through the official AI SDK gateway provider. ([#13149](https://github.com/mastra-ai/mastra/pull/13149))
+
+- Added workspace and skill storage domains with full CRUD, versioning, and implementations across LibSQL, Postgres, and MongoDB. Added `editor.workspace` and `editor.skill` namespaces for managing workspace configurations and skill definitions through the editor. Agents stored in the editor can now reference workspaces (by ID or inline config) and skills, with full hydration to runtime `Workspace` instances during agent resolution. ([#13156](https://github.com/mastra-ai/mastra/pull/13156))
+
+  **Filesystem-native skill versioning (draft → publish model):**
+
+  Skills are versioned as filesystem trees with content-addressable blob storage. The editing surface (live filesystem) is separated from the serving surface (versioned blob store), enabling a `draft → publish` workflow:
+  - `editor.skill.publish(skillId, source, skillPath)` — Snapshots a skill directory from the filesystem into blob storage, creates a new version with a tree manifest, and sets `activeVersionId`
+  - Version switching via `editor.skill.update({ id, activeVersionId })` — Points the skill to a previous version without re-publishing
+  - Publishing a skill automatically invalidates cached agents that reference it, so they re-hydrate with the updated version on next access
+
+  **Agent skill resolution strategies:**
+
+  Agents can reference skills with different resolution strategies:
+  - `strategy: 'latest'` — Resolves the skill's active version (honors `activeVersionId` for rollback)
+  - `pin: '<versionId>'` — Pins to a specific version, immune to publishes
+  - `strategy: 'live'` — Reads directly from the live filesystem (no blob store)
+
+  **Blob storage infrastructure:**
+  - `BlobStore` abstract class for content-addressable storage keyed by SHA-256 hash
+  - `InMemoryBlobStore` for testing
+  - LibSQL, Postgres, and MongoDB implementations
+  - `S3BlobStore` for storing blobs in S3 or S3-compatible storage (AWS, R2, MinIO, DO Spaces)
+  - `BlobStoreProvider` interface and `MastraEditorConfig.blobStores` registry for pluggable blob storage
+  - `VersionedSkillSource` and `CompositeVersionedSkillSource` for reading skill files from the blob store at runtime
+
+  **New storage types:**
+  - `StorageWorkspaceSnapshotType` and `StorageSkillSnapshotType` with corresponding input/output types
+  - `StorageWorkspaceRef` for ID-based or inline workspace references on agents
+  - `StorageSkillConfig` for per-agent skill overrides (`pin`, `strategy`, description, instructions)
+  - `SkillVersionTree` and `SkillVersionTreeEntry` for tree manifests
+  - `StorageBlobEntry` for content-addressable blob entries
+  - `SKILL_BLOBS_SCHEMA` for the `mastra_skill_blobs` table
+
+  **New editor namespaces:**
+  - `editor.workspace` — CRUD for workspace configs, plus `hydrateSnapshotToWorkspace()` for resolving to runtime `Workspace` instances
+  - `editor.skill` — CRUD for skill definitions, plus `publish()` for filesystem-to-blob snapshots
+
+  **Provider registries:**
+  - `MastraEditorConfig` accepts `filesystems`, `sandboxes`, and `blobStores` provider registries (keyed by provider ID)
+  - Built-in `local` filesystem and sandbox providers are auto-registered
+  - `editor.resolveBlobStore()` resolves from provider registry or falls back to the storage backend's blobs domain
+  - Providers expose `id`, `name`, `description`, `configSchema` (JSON Schema for UI form rendering), and a factory method
+
+  **Storage adapter support:**
+  - LibSQL: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - Postgres: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - MongoDB: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - All three include `workspace`, `skills`, and `skillsFormat` fields on agent versions
+
+  **Server endpoints:**
+  - `GET/POST/PATCH/DELETE /stored/workspaces` — CRUD for stored workspaces
+  - `GET/POST/PATCH/DELETE /stored/skills` — CRUD for stored skills
+  - `POST /stored/skills/:id/publish` — Publish a skill from a filesystem source
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { s3FilesystemProvider, s3BlobStoreProvider } from '@mastra/s3';
+  import { e2bSandboxProvider } from '@mastra/e2b';
+
+  const editor = new MastraEditor({
+    filesystems: { s3: s3FilesystemProvider },
+    sandboxes: { e2b: e2bSandboxProvider },
+    blobStores: { s3: s3BlobStoreProvider },
+  });
+
+  // Create a skill and publish it
+  const skill = await editor.skill.create({
+    name: 'Code Review',
+    description: 'Reviews code for best practices',
+    instructions: 'Analyze the code and provide feedback...',
+  });
+  await editor.skill.publish(skill.id, source, 'skills/code-review');
+
+  // Agents resolve skills by strategy
+  await editor.agent.create({
+    name: 'Dev Assistant',
+    model: { provider: 'openai', name: 'gpt-4' },
+    workspace: { type: 'id', workspaceId: workspace.id },
+    skills: { [skill.id]: { strategy: 'latest' } },
+    skillsFormat: 'xml',
+  });
+  ```
+
+- Added draft/publish version management for all editor primitives (agents, scorers, MCP clients, prompt blocks). ([#13061](https://github.com/mastra-ai/mastra/pull/13061))
+
+  **Status filtering on list endpoints** — All list endpoints now accept a `?status=draft|published|archived` query parameter to filter by entity status. Defaults to `published` to preserve backward compatibility.
+
+  **Draft vs published resolution on get-by-id endpoints** — All get-by-id endpoints now accept `?status=draft` to resolve the entity with its latest (unpublished) version, or `?status=published` (default) to resolve with the active published version.
+
+  **Edits no longer auto-publish** — When updating any primitive, a new version is created but `activeVersionId` is no longer automatically updated. Edits stay as drafts until explicitly published via the activate endpoint.
+
+  **Full version management for all primitives** — Scorers, MCP clients, and prompt blocks now have the same version management API that agents have: list versions, create version snapshots, get specific versions, activate/publish, restore from a previous version, delete versions, and compare versions.
+
+  **New prompt block CRUD routes** — Prompt blocks now have full server routes (`GET /stored/prompt-blocks`, `GET /stored/prompt-blocks/:id`, `POST`, `PATCH`, `DELETE`).
+
+  **New version endpoints** — Each primitive now exposes 7 version management endpoints under `/stored/{type}/:id/versions` (list, create, get, activate, restore, delete, compare).
+
+  ```ts
+  // Fetch the published version (default behavior, backward compatible)
+  const published = await fetch('/api/stored/scorers/my-scorer');
+
+  // Fetch the draft version for editing in the UI
+  const draft = await fetch('/api/stored/scorers/my-scorer?status=draft');
+
+  // Publish a specific version
+  await fetch('/api/stored/scorers/my-scorer/versions/abc123/activate', { method: 'POST' });
+
+  // Compare two versions
+  const diff = await fetch('/api/stored/scorers/my-scorer/versions/compare?from=v1&to=v2');
+  ```
+
+- Added `toModelOutput` support to the agent loop. Tool definitions can now include a `toModelOutput` function that transforms the raw tool result before it's sent to the model, while preserving the raw result in storage. This matches the AI SDK `toModelOutput` convention — the function receives the raw output directly and returns `{ type: 'text', value: string }` or `{ type: 'content', value: ContentPart[] }`. ([#13171](https://github.com/mastra-ai/mastra/pull/13171))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  const weatherTool = createTool({
+    id: 'weather',
+    inputSchema: z.object({ city: z.string() }),
+    execute: async ({ city }) => ({
+      city,
+      temperature: 72,
+      conditions: 'sunny',
+      humidity: 45,
+      raw_sensor_data: [0.12, 0.45, 0.78],
+    }),
+    // The model sees a concise summary instead of the full JSON
+    toModelOutput: output => ({
+      type: 'text',
+      value: `${output.city}: ${output.temperature}°F, ${output.conditions}`,
+    }),
+  });
+  ```
+
+- Added `mastra_workspace_grep` workspace tool for regex-based content search across files. This complements the existing semantic search tool by providing direct pattern matching with support for case-insensitive search, file filtering by extension, context lines, and result limiting. ([#13010](https://github.com/mastra-ai/mastra/pull/13010))
+
+  The tool is automatically available when a workspace has a filesystem configured:
+
+  ```typescript
+  import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+  import { LocalFilesystem } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './my-project' }),
+  });
+
+  // The grep tool is auto-injected and available as:
+  // WORKSPACE_TOOLS.SEARCH.GREP → 'mastra_workspace_grep'
+  ```
+
+- Removed `outputSchema` from workspace tools to return raw text instead of JSON, optimizing for token usage and LLM performance. Structured metadata that was previously returned in tool output is now emitted as `data-workspace-metadata` chunks via `writer.custom()`, keeping it available for UI consumption without passing it to the LLM. Tools are also extracted into individual files and can be imported directly (e.g. `import { readFileTool } from '@mastra/core/workspace'`). ([#13166](https://github.com/mastra-ai/mastra/pull/13166))
+
+### Patch Changes
+
+- dependencies updates: ([#13127](https://github.com/mastra-ai/mastra/pull/13127))
+  - Updated dependency [`hono@^4.11.9` ↗︎](https://www.npmjs.com/package/hono/v/4.11.9) (from `^4.11.3`, in `dependencies`)
+
+- dependencies updates: ([#13167](https://github.com/mastra-ai/mastra/pull/13167))
+  - Updated dependency [`lru-cache@^11.2.6` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.2.6) (from `^11.2.2`, in `dependencies`)
+
+- Export `AnyWorkspace` type from `@mastra/core/workspace` for accepting any Workspace regardless of generic parameters. Updates Agent and Mastra to use `AnyWorkspace` so workspaces with typed mounts/sandbox (e.g. E2BSandbox, GCSFilesystem) are accepted without type errors. ([#13155](https://github.com/mastra-ai/mastra/pull/13155))
+
+- Update provider registry and model documentation with latest models and providers ([`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878))
+
+- Fixed skill processor tools (skill-activate, skill-search, skill-read-reference, skill-read-script, skill-read-asset) being incorrectly suspended for approval when `requireToolApproval: true` is set. These internal tools now bypass the approval check and execute directly. ([#13160](https://github.com/mastra-ai/mastra/pull/13160))
+
+- Fixed a bug where `requestContext` metadata was not propagated to child spans. When using `requestContextKeys`, only root spans were enriched with request context values — child spans (e.g. `agent_run` inside a workflow) were missing them. All spans in a trace are now correctly enriched. Fixes #12818. ([#12819](https://github.com/mastra-ai/mastra/pull/12819))
+
+- Fixed semantic recall search in Mastra Studio returning no results when using non-default embedding dimensions (e.g., fastembed with 384-dim). The SemanticRecall processor now probes the embedder for its actual output dimension, ensuring the vector index name matches between write and read paths. Previously, the processor defaulted to a 1536-dim index name regardless of the actual embedder, causing a mismatch with the dimension-aware index name used by Studio's search. Fixes #13039 ([#13059](https://github.com/mastra-ai/mastra/pull/13059))
+
+- Fixed `CompositeFilesystem` instructions: agents and tools no longer receive an incorrect claim that files written via workspace tools are accessible at sandbox paths. The instructions now accurately describe only the available mounted filesystems. ([#13221](https://github.com/mastra-ai/mastra/pull/13221))
+
+- Fixed onChunk callback to receive raw Mastra chunks instead of AI SDK v5 converted chunks for tool results. Also added missing onChunk calls for tool-error chunks and tool-result chunks in mixed-error scenarios. ([#13243](https://github.com/mastra-ai/mastra/pull/13243))
+
+- Fixed tool execution errors stopping the agentic loop. The agent now continues after tool errors, allowing the model to see the error and retry with corrected arguments. ([#13242](https://github.com/mastra-ai/mastra/pull/13242))
+
+- Fixed conditional rules not being persisted for workflows, agents, and scorers when creating or updating agents in the CMS. Rules configured on these entities are now correctly saved to storage. ([#13044](https://github.com/mastra-ai/mastra/pull/13044))
+
+- Added runtime `requestContext` forwarding to tool executions. ([#13094](https://github.com/mastra-ai/mastra/pull/13094))
+
+  Tools invoked within agentic workflow steps now receive the caller's `requestContext` — including authenticated API clients, feature flags, and user metadata set by middleware. Runtime `requestContext` is preferred over build-time context when both are available.
+
+  **Why:** Previously, `requestContext` values were silently dropped in two places: (1) the workflow loop stream created a new empty `RequestContext` instead of forwarding the caller's, and (2) `createToolCallStep` didn't pass `requestContext` in tool options. This aligns both the agent generate/stream and agentic workflow paths with the agent network path, where `requestContext` was already forwarded correctly.
+
+  **Before:** Tools received an empty `requestContext`, losing all values set by the workflow step.
+
+  ```ts
+  // requestContext with auth data set in workflow step
+  requestContext.set('apiClient', authedClient);
+  // tool receives empty RequestContext — apiClient is undefined
+  ```
+
+  **After:** Pass `requestContext` via `MastraToolInvocationOptions` and tools receive it.
+
+  ```ts
+  // requestContext with auth data flows through to the tool
+  requestContext.set('apiClient', authedClient);
+  // tool receives the same RequestContext — apiClient is available
+  ```
+
+  Fixes #13088
+
+- Fixed tsc out-of-memory crash caused by step-schema.d.ts expanding to 50k lines. Added explicit type annotations to all exported Zod schema constants, reducing declaration output from 49,729 to ~500 lines without changing runtime behavior. ([#13229](https://github.com/mastra-ai/mastra/pull/13229))
+
+- Fixed TypeScript type generation hanging or running out of memory when packages depend on @mastra/core tool types. Changed ZodLikeSchema from a nominal union type to structural typing, which prevents TypeScript from performing deep comparisons of zod v3/v4 type trees during generic inference. ([#13239](https://github.com/mastra-ai/mastra/pull/13239))
+
+- Fixed tool execution errors being emitted as `tool-result` instead of `tool-error` in fullStream. Previously, when a tool's execute function threw an error, the error was caught and returned as a value, causing the stream to emit a `tool-result` chunk containing the error object. Now errors are properly propagated, so the stream emits `tool-error` chunks, allowing consumers (including the `@mastra/ai-sdk` conversion pipeline) to correctly distinguish between successful tool results and failed tool executions. Fixes #13123. ([#13147](https://github.com/mastra-ai/mastra/pull/13147))
+
+- Fixed thread title not being generated for pre-created threads. When threads were created before starting a conversation (e.g., for URL routing or storing metadata), the title stayed as a placeholder because the title generation condition checked whether the thread existed rather than whether it had a title. Threads created without an explicit title now get an empty title instead of a placeholder, and title generation fires whenever a thread has no title. Resolves #13145. ([#13151](https://github.com/mastra-ai/mastra/pull/13151))
+
+- Fixed `inputData` in `dowhile` and `dountil` loop condition functions to be properly typed as the step's output schema instead of `any`. This means you no longer need to manually cast `inputData` in your loop conditions — TypeScript will now correctly infer the type from your step's `outputSchema`. ([#12977](https://github.com/mastra-ai/mastra/pull/12977))
+
+- Migrated MastraCode from the prototype harness to the generic CoreHarness from @mastra/core. The createMastraCode function is now fully configurable with optional parameters for modes, subagents, storage, tools, and more. Removed the deprecated prototype harness implementation. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Fixed the writer object being undefined in processOutputStream, allowing output processors to emit custom events to the stream during chunk processing. This enables use cases like streaming moderation results back to the client. ([#13056](https://github.com/mastra-ai/mastra/pull/13056))
+
+- Fixed sub-agent tool approval resume flow. When a sub-agent tool required approval and was approved, the agent would restart from scratch instead of resuming, causing an infinite loop. The resume data is now correctly passed through for agent tools so they properly resume after approval. ([#13241](https://github.com/mastra-ai/mastra/pull/13241))
+
+- Dataset schemas now appear in the Edit Dataset dialog. Previously the `inputSchema` and `groundTruthSchema` fields were not passed to the dialog, so editing a dataset always showed empty schemas. ([#13175](https://github.com/mastra-ai/mastra/pull/13175))
+
+  Schema edits in the JSON editor no longer cause the cursor to jump to the top of the field. Typing `{"type": "object"}` in the schema editor now behaves like a normal text input instead of resetting on every keystroke.
+
+  Validation errors are now surfaced when updating a dataset schema that conflicts with existing items. For example, adding a `required: ["name"]` constraint when existing items lack a `name` field now shows "2 existing item(s) fail validation" in the dialog instead of silently dropping the error.
+
+  Disabling a dataset schema from the Studio UI now correctly clears it. Previously the server converted `null` (disable) to `undefined` (no change), so the old schema persisted and validation continued.
+
+  Workflow schemas fetched via `client.getWorkflow().getSchema()` are now correctly parsed. The server serializes schemas with `superjson`, but the client was using plain `JSON.parse`, yielding a `{json: {...}}` wrapper instead of the actual JSON Schema object.
+
+- Fixed network mode messages missing metadata for filtering. All internal network messages (sub-agent results, tool execution results, workflow results) now include `metadata.mode: 'network'` in their content metadata, making it possible to filter them from user-facing messages without parsing JSON content. Previously, consumers had to parse the JSON body of each message to check for `isNetwork: true` — now they can simply check `message.content.metadata.mode === 'network'`. Fixes #13106. ([#13144](https://github.com/mastra-ai/mastra/pull/13144))
+
+- Fixed sub-agent memory context pollution that caused 'Exhausted all fallback models' errors when using Observational Memory with sub-agents. The parent agent's memory context is now preserved across sub-agent tool execution. ([#13051](https://github.com/mastra-ai/mastra/pull/13051))
+
+- CMS draft support with status badges for agents. ([#13194](https://github.com/mastra-ai/mastra/pull/13194))
+  - Agent list now resolves the latest (draft) version for each stored agent, showing current edits rather than the last published state.
+  - Added `hasDraft` and `activeVersionId` fields to the agent list API response.
+  - Agent list badges: "Published" (green) when a published version exists, "Draft" (colored when unpublished changes exist, grayed out otherwise).
+  - Added `resolvedVersionId` to all `StorageResolved*Type` types so the server can detect whether the latest version differs from the active version.
+  - Added `status` option to `GetByIdOptions` to allow resolving draft vs published versions through the editor layer.
+  - Fixed editor cache not being cleared on version activate, restore, and delete — all four versioned domains (agents, scorers, prompt-blocks, mcp-clients) now clear the cache after version mutations.
+  - Added `ALTER TABLE` migration for `mastra_agent_versions` in libsql and pg to add newer columns (`mcpClients`, `requestContextSchema`, `workspace`, `skills`, `skillsFormat`).
+
+- Added scorer version management and CMS draft/publish flow for scorers. ([#13194](https://github.com/mastra-ai/mastra/pull/13194))
+  - Added scorer version methods to the client SDK: `listVersions`, `createVersion`, `getVersion`, `activateVersion`, `restoreVersion`, `deleteVersion`, `compareVersions`.
+  - Added `ScorerVersionCombobox` for navigating scorer versions with Published/Draft labels.
+  - Scorer edit page now supports Save (draft) and Publish workflows with an "Unpublished changes" indicator.
+  - Storage list methods for agents and scorers no longer default to filtering only published entities, allowing drafts to appear in the playground.
+
+- Fixed CompositeAuth losing public and protected route configurations from underlying auth providers. Routes marked as public or protected now work correctly when deployed to Mastra Cloud. ([#13086](https://github.com/mastra-ai/mastra/pull/13086))
+
+- Trimmed the agent experiment result `output` to only persist relevant fields instead of the entire `FullOutput` blob. The stored output now contains: `text`, `object`, `toolCalls`, `toolResults`, `sources`, `files`, `usage`, `reasoningText`, `traceId`, and `error`. ([#13158](https://github.com/mastra-ai/mastra/pull/13158))
+
+  Dropped fields like `steps`, `response`, `messages`, `rememberedMessages`, `request`, `providerMetadata`, `warnings`, `scoringData`, `suspendPayload`, and other provider/debugging internals that were duplicated elsewhere or not useful for experiment evaluation.
+
+- Fixed `.branch()` condition receiving `undefined` inputData when resuming a suspended nested workflow after `.map()`. ([#13055](https://github.com/mastra-ai/mastra/pull/13055))
+
+  Previously, when a workflow used `.map()` followed by `.branch()` and a nested workflow inside the branch called `suspend()`, resuming would fail with `TypeError: Cannot read properties of undefined` because the branch conditions were unnecessarily re-evaluated with stale data.
+
+  Resume now skips condition re-evaluation for `.branch()` entries and goes directly to the correct suspended branch, matching the existing behavior for `.parallel()` entries.
+
+  Fixes #12982
+
+- Updated dependencies [[`1415bcd`](https://github.com/mastra-ai/mastra/commit/1415bcd894baba03e07640b3b1986037db49559d)]:
+  - @mastra/schema-compat@1.1.1
+
+## 1.5.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`1415bcd`](https://github.com/mastra-ai/mastra/commit/1415bcd894baba03e07640b3b1986037db49559d)]:
+  - @mastra/schema-compat@1.1.1-alpha.0
+
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added `allowedPaths` option to `LocalFilesystem` for granting agents access to specific directories outside `basePath` without disabling containment. ([#13054](https://github.com/mastra-ai/mastra/pull/13054))
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({
+      basePath: './workspace',
+      allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    }),
+  });
+  ```
+
+  Allowed paths can be updated at runtime using `setAllowedPaths()`:
+
+  ```typescript
+  workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/new-dir']);
+  ```
+
+  This is the recommended approach for least-privilege access — agents can only reach the specific directories you allow, while containment stays enabled for everything else.
+
+- Added generic Harness class to @mastra/core for orchestrating agents with modes, state management, built-in tools (ask_user, submit_plan), subagent support, Observational Memory integration, model discovery, and permission-aware tool approval. The Harness provides a reusable foundation for building agent-powered applications with features like thread management, heartbeat monitoring, and event-driven architecture. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Added glob pattern support for workspace configuration. The `list_files` tool now accepts a `pattern` parameter for filtering files (e.g., `**/*.ts`, `src/**/*.test.ts`). `autoIndexPaths` accepts glob patterns like `./docs/**/*.md` to selectively index files for BM25 search. Skills paths support globs like `./**/skills` to discover skill directories at any depth, including dot-directories like `.agents/skills`. ([#13023](https://github.com/mastra-ai/mastra/pull/13023))
+
+  **`list_files` tool with pattern:**
+
+  ```typescript
+  // Agent can now use glob patterns to filter files
+  const result = await workspace.tools.workspace_list_files({
+    path: '/',
+    pattern: '**/*.test.ts',
+  });
+  ```
+
+  **`autoIndexPaths` with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    bm25: true,
+    // Only index markdown files under ./docs
+    autoIndexPaths: ['./docs/**/*.md'],
+  });
+  ```
+
+  **Skills paths with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    // Discover any directory named 'skills' within 4 levels of depth
+    skills: ['./**/skills'],
+  });
+  ```
+
+  Note: Skills glob discovery walks up to 4 directory levels deep from the glob's static prefix. Use more specific patterns like `./src/**/skills` to narrow the search scope for large workspaces.
+
+- Added direct skill path discovery — you can now pass a path directly to a skill directory or SKILL.md file in the workspace skills configuration (e.g., `skills: ['/path/to/my-skill']` or `skills: ['/path/to/my-skill/SKILL.md']`). Previously only parent directories were supported. Also improved error handling when a configured skills path is inaccessible (e.g., permission denied), logging a warning instead of breaking discovery for all skills. ([#13031](https://github.com/mastra-ai/mastra/pull/13031))
+
+- Add optional `instruction` field to ObservationalMemory config types ([#13240](https://github.com/mastra-ai/mastra/pull/13240))
+
+  Adds `instruction?: string` to `ObservationalMemoryObservationConfig` and `ObservationalMemoryReflectionConfig` interfaces, allowing external consumers to pass custom instructions to observational memory.
+
+- Added typed workspace providers — `workspace.filesystem` and `workspace.sandbox` now return the concrete types you passed to the constructor, improving autocomplete and eliminating casts. ([#13021](https://github.com/mastra-ai/mastra/pull/13021))
+
+  When mounts are configured, `workspace.filesystem` returns a typed `CompositeFilesystem<TMounts>` with per-key narrowing via `mounts.get()`.
+
+  **Before:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // WorkspaceFilesystem | undefined
+  workspace.sandbox; // WorkspaceSandbox | undefined
+  ```
+
+  **After:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // LocalFilesystem
+  workspace.sandbox; // E2BSandbox
+
+  // Mount-aware workspaces get typed per-key access:
+  const ws = new Workspace({
+    mounts: { '/local': new LocalFilesystem({ basePath: '/tmp' }) },
+  });
+  ws.filesystem.mounts.get('/local'); // LocalFilesystem
+  ```
+
+- Added support for Vercel AI Gateway in the model router. You can now use `model: 'vercel/google/gemini-3-flash'` with agents and it will route through the official AI SDK gateway provider. ([#13149](https://github.com/mastra-ai/mastra/pull/13149))
+
+- Added workspace and skill storage domains with full CRUD, versioning, and implementations across LibSQL, Postgres, and MongoDB. Added `editor.workspace` and `editor.skill` namespaces for managing workspace configurations and skill definitions through the editor. Agents stored in the editor can now reference workspaces (by ID or inline config) and skills, with full hydration to runtime `Workspace` instances during agent resolution. ([#13156](https://github.com/mastra-ai/mastra/pull/13156))
+
+  **Filesystem-native skill versioning (draft → publish model):**
+
+  Skills are versioned as filesystem trees with content-addressable blob storage. The editing surface (live filesystem) is separated from the serving surface (versioned blob store), enabling a `draft → publish` workflow:
+  - `editor.skill.publish(skillId, source, skillPath)` — Snapshots a skill directory from the filesystem into blob storage, creates a new version with a tree manifest, and sets `activeVersionId`
+  - Version switching via `editor.skill.update({ id, activeVersionId })` — Points the skill to a previous version without re-publishing
+  - Publishing a skill automatically invalidates cached agents that reference it, so they re-hydrate with the updated version on next access
+
+  **Agent skill resolution strategies:**
+
+  Agents can reference skills with different resolution strategies:
+  - `strategy: 'latest'` — Resolves the skill's active version (honors `activeVersionId` for rollback)
+  - `pin: '<versionId>'` — Pins to a specific version, immune to publishes
+  - `strategy: 'live'` — Reads directly from the live filesystem (no blob store)
+
+  **Blob storage infrastructure:**
+  - `BlobStore` abstract class for content-addressable storage keyed by SHA-256 hash
+  - `InMemoryBlobStore` for testing
+  - LibSQL, Postgres, and MongoDB implementations
+  - `S3BlobStore` for storing blobs in S3 or S3-compatible storage (AWS, R2, MinIO, DO Spaces)
+  - `BlobStoreProvider` interface and `MastraEditorConfig.blobStores` registry for pluggable blob storage
+  - `VersionedSkillSource` and `CompositeVersionedSkillSource` for reading skill files from the blob store at runtime
+
+  **New storage types:**
+  - `StorageWorkspaceSnapshotType` and `StorageSkillSnapshotType` with corresponding input/output types
+  - `StorageWorkspaceRef` for ID-based or inline workspace references on agents
+  - `StorageSkillConfig` for per-agent skill overrides (`pin`, `strategy`, description, instructions)
+  - `SkillVersionTree` and `SkillVersionTreeEntry` for tree manifests
+  - `StorageBlobEntry` for content-addressable blob entries
+  - `SKILL_BLOBS_SCHEMA` for the `mastra_skill_blobs` table
+
+  **New editor namespaces:**
+  - `editor.workspace` — CRUD for workspace configs, plus `hydrateSnapshotToWorkspace()` for resolving to runtime `Workspace` instances
+  - `editor.skill` — CRUD for skill definitions, plus `publish()` for filesystem-to-blob snapshots
+
+  **Provider registries:**
+  - `MastraEditorConfig` accepts `filesystems`, `sandboxes`, and `blobStores` provider registries (keyed by provider ID)
+  - Built-in `local` filesystem and sandbox providers are auto-registered
+  - `editor.resolveBlobStore()` resolves from provider registry or falls back to the storage backend's blobs domain
+  - Providers expose `id`, `name`, `description`, `configSchema` (JSON Schema for UI form rendering), and a factory method
+
+  **Storage adapter support:**
+  - LibSQL: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - Postgres: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - MongoDB: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - All three include `workspace`, `skills`, and `skillsFormat` fields on agent versions
+
+  **Server endpoints:**
+  - `GET/POST/PATCH/DELETE /stored/workspaces` — CRUD for stored workspaces
+  - `GET/POST/PATCH/DELETE /stored/skills` — CRUD for stored skills
+  - `POST /stored/skills/:id/publish` — Publish a skill from a filesystem source
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { s3FilesystemProvider, s3BlobStoreProvider } from '@mastra/s3';
+  import { e2bSandboxProvider } from '@mastra/e2b';
+
+  const editor = new MastraEditor({
+    filesystems: { s3: s3FilesystemProvider },
+    sandboxes: { e2b: e2bSandboxProvider },
+    blobStores: { s3: s3BlobStoreProvider },
+  });
+
+  // Create a skill and publish it
+  const skill = await editor.skill.create({
+    name: 'Code Review',
+    description: 'Reviews code for best practices',
+    instructions: 'Analyze the code and provide feedback...',
+  });
+  await editor.skill.publish(skill.id, source, 'skills/code-review');
+
+  // Agents resolve skills by strategy
+  await editor.agent.create({
+    name: 'Dev Assistant',
+    model: { provider: 'openai', name: 'gpt-4' },
+    workspace: { type: 'id', workspaceId: workspace.id },
+    skills: { [skill.id]: { strategy: 'latest' } },
+    skillsFormat: 'xml',
+  });
+  ```
+
+- Added draft/publish version management for all editor primitives (agents, scorers, MCP clients, prompt blocks). ([#13061](https://github.com/mastra-ai/mastra/pull/13061))
+
+  **Status filtering on list endpoints** — All list endpoints now accept a `?status=draft|published|archived` query parameter to filter by entity status. Defaults to `published` to preserve backward compatibility.
+
+  **Draft vs published resolution on get-by-id endpoints** — All get-by-id endpoints now accept `?status=draft` to resolve the entity with its latest (unpublished) version, or `?status=published` (default) to resolve with the active published version.
+
+  **Edits no longer auto-publish** — When updating any primitive, a new version is created but `activeVersionId` is no longer automatically updated. Edits stay as drafts until explicitly published via the activate endpoint.
+
+  **Full version management for all primitives** — Scorers, MCP clients, and prompt blocks now have the same version management API that agents have: list versions, create version snapshots, get specific versions, activate/publish, restore from a previous version, delete versions, and compare versions.
+
+  **New prompt block CRUD routes** — Prompt blocks now have full server routes (`GET /stored/prompt-blocks`, `GET /stored/prompt-blocks/:id`, `POST`, `PATCH`, `DELETE`).
+
+  **New version endpoints** — Each primitive now exposes 7 version management endpoints under `/stored/{type}/:id/versions` (list, create, get, activate, restore, delete, compare).
+
+  ```ts
+  // Fetch the published version (default behavior, backward compatible)
+  const published = await fetch('/api/stored/scorers/my-scorer');
+
+  // Fetch the draft version for editing in the UI
+  const draft = await fetch('/api/stored/scorers/my-scorer?status=draft');
+
+  // Publish a specific version
+  await fetch('/api/stored/scorers/my-scorer/versions/abc123/activate', { method: 'POST' });
+
+  // Compare two versions
+  const diff = await fetch('/api/stored/scorers/my-scorer/versions/compare?from=v1&to=v2');
+  ```
+
+- Added `toModelOutput` support to the agent loop. Tool definitions can now include a `toModelOutput` function that transforms the raw tool result before it's sent to the model, while preserving the raw result in storage. This matches the AI SDK `toModelOutput` convention — the function receives the raw output directly and returns `{ type: 'text', value: string }` or `{ type: 'content', value: ContentPart[] }`. ([#13171](https://github.com/mastra-ai/mastra/pull/13171))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  const weatherTool = createTool({
+    id: 'weather',
+    inputSchema: z.object({ city: z.string() }),
+    execute: async ({ city }) => ({
+      city,
+      temperature: 72,
+      conditions: 'sunny',
+      humidity: 45,
+      raw_sensor_data: [0.12, 0.45, 0.78],
+    }),
+    // The model sees a concise summary instead of the full JSON
+    toModelOutput: output => ({
+      type: 'text',
+      value: `${output.city}: ${output.temperature}°F, ${output.conditions}`,
+    }),
+  });
+  ```
+
+- Added `mastra_workspace_grep` workspace tool for regex-based content search across files. This complements the existing semantic search tool by providing direct pattern matching with support for case-insensitive search, file filtering by extension, context lines, and result limiting. ([#13010](https://github.com/mastra-ai/mastra/pull/13010))
+
+  The tool is automatically available when a workspace has a filesystem configured:
+
+  ```typescript
+  import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+  import { LocalFilesystem } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './my-project' }),
+  });
+
+  // The grep tool is auto-injected and available as:
+  // WORKSPACE_TOOLS.SEARCH.GREP → 'mastra_workspace_grep'
+  ```
+
+- Removed `outputSchema` from workspace tools to return raw text instead of JSON, optimizing for token usage and LLM performance. Structured metadata that was previously returned in tool output is now emitted as `data-workspace-metadata` chunks via `writer.custom()`, keeping it available for UI consumption without passing it to the LLM. Tools are also extracted into individual files and can be imported directly (e.g. `import { readFileTool } from '@mastra/core/workspace'`). ([#13166](https://github.com/mastra-ai/mastra/pull/13166))
+
+### Patch Changes
+
+- dependencies updates: ([#13127](https://github.com/mastra-ai/mastra/pull/13127))
+  - Updated dependency [`hono@^4.11.9` ↗︎](https://www.npmjs.com/package/hono/v/4.11.9) (from `^4.11.3`, in `dependencies`)
+
+- dependencies updates: ([#13167](https://github.com/mastra-ai/mastra/pull/13167))
+  - Updated dependency [`lru-cache@^11.2.6` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.2.6) (from `^11.2.2`, in `dependencies`)
+
+- Export `AnyWorkspace` type from `@mastra/core/workspace` for accepting any Workspace regardless of generic parameters. Updates Agent and Mastra to use `AnyWorkspace` so workspaces with typed mounts/sandbox (e.g. E2BSandbox, GCSFilesystem) are accepted without type errors. ([#13155](https://github.com/mastra-ai/mastra/pull/13155))
+
+- Update provider registry and model documentation with latest models and providers ([`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878))
+
+- Fixed skill processor tools (skill-activate, skill-search, skill-read-reference, skill-read-script, skill-read-asset) being incorrectly suspended for approval when `requireToolApproval: true` is set. These internal tools now bypass the approval check and execute directly. ([#13160](https://github.com/mastra-ai/mastra/pull/13160))
+
+- Fixed a bug where `requestContext` metadata was not propagated to child spans. When using `requestContextKeys`, only root spans were enriched with request context values — child spans (e.g. `agent_run` inside a workflow) were missing them. All spans in a trace are now correctly enriched. Fixes #12818. ([#12819](https://github.com/mastra-ai/mastra/pull/12819))
+
+- Fixed semantic recall search in Mastra Studio returning no results when using non-default embedding dimensions (e.g., fastembed with 384-dim). The SemanticRecall processor now probes the embedder for its actual output dimension, ensuring the vector index name matches between write and read paths. Previously, the processor defaulted to a 1536-dim index name regardless of the actual embedder, causing a mismatch with the dimension-aware index name used by Studio's search. Fixes #13039 ([#13059](https://github.com/mastra-ai/mastra/pull/13059))
+
+- Fixed `CompositeFilesystem` instructions: agents and tools no longer receive an incorrect claim that files written via workspace tools are accessible at sandbox paths. The instructions now accurately describe only the available mounted filesystems. ([#13221](https://github.com/mastra-ai/mastra/pull/13221))
+
+- Fixed onChunk callback to receive raw Mastra chunks instead of AI SDK v5 converted chunks for tool results. Also added missing onChunk calls for tool-error chunks and tool-result chunks in mixed-error scenarios. ([#13243](https://github.com/mastra-ai/mastra/pull/13243))
+
+- Fixed tool execution errors stopping the agentic loop. The agent now continues after tool errors, allowing the model to see the error and retry with corrected arguments. ([#13242](https://github.com/mastra-ai/mastra/pull/13242))
+
+- Fixed conditional rules not being persisted for workflows, agents, and scorers when creating or updating agents in the CMS. Rules configured on these entities are now correctly saved to storage. ([#13044](https://github.com/mastra-ai/mastra/pull/13044))
+
+- Added runtime `requestContext` forwarding to tool executions. ([#13094](https://github.com/mastra-ai/mastra/pull/13094))
+
+  Tools invoked within agentic workflow steps now receive the caller's `requestContext` — including authenticated API clients, feature flags, and user metadata set by middleware. Runtime `requestContext` is preferred over build-time context when both are available.
+
+  **Why:** Previously, `requestContext` values were silently dropped in two places: (1) the workflow loop stream created a new empty `RequestContext` instead of forwarding the caller's, and (2) `createToolCallStep` didn't pass `requestContext` in tool options. This aligns both the agent generate/stream and agentic workflow paths with the agent network path, where `requestContext` was already forwarded correctly.
+
+  **Before:** Tools received an empty `requestContext`, losing all values set by the workflow step.
+
+  ```ts
+  // requestContext with auth data set in workflow step
+  requestContext.set('apiClient', authedClient);
+  // tool receives empty RequestContext — apiClient is undefined
+  ```
+
+  **After:** Pass `requestContext` via `MastraToolInvocationOptions` and tools receive it.
+
+  ```ts
+  // requestContext with auth data flows through to the tool
+  requestContext.set('apiClient', authedClient);
+  // tool receives the same RequestContext — apiClient is available
+  ```
+
+  Fixes #13088
+
+- Fixed tsc out-of-memory crash caused by step-schema.d.ts expanding to 50k lines. Added explicit type annotations to all exported Zod schema constants, reducing declaration output from 49,729 to ~500 lines without changing runtime behavior. ([#13229](https://github.com/mastra-ai/mastra/pull/13229))
+
+- Fixed TypeScript type generation hanging or running out of memory when packages depend on @mastra/core tool types. Changed ZodLikeSchema from a nominal union type to structural typing, which prevents TypeScript from performing deep comparisons of zod v3/v4 type trees during generic inference. ([#13239](https://github.com/mastra-ai/mastra/pull/13239))
+
+- Fixed tool execution errors being emitted as `tool-result` instead of `tool-error` in fullStream. Previously, when a tool's execute function threw an error, the error was caught and returned as a value, causing the stream to emit a `tool-result` chunk containing the error object. Now errors are properly propagated, so the stream emits `tool-error` chunks, allowing consumers (including the `@mastra/ai-sdk` conversion pipeline) to correctly distinguish between successful tool results and failed tool executions. Fixes #13123. ([#13147](https://github.com/mastra-ai/mastra/pull/13147))
+
+- Fixed thread title not being generated for pre-created threads. When threads were created before starting a conversation (e.g., for URL routing or storing metadata), the title stayed as a placeholder because the title generation condition checked whether the thread existed rather than whether it had a title. Threads created without an explicit title now get an empty title instead of a placeholder, and title generation fires whenever a thread has no title. Resolves #13145. ([#13151](https://github.com/mastra-ai/mastra/pull/13151))
+
+- Fixed `inputData` in `dowhile` and `dountil` loop condition functions to be properly typed as the step's output schema instead of `any`. This means you no longer need to manually cast `inputData` in your loop conditions — TypeScript will now correctly infer the type from your step's `outputSchema`. ([#12977](https://github.com/mastra-ai/mastra/pull/12977))
+
+- Migrated MastraCode from the prototype harness to the generic CoreHarness from @mastra/core. The createMastraCode function is now fully configurable with optional parameters for modes, subagents, storage, tools, and more. Removed the deprecated prototype harness implementation. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Fixed the writer object being undefined in processOutputStream, allowing output processors to emit custom events to the stream during chunk processing. This enables use cases like streaming moderation results back to the client. ([#13056](https://github.com/mastra-ai/mastra/pull/13056))
+
+- Fixed sub-agent tool approval resume flow. When a sub-agent tool required approval and was approved, the agent would restart from scratch instead of resuming, causing an infinite loop. The resume data is now correctly passed through for agent tools so they properly resume after approval. ([#13241](https://github.com/mastra-ai/mastra/pull/13241))
+
+- Dataset schemas now appear in the Edit Dataset dialog. Previously the `inputSchema` and `groundTruthSchema` fields were not passed to the dialog, so editing a dataset always showed empty schemas. ([#13175](https://github.com/mastra-ai/mastra/pull/13175))
+
+  Schema edits in the JSON editor no longer cause the cursor to jump to the top of the field. Typing `{"type": "object"}` in the schema editor now behaves like a normal text input instead of resetting on every keystroke.
+
+  Validation errors are now surfaced when updating a dataset schema that conflicts with existing items. For example, adding a `required: ["name"]` constraint when existing items lack a `name` field now shows "2 existing item(s) fail validation" in the dialog instead of silently dropping the error.
+
+  Disabling a dataset schema from the Studio UI now correctly clears it. Previously the server converted `null` (disable) to `undefined` (no change), so the old schema persisted and validation continued.
+
+  Workflow schemas fetched via `client.getWorkflow().getSchema()` are now correctly parsed. The server serializes schemas with `superjson`, but the client was using plain `JSON.parse`, yielding a `{json: {...}}` wrapper instead of the actual JSON Schema object.
+
+- Fixed network mode messages missing metadata for filtering. All internal network messages (sub-agent results, tool execution results, workflow results) now include `metadata.mode: 'network'` in their content metadata, making it possible to filter them from user-facing messages without parsing JSON content. Previously, consumers had to parse the JSON body of each message to check for `isNetwork: true` — now they can simply check `message.content.metadata.mode === 'network'`. Fixes #13106. ([#13144](https://github.com/mastra-ai/mastra/pull/13144))
+
+- Fixed sub-agent memory context pollution that caused 'Exhausted all fallback models' errors when using Observational Memory with sub-agents. The parent agent's memory context is now preserved across sub-agent tool execution. ([#13051](https://github.com/mastra-ai/mastra/pull/13051))
+
+- CMS draft support with status badges for agents. ([#13194](https://github.com/mastra-ai/mastra/pull/13194))
+  - Agent list now resolves the latest (draft) version for each stored agent, showing current edits rather than the last published state.
+  - Added `hasDraft` and `activeVersionId` fields to the agent list API response.
+  - Agent list badges: "Published" (green) when a published version exists, "Draft" (colored when unpublished changes exist, grayed out otherwise).
+  - Added `resolvedVersionId` to all `StorageResolved*Type` types so the server can detect whether the latest version differs from the active version.
+  - Added `status` option to `GetByIdOptions` to allow resolving draft vs published versions through the editor layer.
+  - Fixed editor cache not being cleared on version activate, restore, and delete — all four versioned domains (agents, scorers, prompt-blocks, mcp-clients) now clear the cache after version mutations.
+  - Added `ALTER TABLE` migration for `mastra_agent_versions` in libsql and pg to add newer columns (`mcpClients`, `requestContextSchema`, `workspace`, `skills`, `skillsFormat`).
+
+- Added scorer version management and CMS draft/publish flow for scorers. ([#13194](https://github.com/mastra-ai/mastra/pull/13194))
+  - Added scorer version methods to the client SDK: `listVersions`, `createVersion`, `getVersion`, `activateVersion`, `restoreVersion`, `deleteVersion`, `compareVersions`.
+  - Added `ScorerVersionCombobox` for navigating scorer versions with Published/Draft labels.
+  - Scorer edit page now supports Save (draft) and Publish workflows with an "Unpublished changes" indicator.
+  - Storage list methods for agents and scorers no longer default to filtering only published entities, allowing drafts to appear in the playground.
+
+- Fixed CompositeAuth losing public and protected route configurations from underlying auth providers. Routes marked as public or protected now work correctly when deployed to Mastra Cloud. ([#13086](https://github.com/mastra-ai/mastra/pull/13086))
+
+- Trimmed the agent experiment result `output` to only persist relevant fields instead of the entire `FullOutput` blob. The stored output now contains: `text`, `object`, `toolCalls`, `toolResults`, `sources`, `files`, `usage`, `reasoningText`, `traceId`, and `error`. ([#13158](https://github.com/mastra-ai/mastra/pull/13158))
+
+  Dropped fields like `steps`, `response`, `messages`, `rememberedMessages`, `request`, `providerMetadata`, `warnings`, `scoringData`, `suspendPayload`, and other provider/debugging internals that were duplicated elsewhere or not useful for experiment evaluation.
+
+- Fixed `.branch()` condition receiving `undefined` inputData when resuming a suspended nested workflow after `.map()`. ([#13055](https://github.com/mastra-ai/mastra/pull/13055))
+
+  Previously, when a workflow used `.map()` followed by `.branch()` and a nested workflow inside the branch called `suspend()`, resuming would fail with `TypeError: Cannot read properties of undefined` because the branch conditions were unnecessarily re-evaluated with stale data.
+
+  Resume now skips condition re-evaluation for `.branch()` entries and goes directly to the correct suspended branch, matching the existing behavior for `.parallel()` entries.
+
+  Fixes #12982
+
 ## 1.4.0
 
 ### Minor Changes

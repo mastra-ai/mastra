@@ -233,9 +233,9 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
-      const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
-      expect(result).toBeInstanceOf(MastraError);
-      expect(result.message).toBe('Test error');
+      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
+        MastraError,
+      );
       expect(errorSpy).toHaveBeenCalled();
     }
     errorSpy.mockRestore();

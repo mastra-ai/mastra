@@ -141,6 +141,11 @@ export interface GetByIdOptions {
   versionId?: string;
   /** Retrieve a specific version by number. */
   versionNumber?: number;
+  /** Controls which version is resolved when no versionId/versionNumber is given.
+   *  - `'draft'` — always resolves the latest version.
+   *  - `'published'` (default) — resolves the active version, falling back to latest.
+   */
+  status?: 'draft' | 'published' | 'archived';
 }
 
 // ============================================================================

@@ -114,6 +114,20 @@ export function toQueryParams<T extends Record<string, unknown>>(params: T, flat
   return searchParams.toString();
 }
 
+/**
+ * Parses a JSON string that may have been serialized with superjson.
+ * superjson wraps values as `{json: ..., meta: ...}` — this unwraps to the inner value.
+ * Also handles plain JSON strings for forward compatibility.
+ * @throws {SyntaxError} if `value` is not valid JSON
+ */
+export function parseSuperJsonString(value: string): unknown {
+  const parsed = JSON.parse(value);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'json' in parsed) {
+    return parsed.json;
+  }
+  return parsed;
+}
+
 export function parseClientRequestContext(requestContext?: RequestContext | Record<string, any>) {
   if (requestContext) {
     if (requestContext instanceof RequestContext) {
