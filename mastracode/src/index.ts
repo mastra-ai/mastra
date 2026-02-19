@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
-import type { HarnessSubagent } from '@mastra/core/harness';
+import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { noopLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
 
@@ -35,14 +35,37 @@ import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
 
-export function createMastraCode() {
+export interface MastraCodeConfig {
+	/** Working directory for project detection. Default: process.cwd() */
+	cwd?: string;
+	/** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
+	modes?: HarnessMode[];
+	/** Override or extend subagent definitions. Default: explore/plan/execute */
+	subagents?: HarnessSubagent[];
+	/** Extra tools merged into the dynamic tool set */
+	extraTools?: Record<string, any>;
+	/** Custom storage config instead of auto-detected LibSQL */
+	storage?: { url: string; authToken?: string };
+	/** Initial state overrides (yolo, thinkingLevel, etc.) */
+	initialState?: Record<string, unknown>;
+	/** Override heartbeat handlers. Default: gateway-sync */
+	heartbeatHandlers?: HeartbeatHandler[];
+	/** Disable MCP server discovery. Default: false */
+	disableMcp?: boolean;
+	/** Disable hooks. Default: false */
+	disableHooks?: boolean;
+}
+
+export function createMastraCode(config?: MastraCodeConfig) {
+	const cwd = config?.cwd ?? process.cwd();
+
 	// Auth storage (shared with Claude Max / OpenAI providers and Harness)
 	const authStorage = new AuthStorage();
 	setAuthStorage(authStorage);
 	setOpenAIAuthStorage(authStorage);
 
 	// Project detection
-	const project = detectProject(process.cwd());
+	const project = detectProject(cwd);
 
 	const resourceIdOverride = getResourceIdOverride(project.rootPath);
 	if (resourceIdOverride) {
@@ -60,7 +83,7 @@ export function createMastraCode() {
 	console.info('--------------------------------');
 
 	// Storage
-	const storageConfig = getStorageConfig(project.rootPath);
+	const storageConfig = config?.storage ?? getStorageConfig(project.rootPath);
 	const storage = new LibSQLStore({
 		id: 'mastra-code-storage',
 		url: storageConfig.url,
@@ -70,7 +93,7 @@ export function createMastraCode() {
 	const memory = getDynamicMemory(storage);
 
 	// MCP
-	const mcpManager = new MCPManager(project.rootPath);
+	const mcpManager = config?.disableMcp ? undefined : new MCPManager(project.rootPath);
 
 	// Agent
 	const codeAgentInstance = new Agent({
@@ -90,9 +113,9 @@ export function createMastraCode() {
 	const codeAgent = mastraInstance.getAgent('codeAgentInstance');
 
 	// Hooks
-	const hookManager = new HookManager(project.rootPath, 'session-init');
+	const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
 
-	if (hookManager.hasHooks()) {
+	if (hookManager?.hasHooks()) {
 		const hookConfig = hookManager.getConfig();
 		const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
 		console.info(`Hooks: ${hookCount} hook(s) configured`);
@@ -111,7 +134,7 @@ export function createMastraCode() {
 		find_files: globTool,
 	};
 
-	const subagents: HarnessSubagent[] = [
+	const defaultSubagents: HarnessSubagent[] = [
 		{
 			id: exploreSubagent.id,
 			name: exploreSubagent.name,
@@ -145,13 +168,46 @@ export function createMastraCode() {
 		},
 	];
 
+	const defaultModes: HarnessMode[] = [
+		{
+			id: 'build',
+			name: 'Build',
+			default: true,
+			defaultModelId: 'anthropic/claude-opus-4-6',
+			color: mastra.purple,
+			agent: codeAgent,
+		},
+		{
+			id: 'plan',
+			name: 'Plan',
+			defaultModelId: 'openai/gpt-5.2-codex',
+			color: mastra.blue,
+			agent: codeAgent,
+		},
+		{
+			id: 'fast',
+			name: 'Fast',
+			defaultModelId: 'cerebras/zai-glm-4.7',
+			color: mastra.green,
+			agent: codeAgent,
+		},
+	];
+
+	const defaultHeartbeatHandlers: HeartbeatHandler[] = [
+		{
+			id: 'gateway-sync',
+			intervalMs: 5 * 60 * 1000,
+			handler: () => syncGateways(),
+		},
+	];
+
 	const harness = new Harness({
 		id: 'mastra-code',
 		resourceId: project.resourceId,
 		storage,
 		memory,
 		stateSchema,
-		subagents,
+		subagents: config?.subagents ?? defaultSubagents,
 		resolveModel,
 		toolCategoryResolver: getToolCategory,
 		initialState: {
@@ -159,39 +215,11 @@ export function createMastraCode() {
 			projectName: project.name,
 			gitBranch: project.gitBranch,
 			yolo: true,
+			...config?.initialState,
 		},
 		workspace: getDynamicWorkspace,
-		modes: [
-			{
-				id: 'build',
-				name: 'Build',
-				default: true,
-				defaultModelId: 'anthropic/claude-opus-4-6',
-				color: mastra.purple,
-				agent: codeAgent,
-			},
-			{
-				id: 'plan',
-				name: 'Plan',
-				defaultModelId: 'openai/gpt-5.2-codex',
-				color: mastra.blue,
-				agent: codeAgent,
-			},
-			{
-				id: 'fast',
-				name: 'Fast',
-				defaultModelId: 'cerebras/zai-glm-4.7',
-				color: mastra.green,
-				agent: codeAgent,
-			},
-		],
-		heartbeatHandlers: [
-			{
-				id: 'gateway-sync',
-				intervalMs: 5 * 60 * 1000,
-				handler: () => syncGateways(),
-			},
-		],
+		modes: config?.modes ?? defaultModes,
+		heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
 		modelAuthChecker: provider => {
 			const providerToOAuthId: Record<string, string> = {
 				anthropic: 'anthropic',
