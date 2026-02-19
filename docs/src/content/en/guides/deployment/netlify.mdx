@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Deploy Mastra to Netlify
 
-Use `@mastra/deployer-netlify` to deploy your Mastra server as serverless functions on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/#netlifyv1functions), ready to deploy.
+Use `@mastra/deployer-netlify` to deploy your Mastra server on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/), ready to deploy. You can deploy as serverless functions (default) or as [edge functions](https://docs.netlify.com/build/edge-functions/overview/) for lower latency and longer execution times.
 
 :::info
 This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
@@ -40,6 +40,21 @@ export const mastra = new Mastra({
   deployer: new NetlifyDeployer(),
 });
 ```
+
+To deploy as edge functions instead, pass `{ target: 'edge' }`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    target: "edge",
+  }),
+});
+```
+
+Edge functions run on Deno at the edge closest to your users. They have no hard execution timeout (only a CPU time limit), making them a better fit for longer-running AI workflows. See the [constructor options](/reference/deployer/netlify#constructor-options) for details.
 
 Create a `netlify.toml` file with the following contents in your project root:
 
