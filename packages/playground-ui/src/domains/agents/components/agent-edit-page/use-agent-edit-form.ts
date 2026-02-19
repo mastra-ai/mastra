@@ -60,6 +60,8 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       scorers: initialValues?.scorers ?? {},
       variables: initialValues?.variables ?? {},
       instructionBlocks: initialValues?.instructionBlocks ?? [createInstructionBlock()],
+      mcpClients: initialValues?.mcpClients ?? [],
+      mcpClientsToDelete: [],
     },
   });
 

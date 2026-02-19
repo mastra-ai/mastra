@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -22,7 +22,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@microsoft/api-extractor": "^7.55.2",
+    "@microsoft/api-extractor": "^7.56.3",
     "globby": "^14.1.0",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",

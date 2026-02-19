@@ -33,6 +33,27 @@ export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: b
         ad_personalization: 'granted',
       })
       return
+    }
+
+    const existingConsent = localStorage.getItem('cookie-consent')
+    if (existingConsent === 'true') {
+      setShowBanner(false)
+      onConsentChange(true)
+      window.gtag?.('consent', 'update', {
+        analytics_storage: 'granted',
+        ad_storage: 'granted',
+        ad_user_data: 'granted',
+        ad_personalization: 'granted',
+      })
+    } else if (existingConsent === 'false') {
+      setShowBanner(false)
+      onConsentChange(false)
+      window.gtag?.('consent', 'update', {
+        analytics_storage: 'denied',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+      })
     } else {
       setShowBanner(true)
     }

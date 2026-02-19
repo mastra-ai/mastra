@@ -645,6 +645,64 @@ describe('SkillsProcessor', () => {
     });
   });
 
+  describe('needsApprovalFn on skill tools', () => {
+    it('should set needsApprovalFn that returns false on skill-activate and skill-search', async () => {
+      const result = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      const activateTool = result.tools['skill-activate'] as any;
+      expect(activateTool.needsApprovalFn).toBeDefined();
+      expect(activateTool.needsApprovalFn()).toBe(false);
+
+      const searchTool = result.tools['skill-search'] as any;
+      expect(searchTool.needsApprovalFn).toBeDefined();
+      expect(searchTool.needsApprovalFn()).toBe(false);
+    });
+
+    it('should set needsApprovalFn that returns false on skill-read-* tools after activation', async () => {
+      // Activate a skill first
+      const result1 = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+      const activateTool = result1.tools['skill-activate'] as any;
+      await activateTool.execute({ name: 'code-review' });
+
+      // Process again to get read tools
+      mockMessageList.addSystem.mockClear();
+      const result2 = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      const refTool = result2.tools['skill-read-reference'] as any;
+      expect(refTool.needsApprovalFn).toBeDefined();
+      expect(refTool.needsApprovalFn()).toBe(false);
+
+      const scriptTool = result2.tools['skill-read-script'] as any;
+      expect(scriptTool.needsApprovalFn).toBeDefined();
+      expect(scriptTool.needsApprovalFn()).toBe(false);
+
+      const assetTool = result2.tools['skill-read-asset'] as any;
+      expect(assetTool.needsApprovalFn).toBeDefined();
+      expect(assetTool.needsApprovalFn()).toBe(false);
+    });
+
+    it('should not expose skill-read-* tools when no skills are activated', async () => {
+      const result = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      // Read tools should not exist when no skills are activated
+      expect(result.tools['skill-read-reference']).toBeUndefined();
+      expect(result.tools['skill-read-script']).toBeUndefined();
+      expect(result.tools['skill-read-asset']).toBeUndefined();
+    });
+  });
+
   describe('model calls skill name directly as tool (issue #12654)', () => {
     it('should NOT expose skill names as callable tools', async () => {
       // This test verifies that skill names are NOT available as tools

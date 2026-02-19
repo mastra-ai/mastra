@@ -92,13 +92,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-    // Config field names from StorageMCPClientSnapshotType
-    const configFieldNames = ['name', 'description', 'servers'];
-
-    // Check if any config fields are present in the update
-    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+    const { authorId, activeVersionId, metadata, status } = updates;
 
     // Update metadata fields on the record
     const updatedConfig: StorageMCPClientType = {
@@ -111,60 +105,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
       }),
       updatedAt: new Date(),
     };
-
-    // Auto-set status to 'published' when activeVersionId is set, only if status is not explicitly provided
-    if (activeVersionId !== undefined && status === undefined) {
-      updatedConfig.status = 'published';
-    }
-
-    // If config fields are being updated, create a new version
-    if (hasConfigUpdate) {
-      // Get the latest version to use as base
-      const latestVersion = await this.getLatestVersion(id);
-      if (!latestVersion) {
-        throw new Error(`No versions found for MCP client ${id}`);
-      }
-
-      // Extract config from latest version
-      const {
-        id: _versionId,
-        mcpClientId: _mcpClientId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...latestConfig
-      } = latestVersion;
-
-      // Merge updates into latest config
-      const newConfig = {
-        ...latestConfig,
-        ...configFields,
-      };
-
-      // Identify which fields changed
-      const changedFields = configFieldNames.filter(
-        field =>
-          field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-      );
-
-      // Only create a new version if something actually changed
-      if (changedFields.length > 0) {
-        const newVersionId = crypto.randomUUID();
-        const newVersionNumber = latestVersion.versionNumber + 1;
-
-        await this.createVersion({
-          id: newVersionId,
-          mcpClientId: id,
-          versionNumber: newVersionNumber,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
-    }
 
     // Save the updated record
     this.db.mcpClients.set(id, updatedConfig);
@@ -180,7 +120,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryMCPClientsStorage: list called`);
@@ -200,6 +140,11 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
 
     // Get all MCP clients and apply filters
     let configs = Array.from(this.db.mcpClients.values());
+
+    // Filter by status
+    if (status) {
+      configs = configs.filter(config => config.status === status);
+    }
 
     // Filter by authorId if provided
     if (authorId !== undefined) {
