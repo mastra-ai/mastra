@@ -78,6 +78,7 @@ export {
   DatasetsPG,
   ExperimentsPG,
   MCPClientsPG,
+  MCPServersPG,
   MemoryPG,
   ObservabilityPG,
   PromptBlocksPG,
