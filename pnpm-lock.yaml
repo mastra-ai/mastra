@@ -2534,7 +2534,7 @@ importers:
         specifier: ^7.0.3
         version: 7.0.3
       p-retry:
-        specifier: ^7.1.0
+        specifier: ^7.1.1
         version: 7.1.1
       picomatch:
         specifier: ^4.0.3
