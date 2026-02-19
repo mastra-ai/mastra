@@ -29,7 +29,7 @@ import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
 
 import type { MountManager } from './mount-manager';
-import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
+import type { CommandResult, ExecuteCommandOptions, SandboxInfo, SandboxProcessManager } from './types';
 
 // =============================================================================
 // Sandbox Interface
@@ -80,12 +80,36 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Execute a shell command.
+   * Execute a shell command and wait for it to complete.
    * Optional - if not implemented, the workspace_execute_command tool won't be available.
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  // ---------------------------------------------------------------------------
+  // Background Process Management (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Background process manager.
+   * Optional - if not implemented, background process tools won't be available.
+   *
+   * Provides methods to spawn long-running processes, list them, and interact
+   * with them via their {@link CommandHandle} (kill, sendStdin, wait, read output).
+   *
+   * @example
+   * ```typescript
+   * const handle = await sandbox.processes.spawn('node', ['server.js']);
+   * console.log(handle.pid);
+   *
+   * const procs = await sandbox.processes.list();
+   * const proc = sandbox.processes.get(handle.pid);
+   * await proc?.sendStdin('hello\n');
+   * await proc?.kill();
+   * ```
+   */
+  readonly processes?: SandboxProcessManager;
 
   // ---------------------------------------------------------------------------
   // Mounting Support (Optional)

@@ -79,6 +79,94 @@ export interface ExecuteCommandOptions {
 }
 
 // =============================================================================
+// Spawn Options
+// =============================================================================
+
+export interface SpawnProcessOptions {
+  /** Environment variables */
+  env?: NodeJS.ProcessEnv;
+  /** Working directory */
+  cwd?: string;
+}
+
+// =============================================================================
+// Background Process Types
+// =============================================================================
+
+/**
+ * Handle to a spawned background process.
+ * Returned by {@link SandboxProcessManager.spawn}.
+ * Provides methods to interact with the running process.
+ */
+export interface CommandHandle {
+  /** Process ID of the running command */
+  readonly pid: number;
+  /** Accumulated stdout so far */
+  readonly stdout: string;
+  /** Accumulated stderr so far */
+  readonly stderr: string;
+  /** Exit code, undefined while the process is still running */
+  readonly exitCode: number | undefined;
+  /** Wait for the command to finish and return the result */
+  wait(): Promise<CommandResult>;
+  /** Kill the running command (SIGKILL). Returns true if killed, false if not found. */
+  kill(): Promise<boolean>;
+  /** Send data to the command's stdin */
+  sendStdin(data: string): Promise<void>;
+}
+
+/**
+ * Info about a tracked background process.
+ * Returned by {@link SandboxProcessManager.list}.
+ */
+export interface ProcessInfo {
+  /** Process ID */
+  pid: number;
+  /** The command that was executed */
+  command: string;
+  /** Arguments passed to the command */
+  args: string[];
+  /** Whether the process is still running */
+  running: boolean;
+  /** Exit code if the process has finished */
+  exitCode?: number;
+  /** Accumulated stdout */
+  stdout: string;
+  /** Accumulated stderr */
+  stderr: string;
+}
+
+// =============================================================================
+// Process Manager
+// =============================================================================
+
+/**
+ * Background process manager for a sandbox.
+ *
+ * Provides methods to spawn, list, and retrieve background processes.
+ * Accessible via `sandbox.processes` when the sandbox supports background execution.
+ *
+ * @example
+ * ```typescript
+ * const handle = await sandbox.processes.spawn('node', ['server.js']);
+ * console.log(handle.pid, handle.stdout);
+ *
+ * const all = await sandbox.processes.list();
+ * const proc = sandbox.processes.get(handle.pid);
+ * await proc?.sendStdin('input\n');
+ * await proc?.kill();
+ * ```
+ */
+export interface SandboxProcessManager {
+  /** Spawn a background process. Returns a handle to interact with it. */
+  spawn(command: string, args?: string[], options?: SpawnProcessOptions): Promise<CommandHandle>;
+  /** List all tracked background processes. */
+  list(): Promise<ProcessInfo[]>;
+  /** Get a handle to a background process by PID. Returns undefined if not found. */
+  get(pid: number): CommandHandle | undefined;
+}
+
+// =============================================================================
 // Sandbox Info
 // =============================================================================
 
