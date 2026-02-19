@@ -29,7 +29,7 @@ import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
 
 import type { MountManager } from './mount-manager';
-import type { SandboxProcessManager } from './processes';
+import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================

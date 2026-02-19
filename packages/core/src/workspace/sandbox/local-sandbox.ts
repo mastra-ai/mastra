@@ -21,7 +21,7 @@ import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import { LocalProcessManager } from './processes';
+import { LocalProcessManager } from './process-manager';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {

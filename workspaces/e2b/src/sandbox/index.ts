@@ -27,7 +27,7 @@ import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
-import { E2BProcessManager } from './processes';
+import { E2BProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
