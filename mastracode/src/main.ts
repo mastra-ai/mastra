@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Main entry point for Mastra Code TUI.
  */

@@ -351,8 +351,8 @@ export class MastraTUI {
     });
     // Ctrl+Y - toggle YOLO mode
     this.editor.onAction('toggleYolo', () => {
-      const current = this.harness.getYoloMode();
-      this.harness.setYoloMode(!current);
+      const current = (this.harness.getState() as any).yolo === true;
+      this.harness.setState({ yolo: !current } as any);
       this.updateStatusLine();
       this.showInfo(current ? 'YOLO mode off' : 'YOLO mode on');
     });
@@ -777,7 +777,7 @@ ${instructions}`,
     }
 
     // --- Helper to style the model ID ---
-    const isYolo = this.harness.getYoloMode();
+    const isYolo = (this.harness.getState() as any).yolo === true;
     const styleModelId = (id: string): string => {
       if (!this.modelAuthStatus.hasAuth) {
         const envVar = this.modelAuthStatus.apiKeyEnvVar;
@@ -1944,7 +1944,7 @@ ${instructions}`,
         } else if (action.type === 'always_allow_category') {
           this.harness.resolveToolApprovalDecision('always_allow_category');
         } else if (action.type === 'yolo') {
-          this.harness.setYoloMode(true);
+          this.harness.setState({ yolo: true } as any);
           this.harness.resolveToolApprovalDecision('approve');
           this.updateStatusLine();
         } else {
@@ -3248,7 +3248,7 @@ ${instructions}`,
     const { TOOL_CATEGORIES, getToolsForCategory } = await import('../permissions.js');
     const rules = this.harness.getPermissionRules();
     const grants = this.harness.getSessionGrants();
-    const isYolo = this.harness.getYoloMode();
+    const isYolo = (this.harness.getState() as any).yolo === true;
 
     const lines: string[] = [];
     lines.push('Tool Approval Permissions');
@@ -3301,7 +3301,7 @@ ${instructions}`,
     const state = this.harness.getState() as any;
     const config = {
       notifications: (state?.notifications ?? 'off') as NotificationMode,
-      yolo: this.harness.getYoloMode(),
+      yolo: (this.harness.getState() as any).yolo === true,
       thinkingLevel: this.harness.getThinkingLevel(),
       escapeAsCancel: this.editor.escapeEnabled,
     };
@@ -3313,7 +3313,7 @@ ${instructions}`,
           this.showInfo(`Notifications: ${mode}`);
         },
         onYoloChange: enabled => {
-          this.harness.setYoloMode(enabled);
+          this.harness.setState({ yolo: enabled } as any);
           this.updateStatusLine();
         },
         onThinkingLevelChange: async level => {
@@ -3623,8 +3623,8 @@ ${modeList}`);
         return true;
       }
       case 'yolo': {
-        const current = this.harness.getYoloMode();
-        this.harness.setYoloMode(!current);
+        const current = (this.harness.getState() as any).yolo === true;
+        this.harness.setState({ yolo: !current } as any);
         this.showInfo(!current ? 'YOLO mode ON — tools auto-approved' : 'YOLO mode OFF — tools require approval');
         this.updateStatusLine();
         return true;
