@@ -329,7 +329,7 @@ jobs:
         shell: bash
 
       - name: Build
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./mastracode" build
 
       - name: Run Changeset Pre Exit
         run: pnpm changeset-cli pre exit
