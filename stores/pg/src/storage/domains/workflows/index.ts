@@ -7,6 +7,8 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -315,6 +317,71 @@ export class WorkflowsPG extends WorkflowsStorage {
           details: {
             runId,
             workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_WORKFLOW_SNAPSHOT,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      // Build WHERE clause
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      // Date filter - delete workflow runs created before this date
+      conditions.push(`"createdAt" < $${paramIndex++}`);
+      params.push(args.beforeDate);
+
+      // Optional filters
+      if (args.filters?.workflowName !== undefined) {
+        conditions.push(`workflow_name = $${paramIndex++}`);
+        params.push(args.filters.workflowName);
+      }
+
+      if (args.filters?.status !== undefined) {
+        // Use regexp_replace to handle problematic Unicode sequences (same as listWorkflowRuns)
+        conditions.push(
+          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex++}`,
+        );
+        params.push(args.filters.status);
+      }
+
+      if (args.filters?.resourceId !== undefined) {
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        if (hasResourceId) {
+          conditions.push(`"resourceId" = $${paramIndex++}`);
+          params.push(args.filters.resourceId);
+        } else {
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+        }
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const result = await this.#db.client.query(`DELETE FROM ${tableName} WHERE ${whereClause}`, params);
+
+      return {
+        deletedCount: result.rowCount ?? 0,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
           },
         },
         error,

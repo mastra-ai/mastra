@@ -6,6 +6,8 @@ import {
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -449,6 +451,90 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    this.logger.debug('Deleting workflow runs older than', { beforeDate: args.beforeDate, filters: args.filters });
+
+    try {
+      // Scan all workflow snapshots and filter client-side
+      const itemsToDelete: { workflow_name: string; run_id: string }[] = [];
+      let cursor: string | null = null;
+      const DYNAMODB_PAGE_SIZE = 100;
+
+      do {
+        const pageResults: { data: WorkflowSnapshotDBItem[]; cursor: string | null } =
+          await this.service.entities.workflow_snapshot.scan.go({
+            limit: DYNAMODB_PAGE_SIZE,
+            cursor,
+          });
+
+        if (pageResults.data && pageResults.data.length > 0) {
+          for (const item of pageResults.data) {
+            // Check date filter
+            const createdAt = new Date(item.createdAt);
+            if (createdAt >= args.beforeDate) {
+              continue;
+            }
+
+            // Check optional filters
+            if (args.filters?.workflowName !== undefined && item.workflow_name !== args.filters.workflowName) {
+              continue;
+            }
+
+            if (args.filters?.resourceId !== undefined && item.resourceId !== args.filters.resourceId) {
+              continue;
+            }
+
+            if (args.filters?.status !== undefined) {
+              const snapshot = item.snapshot;
+              if (!snapshot || snapshot.status !== args.filters.status) {
+                continue;
+              }
+            }
+
+            itemsToDelete.push({
+              workflow_name: item.workflow_name,
+              run_id: item.run_id,
+            });
+          }
+        }
+
+        cursor = pageResults.cursor;
+      } while (cursor);
+
+      if (itemsToDelete.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Delete matching items
+      for (const item of itemsToDelete) {
+        await this.service.entities.workflow_snapshot
+          .delete({
+            entity: 'workflow_snapshot',
+            workflow_name: item.workflow_name,
+            run_id: item.run_id,
+          })
+          .go();
+      }
+
+      return { deletedCount: itemsToDelete.length };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

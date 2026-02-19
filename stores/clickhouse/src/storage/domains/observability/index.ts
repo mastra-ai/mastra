@@ -19,6 +19,8 @@ import type {
   BatchUpdateSpansArgs,
   BatchCreateSpansArgs,
   CreateSpanArgs,
+  DeleteTracesOlderThanArgs,
+  DeleteTracesOlderThanResponse,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -778,6 +780,78 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           id: createStorageErrorId('CLICKHOUSE', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
+    try {
+      // Build WHERE clause conditions
+      const conditions: string[] = [];
+      const params: Record<string, any> = {};
+
+      // Date filter - delete traces where root span was created before this date
+      // ClickHouse uses DateTime64(3) which stores milliseconds
+      conditions.push('createdAt < {beforeDate:DateTime64(3)}');
+      params.beforeDate = args.beforeDate.getTime();
+
+      // Only match root spans (parentSpanId is empty string in ClickHouse for NULL)
+      conditions.push("parentSpanId = ''");
+
+      // Optional filters
+      if (args.filters?.entityType !== undefined) {
+        conditions.push('entityType = {entityType:String}');
+        params.entityType = args.filters.entityType;
+      }
+      if (args.filters?.entityId !== undefined) {
+        conditions.push('entityId = {entityId:String}');
+        params.entityId = args.filters.entityId;
+      }
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push('organizationId = {organizationId:String}');
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.environment !== undefined) {
+        conditions.push('environment = {environment:String}');
+        params.environment = args.filters.environment;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // First, find trace IDs of root spans matching the criteria
+      const traceIdsResult = await this.client.query({
+        query: `SELECT DISTINCT traceId FROM ${TABLE_SPANS} WHERE ${whereClause}`,
+        query_params: params,
+        format: 'JSONEachRow',
+      });
+
+      const traceIds = (await traceIdsResult.json<{ traceId: string }[]>()).map(row => row.traceId);
+
+      if (traceIds.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Delete all spans belonging to those traces
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_SPANS} WHERE traceId IN {traceIds:Array(String)}`,
+        query_params: { traceIds },
+      });
+
+      return {
+        deletedCount: traceIds.length,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_TRACES_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

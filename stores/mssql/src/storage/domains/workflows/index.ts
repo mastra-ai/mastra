@@ -7,11 +7,15 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
   CreateIndexOptions,
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -450,6 +454,57 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           details: {
             runId,
             workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+    try {
+      await transaction.begin();
+      const request = new sql.Request(transaction);
+      request.input('beforeDate', args.beforeDate);
+
+      const conditions: string[] = ['"createdAt" < @beforeDate'];
+
+      if (args.filters?.workflowName !== undefined) {
+        request.input('workflowName', args.filters.workflowName);
+        conditions.push('workflow_name = @workflowName');
+      }
+      if (args.filters?.resourceId !== undefined) {
+        request.input('resourceId', args.filters.resourceId);
+        conditions.push('"resourceId" = @resourceId');
+      }
+      if (args.filters?.status !== undefined) {
+        request.input('status', args.filters.status);
+        conditions.push("JSON_VALUE(snapshot, '$.status') = @status");
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const result = await request.query(`DELETE FROM ${table} WHERE ${whereClause}`);
+      await transaction.commit();
+
+      return { deletedCount: result.rowsAffected?.[0] ?? 0 };
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
           },
         },
         error,

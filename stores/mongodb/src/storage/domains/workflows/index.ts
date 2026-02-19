@@ -7,6 +7,8 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -329,6 +331,52 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+
+      // Build query for workflow runs matching the criteria
+      const query: Record<string, any> = {
+        createdAt: { $lt: args.beforeDate },
+      };
+
+      // Optional filters
+      if (args.filters?.workflowName !== undefined) {
+        query.workflow_name = args.filters.workflowName;
+      }
+
+      if (args.filters?.status !== undefined) {
+        query['snapshot.status'] = args.filters.status;
+      }
+
+      if (args.filters?.resourceId !== undefined) {
+        query.resourceId = args.filters.resourceId;
+      }
+
+      // Delete the matching records
+      const result = await collection.deleteMany(query);
+
+      return {
+        deletedCount: result.deletedCount ?? 0,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

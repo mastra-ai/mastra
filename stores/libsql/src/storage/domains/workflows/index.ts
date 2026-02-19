@@ -1,6 +1,8 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -342,6 +344,51 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }, 'deleteWorkflowRunById');
   }
 
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    return this.executeWithRetry(async () => {
+      try {
+        const params: InValue[] = [args.beforeDate.toISOString()];
+        const conditions: string[] = ['"createdAt" < ?'];
+
+        if (args.filters?.workflowName !== undefined) {
+          params.push(args.filters.workflowName);
+          conditions.push('workflow_name = ?');
+        }
+        if (args.filters?.resourceId !== undefined) {
+          params.push(args.filters.resourceId);
+          conditions.push('"resourceId" = ?');
+        }
+        if (args.filters?.status !== undefined) {
+          params.push(args.filters.status);
+          conditions.push("json_extract(snapshot, '$.status') = ?");
+        }
+
+        const whereClause = conditions.join(' AND ');
+        const result = await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+          args: params,
+        });
+
+        return { deletedCount: result.rowsAffected };
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              beforeDate: args.beforeDate.toISOString(),
+              filters: JSON.stringify(args.filters),
+            },
+          },
+          error,
+        );
+      }
+    }, 'deleteWorkflowRunsOlderThan');
+  }
+
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -420,5 +467,74 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         error,
       );
     }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    return this.executeWithRetry(async () => {
+      try {
+        // Build WHERE clause conditions
+        const conditions: string[] = [];
+        const sqlArgs: InValue[] = [];
+
+        // Date filter - delete workflow runs created before this date
+        conditions.push('createdAt < ?');
+        sqlArgs.push(args.beforeDate.toISOString());
+
+        // Optional filters
+        if (args.filters?.workflowName !== undefined) {
+          conditions.push('workflow_name = ?');
+          sqlArgs.push(args.filters.workflowName);
+        }
+
+        if (args.filters?.status !== undefined) {
+          conditions.push("json_extract(snapshot, '$.status') = ?");
+          sqlArgs.push(args.filters.status);
+        }
+
+        if (args.filters?.resourceId !== undefined) {
+          conditions.push('resourceId = ?');
+          sqlArgs.push(args.filters.resourceId);
+        }
+
+        const whereClause = conditions.join(' AND ');
+
+        // First count the records to be deleted
+        const countResult = await this.#client.execute({
+          sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+          args: sqlArgs,
+        });
+
+        const deletedCount = Number(countResult.rows[0]?.count || 0);
+
+        if (deletedCount === 0) {
+          return { deletedCount: 0 };
+        }
+
+        // Delete the records
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+          args: sqlArgs,
+        });
+
+        return {
+          deletedCount,
+        };
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              beforeDate: args.beforeDate.toISOString(),
+              filters: JSON.stringify(args.filters),
+            },
+          },
+          error,
+        );
+      }
+    }, 'deleteWorkflowRunsOlderThan');
   }
 }
