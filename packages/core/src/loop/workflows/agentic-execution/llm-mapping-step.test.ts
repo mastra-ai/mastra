@@ -578,7 +578,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
     expect(msg.content.parts[0].providerExecuted).toBe(true);
   });
 
-  it('should still emit stream chunks for provider-executed tools even though they are excluded from messageList', async () => {
+  it('should emit stream chunks for provider-executed tools even though they are excluded from the client tool-result message', async () => {
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
