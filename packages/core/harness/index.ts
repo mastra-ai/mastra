@@ -1,0 +1,25 @@
+export { Harness } from '../src/harness/harness';
+export { askUserTool, parseSubagentMeta, submitPlanTool } from '../src/harness/tools';
+export type {
+    AvailableModel,
+    HarnessConfig,
+    HarnessEvent,
+    HarnessEventListener,
+    HarnessMessage,
+    HarnessMessageContent,
+    HarnessMode,
+    HarnessOMConfig,
+    HarnessRequestContext,
+    HarnessSession,
+    HarnessStateSchema,
+    HarnessSubagent,
+    HarnessThread,
+    HeartbeatHandler,
+    ModelAuthChecker,
+    ModelAuthStatus,
+    ModelUseCountProvider,
+    PermissionPolicy,
+    PermissionRules,
+    ToolCategory,
+    TokenUsage,
+} from '../src/harness/types';

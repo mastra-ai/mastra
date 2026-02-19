@@ -1,24 +1,47 @@
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { noopLogger } from '@mastra/core/logger';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core"
+import { Agent } from "@mastra/core/agent"
+import { Harness } from "@mastra/core/harness"
+import type { HarnessSubagent } from "@mastra/core/harness"
+import { noopLogger } from "@mastra/core/logger"
+import { LibSQLStore } from "@mastra/libsql"
 
-import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory, omState } from './agents/memory.js';
-import { getDynamicModel } from './agents/model.js';
-import { createDynamicTools } from './agents/tools.js';
-import { getDynamicWorkspace } from './agents/workspace.js';
-import { AuthStorage } from './auth/storage.js';
-import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from './constants.js';
-import { Harness } from './harness/harness.js';
-import { HookManager } from './hooks/index.js';
-import { MCPManager } from './mcp/index.js';
-import { setAuthStorage } from './providers/claude-max.js';
-import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
-import { stateSchema } from './schema.js';
-import { mastra } from './tui/theme.js';
-import { syncGateways } from './utils/gateway-sync.js';
-import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
+import { getDynamicInstructions } from "./agents/instructions.js"
+import { getDynamicMemory } from "./agents/memory.js"
+import { getDynamicModel, resolveModel } from "./agents/model.js"
+import { createDynamicTools } from "./agents/tools.js"
+import { exploreSubagent } from "./agents/subagents/explore.js"
+import { planSubagent } from "./agents/subagents/plan.js"
+import { executeSubagent } from "./agents/subagents/execute.js"
+import { getDynamicWorkspace } from "./agents/workspace.js"
+import { AuthStorage } from "./auth/storage.js"
+import { HookManager } from "./hooks/index.js"
+import { MCPManager } from "./mcp/index.js"
+import { getToolCategory } from "./permissions.js"
+import {
+	setAuthStorage,
+} from "./providers/claude-max.js"
+import {
+	setAuthStorage as setOpenAIAuthStorage,
+} from "./providers/openai-codex.js"
+import { stateSchema } from "./schema.js"
+import {
+	createViewTool,
+	createGrepTool,
+	createGlobTool,
+	createExecuteCommandTool,
+	createWriteFileTool,
+	stringReplaceLspTool,
+	todoWriteTool,
+	todoCheckTool,
+} from "./tools/index.js"
+import { mastra } from "./tui/theme.js"
+import { syncGateways } from "./utils/gateway-sync.js"
+import {
+	detectProject,
+	getStorageConfig,
+	getUserId,
+	getResourceIdOverride,
+} from "./utils/project.js"
 
 export function createMastraCode() {
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
@@ -26,9 +49,8 @@ export function createMastraCode() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
 
-  // Project detection
-  const project = detectProject(process.cwd());
-  const autoDetectedResourceId = project.resourceId;
+	// Project detection
+	const project = detectProject(process.cwd())
 
   const resourceIdOverride = getResourceIdOverride(project.rootPath);
   if (resourceIdOverride) {
@@ -58,23 +80,22 @@ export function createMastraCode() {
   // MCP
   const mcpManager = new MCPManager(project.rootPath);
 
-  // Agent
-  const codeAgent = new Agent({
-    id: 'code-agent',
-    name: 'Code Agent',
-    instructions: getDynamicInstructions,
-    model: getDynamicModel,
-    memory,
-    workspace: getDynamicWorkspace,
-    tools: createDynamicTools(mcpManager),
-  });
+	// Agent
+	const codeAgentInstance = new Agent({
+		id: "code-agent",
+		name: "Code Agent",
+		instructions: getDynamicInstructions,
+		model: getDynamicModel,
+		tools: createDynamicTools(mcpManager),
+	})
 
-  const mastraInstance = new Mastra({
-    agents: { codeAgent },
-    storage,
-  });
-  mastraInstance.getLogger = () => noopLogger as any;
-  codeAgent.__setLogger(noopLogger);
+	const mastraInstance = new Mastra({
+		agents: { codeAgentInstance },
+		logger: noopLogger,
+		storage,
+	})
+
+	const codeAgent = mastraInstance.getAgent("code-agent")
 
   // Hooks
   const hookManager = new HookManager(project.rootPath, 'session-init');
@@ -85,77 +106,118 @@ export function createMastraCode() {
     console.info(`Hooks: ${hookCount} hook(s) configured`);
   }
 
-  // Harness
-  const harness = new Harness({
-    id: 'mastra-code',
-    resourceId: project.resourceId,
-    defaultResourceId: autoDetectedResourceId,
-    userId,
-    isRemoteStorage: storageConfig.isRemote,
-    storage,
-    stateSchema,
-    initialState: {
-      projectPath: project.rootPath,
-      projectName: project.name,
-      gitBranch: project.gitBranch,
-    },
-    workspace: getDynamicWorkspace,
-    hookManager,
-    mcpManager,
-    modes: [
-      {
-        id: 'build',
-        name: 'Build',
-        default: true,
-        defaultModelId: 'anthropic/claude-opus-4-6',
-        color: mastra.purple,
-        agent: codeAgent,
-      },
-      {
-        id: 'plan',
-        name: 'Plan',
-        defaultModelId: 'openai/gpt-5.2-codex',
-        color: mastra.blue,
-        agent: codeAgent,
-      },
-      {
-        id: 'fast',
-        name: 'Fast',
-        defaultModelId: 'cerebras/zai-glm-4.7',
-        color: mastra.green,
-        agent: codeAgent,
-      },
-    ],
-    authStorage,
-    heartbeatHandlers: [
-      {
-        id: 'gateway-sync',
-        intervalMs: 5 * 60 * 1000,
-        handler: () => syncGateways(),
-      },
-    ],
-  });
+	// Build subagent definitions with project-scoped tools
+	const viewTool = createViewTool(project.rootPath)
+	const grepTool = createGrepTool(project.rootPath)
+	const globTool = createGlobTool(project.rootPath)
+	const executeCommandTool = createExecuteCommandTool(project.rootPath)
+	const writeFileTool = createWriteFileTool(project.rootPath)
 
-  // Keep omModelState in sync with harness state changes
-  harness.subscribe(event => {
-    if (event.type === 'om_model_changed') {
-      const { role, modelId } = event as {
-        type: string;
-        role: string;
-        modelId: string;
-      };
-      if (role === 'observer') omState.observerModelId = modelId;
-      if (role === 'reflector') omState.reflectorModelId = modelId;
-    } else if (event.type === 'thread_changed') {
-      omState.observerModelId = harness.getObserverModelId();
-      omState.reflectorModelId = harness.getReflectorModelId();
-      omState.obsThreshold = harness.getState().observationThreshold ?? DEFAULT_OBS_THRESHOLD;
-      omState.refThreshold = harness.getState().reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
-      hookManager.setSessionId((event as any).threadId);
-    } else if (event.type === 'thread_created') {
-      hookManager.setSessionId((event as any).thread.id);
-    }
-  });
+	const readOnlyTools = {
+		view: viewTool,
+		search_content: grepTool,
+		find_files: globTool,
+	}
 
-  return { harness, mcpManager };
+	const subagents: HarnessSubagent[] = [
+		{
+			id: exploreSubagent.id,
+			name: exploreSubagent.name,
+			description: "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
+			instructions: exploreSubagent.instructions,
+			tools: readOnlyTools,
+		},
+		{
+			id: planSubagent.id,
+			name: planSubagent.name,
+			description: "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
+			instructions: planSubagent.instructions,
+			tools: readOnlyTools,
+		},
+		{
+			id: executeSubagent.id,
+			name: executeSubagent.name,
+			description: "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
+			instructions: executeSubagent.instructions,
+			tools: {
+				...readOnlyTools,
+				string_replace_lsp: stringReplaceLspTool,
+				write_file: writeFileTool,
+				execute_command: executeCommandTool,
+				todo_write: todoWriteTool,
+				todo_check: todoCheckTool,
+			},
+		},
+	]
+
+	const harness = new Harness({
+		id: "mastra-code",
+		resourceId: project.resourceId,
+		storage,
+		memory,
+		stateSchema,
+		subagents,
+		resolveModel,
+		toolCategoryResolver: getToolCategory,
+		initialState: {
+			projectPath: project.rootPath,
+			projectName: project.name,
+			gitBranch: project.gitBranch,
+		},
+		workspace: getDynamicWorkspace,
+		modes: [
+			{
+				id: "build",
+				name: "Build",
+				default: true,
+				defaultModelId: "anthropic/claude-opus-4-6",
+				color: mastra.purple,
+				agent: codeAgent,
+			},
+			{
+				id: "plan",
+				name: "Plan",
+				defaultModelId: "openai/gpt-5.2-codex",
+				color: mastra.blue,
+				agent: codeAgent,
+			},
+			{
+				id: "fast",
+				name: "Fast",
+				defaultModelId: "cerebras/zai-glm-4.7",
+				color: mastra.green,
+				agent: codeAgent,
+			},
+		],
+		heartbeatHandlers: [
+			{
+				id: "gateway-sync",
+				intervalMs: 5 * 60 * 1000,
+				handler: () => syncGateways(),
+			},
+		],
+		modelAuthChecker: (provider) => {
+			const providerToOAuthId: Record<string, string> = {
+				anthropic: "anthropic",
+				openai: "openai-codex",
+			}
+			const oauthId = providerToOAuthId[provider]
+			if (oauthId && authStorage.isLoggedIn(oauthId)) {
+				return true
+			}
+			return undefined
+		},
+		modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+	});
+
+	// Sync hookManager session ID on thread changes
+	harness.subscribe((event) => {
+		if (event.type === "thread_changed") {
+			hookManager.setSessionId((event as any).threadId)
+		} else if (event.type === "thread_created") {
+			hookManager.setSessionId((event as any).thread.id)
+		}
+	})
+
+	return { harness, mcpManager, hookManager, authStorage }
 }

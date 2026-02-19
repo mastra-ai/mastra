@@ -16,15 +16,19 @@ import {
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
-import type { Harness } from '../harness/harness.js';
 import type {
+  Harness,
   HarnessEvent,
   HarnessMessage,
   HarnessMessageContent,
   HarnessEventListener,
   TokenUsage,
-} from '../harness/types.js';
+} from '@mastra/core/harness';
+import type { AuthStorage } from '../auth/storage.js';
+import { getOAuthProviders } from '../auth/storage.js';
+import type { HookManager } from '../hooks/index.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_OM_MODEL_ID, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
 import { detectProject } from '../utils/project.js';
@@ -77,6 +81,12 @@ export interface MastraTUIOptions {
   /** The harness instance to control */
   harness: Harness<any>;
 
+  /** Hook manager for session lifecycle hooks */
+  hookManager?: HookManager;
+
+  /** Auth storage for OAuth login/logout */
+  authStorage?: AuthStorage;
+
   /**
    * @deprecated Workspace is now obtained from the Harness.
    * Configure workspace via HarnessConfig.workspace instead.
@@ -107,6 +117,8 @@ export interface MastraTUIOptions {
 export class MastraTUI {
   private harness: Harness<any>;
   private options: MastraTUIOptions;
+  private hookManager?: HookManager;
+  private authStorage?: AuthStorage;
 
   // TUI components
   private ui: TUI;
@@ -205,6 +217,8 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.harness = options.harness;
     this.options = options;
+    this.hookManager = options.hookManager;
+    this.authStorage = options.authStorage;
     this.workspace = options.workspace;
 
     // Detect project info for status line
@@ -378,7 +392,7 @@ export class MastraTUI {
     await this.init();
 
     // Run SessionStart hooks (fire and forget)
-    const hookMgr = this.harness.getHookManager?.();
+    const hookMgr = this.hookManager;
     if (hookMgr) {
       hookMgr.runSessionStart().catch(() => {});
     }
@@ -472,7 +486,7 @@ export class MastraTUI {
    */
   stop(): void {
     // Run SessionEnd hooks (best-effort, don't await)
-    const hookMgr = this.harness.getHookManager?.();
+    const hookMgr = this.hookManager;
     if (hookMgr) {
       hookMgr.runSessionEnd().catch(() => {});
     }
@@ -3144,7 +3158,10 @@ ${instructions}`,
         title: `Select subagent model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
           this.ui.hideOverlay();
-          await this.harness.setSubagentModelId(model.id, scope, agentType);
+          await this.harness.setSubagentModelId(model.id, agentType);
+          if (scope === 'global') {
+            this.authStorage?.setSubagentModelId(model.id, agentType);
+          }
           this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
           resolve();
         },
@@ -3230,7 +3247,7 @@ ${instructions}`,
   // ===========================================================================
   private async showPermissions(): Promise<void> {
     const { TOOL_CATEGORIES, getToolsForCategory } = await import('../permissions.js');
-    const rules = this.harness.getPermissionRules_public();
+    const rules = this.harness.getPermissionRules();
     const grants = this.harness.getSessionGrants();
     const isYolo = this.harness.getYoloMode();
 
@@ -3328,8 +3345,8 @@ ${instructions}`,
   // ===========================================================================
 
   private async showLoginSelector(mode: 'login' | 'logout'): Promise<void> {
-    const allProviders = this.harness.getOAuthProviders();
-    const loggedInIds = this.harness.getLoggedInProviders();
+    const allProviders = getOAuthProviders();
+    const loggedInIds = allProviders.filter(p => this.authStorage?.isLoggedIn(p.id)).map(p => p.id);
 
     if (mode === 'logout') {
       if (loggedInIds.length === 0) {
@@ -3363,7 +3380,7 @@ ${instructions}`,
               if (mode === 'login') {
                 await this.performLogin(provider.id);
               } else {
-                this.harness.logout(provider.id);
+                this.authStorage?.logout(provider.id);
                 this.showInfo(`Logged out from ${provider.name}`);
               }
             }
@@ -3387,7 +3404,7 @@ ${instructions}`,
   }
 
   private async performLogin(providerId: string): Promise<void> {
-    const provider = this.harness.getOAuthProviders().find(p => p.id === providerId);
+    const provider = getOAuthProviders().find(p => p.id === providerId);
     const providerName = provider?.name || providerId;
 
     return new Promise(resolve => {
@@ -3409,8 +3426,14 @@ ${instructions}`,
       });
       dialog.focused = true;
 
-      // Start the login flow via harness
-      this.harness
+      // Start the login flow via authStorage
+      if (!this.authStorage) {
+        this.ui.hideOverlay();
+        this.showError('Auth storage not configured');
+        resolve();
+        return;
+      }
+      this.authStorage
         .login(providerId, {
           onAuth: (info: { url: string; instructions?: string }) => {
             dialog.showAuth(info.url, info.instructions);
@@ -3427,7 +3450,7 @@ ${instructions}`,
           this.ui.hideOverlay();
 
           // Auto-switch to the provider's default model
-          const defaultModel = this.harness.getAuthStorage().getDefaultModelForProvider(providerId as any);
+          const defaultModel = this.authStorage?.getDefaultModelForProvider(providerId as any);
           if (defaultModel) {
             await this.harness.switchModel(defaultModel);
             this.updateStatusLine();
@@ -3745,7 +3768,7 @@ Keyboard shortcuts:
       }
 
       case 'hooks': {
-        const hm = this.harness.getHookManager?.();
+        const hm = this.hookManager;
         if (!hm) {
           this.showInfo('Hooks system not initialized.');
           return true;
@@ -4487,7 +4510,7 @@ Keyboard shortcuts:
     sendNotification(reason, {
       mode,
       message,
-      hookManager: this.harness.getHookManager?.(),
+      hookManager: this.hookManager,
     });
   }
 

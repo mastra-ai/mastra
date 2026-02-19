@@ -1765,6 +1765,10 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+    this.#workspace = workspace;
+  }
+
   /**
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
@@ -2881,7 +2885,7 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
-    return this.formatTools({
+    const allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
@@ -2889,7 +2893,8 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
-    });
+    };
+    return this.formatTools(allTools);
   }
 
   /**
