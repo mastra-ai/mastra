@@ -64,26 +64,32 @@ interface AstGrepModule {
 
 // Cache the import result so we only try once
 let astGrepModule: AstGrepModule | null | undefined;
+let loadingPromise: Promise<AstGrepModule | null> | undefined;
 
 /**
  * Try to load @ast-grep/napi. Returns null if not available.
  * Uses dynamic import to avoid compile-time dependency.
+ * Concurrent callers share the same in-flight promise.
  */
 export async function loadAstGrep(): Promise<AstGrepModule | null> {
   if (astGrepModule !== undefined) {
     return astGrepModule;
   }
-
-  try {
-    // Dynamic import with string concatenation to prevent bundlers from resolving at build time
-    const moduleName = '@ast-grep' + '/napi';
-    const mod = await import(/* webpackIgnore: true */ moduleName);
-    astGrepModule = { parse: mod.parse, Lang: mod.Lang };
-    return astGrepModule;
-  } catch {
-    astGrepModule = null;
-    return null;
+  if (!loadingPromise) {
+    loadingPromise = (async () => {
+      try {
+        // Dynamic import with string concatenation to prevent bundlers from resolving at build time
+        const moduleName = '@ast-grep' + '/napi';
+        const mod = await import(/* webpackIgnore: true */ moduleName);
+        astGrepModule = { parse: mod.parse, Lang: mod.Lang };
+        return astGrepModule;
+      } catch {
+        astGrepModule = null;
+        return null;
+      }
+    })();
   }
+  return loadingPromise;
 }
 
 /**
@@ -217,11 +223,11 @@ function mergeIntoExistingImport(
   const moduleMatch = text.match(/(["'][^"']+["'])\s*;?\s*$/);
 
   if (!moduleMatch) return null;
-  const moduleStr = moduleMatch[1];
+  const moduleStr = moduleMatch[1] ?? '';
 
-  let existingDefault = defaultMatch ? defaultMatch[1] : null;
+  let existingDefault = defaultMatch ? (defaultMatch[1] ?? null) : null;
   const existingNamed = namedMatch
-    ? namedMatch[1]
+    ? (namedMatch[1] ?? '')
         .split(',')
         .map((s: string) => s.trim())
         .filter(Boolean)
@@ -270,7 +276,7 @@ export function addImport(content: string, root: SgNode, importSpec: ImportSpec)
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
   // Check if import from this module already exists
-  const existingImport = imports.find((imp: any) => {
+  const existingImport = imports.find(imp => {
     const text = imp.text();
     return text.includes(`'${module}'`) || text.includes(`"${module}"`);
   });
