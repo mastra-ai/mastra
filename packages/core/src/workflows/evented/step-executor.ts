@@ -70,6 +70,7 @@ export class StepExecutor extends MastraBase {
     validateInputs?: boolean;
     abortController?: AbortController;
     perStep?: boolean;
+    format?: 'legacy' | 'vnext';
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
@@ -194,7 +195,7 @@ export class StepExecutor extends MastraBase {
               abortController?.abort();
             },
             [PUBSUB_SYMBOL]: this.mastra!.pubsub,
-            [STREAM_FORMAT_SYMBOL]: undefined, // TODO
+            [STREAM_FORMAT_SYMBOL]: params.format,
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
