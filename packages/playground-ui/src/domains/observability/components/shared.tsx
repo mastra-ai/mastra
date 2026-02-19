@@ -1,8 +1,8 @@
-import { AgentIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { BrainIcon } from 'lucide-react';
 import { type UISpanStyle } from '../types';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'tool', 'other'];
+export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'other'];
 
 export function getSpanTypeUi(type: string) {
   const typePrefix = type?.toLowerCase().split('_')[0];
@@ -28,6 +28,13 @@ export function getSpanTypeUi(type: string) {
       label: 'Model',
       bgColor: 'bg-oklch(0.75 0.15 320 / 0.1)',
       typePrefix: 'model',
+    },
+    mcp: {
+      icon: <McpServerIcon />,
+      color: 'oklch(0.75 0.15 160)',
+      label: 'MCP',
+      bgColor: 'bg-oklch(0.75 0.15 160 / 0.1)',
+      typePrefix: 'mcp',
     },
     tool: {
       icon: <ToolsIcon />,

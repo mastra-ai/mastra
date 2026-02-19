@@ -274,18 +274,28 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
+      // Detect MCP tools to use MCP_TOOL_CALL span type instead of TOOL_CALL
+      const isMcpTool = !isVercelTool(tool) && 'mcpMetadata' in tool && !!tool.mcpMetadata;
+
       // Create tool span if we have a current span available
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: SpanType.TOOL_CALL,
-        name: `tool: '${options.name}'`,
+        type: isMcpTool ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: isMcpTool
+          ? `mcp_tool: '${options.name}' on '${(tool as any).mcpMetadata.serverName}'`
+          : `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
         entityId: options.name,
         entityName: options.name,
-        attributes: {
-          toolDescription: options.description,
-          toolType: logType || 'tool',
-        },
+        attributes: isMcpTool
+          ? {
+              mcpServer: (tool as any).mcpMetadata.serverName,
+              serverVersion: (tool as any).mcpMetadata.serverVersion,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
         tracingPolicy: options.tracingPolicy,
       });
 

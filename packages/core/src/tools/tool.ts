@@ -146,22 +146,17 @@ export class Tool<
   /**
    * Optional MCP-specific properties including annotations and metadata.
    * Only relevant when the tool is being used in an MCP context.
-   * @example
-   * ```typescript
-   * mcp: {
-   *   annotations: {
-   *     title: 'Weather Lookup',
-   *     readOnlyHint: true,
-   *     destructiveHint: false
-   *   },
-   *   _meta: {
-   *     version: '1.0.0',
-   *     author: 'team@example.com'
-   *   }
-   * }
-   * ```
    */
   mcp?: MCPToolProperties;
+
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: {
+    serverName: string;
+    serverVersion?: string;
+  };
 
   /**
    * Creates a new Tool instance with input validation wrapper.
@@ -191,6 +186,7 @@ export class Tool<
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

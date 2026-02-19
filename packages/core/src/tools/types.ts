@@ -349,6 +349,15 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: {
+    serverName: string;
+    serverVersion?: string;
+  };
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {
