@@ -30,12 +30,6 @@ export async function getAwsCredentials(
     }
 
     const credentials = await defaultProvider()();
-    if (!credentials) {
-      throw new NovaSonicError(
-        NovaSonicErrorCode.CREDENTIALS_MISSING,
-        'AWS credentials not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables, or configure AWS credentials.',
-      );
-    }
 
     if (debug) {
       console.log('[getAwsCredentials] Credentials retrieved successfully');

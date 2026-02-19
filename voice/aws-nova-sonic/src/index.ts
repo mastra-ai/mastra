@@ -1698,7 +1698,7 @@ export class NovaSonicVoice extends MastraVoice<
 
     // Convert to base64 and send as audioInput events (AWS expects 'audioInput', not 'audioInputChunk')
     if (audioData instanceof Int16Array) {
-      const buffer = Buffer.from(audioData.buffer);
+      const buffer = Buffer.from(audioData.buffer, audioData.byteOffset, audioData.byteLength);
       const base64Audio = buffer.toString('base64');
       this.log(`[send] Sending audioInput chunk, size: ${buffer.length} bytes, contentName: ${contentName}, turnCompleted: ${this.turnCompleted}, hasSentContentEnd: ${this.hasSentContentEnd}, audioContentStarted: ${this.audioContentStarted}, state: ${this.state}`);
       
