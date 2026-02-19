@@ -175,7 +175,10 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
-    this.processes = new E2BProcessManager(() => this.ensureSandbox(), this.env);
+    this.processes = new E2BProcessManager(async () => {
+      await this.ensureRunning();
+      return this.instance;
+    }, this.env);
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -853,16 +856,6 @@ export class E2BSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Ensure the sandbox is started and return the E2B Sandbox instance.
-   * Uses base class ensureRunning() for status management and error handling.
-   * @throws {SandboxNotReadyError} if sandbox fails to start
-   */
-  private async ensureSandbox(): Promise<Sandbox> {
-    await this.ensureRunning();
-    return this._sandbox!;
-  }
-
-  /**
    * Check if an error indicates the sandbox itself is dead/gone.
    * Does NOT include code execution timeouts (those are the user's code taking too long).
    * Does NOT include "port is not open" - that needs sandbox kill, not reconnect.
@@ -913,7 +906,8 @@ export class E2BSandbox extends MastraSandbox {
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
     this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
-    const sandbox = await this.ensureSandbox();
+    await this.ensureRunning();
+    const sandbox = this.instance;
 
     const startTime = Date.now();
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
