@@ -1,4 +1,4 @@
-name: Check Redirects
+name: Lint Docs
 
 permissions:
   contents: read
@@ -6,6 +6,11 @@ permissions:
 
 on:
   pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/scripts/check-deleted-pages.js'
+      - '.github/scripts/validate-redirects.js'
+      - '.github/workflows/lint-docs.yml'
 
 jobs:
   check-deleted-pages:
@@ -146,3 +151,31 @@ jobs:
             } catch (error) {
               console.error('Failed to post comment:', error);
             }
+
+  validate-frontmatter:
+    name: Validate MDX frontmatter
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Check for MDX changes
+        id: mdx-changes
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q '\.mdx$'; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup pnpm and Node.js
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Validate frontmatter
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        working-directory: ./docs
+        run: pnpm dlx tsx scripts/validate-frontmatter.ts
