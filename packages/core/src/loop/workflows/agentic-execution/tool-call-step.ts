@@ -484,7 +484,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
 
         //if resuming a subAgent tool, we want to find the runId from when the subAgent got suspended.
-        if (resumeDataToPassToToolOptions && inputData.toolName?.startsWith('agent-') && !isResumeToolCall) {
+        if (resumeDataToPassToToolOptions && isAgentTool && !isResumeToolCall) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
