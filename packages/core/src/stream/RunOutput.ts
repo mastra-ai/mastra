@@ -25,6 +25,7 @@ export class WorkflowRunOutput<
   #baseStream: ReadableStream<WorkflowStreamEvent>;
   #emitter = new EventEmitter();
   #bufferedChunks: WorkflowStreamEvent[] = [];
+  #hasActiveConsumer = false;
 
   #streamFinished = false;
 
@@ -71,12 +72,16 @@ export class WorkflowRunOutput<
               },
             } as WorkflowStreamEvent;
 
-            self.#bufferedChunks.push(chunk);
+            if (!self.#hasActiveConsumer) {
+              self.#bufferedChunks.push(chunk);
+            }
             self.#emitter.emit('chunk', chunk);
           },
           write(chunk) {
             if (chunk.type !== 'workflow-step-finish') {
-              self.#bufferedChunks.push(chunk);
+              if (!self.#hasActiveConsumer) {
+                self.#bufferedChunks.push(chunk);
+              }
               self.#emitter.emit('chunk', chunk);
             }
 
@@ -223,6 +228,7 @@ export class WorkflowRunOutput<
     this.#baseStream = stream;
     this.#streamFinished = false;
     this.#consumptionStarted = false;
+    this.#hasActiveConsumer = false;
     this.#status = 'running';
     this.#delayedPromises = {
       usage: new DelayedPromise<LanguageModelUsage>(),
@@ -243,12 +249,16 @@ export class WorkflowRunOutput<
               },
             } as WorkflowStreamEvent;
 
-            self.#bufferedChunks.push(chunk);
+            if (!self.#hasActiveConsumer) {
+              self.#bufferedChunks.push(chunk);
+            }
             self.#emitter.emit('chunk', chunk);
           },
           write(chunk) {
             if (chunk.type !== 'workflow-step-finish') {
-              self.#bufferedChunks.push(chunk);
+              if (!self.#hasActiveConsumer) {
+                self.#bufferedChunks.push(chunk);
+              }
               self.#emitter.emit('chunk', chunk);
             }
 
@@ -337,12 +347,20 @@ export class WorkflowRunOutput<
 
   get fullStream(): ReadableStream<WorkflowStreamEvent> {
     const self = this;
+    // Closure-scoped handler refs so cancel() removes only this stream's listeners
+    let chunkHandler: ((chunk: WorkflowStreamEvent) => void) | null = null;
+    let finishHandler: (() => void) | null = null;
+
     return new ReadableStream<WorkflowStreamEvent>({
       start(controller) {
         // Replay existing buffered chunks
         self.#bufferedChunks.forEach(chunk => {
           controller.enqueue(chunk);
         });
+
+        // Buffer has been replayed — stop accumulating and release memory
+        self.#hasActiveConsumer = true;
+        self.#bufferedChunks = [];
 
         // If stream already finished, close immediately
         if (self.#streamFinished) {
@@ -351,13 +369,15 @@ export class WorkflowRunOutput<
         }
 
         // Listen for new chunks and stream finish
-        const chunkHandler = (chunk: WorkflowStreamEvent) => {
+        chunkHandler = (chunk: WorkflowStreamEvent) => {
           controller.enqueue(chunk);
         };
 
-        const finishHandler = () => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
+        finishHandler = () => {
+          if (chunkHandler) self.#emitter.off('chunk', chunkHandler);
+          if (finishHandler) self.#emitter.off('finish', finishHandler);
+          chunkHandler = null;
+          finishHandler = null;
           controller.close();
         };
 
@@ -373,8 +393,11 @@ export class WorkflowRunOutput<
       },
 
       cancel() {
-        // Stream was cancelled, clean up
-        self.#emitter.removeAllListeners();
+        // Only remove this stream's listeners, not all listeners
+        if (chunkHandler) self.#emitter.off('chunk', chunkHandler);
+        if (finishHandler) self.#emitter.off('finish', finishHandler);
+        chunkHandler = null;
+        finishHandler = null;
       },
     });
   }
