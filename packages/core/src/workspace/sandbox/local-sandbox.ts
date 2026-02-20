@@ -17,11 +17,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
+import { LocalProcessManager } from './local-sandbox-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import { LocalProcessManager } from './process-manager';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
@@ -41,8 +41,9 @@ function execWithStreaming(
   options: ExecStreamingOptions,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const { timeout, onStdout, onStderr, cwd, env, ...spawnOptions } = options;
+  const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
   return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(command, args, { cwd, env, ...spawnOptions });
+    const proc = childProcess.spawn(fullCommand, { cwd, env, shell: true, ...spawnOptions });
 
     let stdout = '';
     let stderr = '';
@@ -330,7 +331,8 @@ export class LocalSandbox extends MastraSandbox {
     this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this._workingDirectory });
 
     // Kill all background processes
-    await this.processes.killAll();
+    const procs = await this.processes.list();
+    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
 
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {

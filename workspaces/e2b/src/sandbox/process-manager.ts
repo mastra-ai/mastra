@@ -5,35 +5,32 @@
  * Wraps the E2B SDK's commands API (background mode, sendStdin, kill, list).
  */
 
-import type { ProcessHandle as MastraProcessHandle, CommandResult, SpawnProcessOptions } from '@mastra/core/workspace';
-import { SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { CommandHandle as E2BCommandHandle, Sandbox } from 'e2b';
-
 import type { E2BSandbox } from './index';
-
-import { shellQuote } from '../utils/shell-quote';
 
 // =============================================================================
 // E2B Process Handle
 // =============================================================================
 
 /**
- * Wraps an E2B CommandHandle to conform to Mastra's ProcessHandle interface.
+ * Wraps an E2B CommandHandle to conform to Mastra's ProcessHandle.
  * Not exported — internal to this module.
+ *
+ * Listener dispatch is handled by the base class. The manager's spawn()/get()
+ * methods wire E2B's constructor-time callbacks to handle.emitStdout/emitStderr.
  */
-class E2BProcessHandle implements MastraProcessHandle {
+class E2BProcessHandle extends ProcessHandle {
   readonly pid: number;
-  readonly command: string;
-  readonly args: string[];
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
   private readonly _startTime: number;
 
-  constructor(e2bHandle: E2BCommandHandle, sandbox: Sandbox, command: string, args: string[], startTime: number) {
+  constructor(e2bHandle: E2BCommandHandle, sandbox: Sandbox, startTime: number, options?: SpawnProcessOptions) {
+    super(options);
     this.pid = e2bHandle.pid;
-    this.command = command;
-    this.args = args;
     this._e2bHandle = e2bHandle;
     this._sandbox = sandbox;
     this._startTime = startTime;
@@ -51,10 +48,6 @@ class E2BProcessHandle implements MastraProcessHandle {
     return this._e2bHandle.exitCode;
   }
 
-  get running(): boolean {
-    return this.exitCode === undefined;
-  }
-
   async wait(): Promise<CommandResult> {
     try {
       const result = await this._e2bHandle.wait();
@@ -64,8 +57,6 @@ class E2BProcessHandle implements MastraProcessHandle {
         stdout: result.stdout,
         stderr: result.stderr,
         executionTimeMs: Date.now() - this._startTime,
-        command: this.command,
-        args: this.args,
       };
     } catch (error) {
       // E2B throws CommandExitError for non-zero exit codes
@@ -76,8 +67,6 @@ class E2BProcessHandle implements MastraProcessHandle {
         stdout: errorObj.stdout ?? this._e2bHandle.stdout,
         stderr: errorObj.stderr ?? this._e2bHandle.stderr,
         executionTimeMs: Date.now() - this._startTime,
-        command: this.command,
-        args: this.args,
       };
     }
   }
@@ -111,9 +100,8 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     this._env = env;
   }
 
-  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraProcessHandle> {
+  async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const e2b = this.sandbox.instance;
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 
     // Merge default env with per-spawn env
     const mergedEnv = { ...this._env, ...options.env };
@@ -121,13 +109,59 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
-    const e2bHandle = await e2b.commands.run(fullCommand, {
+    // Deferred reference — E2B requires callbacks at run() time, but data
+    // arrives asynchronously after the promise resolves, so handle is always
+    // assigned by the time the first callback fires.
+    let handle: E2BProcessHandle;
+
+    const e2bHandle = await e2b.commands.run(command, {
       background: true,
       stdin: true,
       cwd: options.cwd,
       envs,
+      onStdout: (data: string) => handle.emitStdout(data),
+      onStderr: (data: string) => handle.emitStderr(data),
     });
 
-    return new E2BProcessHandle(e2bHandle, e2b, command, args, Date.now());
+    handle = new E2BProcessHandle(e2bHandle, e2b, Date.now(), options);
+    return handle;
+  }
+
+  /**
+   * List processes by querying E2B's commands API.
+   * E2B manages all state server-side — no local tracking needed.
+   */
+  async list(): Promise<ProcessInfo[]> {
+    const e2b = this.sandbox.instance;
+    const procs = await e2b.commands.list();
+    return procs.map(proc => ({
+      pid: proc.pid,
+      command: [proc.cmd, ...proc.args].join(' '),
+      running: true, // E2B only lists running processes
+      stdout: '',
+      stderr: '',
+    }));
+  }
+
+  /** Kill a process by PID directly via E2B's commands API. */
+  async kill(pid: number): Promise<boolean> {
+    const e2b = this.sandbox.instance;
+    return e2b.commands.kill(pid);
+  }
+
+  /** Get a handle to a process by PID via E2B's commands.connect(). */
+  async get(pid: number): Promise<ProcessHandle | undefined> {
+    const e2b = this.sandbox.instance;
+    let handle: E2BProcessHandle;
+    try {
+      const e2bHandle = await e2b.commands.connect(pid, {
+        onStdout: (data: string) => handle.emitStdout(data),
+        onStderr: (data: string) => handle.emitStderr(data),
+      });
+      handle = new E2BProcessHandle(e2bHandle, e2b, Date.now());
+      return handle;
+    } catch {
+      return undefined;
+    }
   }
 }
