@@ -14,6 +14,7 @@ export default function pluginLearn(_context: LoadContext): Plugin {
       })
 
       for (const lesson of course.lessons) {
+        if (lesson.status !== 'published') continue
         addRoute({
           path: `/learn/${lesson.slug}`,
           component: '@site/src/learn/pages/LessonPage',

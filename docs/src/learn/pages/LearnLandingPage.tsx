@@ -4,7 +4,7 @@ import { course } from '../course'
 import type { Lesson } from '../types'
 import { useSharedLearnStorage } from '../hooks/LearnStorageContext'
 import { LearnLayout } from '../components/LearnLayout'
-import { ContinueCard } from '../components/ContinueCard'
+
 import { LessonListItem } from '../components/LessonListItem'
 import { CourseSignupCTA } from '../components/CourseSignupCTA'
 
@@ -35,11 +35,8 @@ function LandingContent() {
       {/* Hero */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">{course.title}</h1>
-        <p className="mt-2 text-lg text-(--mastra-text-tertiary)">{course.description}</p>
+        <p className="mt-2 text-(--mastra-text-tertiary)">{course.description}</p>
       </div>
-
-      {/* Continue card */}
-      <ContinueCard storage={storage} lessons={course.lessons} className="mb-6" />
 
       {/* Lesson list grouped by module */}
       <div className="flex flex-col gap-8">

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Layout from '@theme/Layout'
 import { cn } from '@site/src/lib/utils'
-import { AnnouncementBanner } from '@site/src/components/AnnouncementBanner'
+
 import ChatbotSidebar from '@site/src/theme/DocRoot/Layout/ChatbotSidebar'
 import { course } from '../course'
 import { LearnStorageProvider, useSharedLearnStorage } from '../hooks/LearnStorageContext'
@@ -24,7 +24,6 @@ function LearnLayoutInner({ children, title, description, className }: LearnLayo
       <div className="learn-layout-flex">
         <LearnSidebar lessons={course.lessons} storage={storage} />
         <main className={cn('learn-main', className)}>
-          <AnnouncementBanner />
           <div className="padding-top--md padding-bottom--lg container">
             <div className="row" id="doc-item-container">
               <article className="col">{children}</article>

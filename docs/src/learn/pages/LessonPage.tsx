@@ -1,7 +1,8 @@
-import { useEffect, lazy, Suspense, useMemo } from 'react'
+import { useState, useEffect, lazy, Suspense, useMemo } from 'react'
 import { useLocation } from '@docusaurus/router'
 import Head from '@docusaurus/Head'
 import MDXContent from '@theme/MDXContent'
+import { cn } from '@site/src/lib/utils'
 import { course } from '../course'
 import { useLessonProgress } from '../hooks/useLessonProgress'
 import { contentModules } from '../contentIndex'
@@ -25,26 +26,6 @@ function LearnNotFound() {
         </p>
       </div>
     </LearnLayout>
-  )
-}
-
-function ComingSoonContent({ lesson }: { lesson: (typeof course.lessons)[number] }) {
-  return (
-    <div className="mt-6">
-      <div className="rounded-lg border border-(--border) bg-(--mastra-surface-1) p-6 dark:bg-(--mastra-surface-2)">
-        <p className="text-(--mastra-text-secondary)">{lesson.preview.intro}</p>
-        <h3 className="mt-4 mb-2 text-sm font-semibold text-(--mastra-text-primary)">What you'll learn:</h3>
-        <ul className="m-0 list-none space-y-2 p-0">
-          {lesson.preview.bullets.map((bullet, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-(--mastra-text-secondary)">
-              <span className="learn-bullet mt-1">•</span>
-              <span>{bullet}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <CourseSignupCTA className="mt-8" />
-    </div>
   )
 }
 
@@ -95,8 +76,46 @@ function PublishedContent({
           </MDXContent>
         </div>
       )}
+      <MarkAsCompleteButton watched={watched} onToggle={() => setWatched(!watched)} className="mt-8" />
       <CourseSignupCTA className="mt-8" />
     </>
+  )
+}
+
+function MarkAsCompleteButton({
+  watched,
+  onToggle,
+  className,
+}: {
+  watched: boolean
+  onToggle: () => void
+  className?: string
+}) {
+  const [animating, setAnimating] = useState(false)
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setAnimating(true)
+        onToggle()
+      }}
+      className={cn(
+        'flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors',
+        watched
+          ? 'learn-complete-button-done border-(--mastra-green-accent-3) text-(--mastra-green-accent-3) dark:border-(--mastra-green-accent-2) dark:text-(--mastra-green-accent-2)'
+          : 'border-(--border) text-(--mastra-text-secondary) hover:border-(--mastra-green-accent-3) hover:text-(--mastra-text-primary)',
+        className,
+      )}
+    >
+      <span
+        className={cn('learn-watched-icon', watched && 'is-watched', animating && 'is-animate')}
+        onAnimationEnd={() => setAnimating(false)}
+      >
+        {watched && '✓'}
+      </span>
+      {watched ? 'Completed' : 'Mark as complete'}
+    </button>
   )
 }
 
@@ -147,14 +166,7 @@ export default function LessonPage() {
         )}
       </Head>
 
-      {lesson.status === 'published' ? (
-        <PublishedContent lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
-      ) : (
-        <>
-          <LessonHeader lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
-          <ComingSoonContent lesson={lesson} />
-        </>
-      )}
+      <PublishedContent lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
 
       <LessonNav prev={prev} next={next} className="mt-8 border-t border-t-(--border)" />
     </LearnLayout>

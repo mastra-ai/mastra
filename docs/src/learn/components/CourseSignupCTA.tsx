@@ -63,7 +63,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
 
   if (submitted) {
     return (
-      <div className={cn('learn-subscribed rounded-lg border p-6 text-center', className)}>
+      <div id="learn-signup-cta" className={cn('learn-subscribed rounded-lg border p-6 text-center', className)}>
         <p className="text-lg font-medium text-(--mastra-text-primary)">You're subscribed!</p>
         <p className="mt-1 text-sm text-(--mastra-text-tertiary)">We'll email you when new lessons are published.</p>
       </div>
@@ -71,7 +71,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
   }
 
   return (
-    <div className={cn('rounded-lg border border-(--border) p-6 text-center', className)}>
+    <div id="learn-signup-cta" className={cn('rounded-lg border border-(--border) p-6 text-center', className)}>
       <h3 className="text-lg font-semibold text-(--mastra-text-primary)">New lessons arriving early March</h3>
       <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">Get a heads-up the moment they go live.</p>
       <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-2">
