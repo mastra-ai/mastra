@@ -3868,40 +3868,39 @@ describe('MessageList', () => {
     });
   });
 
-  describe('Empty message list validation', () => {
-    it('should throw error when calling prompt() with empty message list', () => {
+  describe('Empty message list handling', () => {
+    it('should pass through empty message list unchanged when calling prompt()', () => {
       const list = new MessageList();
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(0);
     });
 
-    it('should throw error when calling prompt() with only system messages', () => {
+    it('should pass through system-only message list unchanged when calling prompt()', () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant');
       list.addSystem('Follow these rules');
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(2);
+      expect(prompt[0].role).toBe('system');
+      expect(prompt[1].role).toBe('system');
     });
 
-    it('should throw error when calling llmPrompt() with empty message list', async () => {
+    it('should pass through empty message list unchanged when calling llmPrompt()', async () => {
       const list = new MessageList();
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(0);
     });
 
-    it('should throw error when calling llmPrompt() with only system messages', async () => {
+    it('should pass through system-only message list unchanged when calling llmPrompt()', async () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant');
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(1);
+      expect(llmPrompt[0].role).toBe('system');
     });
   });
 

@@ -68,6 +68,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         threadId: thread?.id,
         resourceId,
         generateMessageId: capabilities.generateMessageId,
+        logger: capabilities.logger,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
