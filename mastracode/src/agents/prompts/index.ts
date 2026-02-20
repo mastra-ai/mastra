@@ -66,7 +66,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
     taskSection = `\n<current-task-list>\n${lines.join('\n')}\n</current-task-list>\n`;
   }
 
-  // Load and inject agent instructions from AGENT.md/CLAUDE.md files
+  // Load and inject agent instructions from AGENTS.md/CLAUDE.md files
   const instructionSources = loadAgentInstructions(ctx.workingDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 

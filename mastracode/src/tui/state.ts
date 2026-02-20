@@ -26,7 +26,7 @@ import { detectProject } from '../utils/project.js';
 import { defaultOMProgressState } from './components/om-progress.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
-import type { MCPManager } from '../mcp/manager.js';
+import type { McpManager } from '../mcp/manager.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -56,7 +56,7 @@ export interface MastraTUIOptions {
   authStorage?: AuthStorage;
 
   /** MCP manager for server status and reload */
-  mcpManager?: MCPManager;
+  mcpManager?: McpManager;
 
   /**
    * @deprecated Workspace is now obtained from the Harness.
@@ -91,7 +91,7 @@ export interface TUIState {
   options: MastraTUIOptions;
   hookManager?: HookManager;
   authStorage?: AuthStorage;
-  mcpManager?: MCPManager;
+  mcpManager?: McpManager;
   workspace?: Workspace;
 
   // ── TUI framework (set once) ──────────────────────────────────────────

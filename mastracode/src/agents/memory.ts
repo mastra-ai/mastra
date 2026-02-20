@@ -62,7 +62,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
           scope: omScope,
           observation: {
             bufferTokens: 1 / 10,
-            bufferActivation: 2000,
+            bufferActivation: 4000,
             model: getObserverModel,
             messageTokens: obsThreshold,
             blockAfter: 1.2,
