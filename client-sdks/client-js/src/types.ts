@@ -2135,6 +2135,7 @@ export interface TriggerDatasetExperimentParams {
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  targetVersionId?: string;
   maxConcurrency?: number;
 }
 
