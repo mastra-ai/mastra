@@ -13,6 +13,9 @@ import type {
   ObservabilityBridge,
   SpanOutputProcessor,
   TracingEvent,
+  LogEvent,
+  LoggerContext,
+  LogLevel,
   AnySpan,
   EndSpanOptions,
   UpdateSpanOptions,
@@ -526,6 +529,62 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     });
 
     await Promise.allSettled(exportPromises);
+  }
+
+  /**
+   * Export log event through all exporters that support onLogEvent
+   */
+  protected async exportLogEvent(event: LogEvent): Promise<void> {
+    const exportPromises = this.exporters
+      .filter(exporter => typeof exporter.onLogEvent === 'function')
+      .map(async exporter => {
+        try {
+          await exporter.onLogEvent!(event);
+          this.logger.debug(`[Observability] Log exported [target=${exporter.name}] [level=${event.log.level}]`);
+        } catch (error) {
+          this.logger.error(`[Observability] Log export error [target=${exporter.name}]`, error);
+        }
+      });
+
+    await Promise.allSettled(exportPromises);
+  }
+
+  // ============================================================================
+  // LoggerContext
+  // ============================================================================
+
+  /**
+   * Get a LoggerContext correlated to a span.
+   * When called, the returned logger emits LogEvent to all exporters
+   * with the span's traceId and spanId attached.
+   */
+  getLoggerContext(span?: AnySpan): LoggerContext {
+    const emitLog = (level: LogLevel, message: string, data?: Record<string, unknown>) => {
+      const event: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level,
+          message,
+          data,
+          traceId: span?.traceId,
+          spanId: span?.id,
+          metadata: span?.metadata,
+        },
+      };
+
+      this.exportLogEvent(event).catch(error => {
+        this.logger.error('[Observability] Failed to export log event', error);
+      });
+    };
+
+    return {
+      debug: (message, data) => emitLog('debug', message, data),
+      info: (message, data) => emitLog('info', message, data),
+      warn: (message, data) => emitLog('warn', message, data),
+      error: (message, data) => emitLog('error', message, data),
+      fatal: (message, data) => emitLog('fatal', message, data),
+    };
   }
 
   // ============================================================================
