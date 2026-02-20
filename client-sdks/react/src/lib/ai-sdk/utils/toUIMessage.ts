@@ -421,7 +421,12 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
               toolCallId,
               state: 'output-error',
               input: (toolPart as any).input,
-              errorText: String(error),
+              errorText:
+                typeof error === 'string'
+                  ? error
+                  : error instanceof Error
+                    ? error.message
+                    : ((error as any)?.message ?? String(error)),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {

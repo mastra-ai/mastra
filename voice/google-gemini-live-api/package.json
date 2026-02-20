@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google/genai": "latest",
-    "google-auth-library": "^10.2.1",
+    "google-auth-library": "^10.5.0",
     "ws": "^8.19.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"

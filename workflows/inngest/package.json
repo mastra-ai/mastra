@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -25,10 +25,10 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
-    "test": "docker-compose up -d && vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**' && docker-compose down",
+    "test": "vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**'",
     "test:unit": "vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**' --exclude='src/index.test.ts'",
-    "test:workflow": "docker-compose up -d && vitest run --no-isolate --retry=1 src/index.test.ts && docker-compose down",
-    "test:integration": "docker-compose up -d && vitest run --no-isolate --retry=1 src/__tests__/adapters/ && docker-compose down",
+    "test:workflow": "vitest run --no-isolate --retry=1 src/index.test.ts",
+    "test:integration": "vitest run --no-isolate --retry=1 src/__tests__/adapters/",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -41,6 +41,7 @@
     "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workflow-test-utils": "workspace:*",
     "@koa/router": "^13.1.1",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
@@ -54,11 +55,11 @@
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "eslint": "^9.37.0",
-    "execa": "^9.6.0",
+    "execa": "^9.6.1",
     "express": "^5.1.0",
     "fastify": "^5.6.2",
     "get-port": "7.1.0",
-    "hono": "^4.11.3",
+    "hono": "^4.11.9",
     "inngest-cli": "^1.12.1",
     "koa": "^3.1.0",
     "koa-bodyparser": "^4.4.1",

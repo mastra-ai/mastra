@@ -1,6 +1,7 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
+import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
@@ -9,7 +10,6 @@ import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
-import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
@@ -216,15 +216,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       if (shouldEmitStepFinish) {
         // Only enqueue if controller is still open
-        if (isControllerOpen(controller)) {
-          controller.enqueue({
-            type: 'step-finish',
-            runId,
-            from: ChunkFrom.AGENT,
-            // @ts-expect-error TODO: Look into the proper types for this
-            payload: typedInputData,
-          });
-        }
+        safeEnqueue(controller, {
+          type: 'step-finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          // @ts-expect-error TODO: Look into the proper types for this
+          payload: typedInputData,
+        });
       }
 
       const reason = typedInputData.stepResult?.reason;
