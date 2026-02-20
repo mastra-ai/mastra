@@ -136,15 +136,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // This is required when writing directly to reply.raw
     reply.hijack();
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Write headers directly to the raw response, merging existing headers (like CORS)
     // with our stream-specific headers
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     reply.raw.writeHead(200, {
       ...existingHeaders,
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -459,6 +471,24 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
           return reply.status(400).send({
             error: 'Invalid request body',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          });
+        }
+      }
+
+      // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+      if (params.urlParams) {
+        try {
+          params.urlParams = await this.parsePathParams(route, params.urlParams);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error parsing path params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          if (error instanceof ZodError) {
+            return reply.status(400).send(formatZodError(error, 'path parameters'));
+          }
+          return reply.status(400).send({
+            error: 'Invalid path parameters',
             issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
           });
         }

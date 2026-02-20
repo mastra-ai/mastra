@@ -5,9 +5,10 @@ import {
   useLinkComponent,
   useStoredAgent,
   useAgentVersion,
+  useAgentVersions,
   useAgentCmsForm,
   AgentCmsFormShell,
-  AgentVersionCombobox,
+  AgentVersionPanel,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -19,10 +20,11 @@ import {
   Alert,
   Button,
   AlertTitle,
+  Badge,
   type AgentDataSource,
   AlertDescription,
 } from '@mastra/playground-ui';
-import { Check } from 'lucide-react';
+import { Check, Save } from 'lucide-react';
 
 function EditFormContent({
   agentId,
@@ -31,7 +33,12 @@ function EditFormContent({
   readOnly = false,
   form,
   handlePublish,
+  handleSaveDraft,
   isSubmitting,
+  isSavingDraft,
+  onVersionSelect,
+  activeVersionId,
+  latestVersionId,
 }: {
   agentId: string;
   selectedVersionId: string | null;
@@ -39,14 +46,20 @@ function EditFormContent({
   readOnly?: boolean;
   form: ReturnType<typeof useAgentCmsForm>['form'];
   handlePublish: ReturnType<typeof useAgentCmsForm>['handlePublish'];
+  handleSaveDraft: ReturnType<typeof useAgentCmsForm>['handleSaveDraft'];
   isSubmitting: boolean;
+  isSavingDraft: boolean;
+  onVersionSelect: (versionId: string) => void;
+  activeVersionId?: string;
+  latestVersionId?: string;
 }) {
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersionId;
 
-  const banner = isViewingVersion ? (
+  const banner = isViewingPreviousVersion ? (
     <Alert variant="info" className="mb-4">
       <AlertTitle>This is a previous version</AlertTitle>
       <AlertDescription as="p">You are seeing a specific version of the agent.</AlertDescription>
@@ -58,18 +71,30 @@ function EditFormContent({
     </Alert>
   ) : undefined;
 
+  const rightPanel = (
+    <AgentVersionPanel
+      agentId={agentId}
+      selectedVersionId={selectedVersionId ?? undefined}
+      onVersionSelect={onVersionSelect}
+      activeVersionId={activeVersionId}
+    />
+  );
+
   return (
     <AgentCmsFormShell
       form={form}
       mode="edit"
       agentId={agentId}
       isSubmitting={isSubmitting}
+      isSavingDraft={isSavingDraft}
       handlePublish={handlePublish}
-      readOnly={readOnly || isViewingVersion}
+      handleSaveDraft={handleSaveDraft}
+      readOnly={readOnly}
       basePath={`/cms/agents/${agentId}/edit`}
       currentPath={location.pathname}
       banner={banner}
       versionId={selectedVersionId ?? undefined}
+      rightPanel={rightPanel}
     >
       <Outlet />
     </AgentCmsFormShell>
@@ -82,11 +107,19 @@ function EditLayoutWrapper() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
-  const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
+  const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId, { status: 'draft' });
   const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
   });
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  const activeVersionId = agent?.activeVersionId;
+  const latestVersion = versionsData?.versions?.[0];
+  const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -95,11 +128,11 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent]);
 
-  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
+  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
-    onSuccess: id => navigate(`${paths.agentLink(id)}/chat`),
+    onSuccess: id => navigate(paths.agentLink(id)),
   });
 
   const handleVersionSelect = useCallback(
@@ -126,32 +159,40 @@ function EditLayoutWrapper() {
           {isLoadingAgent && <Skeleton className="h-6 w-[200px]" />}
           {isNotFound && 'Agent not found'}
           {isReady && `Edit agent: ${agent.name}`}
+          {isReady && hasDraft && <Badge variant="info">Unpublished changes</Badge>}
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            <AgentVersionCombobox
-              agentId={agentId}
-              value={selectedVersionId ?? ''}
-              onValueChange={handleVersionSelect}
-              variant="outline"
-            />
-            {!selectedVersionId && (
-              <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <Icon>
-                      <Check />
-                    </Icon>
-                    Update agent
-                  </>
-                )}
-              </Button>
-            )}
+            <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+              {isSavingDraft ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Icon>
+                    <Save />
+                  </Icon>
+                  Save
+                </>
+              )}
+            </Button>
+            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
+              {isSubmitting ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Icon>
+                    <Check />
+                  </Icon>
+                  Publish
+                </>
+              )}
+            </Button>
           </HeaderAction>
         )}
       </Header>
@@ -167,7 +208,12 @@ function EditLayoutWrapper() {
               readOnly
               form={form}
               handlePublish={handlePublish}
+              handleSaveDraft={handleSaveDraft}
               isSubmitting={isSubmitting}
+              isSavingDraft={isSavingDraft}
+              onVersionSelect={handleVersionSelect}
+              activeVersionId={activeVersionId}
+              latestVersionId={latestVersion?.id}
             />
           </div>
         </>
@@ -176,10 +222,14 @@ function EditLayoutWrapper() {
           agentId={agentId ?? ''}
           selectedVersionId={selectedVersionId}
           versionData={versionData}
-          readOnly={isLoadingAgent || isLoadingVersion}
           form={form}
           handlePublish={handlePublish}
+          handleSaveDraft={handleSaveDraft}
           isSubmitting={isSubmitting}
+          isSavingDraft={isSavingDraft}
+          onVersionSelect={handleVersionSelect}
+          activeVersionId={activeVersionId}
+          latestVersionId={latestVersion?.id}
         />
       )}
     </MainContentLayout>

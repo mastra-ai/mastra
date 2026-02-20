@@ -1,11 +1,11 @@
 export function getAuthEntrypoint() {
-  const tokensObject: Record<string, { id: string }> = {};
+  const tokensObject: Record<string, { id: string; role: string }> = {};
 
   if (process.env.PLAYGROUND_JWT_TOKEN) {
-    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api' };
+    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api', role: 'api' };
   }
   if (process.env.BUSINESS_JWT_TOKEN) {
-    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api' };
+    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api', role: 'api' };
   }
 
   return `
@@ -69,7 +69,6 @@ export function getAuthEntrypoint() {
           owner: ['*'],
           admin: ['*:read', '*:write', '*:execute'],
           api: ['*:read', '*:write', '*:execute'],
-          'business-api': ['*:read', '*:write', '*:execute'],
           member: ['*:read', '*:execute'],
           viewer: ['*:read'],
           _default: [],

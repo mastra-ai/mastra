@@ -102,7 +102,6 @@ const mainNavigation: NavSection[] = [
         url: '/datasets',
         icon: <DatabaseIcon />,
         isOnMastraPlatform: false,
-        isExperimental: true,
       },
     ],
   },
@@ -185,9 +184,6 @@ export function AppSidebar() {
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
 
   const filterPlatformLink = (link: NavLink) => {
-    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
-      return false;
-    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }

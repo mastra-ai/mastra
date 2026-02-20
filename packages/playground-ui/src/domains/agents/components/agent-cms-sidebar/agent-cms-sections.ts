@@ -14,6 +14,7 @@ export const AGENT_CMS_SECTIONS: AgentCmsSection[] = [
   { name: 'Agents', pathSuffix: '/agents', descriptionKey: 'agents', required: false },
   { name: 'Scorers', pathSuffix: '/scorers', descriptionKey: 'scorers', required: false },
   { name: 'Workflows', pathSuffix: '/workflows', descriptionKey: 'workflows', required: false },
+  { name: 'Skills', pathSuffix: '/skills', descriptionKey: 'skills', required: false },
   { name: 'Memory', pathSuffix: '/memory', descriptionKey: 'memory', required: false },
   { name: 'Variables', pathSuffix: '/variables', descriptionKey: 'variables', required: false },
 ];

@@ -62,10 +62,7 @@ function DatasetCompareVersionsPage() {
               </Icon>
               Datasets
             </Crumb>
-            <Crumb isCurrent>
-              <Icon>
-                <ScaleIcon />
-              </Icon>
+            <Crumb isCurrent as="span">
               Compare Versions
             </Crumb>
           </Breadcrumb>
@@ -104,7 +101,7 @@ function DatasetCompareVersionsPage() {
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
-          <Crumb isCurrent>
+          <Crumb isCurrent as="span">
             <Icon>
               <ScaleIcon />
             </Icon>

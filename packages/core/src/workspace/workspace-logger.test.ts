@@ -478,8 +478,8 @@ describe('Workspace Logger Integration', () => {
 
       await sandbox._start();
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
-      expect(mockLogger.debug).toHaveBeenCalledWith('Sandbox started', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Sandbox started', expect.any(Object));
 
       await sandbox._destroy();
     });
@@ -492,7 +492,7 @@ describe('Workspace Logger Integration', () => {
       await sandbox._start();
       await sandbox._stop();
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Stopping sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Stopping sandbox', expect.any(Object));
 
       await sandbox._destroy();
     });
@@ -505,7 +505,7 @@ describe('Workspace Logger Integration', () => {
       await sandbox._start();
       await sandbox._destroy();
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Destroying sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Destroying sandbox', expect.any(Object));
     });
 
     it('should log when executing command', async () => {
@@ -516,8 +516,11 @@ describe('Workspace Logger Integration', () => {
       const result = await sandbox.executeCommand!('echo', ['hello']);
 
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.objectContaining({ command: 'echo' }));
-      expect(mockLogger.info).toHaveBeenCalledWith('Command completed', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        '[LocalSandbox] Executing command',
+        expect.objectContaining({ command: 'echo' }),
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Command completed', expect.any(Object));
 
       await sandbox._destroy();
     });
@@ -530,8 +533,8 @@ describe('Workspace Logger Integration', () => {
       const result = await sandbox.executeCommand!('nonexistent-command-xyz', []);
 
       expect(result.success).toBe(false);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
-      expect(mockLogger.error).toHaveBeenCalledWith('Command failed', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
+      expect(mockLogger.error).toHaveBeenCalledWith('[LocalSandbox] Command failed', expect.any(Object));
 
       await sandbox._destroy();
     });
@@ -553,7 +556,7 @@ describe('Workspace Logger Integration', () => {
       await workspace.init();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
-      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
 
       // Filesystem operations should log
       await workspace.filesystem!.writeFile('/test.txt', 'hello');
@@ -562,7 +565,7 @@ describe('Workspace Logger Integration', () => {
       // Sandbox operations should log
       const result = await workspace.sandbox!.executeCommand!('echo', ['hello']);
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
 
       await workspace.destroy();
     });
@@ -601,7 +604,7 @@ describe('Workspace Logger Integration', () => {
       await agentWorkspace!.init();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
-      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
 
       await agentWorkspace!.destroy();
     });
@@ -672,7 +675,7 @@ describe('Workspace Logger Integration', () => {
 
       // Verify logger was propagated through Mastra → Workspace → Providers
       expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
-      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
 
       // Filesystem operations should use the Mastra logger
       await mastraWorkspace!.filesystem!.writeFile('/mastra-test.txt', 'hello from mastra');
@@ -681,7 +684,7 @@ describe('Workspace Logger Integration', () => {
       // Sandbox operations should use the Mastra logger
       const result = await mastraWorkspace!.sandbox!.executeCommand!('echo', ['mastra']);
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
 
       await mastraWorkspace!.destroy();
     });

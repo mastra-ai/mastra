@@ -1,0 +1,33 @@
+{
+  "name": "template-customer-feedback-summarization",
+  "version": "1.0.0",
+  "description": "An AI agent that analyzes customer feedback and produces actionable summaries.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
