@@ -55,6 +55,7 @@ export function createSubagentTool(deps: SubagentToolDeps) {
     explore: `- **explore**: Read-only codebase exploration. Has access to view, search_content, and find_files. Use for questions like "find all usages of X", "how does module Y work", "what files are related to Z".`,
     plan: `- **plan**: Read-only analysis and planning. Same tools as explore. Use for "create an implementation plan for X", "analyze the architecture of Y".`,
     execute: `- **execute**: Task execution with write capabilities. Has access to all tools including string_replace_lsp, write_file, and execute_command. Use for "implement feature X", "fix bug Y", "refactor module Z".`,
+    'audit-tests': `- **audit-tests**: Read-only test quality auditor. Has access to view, search_content, and find_files. Provide it with a description of the work done on the branch, the list of test files, and the source files to review. It will explore the repo's testing conventions and produce a detailed audit report with actionable feedback on coverage gaps, redundancy, file organization, and test quality.`,
   };
 
   const availableTypesDocs = validAgentTypes.map(t => typeDescriptions[t] ?? `- **${t}**`).join('\n');
