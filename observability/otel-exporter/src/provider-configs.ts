@@ -291,7 +291,7 @@ function resolveGrafanaCloudConfig(config: GrafanaCloudConfig, debug?: boolean):
     headers: {
       Authorization: `Basic ${basicAuth}`,
     },
-    protocol: 'http/protobuf',
+    protocol: 'http/json',
   };
 }
 

@@ -92,28 +92,13 @@ export class OtelExporter extends BaseExporter {
 
     this.config = config;
 
-    // Set up OpenTelemetry diagnostics if debug mode.
-    // Use a filtered logger that suppresses the massive payload dumps
-    // from OTLPExportDelegate ("items to be sent" with full span objects).
+    // Set OTel SDK diagnostics to INFO level so we see warnings/errors from
+    // the SDK internals. We intentionally do NOT use DEBUG here because:
+    // 1. OTLPExportDelegate dumps enormous payloads at DEBUG level
+    // 2. diag.setLogger() is global and can be overwritten by other code
+    // Our DebugSpanExporterWrapper provides export-result logging instead.
     if (config.logLevel === 'debug') {
-      const inner = new DiagConsoleLogger();
-      diag.setLogger(
-        {
-          verbose: (message: string, ...args: unknown[]) => inner.verbose(message, ...args),
-          debug: (message: string, ...args: unknown[]) => {
-            // Suppress the giant payload logged by OTLPExportDelegate
-            if (message.includes('items to be sent')) {
-              inner.debug(`${message} (${Array.isArray(args[0]) ? args[0].length : '?'} items, payload omitted)`);
-              return;
-            }
-            inner.debug(message, ...args);
-          },
-          info: (message: string, ...args: unknown[]) => inner.info(message, ...args),
-          warn: (message: string, ...args: unknown[]) => inner.warn(message, ...args),
-          error: (message: string, ...args: unknown[]) => inner.error(message, ...args),
-        },
-        DiagLogLevel.DEBUG,
-      );
+      diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
     }
   }
 

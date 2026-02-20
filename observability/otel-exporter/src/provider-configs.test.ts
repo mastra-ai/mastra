@@ -118,7 +118,7 @@ describe('Provider Configurations', () => {
       const expectedAuth = Buffer.from('1235678:glc_eyJvIjoiM').toString('base64');
       expect(config?.endpoint).toBe('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces');
       expect(config?.headers['Authorization']).toBe(`Basic ${expectedAuth}`);
-      expect(config?.protocol).toBe('http/protobuf');
+      expect(config?.protocol).toBe('http/json');
     });
 
     it('should strip trailing slash from endpoint before appending path', () => {
