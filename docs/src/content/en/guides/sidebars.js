@@ -276,6 +276,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'guide/research-coordinator',
+          label: 'Supervisor Pattern: Research Coordinator',
+        },
+        {
+          type: 'doc',
           id: 'guide/stock-agent',
           label: 'Tools: Stock Agent',
         },
