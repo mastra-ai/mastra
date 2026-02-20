@@ -1475,6 +1475,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         resourceId: resourceId ?? threadId,
       };
     }
+    if (!threadId) {
+      throw new Error(
+        `ObservationalMemory (scope: 'thread') requires a threadId, but received an empty value. ` +
+          `This is a bug — getThreadContext should have caught this earlier.`,
+      );
+    }
     return {
       threadId,
       resourceId: resourceId ?? threadId,
@@ -2498,6 +2504,16 @@ ${suggestedResponse}
         threadId: serialized.memoryInfo.threadId,
         resourceId: serialized.memoryInfo.resourceId,
       };
+    }
+
+    // In thread scope, threadId is required — without it OM would silently
+    // fall back to a resource-keyed record which causes deadlocks when
+    // multiple threads share the same resourceId.
+    if (this.scope === 'thread') {
+      throw new Error(
+        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+          `Ensure the agent is configured with Memory and a valid threadId is provided.`,
+      );
     }
 
     return null;
@@ -4058,15 +4074,10 @@ ${formattedMessages}
       const existingIds = freshRecord?.observedMessageIds ?? record.observedMessageIds ?? [];
       const allObservedIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 
-      await this.storage.updateActiveObservations({
-        id: record.id,
-        observations: newObservations,
-        tokenCount: totalTokenCount,
-        lastObservedAt,
-        observedMessageIds: allObservedIds,
-      });
-
-      // Save thread-specific metadata (currentTask, suggestedResponse only)
+      // Save thread-specific metadata BEFORE updating the OM record.
+      // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
+      // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
+      // when concurrent agents share a resourceId.
       if (result.suggestedContinuation || result.currentTask) {
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
@@ -4081,6 +4092,14 @@ ${formattedMessages}
           });
         }
       }
+
+      await this.storage.updateActiveObservations({
+        id: record.id,
+        observations: newObservations,
+        tokenCount: totalTokenCount,
+        lastObservedAt,
+        observedMessageIds: allObservedIds,
+      });
 
       // ════════════════════════════════════════════════════════════════════════
       // INSERT END MARKER after successful observation
