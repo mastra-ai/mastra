@@ -485,7 +485,15 @@ export type HarnessEvent =
       isError: boolean;
       durationMs: number;
     }
-  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string };
+  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
+  | {
+      type: 'task_updated';
+      tasks: Array<{
+        content: string;
+        status: 'pending' | 'in_progress' | 'completed';
+        activeForm: string;
+      }>;
+    };
 
 /**
  * Listener function for harness events.

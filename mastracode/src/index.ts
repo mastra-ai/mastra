@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { noopLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
@@ -28,8 +28,6 @@ import {
   createExecuteCommandTool,
   createWriteFileTool,
   stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -168,8 +166,8 @@ export function createMastraCode(config?: MastraCodeConfig) {
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
-        todo_write: todoWriteTool,
-        todo_check: todoCheckTool,
+        task_write: taskWriteTool,
+        task_check: taskCheckTool,
       },
     },
   ];
