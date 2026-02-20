@@ -591,10 +591,23 @@ export class MastraTUI {
   /**
    * Prompt user to continue existing thread or start new one.
    * This runs before the TUI is fully initialized.
-   * Threads are already scoped to the current project path by listThreads().
+   * Threads are scoped to the current resourceId by listThreads(),
+   * then further filtered by projectPath to avoid resuming threads
+   * from other worktrees of the same repo.
    */
   private async promptForThreadSelection(): Promise<void> {
-    const threads = await this.harness.listThreads();
+    const allThreads = await this.harness.listThreads();
+
+    // Filter to threads matching the current working directory.
+    // This prevents worktrees (which share the same resourceId) from
+    // resuming each other's threads.
+    const currentPath = this.projectInfo.rootPath;
+    const threads = allThreads.filter(t => {
+      const threadPath = t.metadata?.projectPath as string | undefined;
+      // Include threads that match the current path, or threads that
+      // were never tagged (legacy threads before auto-tagging).
+      return !threadPath || threadPath === currentPath;
+    });
 
     if (threads.length === 0) {
       // No existing threads for this path - defer creation until first message
