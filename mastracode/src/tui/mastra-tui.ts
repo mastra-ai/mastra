@@ -28,7 +28,7 @@ import { parse as parsePartialJson } from 'partial-json';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
-import type { MCPManager } from '../mcp/manager.js';
+import type { McpManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -95,7 +95,7 @@ export interface MastraTUIOptions {
   authStorage?: AuthStorage;
 
   /** MCP manager for server status and reload */
-  mcpManager?: MCPManager;
+  mcpManager?: McpManager;
 
   /**
    * @deprecated Workspace is now obtained from the Harness.
@@ -129,7 +129,7 @@ export class MastraTUI {
   private options: MastraTUIOptions;
   private hookManager?: HookManager;
   private authStorage?: AuthStorage;
-  private mcpManager?: MCPManager;
+  private mcpManager?: McpManager;
 
   // TUI components
   private ui: TUI;

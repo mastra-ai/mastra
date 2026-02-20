@@ -16,7 +16,7 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
-import { MCPManager } from './mcp/index.js';
+import { createMcpManager } from './mcp/index.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -97,7 +97,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : new MCPManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
 
   // Agent
   const codeAgentInstance = new Agent({
