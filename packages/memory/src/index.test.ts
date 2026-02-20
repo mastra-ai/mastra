@@ -1259,8 +1259,7 @@ describe('Memory', () => {
       });
 
       expect(result.messages).toHaveLength(2);
-      // These assertions verify that recall() returns pagination metadata
-      // Currently this fails because recall() only returns { messages, usage }
+      // Verifies the fix for #13277 — recall() now surfaces pagination metadata
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('page', 0);
       expect(result).toHaveProperty('perPage', 2);
