@@ -164,10 +164,9 @@ describe('execute_command tool', () => {
         });
         const ctx = createContext(sandbox);
         const result = await executeCommandTool.execute({ command: 'seq', args: ['500'] }, ctx);
-        const lines = (result as string).split('\n');
-        expect(lines.length).toBe(200);
-        expect(lines[0]).toBe('line 301');
-        expect(lines[199]).toBe('line 500');
+        expect(result).toContain('[showing last 200 of 500 lines]');
+        expect(result).toContain('line 301');
+        expect(result).toContain('line 500');
       });
 
       it('tail: 10 returns last 10 lines', async () => {
@@ -182,10 +181,9 @@ describe('execute_command tool', () => {
         });
         const ctx = createContext(sandbox);
         const result = await executeCommandTool.execute({ command: 'seq', args: ['500'], tail: 10 }, ctx);
-        const lines = (result as string).split('\n');
-        expect(lines.length).toBe(10);
-        expect(lines[0]).toBe('line 491');
-        expect(lines[9]).toBe('line 500');
+        expect(result).toContain('[showing last 10 of 500 lines]');
+        expect(result).toContain('line 491');
+        expect(result).toContain('line 500');
       });
 
       it('tail: 0 returns all lines (no limit)', async () => {
@@ -200,8 +198,9 @@ describe('execute_command tool', () => {
         });
         const ctx = createContext(sandbox);
         const result = await executeCommandTool.execute({ command: 'seq', args: ['500'], tail: 0 }, ctx);
-        const lines = (result as string).split('\n');
-        expect(lines.length).toBe(500);
+        expect(result).not.toContain('[showing last');
+        expect(result).toContain('line 1\n');
+        expect(result).toContain('line 500');
       });
 
       it('tail applies to both stdout and stderr on failure', async () => {
@@ -217,10 +216,8 @@ describe('execute_command tool', () => {
         });
         const ctx = createContext(sandbox);
         const result = await executeCommandTool.execute({ command: 'fail', args: [], tail: 5 }, ctx);
-        // stdout should be last 5 lines
         expect(result).toContain('line 496');
         expect(result).toContain('line 500');
-        // stderr should be last 5 lines
         expect(result).toContain('err 46');
         expect(result).toContain('err 50');
         expect(result).toContain('Exit code: 1');
@@ -266,7 +263,7 @@ describe('execute_command tool', () => {
 });
 
 describe('get_process_output tool', () => {
-  it('returns output for a running process', async () => {
+  it('returns stdout directly for a running process', async () => {
     const handle = createMockHandle({
       pid: 10,
       stdout: 'server started on port 3000\n',
@@ -280,9 +277,10 @@ describe('get_process_output tool', () => {
     });
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 10 }, ctx);
-    expect(result).toContain('PID: 10');
-    expect(result).toContain('Status: running');
+    // Should be just the output — no PID or status labels
     expect(result).toContain('server started on port 3000');
+    expect(result).not.toContain('PID:');
+    expect(result).not.toContain('Status:');
   });
 
   it('returns "no output yet" for a running process with no output', async () => {
@@ -299,8 +297,7 @@ describe('get_process_output tool', () => {
     });
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 11 }, ctx);
-    expect(result).toContain('Status: running');
-    expect(result).toContain('(no output yet)');
+    expect(result).toBe('(no output yet)');
   });
 
   it('returns not found for unknown PID', async () => {
@@ -314,7 +311,7 @@ describe('get_process_output tool', () => {
     expect(result).toContain('No background process found with PID 99999');
   });
 
-  it('skips output for already-exited process (no wait)', async () => {
+  it('returns exit code for already-exited process (no wait)', async () => {
     const handle = createMockHandle({
       pid: 12,
       stdout: 'lots of output here\n',
@@ -328,9 +325,46 @@ describe('get_process_output tool', () => {
     });
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 12 }, ctx);
-    expect(result).toContain('Status: exited (code 0)');
-    // Should NOT include stdout since process already exited and wait was not requested
+    expect(result).toBe('Exited (code 0)');
     expect(result).not.toContain('lots of output here');
+  });
+
+  it('labels stdout and stderr when both present', async () => {
+    const handle = createMockHandle({
+      pid: 17,
+      stdout: 'out data\n',
+      stderr: 'err data\n',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: 17 }, ctx);
+    expect(result).toContain('stdout:');
+    expect(result).toContain('out data');
+    expect(result).toContain('stderr:');
+    expect(result).toContain('err data');
+  });
+
+  it('does not label stdout when only stdout is present', async () => {
+    const handle = createMockHandle({
+      pid: 18,
+      stdout: 'just output\n',
+      stderr: '',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: 18 }, ctx);
+    expect(result).not.toContain('stdout:');
+    expect(result).toContain('just output');
   });
 
   describe('tail param', () => {
@@ -382,9 +416,7 @@ describe('get_process_output tool', () => {
         stderr: '',
         exitCode: undefined,
       });
-      // Simulate wait resolving
       handle.wait.mockImplementation(async () => {
-        // After wait resolves, exitCode gets set
         (handle as any).exitCode = 0;
         return { exitCode: 0, success: true, stdout: 'final output\n', stderr: '', executionTimeMs: 100 };
       });
@@ -397,6 +429,7 @@ describe('get_process_output tool', () => {
       const result = await getProcessOutputTool.execute({ pid: 15, wait: true }, ctx);
       expect(handle.wait).toHaveBeenCalled();
       expect(result).toContain('final output');
+      expect(result).toContain('Exit code: 0');
     });
 
     it('returns output for exited process when wait: true', async () => {
@@ -413,7 +446,6 @@ describe('get_process_output tool', () => {
       });
       const ctx = createContext(sandbox);
       const result = await getProcessOutputTool.execute({ pid: 16, wait: true }, ctx);
-      // wait: true should bypass the "skip output for exited" guard
       expect(result).toContain('build complete');
       expect(result).toContain('Done in 2.3s');
     });
@@ -438,12 +470,9 @@ describe('kill_process tool', () => {
     const ctx = createContext(sandbox);
     const result = await killProcessTool.execute({ pid: 20 }, ctx);
     expect(result).toContain('Process 20 has been killed');
-    // Should include last 50 lines of stdout
     expect(result).toContain('server log 51');
     expect(result).toContain('server log 100');
-    // Should NOT include early lines
     expect(result).not.toContain('server log 1\n');
-    // Should include stderr
     expect(result).toContain('warn: something');
   });
 
@@ -512,51 +541,54 @@ describe('output-helpers', () => {
       expect(applyTail('a\nb\nc', 10)).toBe('a\nb\nc');
     });
 
-    it('returns last N lines', () => {
+    it('returns last N lines with truncation notice', () => {
       const input = 'a\nb\nc\nd\ne';
-      expect(applyTail(input, 2)).toBe('d\ne');
+      const result = applyTail(input, 2);
+      expect(result).toBe('[showing last 2 of 5 lines]\nd\ne');
     });
 
     it('uses DEFAULT_TAIL_LINES when tail is undefined', () => {
       const lines = Array.from({ length: 300 }, (_, i) => `${i}`).join('\n');
       const result = applyTail(lines, undefined);
-      expect(result.split('\n').length).toBe(DEFAULT_TAIL_LINES);
+      expect(result).toContain(`[showing last ${DEFAULT_TAIL_LINES} of 300 lines]`);
     });
 
     it('uses DEFAULT_TAIL_LINES when tail is null', () => {
       const lines = Array.from({ length: 300 }, (_, i) => `${i}`).join('\n');
       const result = applyTail(lines, null);
-      expect(result.split('\n').length).toBe(DEFAULT_TAIL_LINES);
+      expect(result).toContain(`[showing last ${DEFAULT_TAIL_LINES} of 300 lines]`);
     });
 
     it('returns all lines when tail is 0 (no limit)', () => {
       const lines = Array.from({ length: 500 }, (_, i) => `${i}`).join('\n');
       const result = applyTail(lines, 0);
       expect(result.split('\n').length).toBe(500);
+      expect(result).not.toContain('[showing last');
     });
 
     it('handles negative tail by taking absolute value', () => {
       const input = 'a\nb\nc\nd\ne';
-      expect(applyTail(input, -2)).toBe('d\ne');
+      const result = applyTail(input, -2);
+      expect(result).toContain('d\ne');
+      expect(result).toContain('[showing last 2 of 5 lines]');
     });
 
     it('does not count trailing newline as an extra line', () => {
-      // "a\nb\nc\n" should be treated as 3 lines, not 4
       const input = 'a\nb\nc\nd\ne\n';
       const result = applyTail(input, 2);
-      expect(result).toBe('d\ne\n');
+      expect(result).toBe('[showing last 2 of 5 lines]\nd\ne\n');
     });
 
     it('preserves trailing newline after truncation', () => {
       const input = 'line1\nline2\nline3\n';
       const result = applyTail(input, 1);
-      expect(result).toBe('line3\n');
+      expect(result).toBe('[showing last 1 of 3 lines]\nline3\n');
     });
 
     it('works correctly without trailing newline', () => {
       const input = 'line1\nline2\nline3';
       const result = applyTail(input, 1);
-      expect(result).toBe('line3');
+      expect(result).toBe('[showing last 1 of 3 lines]\nline3');
     });
   });
 
@@ -574,7 +606,6 @@ describe('output-helpers', () => {
       const output = 'a'.repeat(50);
       const result = applyCharLimit(output, 20);
       expect(result).toContain('[output truncated: showing last 20 of 50 characters]');
-      // The actual content should be the last 20 chars
       expect(result).toContain('a'.repeat(20));
     });
 
@@ -583,11 +614,9 @@ describe('output-helpers', () => {
     });
 
     it('uses MAX_OUTPUT_CHARS as default limit', () => {
-      // Just under the limit — should pass through
       const justUnder = 'x'.repeat(MAX_OUTPUT_CHARS);
       expect(applyCharLimit(justUnder)).toBe(justUnder);
 
-      // Just over — should truncate
       const justOver = 'x'.repeat(MAX_OUTPUT_CHARS + 1);
       const result = applyCharLimit(justOver);
       expect(result).toContain('[output truncated');
@@ -596,24 +625,21 @@ describe('output-helpers', () => {
 
   describe('truncateOutput', () => {
     it('applies tail then char limit', () => {
-      // 500 lines of 100 chars each = 50,000+ chars
       const lines = Array.from({ length: 500 }, (_, i) => `line-${String(i).padStart(3, '0')}-${'x'.repeat(90)}`);
       const output = lines.join('\n');
 
-      // tail: 0 (no line limit) but char limit should kick in
       const result = truncateOutput(output, 0);
       expect(result).toContain('[output truncated');
-      expect(result.length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS + 200); // notice adds some overhead
+      expect(result.length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS + 200);
     });
 
     it('tail reduces output enough to skip char limit', () => {
-      // 500 lines, but tail: 5 will reduce to ~500 chars — well under 30k
       const lines = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`);
       const output = lines.join('\n');
 
       const result = truncateOutput(output, 5);
       expect(result).not.toContain('[output truncated');
-      expect(result.split('\n').length).toBe(5);
+      expect(result).toContain('[showing last 5 of 500 lines]');
     });
   });
 });
@@ -633,7 +659,6 @@ describe('char limit integration', () => {
     const ctx = createContext(sandbox);
     const result = await executeCommandTool.execute({ command: 'cat', args: ['big.bin'], tail: 0 }, ctx);
     expect(result).toContain('[output truncated');
-    // Result should be bounded
     expect((result as string).length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS + 200);
   });
 

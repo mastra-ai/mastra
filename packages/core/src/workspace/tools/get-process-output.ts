@@ -45,29 +45,33 @@ Use this after starting a background command with execute_command (background: t
     }
 
     const running = handle.exitCode === undefined;
-    const parts: string[] = [];
-
-    parts.push(`PID: ${pid}`);
-    parts.push(`Status: ${running ? 'running' : `exited (code ${handle.exitCode})`}`);
 
     if (!running && !shouldWait) {
       // Process already exited and agent didn't request wait — output was
       // already returned by kill_process. Don't dump the buffer again.
-      return parts.join('\n');
+      return `Exited (code ${handle.exitCode})`;
     }
 
     const stdout = truncateOutput(handle.stdout, tail);
     const stderr = truncateOutput(handle.stderr, tail);
 
-    if (stdout) {
-      parts.push('', '--- stdout ---', stdout);
-    }
-    if (stderr) {
-      parts.push('', '--- stderr ---', stderr);
+    if (!stdout && !stderr) {
+      return '(no output yet)';
     }
 
-    if (!stdout && !stderr) {
-      parts.push('', '(no output yet)');
+    const parts: string[] = [];
+
+    // Only label stdout/stderr when both are present
+    if (stdout && stderr) {
+      parts.push('stdout:', stdout, '', 'stderr:', stderr);
+    } else if (stdout) {
+      parts.push(stdout);
+    } else {
+      parts.push('stderr:', stderr);
+    }
+
+    if (!running) {
+      parts.push('', `Exit code: ${handle.exitCode}`);
     }
 
     return parts.join('\n');
