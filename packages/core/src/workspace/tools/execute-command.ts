@@ -10,8 +10,9 @@ import { DEFAULT_TAIL_LINES, truncateOutput } from './output-helpers';
  * Extended with `background` in tools.ts when sandbox.processes exists.
  */
 export const executeCommandInputSchema = z.object({
-  command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
-  args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+  command: z
+    .string()
+    .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
   timeout: z.number().nullish().describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
@@ -28,13 +29,13 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     .boolean()
     .optional()
     .describe(
-      'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use process_output to check on it later.',
+      'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use get_process_output to check on it later.',
     ),
 });
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  const { command, args, timeout, cwd, tail } = input;
+  const { command, timeout, cwd, tail } = input;
   const background = input.background as boolean | undefined;
   const { sandbox } = requireSandbox(context);
 
@@ -47,8 +48,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       throw new SandboxFeatureNotSupportedError('processes');
     }
 
-    const fullCommand = args?.length ? `${command} ${(args as string[]).join(' ')}` : command;
-    const handle = await sandbox.processes.spawn(fullCommand, {
+    const handle = await sandbox.processes.spawn(command, {
       cwd: cwd ?? undefined,
       timeout: timeout ?? undefined,
     });
@@ -65,7 +65,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
   let stdout = '';
   let stderr = '';
   try {
-    const result = await sandbox.executeCommand(command, args ?? [], {
+    const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
       onStdout: async (data: string) => {
@@ -118,16 +118,24 @@ async function executeCommand(input: Record<string, any>, context: any) {
   }
 }
 
+const baseDescription = `Execute a shell command in the workspace sandbox.
+
+Examples:
+  "npm install && npm run build"
+  "ls -la src/"
+  "cat config.json | jq '.database'"
+  "cd /app && python main.py"
+
+Usage:
+- Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
+- Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
+- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
+- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
+
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-  description: `Execute a shell command in the workspace sandbox.
-
-Usage:
-- Verify parent directories exist before running commands that create files or directories.
-- Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`,
+  description: baseDescription,
   inputSchema: executeCommandInputSchema,
   execute: executeCommand,
 });
@@ -135,13 +143,7 @@ Usage:
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-  description: `Execute a shell command in the workspace sandbox.
-
-Usage:
-- Verify parent directories exist before running commands that create files or directories.
-- Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.
+  description: `${baseDescription}
 
 Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
   inputSchema: executeCommandWithBackgroundSchema,
