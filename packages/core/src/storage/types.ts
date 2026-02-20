@@ -1190,10 +1190,13 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Ratio controlling how much context to retain after activation (0-1 float).
+   * Normalized ratio (0-1) controlling how much context to activate.
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
    * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
-   * Chunks are selected by boundary, biased under the target.
+   * Chunks are selected by boundary, biased over the target (to ensure remaining context stays at or below the retention floor).
+   *
+   * Note: this is always a ratio. The caller resolves absolute `bufferActivation` values (> 1)
+   * into the equivalent ratio before passing to the storage layer.
    */
   activationRatio: number;
   /**
@@ -1206,6 +1209,12 @@ export interface SwapBufferedToActiveInput {
    * Used to compute how many tokens need to be removed to reach the retention floor.
    */
   currentPendingTokens: number;
+  /**
+   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
+   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
+   * aggressively reducing context is more important than preserving the retention floor.
+   */
+  forceMaxActivation?: boolean;
   /**
    * Optional timestamp to use as lastObservedAt after swap.
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
