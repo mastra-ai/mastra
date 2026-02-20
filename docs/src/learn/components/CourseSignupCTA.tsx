@@ -3,6 +3,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { cn } from '@site/src/lib/utils'
 import { Button } from '@site/src/components/ui/button'
 import { Input } from '@site/src/components/ui/input'
+import { course } from '../course'
 
 const SUBSCRIBED_KEY = 'mastraLearn:subscribed'
 
@@ -11,6 +12,7 @@ type CourseSignupCTAProps = {
 }
 
 export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
+  const allPublished = course.lessons.every(l => l.status === 'published')
   const { siteConfig } = useDocusaurusContext()
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -57,6 +59,8 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
     }
   }
 
+  if (allPublished) return null
+
   if (submitted) {
     return (
       <div className={cn('learn-subscribed rounded-lg border p-6 text-center', className)}>
@@ -68,10 +72,8 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
 
   return (
     <div className={cn('rounded-lg border border-(--border) p-6 text-center', className)}>
-      <h3 className="text-lg font-semibold text-(--mastra-text-primary)">Get notified when new lessons drop</h3>
-      <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">
-        Join the Mastra learning community — no spam, just new lesson notifications.
-      </p>
+      <h3 className="text-lg font-semibold text-(--mastra-text-primary)">New lessons arriving early March</h3>
+      <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">Get a heads-up the moment they go live.</p>
       <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-2">
         <Input
           type="email"
@@ -82,7 +84,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
           className="flex-1"
         />
         <Button type="submit" disabled={submitting} size="default">
-          {submitting ? 'Subscribing...' : 'Subscribe'}
+          {submitting ? 'Signing you up...' : 'Get notified'}
         </Button>
       </form>
       {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
