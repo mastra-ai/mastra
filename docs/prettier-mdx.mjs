@@ -44,7 +44,7 @@ function remarkFormatCodeBlocks(prettierOptions) {
       mark: /^=( |$)/,
     }
 
-    visit(tree, 'code', (node) => {
+    visit(tree, 'code', node => {
       let prettierDisabled = !prettierOptions.mdxFormatCodeBlocks || DISABLE_PRETTIER_RE.test(node.meta ?? '')
       let prettierEnabled = !prettierDisabled
 
@@ -90,7 +90,7 @@ function remarkFormatCodeBlocks(prettierOptions) {
                 parser,
                 printWidth: 100,
               })
-              .then((formatted) => {
+              .then(formatted => {
                 let newValue = formatted.trimEnd()
 
                 if (hasMarks) {
@@ -122,7 +122,7 @@ function remarkFormatCodeBlocks(prettierOptions) {
                 }
                 node.value = newValue
               })
-              .catch((error) => {
+              .catch(error => {
                 if (error instanceof SyntaxError) {
                   error.message = error.message.replace(
                     /\((\d+):(\d+)\)/,
@@ -143,7 +143,7 @@ function remarkFormatCodeBlocks(prettierOptions) {
 
 // https://github.com/prettier/prettier/blob/8a88cdce6d4605f206305ebb9204a0cabf96a070/src/utils/infer-parser.js#L61
 function inferParser(prettierOptions, fileInfo) {
-  let languages = prettierOptions.plugins.flatMap((plugin) => plugin.languages ?? [])
+  let languages = prettierOptions.plugins.flatMap(plugin => plugin.languages ?? [])
   let language = getLanguageByLanguageName(languages, fileInfo.language)
   return language?.parsers[0]
 }
