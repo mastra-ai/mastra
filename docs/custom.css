@@ -1571,3 +1571,28 @@ article p {
     justify-content: space-between;
   }
 }
+
+/* Learn content area — match docs max-width and font size */
+.learn-main [class*='container'] article {
+  max-width: 48rem;
+}
+
+/* "new" badge on Learn tab */
+.learn-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 15%, transparent);
+  color: var(--mastra-green-accent-3);
+}
+
+[data-theme='dark'] .learn-tab-badge {
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
+  color: var(--mastra-green-accent);
+}

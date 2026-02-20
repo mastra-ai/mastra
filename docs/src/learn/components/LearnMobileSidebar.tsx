@@ -57,6 +57,18 @@ const LearnMobileSidebarContent: NavbarSecondaryMenuComponent<LearnMobileSidebar
                 const isActive =
                   location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
                 const isComingSoon = lesson.status === 'comingSoon'
+
+                if (isComingSoon) {
+                  return (
+                    <li key={lesson.slug} className="menu__list-item">
+                      <span className="learn-sidebar-item flex cursor-default items-center gap-2 px-2 py-1.5 text-sm text-(--mastra-text-muted)">
+                        <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
+                        <span>{lesson.title}</span>
+                      </span>
+                    </li>
+                  )
+                }
+
                 return (
                   <li key={lesson.slug} className="menu__list-item">
                     <Link
@@ -66,9 +78,7 @@ const LearnMobileSidebarContent: NavbarSecondaryMenuComponent<LearnMobileSidebar
                         'learn-sidebar-item flex items-center gap-2 px-2 py-1.5 text-sm',
                         isActive
                           ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
-                          : isComingSoon
-                            ? 'text-(--mastra-text-muted)'
-                            : 'text-(--mastra-text-tertiary)',
+                          : 'text-(--mastra-text-tertiary)',
                       )}
                     >
                       <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />

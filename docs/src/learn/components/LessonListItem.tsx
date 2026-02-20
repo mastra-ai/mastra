@@ -26,27 +26,54 @@ function ProgressDot({ status }: { status: LessonProgressStatus }) {
   if (status === 'in-progress') {
     return <span className="learn-sidebar-icon-in-progress" />
   }
-  return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-(--border)" />
+  return <span className="learn-sidebar-icon-unwatched" />
 }
 
 export function LessonListItem({ lesson, index, storage, className }: LessonListItemProps) {
-  const progressStatus = getProgressStatus(storage, lesson.slug)
+  const isComingSoon = lesson.status === 'comingSoon'
+  const progressStatus = isComingSoon ? 'not-started' : getProgressStatus(storage, lesson.slug)
 
   const buttonLabel = (() => {
-    if (lesson.status === 'comingSoon') return 'Preview'
+    if (isComingSoon) return 'Coming Early March 2026'
     if (progressStatus === 'in-progress') return 'Continue'
     if (progressStatus === 'completed') return 'Review'
     return 'Start'
   })()
 
+  const sharedClassName = cn(
+    'learn-link group flex items-center gap-4 rounded-lg border border-(--border) p-4 transition-colors cursor-pointer',
+    isComingSoon ? 'opacity-60' : 'hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
+    className,
+  )
+
+  if (isComingSoon) {
+    return (
+      <a
+        href="#learn-signup-cta"
+        onClick={e => {
+          e.preventDefault()
+          document.getElementById('learn-signup-cta')?.scrollIntoView({ behavior: 'smooth' })
+        }}
+        className={sharedClassName}
+      >
+        <div className="flex h-8 w-8 items-center justify-center">
+          <span className="learn-sidebar-icon-coming-soon" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-(--mastra-text-primary) no-underline">
+              {index + 1}. {lesson.title}
+            </span>
+          </div>
+          <span className="text-xs text-(--mastra-text-tertiary)">{lesson.durationMin} min</span>
+        </div>
+        <LessonStatusChip status={lesson.status} />
+      </a>
+    )
+  }
+
   return (
-    <Link
-      to={`/learn/${lesson.slug}`}
-      className={cn(
-        'learn-link group flex items-center gap-4 rounded-lg border border-(--border) p-4 transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
-        className,
-      )}
-    >
+    <Link to={`/learn/${lesson.slug}`} className={sharedClassName}>
       <div className="flex h-8 w-8 items-center justify-center">
         <ProgressDot status={progressStatus} />
       </div>
@@ -55,7 +82,6 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
           <span className="truncate text-sm font-medium text-(--mastra-text-primary) no-underline">
             {index + 1}. {lesson.title}
           </span>
-          <LessonStatusChip status={lesson.status} />
         </div>
         <span className="text-xs text-(--mastra-text-tertiary)">{lesson.durationMin} min</span>
       </div>

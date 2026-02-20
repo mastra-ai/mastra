@@ -30,8 +30,12 @@ export function LessonHeader({
         </span>
         <span className="learn-meta-text">·</span>
         <span className="learn-meta-text text-sm">{lesson.durationMin} min</span>
-        <span className="learn-meta-text">·</span>
-        <LessonStatusChip status={lesson.status} />
+        {lesson.status === 'comingSoon' && (
+          <>
+            <span className="learn-meta-text">·</span>
+            <LessonStatusChip status={lesson.status} />
+          </>
+        )}
         {onWatchedChange != null && (
           <label className="ml-auto flex cursor-pointer items-center gap-2 select-none">
             <input
@@ -43,7 +47,7 @@ export function LessonHeader({
               }}
               className="sr-only"
             />
-            <span className="learn-meta-text text-sm">{watched ? 'Watched' : 'Mark as watched'}</span>
+            <span className="learn-meta-text text-sm">{watched ? 'Complete' : 'Mark as complete'}</span>
             <span
               className={cn('learn-watched-icon', watched && 'is-watched', animating && 'is-animate')}
               onAnimationEnd={() => setAnimating(false)}

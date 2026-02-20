@@ -61,12 +61,24 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
         <div className="flex-1">
           {modules.map(([moduleName, moduleLessons]) => (
             <div key={moduleName} className="mb-3">
-              <h4 className="px-4 py-1 text-xs font-semibold text-(--mastra-text-tertiary)">{moduleName}</h4>
+              <h4 className="mb-2! px-4 pt-2 text-xs font-semibold text-(--mastra-text-tertiary)">{moduleName}</h4>
               <ul>
                 {moduleLessons.map(lesson => {
                   const isActive =
                     location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
                   const isComingSoon = lesson.status === 'comingSoon'
+
+                  if (isComingSoon) {
+                    return (
+                      <li key={lesson.slug}>
+                        <span className="learn-sidebar-item relative flex cursor-default items-center gap-2 px-4 py-1 text-sm text-(--mastra-text-muted)">
+                          <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
+                          <span className="truncate">{lesson.title}</span>
+                        </span>
+                      </li>
+                    )
+                  }
+
                   return (
                     <li key={lesson.slug}>
                       <Link
@@ -75,9 +87,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
                           'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
                           isActive
                             ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
-                            : isComingSoon
-                              ? 'text-(--mastra-text-muted) hover:text-(--mastra-text-tertiary)'
-                              : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
+                            : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
                         )}
                       >
                         <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
