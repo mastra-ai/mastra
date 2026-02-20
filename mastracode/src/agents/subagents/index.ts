@@ -84,4 +84,3 @@ export function getSubagentTools(projectPath: string) {
     toolReadOnly: subagentToolReadOnly,
   };
 }
-
