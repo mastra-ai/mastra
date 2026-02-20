@@ -77,8 +77,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const currentContent = allContent.slice(previousContentLength);
       previousContentLength = allContent.length;
 
-      // Derive tool results from content (matching DefaultStepResult's pattern)
-      // rather than from output.toolResults which is never populated by the execution pipeline
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
       const currentStep: StepResult<Tools> = {
