@@ -2890,9 +2890,6 @@ importers:
       '@composio/mastra':
         specifier: ^0.6.3
         version: 0.6.3(@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
-      '@mastra/mcp':
-        specifier: '>=1.0.0-0 <2.0.0-0'
-        version: 1.0.0(@mastra/core@packages+core)(@types/json-schema@7.0.15)(zod@3.25.76)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -2900,6 +2897,9 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
     devDependencies:
+      '@hono/node-server':
+        specifier: ^1.14.1
+        version: 1.19.9(hono@4.11.9)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -2912,9 +2912,18 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      hono:
+        specifier: ^4.7.10
+        version: 4.11.9
       tsup:
         specifier: ^8.0.2
         version: 8.5.1(@microsoft/api-extractor@7.56.3(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -10123,13 +10132,6 @@ packages:
   '@mariozechner/pi-tui@0.54.0':
     resolution: {integrity: sha512-bvFlUohdxDvKcFeQM2xsd5twCGKWxVaYSlHCFljIW0KqMC4vU+/Ts4A1i9iDnm6Xe/MlueKvC0V09YeC8fLIHA==}
     engines: {node: '>=20.0.0'}
-
-  '@mastra/mcp@1.0.0':
-    resolution: {integrity: sha512-g+N3L61Sq4dQGLjMlQmVAnAPVOi1fJHmSe+gJxamxTGJ/r8Tdl6Za0gOj4faSeDUAn2sim0dCz2FEDjXDvoDsQ==}
-    engines: {node: '>=22.13.0'}
-    peerDependencies:
-      '@mastra/core': '>=1.0.0-0 <2.0.0-0'
-      zod: ^3.25.0 || ^4.0.0
 
   '@mastra/schema-compat@1.1.0':
     resolution: {integrity: sha512-2v8nTaAC/279jHs0ux2Emp+lNgBFq3QeNbZCGSHFeeBhbqqM5aWJCPY2Xgw8Z/dY3mTpFxBbmXQz3oRyYStnqg==}
@@ -28638,21 +28640,6 @@ snapshots:
       koffi: 2.15.1
       marked: 15.0.12
       mime-types: 3.0.1
-
-  '@mastra/mcp@1.0.0(@mastra/core@packages+core)(@types/json-schema@7.0.15)(zod@3.25.76)':
-    dependencies:
-      '@apidevtools/json-schema-ref-parser': 14.2.1(@types/json-schema@7.0.15)
-      '@mastra/core': link:packages/core
-      '@modelcontextprotocol/sdk': 1.20.1
-      exit-hook: 5.0.1
-      fast-deep-equal: 3.1.3
-      uuid: 13.0.0
-      zod: 3.25.76
-      zod-from-json-schema: 0.5.0
-      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
-    transitivePeerDependencies:
-      - '@types/json-schema'
-      - supports-color
 
   '@mastra/schema-compat@1.1.0(zod@3.25.76)':
     dependencies:
