@@ -27,8 +27,7 @@ export const listStoredPromptBlocksQuerySchema = createPagePaginationSchema(100)
   status: z
     .enum(['draft', 'published', 'archived'])
     .optional()
-    .default('published')
-    .describe('Filter prompt blocks by status (defaults to published)'),
+    .describe('Filter prompt blocks by status. When omitted, returns all prompt blocks regardless of status'),
   authorId: z.string().optional().describe('Filter prompt blocks by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter prompt blocks by metadata key-value pairs'),
 });
@@ -42,6 +41,10 @@ const snapshotConfigSchema = z.object({
   description: z.string().optional().describe('Purpose description'),
   content: z.string().describe('Template content with {{variable}} interpolation'),
   rules: ruleGroupSchema.optional().describe('Rules for conditional inclusion'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining available variables for {{variableName}} interpolation and conditions'),
 });
 
 export const createStoredPromptBlockBodySchema = z
@@ -67,6 +70,7 @@ export const storedPromptBlockSchema = z.object({
   id: z.string(),
   status: z.string().describe('Prompt block status: draft, published, or archived'),
   activeVersionId: z.string().optional(),
+  hasDraft: z.boolean().optional().describe('Whether the prompt block has unpublished draft changes'),
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.coerce.date(),
@@ -75,6 +79,10 @@ export const storedPromptBlockSchema = z.object({
   description: z.string().optional().describe('Purpose description'),
   content: z.string().describe('Template content with {{variable}} interpolation'),
   rules: ruleGroupSchema.optional().describe('Rules for conditional inclusion'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining available variables for {{variableName}} interpolation and conditions'),
 });
 
 export const listStoredPromptBlocksResponseSchema = paginationInfoSchema.extend({

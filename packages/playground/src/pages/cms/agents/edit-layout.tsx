@@ -108,7 +108,7 @@ function EditLayoutWrapper() {
   const selectedVersionId = searchParams.get('versionId');
 
   const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId, { status: 'draft' });
-  const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
+  const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
   });
@@ -128,7 +128,7 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent]);
 
-  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft } = useAgentCmsForm({
+  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, isDirty } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
@@ -163,7 +163,7 @@ function EditLayoutWrapper() {
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+            <Button variant="outline" onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -178,7 +178,11 @@ function EditLayoutWrapper() {
                 </>
               )}
             </Button>
-            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
+            <Button
+              variant="primary"
+              onClick={handlePublish}
+              disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
+            >
               {isSubmitting ? (
                 <>
                   <Spinner className="h-4 w-4" />

@@ -69,6 +69,9 @@ import CmsAgentSkillsPage from './pages/cms/agents/skills';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import PromptBlocks from './pages/prompt-blocks';
+import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
+import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import DatasetItemPage from './pages/datasets/dataset/item';
@@ -99,6 +102,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
   cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
+  promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
+  promptBlocksLink: () => '/prompts',
+  cmsPromptBlockCreateLink: () => '/cms/prompts/create',
+  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
   skillLink: (skillName: string, workspaceId?: string) =>
     workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
@@ -175,6 +182,9 @@ const routes = [
       },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+      { path: '/prompts', element: <PromptBlocks /> },
+      { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
+      { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
       {
         path: '/agents/:agentId',

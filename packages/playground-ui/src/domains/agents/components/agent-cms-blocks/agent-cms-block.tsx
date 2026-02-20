@@ -9,10 +9,11 @@ import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
-import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { DisplayConditionsDialog } from '@/domains/cms';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
 
 export interface AgentCMSBlockProps {
   index: number;
@@ -25,9 +26,9 @@ export interface AgentCMSBlockProps {
   autoFocus?: boolean;
 }
 
-interface AgentCMSBlockContentProps {
+interface InlineBlockContentProps {
   index: number;
-  block: InstructionBlock;
+  block: InlineInstructionBlock;
   onBlockChange: (block: InstructionBlock) => void;
   placeholder?: string;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
@@ -36,7 +37,7 @@ interface AgentCMSBlockContentProps {
   autoFocus?: boolean;
 }
 
-const AgentCMSBlockContent = ({
+const InlineBlockContent = ({
   index,
   block,
   onBlockChange,
@@ -45,7 +46,7 @@ const AgentCMSBlockContent = ({
   onDelete,
   schema,
   autoFocus = false,
-}: AgentCMSBlockContentProps) => {
+}: InlineBlockContentProps) => {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   useEffect(() => {
@@ -126,6 +127,10 @@ export const AgentCMSBlock = ({
   schema,
   autoFocus,
 }: AgentCMSBlockProps) => {
+  if (block.type === 'prompt_block_ref') {
+    return <AgentCMSRefBlock index={index} block={block} onDelete={onDelete} className={className} />;
+  }
+
   return (
     <ContentBlock
       index={index}
@@ -133,7 +138,7 @@ export const AgentCMSBlock = ({
       className={cn('h-full rounded-md border border-border1 overflow-hidden', className)}
     >
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
-        <AgentCMSBlockContent
+        <InlineBlockContent
           index={index}
           block={block}
           onBlockChange={onBlockChange}

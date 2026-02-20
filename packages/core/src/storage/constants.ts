@@ -186,6 +186,7 @@ export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   description: { type: 'text', nullable: true },
   content: { type: 'text', nullable: false },
   rules: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },

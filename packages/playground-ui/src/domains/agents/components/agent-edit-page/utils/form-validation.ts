@@ -19,12 +19,20 @@ export type SkillFormValue = {
   files: InMemoryFileNode[];
 };
 
-export type InstructionBlock = {
+export type InlineInstructionBlock = {
   id: string;
   type: 'prompt_block';
   content: string;
   rules?: RuleGroup;
 };
+
+export type RefInstructionBlock = {
+  id: string;
+  type: 'prompt_block_ref';
+  promptBlockId: string;
+};
+
+export type InstructionBlock = InlineInstructionBlock | RefInstructionBlock;
 
 const ruleSchema = z.object({
   field: z.string(),
@@ -60,18 +68,32 @@ const ruleGroupSchema: z.ZodType<RuleGroup> = z.object({
   conditions: z.array(z.union([ruleSchema, ruleGroupDepth1Schema])),
 });
 
-const instructionBlockSchema = z.object({
+const inlineInstructionBlockSchema = z.object({
   id: z.string(),
   type: z.literal('prompt_block'),
   content: z.string(),
   rules: ruleGroupSchema.optional(),
 });
 
-export const createInstructionBlock = (content = '', rules?: RuleGroup): InstructionBlock => ({
+const refInstructionBlockSchema = z.object({
+  id: z.string(),
+  type: z.literal('prompt_block_ref'),
+  promptBlockId: z.string(),
+});
+
+const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);
+
+export const createInstructionBlock = (content = '', rules?: RuleGroup): InlineInstructionBlock => ({
   id: uuid(),
   type: 'prompt_block',
   content,
   rules,
+});
+
+export const createRefInstructionBlock = (promptBlockId: string): RefInstructionBlock => ({
+  id: uuid(),
+  type: 'prompt_block_ref',
+  promptBlockId,
 });
 
 const scoringSamplingConfigSchema = z.object({

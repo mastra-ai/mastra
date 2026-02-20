@@ -685,6 +685,8 @@ export interface StoragePromptBlockSnapshotType {
   content: string;
   /** Rules for conditional inclusion */
   rules?: RuleGroup;
+  /** JSON Schema for validating request context values. Defines available variables for {{variableName}} interpolation and conditions. */
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /** Resolved prompt block: thin record merged with active version snapshot */

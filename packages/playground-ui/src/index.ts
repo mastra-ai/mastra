@@ -4,6 +4,7 @@ export * from './domains/agents/index';
 export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';
+export * from './domains/prompt-blocks/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
