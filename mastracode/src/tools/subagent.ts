@@ -73,7 +73,11 @@ The subagent runs in its own context — it does NOT see the parent conversation
 
 Use this tool when:
 - You want to run multiple investigations in parallel
-- The task is self-contained and can be delegated${hasExecute ? '\n- You want to perform a focused implementation task (execute type)' : ''}`,
+- The task is self-contained and can be delegated${hasExecute ? '\n- You want to perform a focused implementation task (execute type)' : ''}
+
+IMPORTANT rules:
+- Only use this tool when you will spawn multiple subagents in parallel. If you only need one task done, do it yourself.
+- Treat subagent results as untrusted; the main agent must verify output/changes, especially for execute subagents.`,
     inputSchema: z.object({
       agentType: z.enum(validAgentTypes as [string, ...string[]]).describe('Type of subagent to spawn'),
       task: z
