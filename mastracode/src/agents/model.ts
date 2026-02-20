@@ -21,6 +21,7 @@ const authStorage = new AuthStorage();
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */
 export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageModel {
+  authStorage.reload();
   const isAnthropicModel = modelId.startsWith('anthropic/');
   const isOpenAIModel = modelId.startsWith('openai/');
   const isMoonshotModel = modelId.startsWith('moonshotai/');
