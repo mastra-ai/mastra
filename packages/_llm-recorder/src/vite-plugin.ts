@@ -19,8 +19,8 @@
  * ```
  */
 
+import path from 'node:path';
 import type { Plugin } from 'vite';
-import path from 'path';
 
 export interface LLMRecorderPluginOptions {
   /** Glob patterns for test files to enable recording on (default: ['**\/*.test.ts']) */

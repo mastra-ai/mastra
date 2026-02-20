@@ -17,8 +17,8 @@
  * ```
  */
 
-import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '@mastra/core/agent';
+import { describe, it, expect, vi } from 'vitest';
 import {
   useLLMRecording,
   useLiveMode,

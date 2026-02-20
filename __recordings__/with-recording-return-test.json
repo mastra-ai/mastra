@@ -1,6 +1,6 @@
 [
   {
-    "hash": "b002d7480bdec62c",
+    "hash": "704b5fa568aa37f0",
     "request": {
       "url": "https://api.openai.com/v1/responses",
       "method": "POST",
@@ -16,14 +16,14 @@
             "content": [
               {
                 "type": "input_text",
-                "text": "Say \"test\" and nothing else."
+                "text": "Say \"hello\" and nothing else."
               }
             ]
           }
         ],
         "temperature": 0
       },
-      "timestamp": 1770721564315
+      "timestamp": 1771547973381
     },
     "response": {
       "status": 200,
@@ -31,16 +31,15 @@
       "headers": {
         "alt-svc": "h3=\":443\"; ma=86400",
         "cf-cache-status": "DYNAMIC",
-        "cf-ray": "9cbb228ab899605a-BRU",
+        "cf-ray": "9d09f2927a5728a9-BRU",
         "connection": "keep-alive",
         "content-type": "application/json",
-        "date": "Tue, 10 Feb 2026 11:06:04 GMT",
+        "date": "Fri, 20 Feb 2026 00:39:34 GMT",
         "openai-organization": "mastra-qb2kpb",
-        "openai-processing-ms": "581",
+        "openai-processing-ms": "425",
         "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
         "openai-version": "2020-10-01",
         "server": "cloudflare",
-        "set-cookie": "__cf_bm=Kbn90Q_cyzNzCPC1WCkk4CK_EyltLYfpjIfYFnyrmm4-1770721563.313969-1.0.1.1-5EYp5mWUFkuFdyLqcTkggiYSKXrA6jDsyrGLl_gALeZRid7sMqsnPf26zhuDvjP0EtDBWQsp8ukJyNAWnA0fzrUFp0sSj_VVDlCpNu2jqVxwt37z7Gbs8yiv7kgKx2xN; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Tue, 10 Feb 2026 11:36:04 GMT",
         "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
         "x-content-type-options": "nosniff",
         "x-ratelimit-limit-requests": "10000",
@@ -49,18 +48,18 @@
         "x-ratelimit-remaining-tokens": "9999953",
         "x-ratelimit-reset-requests": "6ms",
         "x-ratelimit-reset-tokens": "0s",
-        "x-request-id": "req_02baa558fb934831961bfb302fac6e76"
+        "x-request-id": "req_5fb38287e86646e492f806705303ceb2"
       },
       "body": {
-        "id": "resp_0af525333666f84800698b111bb1588194842fc117a35a48eb",
+        "id": "resp_02ae671d7834dd49006997ad45987c81969397b2010c4eeef8",
         "object": "response",
-        "created_at": 1770721563,
+        "created_at": 1771547973,
         "status": "completed",
         "background": false,
         "billing": {
           "payer": "developer"
         },
-        "completed_at": 1770721564,
+        "completed_at": 1771547973,
         "error": null,
         "frequency_penalty": 0,
         "incomplete_details": null,
@@ -70,7 +69,7 @@
         "model": "gpt-4o-mini-2024-07-18",
         "output": [
           {
-            "id": "msg_0af525333666f84800698b111c1ce0819489d29e35f829e693",
+            "id": "msg_02ae671d7834dd49006997ad45df2c81969c0edbcfa35bd5ef",
             "type": "message",
             "status": "completed",
             "content": [
@@ -78,7 +77,7 @@
                 "type": "output_text",
                 "annotations": [],
                 "logprobs": [],
-                "text": "test"
+                "text": "Hello."
               }
             ],
             "role": "assistant"
@@ -113,11 +112,11 @@
           "input_tokens_details": {
             "cached_tokens": 0
           },
-          "output_tokens": 2,
+          "output_tokens": 3,
           "output_tokens_details": {
             "reasoning_tokens": 0
           },
-          "total_tokens": 30
+          "total_tokens": 31
         },
         "user": null,
         "metadata": {}

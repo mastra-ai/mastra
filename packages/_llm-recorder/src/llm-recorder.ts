@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * LLM Response Recorder
  *
@@ -55,14 +56,15 @@
  * ```
  */
 
-import { setupServer, SetupServerApi } from 'msw/node';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { diffJson } from 'diff';
 import { http, HttpResponse, bypass } from 'msw';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+import type { SetupServerApi } from 'msw/node';
+import { setupServer } from 'msw/node';
 import stringSimilarity from 'string-similarity';
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { diffJson } from 'diff';
 
 // Default recordings directory - can be overridden via options
 const DEFAULT_RECORDINGS_DIR = path.join(process.cwd(), '__recordings__');

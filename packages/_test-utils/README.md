@@ -23,12 +23,7 @@ Mastra-specific test helpers. Provides version-agnostic agent wrappers and API k
 Helper functions for writing tests that work with both AI SDK v4 and v5+ models:
 
 ```typescript
-import {
-  agentGenerate,
-  agentStream,
-  isV5PlusModel,
-  getModelRecordingName,
-} from '@internal/test-utils';
+import { agentGenerate, agentStream, isV5PlusModel, getModelRecordingName } from '@internal/test-utils';
 ```
 
 #### `agentGenerate(agent, message, options, model)`
@@ -55,9 +50,9 @@ const stream = await agentStream(agent, 'Count to 5', { threadId }, model);
 Check if a model uses the v5+ API:
 
 ```typescript
-isV5PlusModel('openai/gpt-4o')           // true (string models)
-isV5PlusModel({ specificationVersion: 'v2' }) // true
-isV5PlusModel({ specificationVersion: 'v1' }) // false
+isV5PlusModel('openai/gpt-4o'); // true (string models)
+isV5PlusModel({ specificationVersion: 'v2' }); // true
+isV5PlusModel({ specificationVersion: 'v1' }); // false
 ```
 
 #### `getModelRecordingName(model)`
@@ -65,8 +60,8 @@ isV5PlusModel({ specificationVersion: 'v1' }) // false
 Convert a model config to a recording-safe filename:
 
 ```typescript
-getModelRecordingName('openai/gpt-4o-mini')    // "openai-gpt-4o-mini"
-getModelRecordingName({ modelId: 'gpt-4o' })   // "gpt-4o"
+getModelRecordingName('openai/gpt-4o-mini'); // "openai-gpt-4o-mini"
+getModelRecordingName({ modelId: 'gpt-4o' }); // "gpt-4o"
 ```
 
 ### API Key Management
@@ -79,9 +74,9 @@ Set placeholder API keys for replay mode so agent validation passes without real
 import { setupDummyApiKeys } from '@internal/test-utils';
 import { getLLMTestMode } from '@internal/llm-recorder';
 
-setupDummyApiKeys(getLLMTestMode());                    // All providers
-setupDummyApiKeys(getLLMTestMode(), ['openai']);        // Just OpenAI
-setupDummyApiKeys('live');                              // No-op in live/record mode
+setupDummyApiKeys(getLLMTestMode()); // All providers
+setupDummyApiKeys(getLLMTestMode(), ['openai']); // Just OpenAI
+setupDummyApiKeys('live'); // No-op in live/record mode
 ```
 
 #### `hasApiKey(provider)`
@@ -91,10 +86,10 @@ Check if an API key is set:
 ```typescript
 import { hasApiKey } from '@internal/test-utils';
 
-hasApiKey('openai')     // checks OPENAI_API_KEY
-hasApiKey('anthropic')  // checks ANTHROPIC_API_KEY
-hasApiKey('google')     // checks GOOGLE_API_KEY
-hasApiKey('openrouter') // checks OPENROUTER_API_KEY
+hasApiKey('openai'); // checks OPENAI_API_KEY
+hasApiKey('anthropic'); // checks ANTHROPIC_API_KEY
+hasApiKey('google'); // checks GOOGLE_API_KEY
+hasApiKey('openrouter'); // checks OPENROUTER_API_KEY
 ```
 
 ## Development

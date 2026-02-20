@@ -187,21 +187,7 @@
         "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_08806d961844167800698b02cdf83c8196a448f749ebb4b1c8\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"1  \\n2  \\n3  \"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":12}\n\n",
         "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_08806d961844167800698b02cda3008196970a069db63b2cb7\",\"object\":\"response\",\"created_at\":1770717901,\"status\":\"completed\",\"background\":false,\"completed_at\":1770717902,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_08806d961844167800698b02cdf83c8196a448f749ebb4b1c8\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"1  \\n2  \\n3  \"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":30,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":7,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":37},\"user\":null,\"metadata\":{}},\"sequence_number\":13}\n\n"
       ],
-      "chunkTimings": [
-        4,
-        2,
-        275,
-        10,
-        2,
-        19,
-        0,
-        16,
-        3,
-        28,
-        1,
-        0,
-        90
-      ],
+      "chunkTimings": [4, 2, 275, 10, 2, 19, 0, 16, 3, 28, 1, 0, 90],
       "isStreaming": true
     }
   }

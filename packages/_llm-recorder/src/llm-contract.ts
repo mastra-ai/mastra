@@ -109,9 +109,7 @@ function getType(value: unknown): string {
  */
 function pathMatches(path: string, patterns: string[]): boolean {
   return patterns.some(pattern => {
-    const regex = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*/g, '[^.]*');
+    const regex = pattern.replace(/\./g, '\\.').replace(/\*/g, '[^.]*');
     return new RegExp(`^${regex}$`).test(path);
   });
 }
@@ -231,26 +229,14 @@ function compareSchemas(
     for (const key of Object.keys(expected.properties)) {
       if (key in (actual.properties || {})) {
         const fieldPath = currentPath ? `${currentPath}.${key}` : key;
-        compareSchemas(
-          expected.properties[key]!,
-          actual.properties![key]!,
-          fieldPath,
-          options,
-          differences,
-        );
+        compareSchemas(expected.properties[key]!, actual.properties![key]!, fieldPath, options, differences);
       }
     }
   }
 
   // Compare array items
   if (expected.type === 'array' && expected.items && actual.items) {
-    compareSchemas(
-      expected.items,
-      actual.items,
-      `${currentPath}[]`,
-      options,
-      differences,
-    );
+    compareSchemas(expected.items, actual.items, `${currentPath}[]`, options, differences);
   }
 }
 

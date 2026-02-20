@@ -12,17 +12,18 @@
  *   pnpm vitest run src/test-utils/__tests__/llm-contract.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
+import { describe, it, expect } from 'vitest';
 import {
   validateLLMContract,
   validateStreamingContract,
   extractSchema,
-  formatContractResult,
-  type LLMRecording,
+  formatContractResult
+  
 } from './llm-contract';
+import type {LLMRecording} from './llm-contract';
 
 const RECORDINGS_DIR = path.join(process.cwd(), '__recordings__');
 const CONTRACT_MODE = process.env.CONTRACT_TEST === 'true';
@@ -223,10 +224,7 @@ describe('Contract Validation with Recordings', () => {
     }
 
     // A recording should validate against itself
-    const result = validateStreamingContract(
-      streamingRecording.response.chunks,
-      streamingRecording.response.chunks,
-    );
+    const result = validateStreamingContract(streamingRecording.response.chunks, streamingRecording.response.chunks);
 
     expect(result.valid).toBe(true);
     console.log(formatContractResult(result));

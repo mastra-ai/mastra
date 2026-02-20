@@ -9,9 +9,7 @@
  * Model configuration type from @mastra/core/llm
  * Re-declared here to avoid circular dependencies
  */
-export type MastraModelConfig =
-  | string
-  | { modelId?: string; specificationVersion?: string; [key: string]: unknown };
+export type MastraModelConfig = string | { modelId?: string; specificationVersion?: string; [key: string]: unknown };
 
 /**
  * Minimal interface for Agent-like objects.

@@ -3,8 +3,8 @@
  * These tests don't require API keys or network access.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getLLMTestMode, hasLLMRecording, listLLMRecordings, getLLMRecordingsDir } from '@internal/llm-recorder';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getModelRecordingName, isV5PlusModel, setupDummyApiKeys, hasApiKey } from './llm-helpers';
 
 describe('getLLMTestMode', () => {
