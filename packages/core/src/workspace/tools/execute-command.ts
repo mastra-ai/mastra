@@ -53,7 +53,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       timeout: timeout ?? undefined,
     });
 
-    return `PID: ${handle.pid}`;
+    return `Started background process (PID: ${handle.pid})`;
   }
 
   // Foreground mode: execute and wait for completion
