@@ -59,7 +59,18 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
         metadata,
       });
 
-      return result;
+      // For each block, fetch the latest version to compute hasDraft.
+      // resolvedVersionId from listResolved defaults to 'published' resolution,
+      // so we need the actual latest version to detect unpublished drafts.
+      const promptBlocks = await Promise.all(
+        result.promptBlocks.map(async (block: (typeof result.promptBlocks)[number]) => {
+          const latestVersion = await promptBlockStore.getLatestVersion(block.id);
+          const hasDraft = !!(latestVersion && (!block.activeVersionId || latestVersion.id !== block.activeVersionId));
+          return { ...block, hasDraft };
+        }),
+      );
+
+      return { ...result, promptBlocks };
     } catch (error) {
       return handleError(error, 'Error listing stored prompt blocks');
     }
@@ -100,7 +111,13 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
 
-      return promptBlock;
+      const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
+      const hasDraft = !!(
+        latestVersion &&
+        (!promptBlock.activeVersionId || latestVersion.id !== promptBlock.activeVersionId)
+      );
+
+      return { ...promptBlock, hasDraft };
     } catch (error) {
       return handleError(error, 'Error getting stored prompt block');
     }
@@ -167,7 +184,13 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve created prompt block' });
       }
 
-      return resolved;
+      const latestVersion = await promptBlockStore.getLatestVersion(id);
+      const hasDraft = !!(
+        latestVersion &&
+        (!resolved.activeVersionId || latestVersion.id !== resolved.activeVersionId)
+      );
+
+      return { ...resolved, hasDraft };
     } catch (error) {
       return handleError(error, 'Error creating stored prompt block');
     }
@@ -254,7 +277,13 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve updated prompt block' });
       }
 
-      return resolved;
+      const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
+      const hasDraft = !!(
+        latestVersion &&
+        (!resolved.activeVersionId || latestVersion.id !== resolved.activeVersionId)
+      );
+
+      return { ...resolved, hasDraft };
     } catch (error) {
       return handleError(error, 'Error updating stored prompt block');
     }
