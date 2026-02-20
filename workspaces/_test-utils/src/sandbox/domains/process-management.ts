@@ -441,6 +441,27 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         },
         getContext().testTimeout,
       );
+
+      it(
+        'get after manager kill shows process as exited',
+        async () => {
+          // Simulates tool flow: kill_process → get_process_output should show exited, not running
+          const handle = await processes.spawn(
+            `node -e "setInterval(()=>{},60000)"`,
+          );
+          const pid = handle.pid;
+
+          const killed = await processes.kill(pid);
+          expect(killed).toBe(true);
+
+          // get() should now show the process as exited (exitCode defined)
+          const retrieved = await processes.get(pid);
+          if (retrieved) {
+            expect(retrieved.exitCode).toBeDefined();
+          }
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('sandbox-level env', () => {

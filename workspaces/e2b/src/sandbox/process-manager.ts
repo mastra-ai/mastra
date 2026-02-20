@@ -129,12 +129,6 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     }));
   }
 
-  /** Kill a process by PID directly via E2B's commands API. */
-  async kill(pid: number): Promise<boolean> {
-    const e2b = this.sandbox.instance;
-    return e2b.commands.kill(pid);
-  }
-
   /**
    * Get a handle to a process by PID.
    * Returns the original handle (with accumulated stdout/stderr) if it was

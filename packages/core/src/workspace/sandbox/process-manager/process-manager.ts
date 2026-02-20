@@ -95,6 +95,12 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   async kill(pid: number): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;
-    return handle.kill();
+    const killed = await handle.kill();
+    if (killed) {
+      // Wait for termination so handle.exitCode is populated before returning.
+      // Without this, a subsequent get() could still report the process as running.
+      await handle.wait().catch(() => {});
+    }
+    return killed;
   }
 }
