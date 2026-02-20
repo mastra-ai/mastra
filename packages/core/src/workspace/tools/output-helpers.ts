@@ -14,9 +14,12 @@ export function applyTail(output: string, tail: number | null | undefined): stri
   if (!output) return output;
   const n = Math.abs(tail ?? DEFAULT_TAIL_LINES);
   if (n === 0) return output; // 0 = no limit
-  const lines = output.split('\n');
+  // Strip trailing newline before splitting so it doesn't count as a line
+  const trailingNewline = output.endsWith('\n');
+  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
   if (lines.length <= n) return output;
-  return lines.slice(-n).join('\n');
+  const sliced = lines.slice(-n).join('\n');
+  return trailingNewline ? sliced + '\n' : sliced;
 }
 
 /**
