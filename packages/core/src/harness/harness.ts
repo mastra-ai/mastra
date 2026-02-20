@@ -537,11 +537,26 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     }
 
-    // Release lock on previous thread, acquire lock on new one
-    if (this.currentThreadId) {
-      this.config.threadLock?.release(this.currentThreadId);
+    // Acquire lock on new thread before releasing old one.
+    // If acquire fails, attempt to re-acquire the old lock before rethrowing.
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        this.config.threadLock.acquire(thread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        this.config.threadLock.release(oldThreadId);
+      }
     }
-    this.config.threadLock?.acquire(thread.id);
 
     this.currentThreadId = thread.id;
 

@@ -46,14 +46,31 @@ describe('Harness thread locking', () => {
       expect(acquire).toHaveBeenCalledWith(second.id);
     });
 
-    it('release is called before acquire on createThread', async () => {
+    it('acquire is called before release on createThread', async () => {
       await harness.createThread();
       const callOrder: string[] = [];
       release.mockImplementation(() => callOrder.push('release'));
       acquire.mockImplementation(() => callOrder.push('acquire'));
 
       await harness.createThread();
-      expect(callOrder).toEqual(['release', 'acquire']);
+      expect(callOrder).toEqual(['acquire', 'release']);
+    });
+
+    it('re-acquires old lock if acquire on new thread fails', async () => {
+      const first = await harness.createThread();
+      acquire.mockClear();
+      release.mockClear();
+
+      acquire.mockImplementationOnce(() => {
+        throw new Error('Thread is locked');
+      });
+
+      await expect(harness.createThread()).rejects.toThrow('Thread is locked');
+      // Should have attempted to re-acquire the old thread's lock
+      expect(acquire).toHaveBeenCalledTimes(2); // failed new + re-acquire old
+      expect(acquire).toHaveBeenLastCalledWith(first.id);
+      // Old thread lock was never released
+      expect(release).not.toHaveBeenCalled();
     });
   });
 
