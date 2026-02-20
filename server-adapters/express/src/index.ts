@@ -495,18 +495,28 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     });
   }
 
+  private useScopedMiddleware(
+    ...middlewares: Array<(req: Request, res: Response, next: NextFunction) => void | Promise<void>>
+  ): void {
+    for (const mw of middlewares) {
+      if (this.prefix) {
+        this.app.use(this.prefix, mw);
+      } else {
+        this.app.use(mw);
+      }
+    }
+  }
+
   registerContextMiddleware(): void {
-    this.app.use(this.createContextMiddleware());
+    this.useScopedMiddleware(this.createContextMiddleware());
   }
 
   registerAuthMiddleware(): void {
     const authConfig = this.mastra.getServer()?.auth;
     if (!authConfig) {
-      // No auth config, skip registration
       return;
     }
 
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    this.useScopedMiddleware(authenticationMiddleware, authorizationMiddleware);
   }
 }
