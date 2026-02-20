@@ -117,6 +117,16 @@ export class OtelExporter extends BaseExporter {
     return this.config.logLevel === 'debug';
   }
 
+  /**
+   * Debug logging that bypasses the Mastra logger.
+   *
+   * The Mastra framework replaces our logger via __setLogger() with one at
+   * INFO level, which silently swallows all this.logger.debug() calls.
+   * For debug output we need to go through console.info directly.
+   */
+
+  private debugLog = (...args: unknown[]) => this.isDebug && console.info('[OtelExporter:debug]', ...args);
+
   private resolveProvider(): ResolvedProviderConfig | null {
     if (this.resolvedConfig !== undefined) {
       return this.resolvedConfig;
@@ -190,9 +200,7 @@ export class OtelExporter extends BaseExporter {
     const headers = resolved.headers;
     const protocol = resolved.protocol;
 
-    if (this.isDebug) {
-      this.logger.debug(`[OtelExporter] Setting up trace exporter: protocol=${protocol}, endpoint=${endpoint}`);
-    }
+    this.debugLog(`Setting up trace exporter: protocol=${protocol}, endpoint=${endpoint}`);
 
     // Load and create the appropriate exporter based on protocol
     const ExporterClass = await loadExporter(protocol, this.providerName);
@@ -250,11 +258,7 @@ export class OtelExporter extends BaseExporter {
       return;
     }
 
-    if (this.isDebug) {
-      this.logger.debug(
-        `[OtelExporter] Trace exporter created successfully: ${this.exporter?.constructor?.name ?? 'unknown'} -> ${endpoint}`,
-      );
-    }
+    this.debugLog(`Trace exporter created: ${this.exporter?.constructor?.name ?? 'unknown'} -> ${endpoint}`);
   }
 
   private async setupProcessor() {
@@ -269,7 +273,7 @@ export class OtelExporter extends BaseExporter {
 
     // Wrap exporter with debug logging when enabled
     const exporterForProcessor = this.isDebug
-      ? new DebugSpanExporterWrapper(this.exporter!, msg => this.logger.debug(msg))
+      ? new DebugSpanExporterWrapper(this.exporter!, msg => this.debugLog(msg))
       : this.exporter!;
 
     // Always use BatchSpanProcessor for production
@@ -281,9 +285,7 @@ export class OtelExporter extends BaseExporter {
       exportTimeoutMillis: this.config.timeout || 30000, // Export timeout
     });
 
-    this.logger.debug(
-      `[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`,
-    );
+    this.debugLog(`BatchSpanProcessor ready (batch size: ${this.config.batchSize || 512}, delay: 5s)`);
   }
 
   private async setup() {
@@ -303,7 +305,7 @@ export class OtelExporter extends BaseExporter {
 
     // Check if logs are explicitly disabled
     if (this.config.signals?.logs === false) {
-      this.logger.debug('[OtelExporter] Log export disabled via config');
+      this.debugLog('Log export disabled via config');
       this.isLogSetup = true;
       this.logSetupFailed = true;
       return false;
@@ -319,7 +321,7 @@ export class OtelExporter extends BaseExporter {
     const protocol = resolved.protocol;
     const LogExporterClass = await loadSignalExporter('logs', protocol, this.providerName);
     if (!LogExporterClass) {
-      this.logger.debug('[OtelExporter] Log exporter packages not available. Log export disabled.');
+      this.debugLog('Log exporter packages not available. Log export disabled.');
       this.isLogSetup = true;
       this.logSetupFailed = true;
       return false;
@@ -334,9 +336,7 @@ export class OtelExporter extends BaseExporter {
       const logEndpoint = this.getSignalEndpoint(resolved, 'logs');
       const headers = resolved.headers;
 
-      if (this.isDebug) {
-        this.logger.debug(`[OtelExporter] Setting up log exporter: protocol=${protocol}, endpoint=${logEndpoint}`);
-      }
+      this.debugLog(`Setting up log exporter: protocol=${protocol}, endpoint=${logEndpoint}`);
 
       // Create the log exporter
       let logExporter: any;
@@ -380,14 +380,14 @@ export class OtelExporter extends BaseExporter {
 
       this.otelLogger = this.loggerProvider.getLogger('@mastra/otel-exporter');
 
-      this.logger.debug(`[OtelExporter] Log export initialized (endpoint: ${logEndpoint})`);
+      this.debugLog(`Log export initialized (endpoint: ${logEndpoint})`);
       this.isLogSetup = true;
       return true;
     } catch (error) {
       this.logger.warn(
         '[OtelExporter] Failed to initialize log export. Required packages: @opentelemetry/sdk-logs @opentelemetry/api-logs',
       );
-      this.logger.debug('[OtelExporter] Log setup error:', error);
+      this.debugLog('Log setup error:', error);
       this.isLogSetup = true;
       this.logSetupFailed = true;
       return false;
@@ -404,7 +404,7 @@ export class OtelExporter extends BaseExporter {
 
     // Check if metrics are explicitly disabled
     if (this.config.signals?.metrics === false) {
-      this.logger.debug('[OtelExporter] Metric export disabled via config');
+      this.debugLog('Metric export disabled via config');
       this.isMetricSetup = true;
       this.metricSetupFailed = true;
       return false;
@@ -420,7 +420,7 @@ export class OtelExporter extends BaseExporter {
     const protocol = resolved.protocol;
     const MetricExporterClass = await loadSignalExporter('metrics', protocol, this.providerName);
     if (!MetricExporterClass) {
-      this.logger.debug('[OtelExporter] Metric exporter packages not available. Metric export disabled.');
+      this.debugLog('Metric exporter packages not available. Metric export disabled.');
       this.isMetricSetup = true;
       this.metricSetupFailed = true;
       return false;
@@ -435,11 +435,7 @@ export class OtelExporter extends BaseExporter {
       const metricEndpoint = this.getSignalEndpoint(resolved, 'metrics');
       const headers = resolved.headers;
 
-      if (this.isDebug) {
-        this.logger.debug(
-          `[OtelExporter] Setting up metric exporter: protocol=${protocol}, endpoint=${metricEndpoint}`,
-        );
-      }
+      this.debugLog(`Setting up metric exporter: protocol=${protocol}, endpoint=${metricEndpoint}`);
 
       // Create the metric exporter
       let metricExporter: any;
@@ -483,14 +479,14 @@ export class OtelExporter extends BaseExporter {
       const meter = this.meterProvider.getMeter('@mastra/otel-exporter');
       this.metricCache = new MetricInstrumentCache(meter);
 
-      this.logger.debug(`[OtelExporter] Metric export initialized (endpoint: ${metricEndpoint})`);
+      this.debugLog(`Metric export initialized (endpoint: ${metricEndpoint})`);
       this.isMetricSetup = true;
       return true;
     } catch (error) {
       this.logger.warn(
         '[OtelExporter] Failed to initialize metric export. Required package: @opentelemetry/sdk-metrics',
       );
-      this.logger.debug('[OtelExporter] Metric setup error:', error);
+      this.debugLog('Metric setup error:', error);
       this.isMetricSetup = true;
       this.metricSetupFailed = true;
       return false;
@@ -539,8 +535,8 @@ export class OtelExporter extends BaseExporter {
         resolve();
       });
 
-      this.logger.debug(
-        `[OtelExporter] Exported span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
+      this.debugLog(
+        `Queued span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
       );
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
@@ -577,9 +573,7 @@ export class OtelExporter extends BaseExporter {
         attributes,
       });
 
-      this.logger.debug(
-        `[OtelExporter] Exported log (level: ${event.log.level}, trace: ${event.log.traceId || 'none'})`,
-      );
+      this.debugLog(`Exported log (level: ${event.log.level}, trace: ${event.log.traceId || 'none'})`);
     } catch (error) {
       this.logger.error('[OtelExporter] Failed to export log:', error);
     }
@@ -598,8 +592,8 @@ export class OtelExporter extends BaseExporter {
     try {
       this.metricCache.recordMetric(event.metric);
 
-      this.logger.debug(
-        `[OtelExporter] Recorded metric ${event.metric.name} (type: ${event.metric.metricType}, value: ${event.metric.value})`,
+      this.debugLog(
+        `Recorded metric ${event.metric.name} (type: ${event.metric.metricType}, value: ${event.metric.value})`,
       );
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to record metric ${event.metric.name}:`, error);
@@ -632,13 +626,11 @@ export class OtelExporter extends BaseExporter {
     }
 
     if (flushPromises.length > 0) {
-      if (this.isDebug) {
-        this.logger.debug(`[OtelExporter] Flushing signals: ${signals.join(', ')}...`);
-      }
+      this.debugLog(`Flushing signals: ${signals.join(', ')}...`);
       await Promise.all(flushPromises);
-      this.logger.debug('[OtelExporter] Flushed all pending data');
-    } else if (this.isDebug) {
-      this.logger.debug('[OtelExporter] Flush called but no active exporters');
+      this.debugLog('Flushed all pending data');
+    } else {
+      this.debugLog('Flush called but no active exporters');
     }
   }
 
