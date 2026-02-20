@@ -927,12 +927,12 @@ importers:
       remark-lint-heading-increment:
         specifier: ^4.0.1
         version: 4.0.1
-      remark-lint-no-duplicate-headings:
-        specifier: ^4.0.1
-        version: 4.0.1
       remark-lint-no-emphasis-as-heading:
         specifier: ^4.0.1
         version: 4.0.1
+      remark-lint-no-undefined-references:
+        specifier: ^5.0.2
+        version: 5.0.2
       remark-lint-ordered-list-marker-value:
         specifier: ^4.0.1
         version: 4.0.1
@@ -20944,9 +20944,6 @@ packages:
 
   remark-lint-no-duplicate-definitions@4.0.1:
     resolution: {integrity: sha512-Ek+A/xDkv5Nn+BXCFmf+uOrFSajCHj6CjhsHjtROgVUeEPj726yYekDBoDRA0Y3+z+U30AsJoHgf/9Jj1IFSug==}
-
-  remark-lint-no-duplicate-headings@4.0.1:
-    resolution: {integrity: sha512-6lggqnpIe5FepikjYF2me3ovKV4oD/rAz8WmwVbLR2cLkce1iH+PB7jyxk/A2gQQqrDcIlRMA5Ct2Yj56cEwhQ==}
 
   remark-lint-no-emphasis-as-heading@4.0.1:
     resolution: {integrity: sha512-zzI/C330qdKO9FB3h6IUtOG36FSrS5nfJ7qxp0atXGYtHyg+Ag7dPC/0FzchOVsxofQm0QTstVoIARt/9TiN5g==}
@@ -42461,18 +42458,6 @@ snapshots:
       unified-lint-rule: 3.0.1
       unist-util-visit-parents: 6.0.2
       vfile-message: 4.0.3
-
-  remark-lint-no-duplicate-headings@4.0.1:
-    dependencies:
-      '@types/mdast': 4.0.4
-      devlop: 1.1.0
-      mdast-util-mdx: 3.0.0
-      mdast-util-to-string: 4.0.0
-      unified-lint-rule: 3.0.1
-      unist-util-visit-parents: 6.0.2
-      vfile-message: 4.0.3
-    transitivePeerDependencies:
-      - supports-color
 
   remark-lint-no-emphasis-as-heading@4.0.1:
     dependencies:
