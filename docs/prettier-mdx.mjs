@@ -1,0 +1,195 @@
+import * as prettier from 'prettier'
+import { remark } from 'remark'
+import remarkFrontmatter from 'remark-frontmatter'
+import remarkGfm from 'remark-gfm'
+import remarkMdx from 'remark-mdx'
+import { visit } from 'unist-util-visit'
+
+const DISABLE_PRETTIER_RE = /[{,\s]prettier\s*:\s*false[},\s]/
+
+const processor = remark()
+  .data('settings', {
+    bullet: '-',
+    bulletOther: '*',
+    rule: '-',
+    emphasis: '_',
+    quote: "'",
+    incrementListMarker: false,
+  })
+  .use(remarkFrontmatter)
+  .use(remarkGfm, { tablePipeAlign: false })
+  .use(remarkMdx, { printWidth: 120 })
+
+function remarkFormatCodeBlocks(prettierOptions) {
+  return async function traverse(tree) {
+    let promises = []
+
+    // For YAML files the mark characters must appear at the very start of the line
+    // (no whitespace), because the `-` character is used for lists.
+    let markStrictLangs = ['yaml']
+
+    let markReLoose = {
+      anyMark: /^\s*[-+=]( |$)/m,
+      markOrIndent: /^\s*[-+= ]( |$)/,
+      del: /^\s*-( |$)/,
+      ins: /^\s*\+( |$)/,
+      mark: /^\s*=( |$)/,
+    }
+
+    let markReStrict = {
+      anyMark: /^[-+=]( |$)/m,
+      markOrIndent: /^[-+= ]( |$)/,
+      del: /^-( |$)/,
+      ins: /^\+( |$)/,
+      mark: /^=( |$)/,
+    }
+
+    visit(tree, 'code', (node) => {
+      let prettierDisabled = !prettierOptions.mdxFormatCodeBlocks || DISABLE_PRETTIER_RE.test(node.meta ?? '')
+      let prettierEnabled = !prettierDisabled
+
+      if (prettierEnabled) {
+        let parser = inferParser(prettierOptions, { language: node.lang })
+
+        if (parser) {
+          let code = node.value
+
+          let markRe = markStrictLangs.includes(node.lang) ? markReStrict : markReLoose
+
+          // Exclude Markdown files because `-` is used for lists
+          let hasMarks = markRe.anyMark.test(code) && !['md', 'markdown', 'mdx'].includes(node.lang)
+          let del = []
+          let ins = []
+          let mark = []
+
+          if (hasMarks) {
+            let lines = code.split('\n')
+            let newLines = []
+
+            for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+              let line = lines[lineIndex]
+
+              if (markRe.del.test(line)) {
+                del.push(lineIndex)
+              } else if (markRe.ins.test(line)) {
+                ins.push(lineIndex)
+              } else if (markRe.mark.test(line)) {
+                mark.push(lineIndex)
+              }
+
+              newLines.push(line.replace(markRe.markOrIndent, '  '))
+            }
+
+            code = newLines.join('\n')
+          }
+
+          promises.push(
+            prettier
+              .format(code, {
+                ...prettierOptions,
+                parser,
+                printWidth: 100,
+              })
+              .then((formatted) => {
+                let newValue = formatted.trimEnd()
+
+                if (hasMarks) {
+                  let lines = newValue.split('\n')
+                  let newLines = []
+                  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                    let line = lines[lineIndex]
+                    if (del.includes(lineIndex)) {
+                      newLines.push(`- ${line}`)
+                    } else if (ins.includes(lineIndex)) {
+                      newLines.push(`+ ${line}`)
+                    } else if (mark.includes(lineIndex)) {
+                      newLines.push(`= ${line}`)
+                    } else if (line.trim()) {
+                      newLines.push(`  ${line}`)
+                    } else {
+                      newLines.push('')
+                    }
+                  }
+                  newValue = newLines.join('\n')
+                }
+
+                /**
+                 * If the formatter added a semi-colon to the start then remove it.
+                 * Prevents `<Example />` from becoming `;<Example />`
+                 */
+                if (newValue.startsWith(';') && !node.value.startsWith(';')) {
+                  newValue = newValue.slice(1)
+                }
+                node.value = newValue
+              })
+              .catch((error) => {
+                if (error instanceof SyntaxError) {
+                  error.message = error.message.replace(
+                    /\((\d+):(\d+)\)/,
+                    (_, line, column) =>
+                      `(${parseInt(line, 10) + node.position.start.line}:${parseInt(column, 10) + node.position.start.column - 1})`,
+                  )
+                }
+                throw error
+              }),
+          )
+        }
+      }
+    })
+
+    await Promise.all(promises)
+  }
+}
+
+// https://github.com/prettier/prettier/blob/8a88cdce6d4605f206305ebb9204a0cabf96a070/src/utils/infer-parser.js#L61
+function inferParser(prettierOptions, fileInfo) {
+  let languages = prettierOptions.plugins.flatMap((plugin) => plugin.languages ?? [])
+  let language = getLanguageByLanguageName(languages, fileInfo.language)
+  return language?.parsers[0]
+}
+
+// https://github.com/prettier/prettier/blob/8a88cdce6d4605f206305ebb9204a0cabf96a070/src/utils/infer-parser.js#L24
+function getLanguageByLanguageName(languages, languageName) {
+  if (!languageName) {
+    return
+  }
+
+  return (
+    languages.find(({ name }) => name.toLowerCase() === languageName) ??
+    languages.find(({ aliases }) => aliases?.includes(languageName)) ??
+    languages.find(({ extensions }) => extensions?.includes(`.${languageName}`))
+  )
+}
+
+export const parsers = {
+  'mdx-custom': {
+    astFormat: 'mdx-custom',
+    parse(text) {
+      return { text }
+    },
+  },
+}
+
+export const printers = {
+  'mdx-custom': {
+    async print(ast, prettierOptions) {
+      let text = ast.stack[0].text
+
+      text = await formatAnnotations(text, prettierOptions)
+      text = String(
+        await processor().use(remarkFormatCodeBlocks, prettierOptions).use(remarkAddCalloutMarkers).process(text),
+      )
+
+      return text
+    },
+  },
+}
+
+export const options = {
+  mdxFormatCodeBlocks: {
+    type: 'boolean',
+    category: 'Global',
+    default: true,
+    description: 'Format the code within fenced code blocks.',
+  },
+}
