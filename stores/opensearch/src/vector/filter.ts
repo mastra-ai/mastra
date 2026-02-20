@@ -85,7 +85,7 @@ export class OpenSearchFilterTranslator extends ElasticDSLFilterTranslator<OpenS
     if (regexValue.includes('\n') || regexValue.includes('\r')) {
       // For patterns with newlines, use a simpler approach
       // OpenSearch doesn't support dotall flag like JavaScript
-      return { match: { [field]: value } };
+      return { match: { [field]: regexValue } };
     }
 
     // Process regex pattern to handle anchors properly
