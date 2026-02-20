@@ -202,6 +202,9 @@ export class MastraTUI {
   // Follow-up messages sent via Ctrl+F while streaming
   // These must stay anchored at the bottom of the chat stream
   private followUpComponents: UserMessageComponent[] = [];
+  // Slash commands queued via Ctrl+F while the agent is running.
+  // Drained in handleAgentEnd after all harness-level follow-ups complete.
+  private pendingSlashCommands: string[] = [];
 
   // Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog
   private pendingApprovalDismiss: (() => void) | null = null;
@@ -372,20 +375,28 @@ export class MastraTUI {
       if (!text) return;
       if (!this.harness.isRunning()) return; // Only relevant while streaming
 
-      // Clear editor and add user message to chat
+      // Clear editor
       this.editor.setText('');
-      this.addUserMessage({
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
       this.ui.requestRender();
 
-      // Queue the follow-up
-      this.harness.followUp(text).catch(error => {
-        this.showError(error instanceof Error ? error.message : 'Follow-up failed');
-      });
+      if (text.startsWith('/')) {
+        // Queue slash command for processing after the agent completes
+        this.pendingSlashCommands.push(text);
+        this.showInfo(`Slash command queued: ${text}`);
+      } else {
+        // Queue as a regular follow-up message
+        this.addUserMessage({
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+          createdAt: new Date(),
+        });
+        this.ui.requestRender();
+
+        this.harness.followUp(text).catch(error => {
+          this.showError(error instanceof Error ? error.message : 'Follow-up failed');
+        });
+      }
     });
   }
 
@@ -466,6 +477,7 @@ export class MastraTUI {
           // Agent is streaming → steer (abort + resend)
           // Clear follow-up tracking since steer replaces the current response
           this.followUpComponents = [];
+          this.pendingSlashCommands = [];
           this.harness.steer(userInput).catch(error => {
             this.showError(error instanceof Error ? error.message : 'Steer failed');
           });
@@ -1400,9 +1412,11 @@ ${instructions}`,
         this.ui.requestRender();
         break;
 
-      case 'follow_up_queued':
-        this.showInfo(`Follow-up queued (${event.count} pending)`);
+      case 'follow_up_queued': {
+        const totalPending = (event.count as number) + this.pendingSlashCommands.length;
+        this.showInfo(`Follow-up queued (${totalPending} pending)`);
         break;
+      }
 
       case 'workspace_ready':
         // Workspace initialized successfully - silent unless verbose
@@ -1763,6 +1777,16 @@ ${instructions}`,
     // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
     this.notify('agent_done');
+
+    // Drain queued slash commands once all harness-level follow-ups are done.
+    // Each slash command that triggers sendMessage will start a new agent
+    // operation, and handleAgentEnd will fire again to drain the next one.
+    if (this.pendingSlashCommands.length > 0 && this.harness.getFollowUpCount() === 0) {
+      const nextCommand = this.pendingSlashCommands.shift()!;
+      this.handleSlashCommand(nextCommand).catch(error => {
+        this.showError(error instanceof Error ? error.message : 'Queued slash command failed');
+      });
+    }
   }
 
   private handleAgentAborted(): void {
@@ -1787,6 +1811,7 @@ ${instructions}`,
     this.userInitiatedAbort = false;
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
     this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after interruption
@@ -1806,6 +1831,7 @@ ${instructions}`,
     }
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
     this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after errors
