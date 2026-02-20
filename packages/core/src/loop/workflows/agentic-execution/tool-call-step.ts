@@ -516,6 +516,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        if (args === null || args === undefined) {
+          return {
+            error: new Error(
+              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            ),
+            ...inputData,
+          };
+        }
+
         const result = await tool.execute(args, toolOptions);
 
         // Call onOutput hook after successful execution

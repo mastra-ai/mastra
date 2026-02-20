@@ -34,11 +34,11 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
       aria-selected={isSelected || undefined}
       tabIndex={0}
       className={cn(
-        'group flex cursor-pointer items-center gap-1.5 rounded-sm px-1 py-0.5',
+        'group flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm px-1',
         transitions.colors,
         focusRing.visible,
         'hover:bg-surface4',
-        isSelected && 'bg-accent1Dark text-neutral6',
+        isSelected && 'bg-surface4 text-neutral6',
         className,
       )}
       // +18 offsets past the chevron (size-3 = 12px) + flex gap (gap-1.5 = 6px) that folders have

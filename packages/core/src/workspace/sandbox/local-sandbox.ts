@@ -17,11 +17,20 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
+import { LocalProcessManager } from './local-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
+
+/** Shell-quote an argument for safe interpolation into a shell command string. */
+function shellQuote(arg: string): string {
+  // If the arg only contains safe characters, no quoting needed
+  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
+  // Wrap in single quotes, escaping embedded single quotes
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   /** Timeout in ms - handled manually for custom exit code 124 */
@@ -92,6 +101,10 @@ function execWithStreaming(
     });
   });
 }
+
+// =============================================================================
+// Local Sandbox
+// =============================================================================
 
 /**
  * Local sandbox provider configuration.
@@ -176,6 +189,12 @@ export class LocalSandbox extends MastraSandbox {
   private readonly _createdAt: Date;
 
   /**
+   * Background process manager.
+   * Provides methods to spawn, list, and retrieve background processes.
+   */
+  readonly processes: LocalProcessManager;
+
+  /**
    * The working directory where commands are executed.
    */
   get workingDirectory(): string {
@@ -222,6 +241,7 @@ export class LocalSandbox extends MastraSandbox {
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
     this._isolation = requestedIsolation;
+    this.processes = new LocalProcessManager({ sandbox: this, env: this.env });
   }
 
   private generateId(): string {
@@ -316,6 +336,11 @@ export class LocalSandbox extends MastraSandbox {
    */
   async destroy(): Promise<void> {
     this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this._workingDirectory });
+
+    // Kill all background processes
+    const procs = await this.processes.list();
+    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
       try {
@@ -339,6 +364,7 @@ export class LocalSandbox extends MastraSandbox {
     }
   }
 
+  /** @deprecated Use `status === 'running'` instead. */
   async isReady(): Promise<boolean> {
     return this.status === 'running';
   }
@@ -381,12 +407,12 @@ export class LocalSandbox extends MastraSandbox {
   /**
    * Wrap a command with the configured isolation backend.
    */
-  private wrapCommandForIsolation(command: string, args: string[]): { command: string; args: string[] } {
+  private wrapCommandForIsolation(command: string): { command: string; args: string[] } {
     if (this._isolation === 'none') {
-      return { command, args };
+      return { command, args: [] };
     }
 
-    return wrapCommand(command, args, {
+    return wrapCommand(command, {
       backend: this._isolation,
       workspacePath: this.workingDirectory,
       seatbeltProfile: this._seatbeltProfile,
@@ -406,10 +432,9 @@ export class LocalSandbox extends MastraSandbox {
 
     const startTime = Date.now();
 
-    // Wrap command with isolation backend if configured
-    const wrapped = this.wrapCommandForIsolation(command, args);
-
-    // Use streaming execution when callbacks are provided
+    // Combine command + args into a single shell string, then wrap with isolation
+    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+    const wrapped = this.wrapCommandForIsolation(fullCommand);
 
     try {
       const result = await execWithStreaming(wrapped.command, wrapped.args, {
@@ -418,6 +443,10 @@ export class LocalSandbox extends MastraSandbox {
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,
+        // Non-isolated: use shell mode so the host shell interprets the command string.
+        // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
+        // sandbox, so we spawn the wrapper binary directly — no host shell needed.
+        shell: this._isolation === 'none',
       });
 
       const commandResult: CommandResult = {

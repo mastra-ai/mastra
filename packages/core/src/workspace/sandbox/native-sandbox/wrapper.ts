@@ -27,35 +27,34 @@ export interface WrapCommandOptions {
 /**
  * Wrap a command with the appropriate sandbox backend.
  *
- * @param command - The command to run
- * @param args - Arguments for the command
+ * @param command - The full shell command string to run
  * @param options - Wrapping options
  * @returns The wrapped command and arguments
  *
  * @example
  * ```typescript
- * const wrapped = wrapCommand('node', ['script.js'], {
+ * const wrapped = wrapCommand('node script.js', {
  *   backend: 'seatbelt',
  *   workspacePath: '/workspace',
  *   config: { allowNetwork: false },
  * });
  * // wrapped.command = 'sandbox-exec'
- * // wrapped.args = ['-p', '<profile>', 'node', 'script.js']
+ * // wrapped.args = ['-p', '<profile>', 'sh', '-c', 'node script.js']
  * ```
  */
-export function wrapCommand(command: string, args: string[], options: WrapCommandOptions): WrappedCommand {
+export function wrapCommand(command: string, options: WrapCommandOptions): WrappedCommand {
   switch (options.backend) {
     case 'seatbelt': {
       const profile = options.seatbeltProfile ?? generateSeatbeltProfile(options.workspacePath, options.config);
-      return buildSeatbeltCommand(command, args, profile);
+      return buildSeatbeltCommand(command, profile);
     }
 
     case 'bwrap': {
-      return buildBwrapCommand(command, args, options.workspacePath, options.config);
+      return buildBwrapCommand(command, options.workspacePath, options.config);
     }
 
     case 'none':
     default:
-      return { command, args };
+      return { command, args: [] };
   }
 }

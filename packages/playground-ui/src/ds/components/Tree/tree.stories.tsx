@@ -131,16 +131,19 @@ export const WithActions: Story = {
       <div className="w-[300px]">
         <Tree>
           <Tree.Folder defaultOpen>
-            <Tree.FolderTrigger>
+            <Tree.FolderTrigger
+              actions={
+                <span className="opacity-0 group-hover:opacity-100">
+                  <IconButton size="sm" variant="ghost" tooltip="Add folder">
+                    <FolderPlus />
+                  </IconButton>
+                </span>
+              }
+            >
               <Tree.Icon className="text-accent6">
                 <Folder />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
-              <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-                <IconButton size="sm" variant="ghost" tooltip="Add folder" onClick={e => e.stopPropagation()}>
-                  <FolderPlus />
-                </IconButton>
-              </span>
             </Tree.FolderTrigger>
             <Tree.FolderContent>
               <Tree.File id="src/index.ts">
@@ -155,16 +158,19 @@ export const WithActions: Story = {
                 </span>
               </Tree.File>
               <Tree.Folder>
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={
+                    <span className="opacity-0 group-hover:opacity-100">
+                      <IconButton size="sm" variant="ghost" tooltip="Add file">
+                        <Plus />
+                      </IconButton>
+                    </span>
+                  }
+                >
                   <Tree.Icon className="text-accent6">
                     <Folder />
                   </Tree.Icon>
                   <Tree.Label>components</Tree.Label>
-                  <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-                    <IconButton size="sm" variant="ghost" tooltip="Add file" onClick={e => e.stopPropagation()}>
-                      <Plus />
-                    </IconButton>
-                  </span>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <Tree.File id="src/components/App.tsx">
@@ -248,35 +254,22 @@ function WithInlineCreationExample() {
       <div className="w-[300px]">
         <Tree>
           <Tree.Folder defaultOpen>
-            <Tree.FolderTrigger>
+            <Tree.FolderTrigger
+              actions={
+                <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                  <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
+                    <Plus />
+                  </IconButton>
+                  <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
+                    <FolderPlus />
+                  </IconButton>
+                </span>
+              }
+            >
               <Tree.Icon className="text-accent6">
                 <Folder />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
-              <span className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  tooltip="New file"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setCreating('file');
-                  }}
-                >
-                  <Plus />
-                </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  tooltip="New folder"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setCreating('folder');
-                  }}
-                >
-                  <FolderPlus />
-                </IconButton>
-              </span>
             </Tree.FolderTrigger>
             <Tree.FolderContent>
               {creating && (

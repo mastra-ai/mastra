@@ -4,4 +4,6 @@ export * from './mount-manager';
 export * from './sandbox';
 export * from './mastra-sandbox';
 export * from './local-sandbox';
+export * from './process-manager';
+export * from './local-process-manager';
 export * from './native-sandbox';

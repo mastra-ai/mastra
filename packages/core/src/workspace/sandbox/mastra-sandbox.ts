@@ -30,7 +30,9 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
+import type { SandboxProcessManager } from './process-manager';
 import type { WorkspaceSandbox } from './sandbox';
+import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 /**
  * Lifecycle hook that fires during sandbox state transitions.
@@ -98,11 +100,35 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Current status of the sandbox */
   abstract status: ProviderStatus;
 
+  // ---------------------------------------------------------------------------
+  // Optional WorkspaceSandbox members
+  //
+  // Re-declared here so that variables typed as `MastraSandbox` (not just
+  // `WorkspaceSandbox`) can see them.  TypeScript's `implements` is a
+  // constraint check, not a type merge — optional interface members are
+  // invisible on the class type unless explicitly listed.
+  // ---------------------------------------------------------------------------
+
+  /** Execute a shell command and wait for completion */
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  /** Background process manager */
+  declare readonly processes?: SandboxProcessManager;
+
   /** Mount manager - automatically created if subclass implements mount() */
   readonly mounts?: MountManager;
 
   /** Optional mount method - implement to enable mounting support */
   mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+
+  /** Optional unmount method */
+  unmount?(mountPath: string): Promise<void>;
+
+  /** Get instructions describing how this sandbox works */
+  getInstructions?(): string;
+
+  /** Get sandbox status and metadata */
+  getInfo?(): SandboxInfo | Promise<SandboxInfo>;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
@@ -248,7 +274,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * }
    * ```
    */
-  protected async ensureRunning(): Promise<void> {
+  async ensureRunning(): Promise<void> {
+    // Already destroyed — nothing to do
+    if (this.status === 'destroyed') {
+      throw new SandboxNotReadyError(this.id);
+    }
+    // During teardown the sandbox is still operational (e.g. destroy()
+    // may need to list/kill processes).  Allow operations to proceed
+    // without trying to restart.
+    if (this.status === 'destroying' || this.status === 'stopping') {
+      return;
+    }
     if (this.status !== 'running') {
       await this._start();
     }
@@ -328,6 +364,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   async _destroy(): Promise<void> {
     // Already destroyed
     if (this.status === 'destroyed') {
+      return;
+    }
+
+    // Never started — nothing to clean up
+    if (this.status === 'pending') {
+      this.status = 'destroyed';
       return;
     }
 

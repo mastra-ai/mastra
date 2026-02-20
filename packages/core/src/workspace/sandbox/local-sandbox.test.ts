@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createSandboxTestSuite } from '../../../../../workspaces/_test-utils/src/sandbox/factory';
 
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
@@ -14,7 +15,7 @@ describe('LocalSandbox', () => {
 
   beforeEach(async () => {
     // Create a unique temp directory for each test
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-sandbox-test-'));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-test-'));
     // PATH is included by default, so basic commands work out of the box
     sandbox = new LocalSandbox({ workingDirectory: tempDir });
   });
@@ -751,4 +752,38 @@ describe('LocalSandbox', () => {
       await bwrapSandbox._destroy();
     });
   });
+});
+
+/**
+ * Shared Sandbox Conformance Tests
+ *
+ * Verifies LocalSandbox conforms to the WorkspaceSandbox interface.
+ * Same suite that runs against E2BSandbox.
+ */
+createSandboxTestSuite({
+  suiteName: 'LocalSandbox Conformance',
+  createSandbox: async options => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-conformance-'));
+    const realDir = await fs.realpath(dir);
+    return new LocalSandbox({ workingDirectory: realDir, env: { PATH: process.env.PATH!, ...options?.env } });
+  },
+  capabilities: {
+    supportsMounting: false,
+    supportsReconnection: false,
+    supportsConcurrency: true,
+    supportsEnvVars: true,
+    supportsWorkingDirectory: true,
+    supportsTimeout: true,
+    defaultCommandTimeout: 10000,
+    supportsStreaming: true,
+  },
+  testDomains: {
+    commandExecution: true,
+    lifecycle: true,
+    mountOperations: false,
+    reconnection: false,
+    processManagement: true,
+  },
+  testTimeout: 10000,
+  fastOnly: false,
 });

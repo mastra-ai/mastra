@@ -27,6 +27,7 @@ import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { E2BProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
@@ -147,6 +148,12 @@ export class E2BSandbox extends MastraSandbox {
   private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
+  /**
+   * Background process manager.
+   * Always available — auto-starts the sandbox when spawn is called.
+   */
+  readonly processes: E2BProcessManager;
+
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
 
@@ -167,6 +174,8 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.apiKey && { apiKey: options.apiKey }),
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
+
+    this.processes = new E2BProcessManager({ sandbox: this, env: this.env });
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -755,6 +764,10 @@ export class E2BSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
+    // Kill all background processes before stopping
+    const procs = await this.processes.list();
+    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
@@ -774,31 +787,34 @@ export class E2BSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // Unmount all filesystems
-    // Collect keys first since unmount() mutates the map
-    for (const mountPath of [...this.mounts.entries.keys()]) {
-      try {
-        await this.unmount(mountPath);
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
-
     if (this._sandbox) {
+      // Kill all background processes
+      const procs = await this.processes.list();
+      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+
+      // Unmount all filesystems
+      // Collect keys first since unmount() mutates the map
+      for (const mountPath of [...this.mounts.entries.keys()]) {
+        try {
+          await this.unmount(mountPath);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+
       try {
         await this._sandbox.kill();
       } catch {
         // Ignore errors during destroy
       }
+
+      this._sandbox = null;
     }
 
-    this._sandbox = null;
     this.mounts.clear();
   }
 
-  /**
-   * Check if the sandbox is ready for operations.
-   */
+  /** @deprecated Use `status === 'running'` instead. */
   async isReady(): Promise<boolean> {
     return this.status === 'running' && this._sandbox !== null;
   }
@@ -836,16 +852,6 @@ export class E2BSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Ensure the sandbox is started and return the E2B Sandbox instance.
-   * Uses base class ensureRunning() for status management and error handling.
-   * @throws {SandboxNotReadyError} if sandbox fails to start
-   */
-  private async ensureSandbox(): Promise<Sandbox> {
-    await this.ensureRunning();
-    return this._sandbox!;
-  }
 
   /**
    * Check if an error indicates the sandbox itself is dead/gone.
@@ -898,7 +904,8 @@ export class E2BSandbox extends MastraSandbox {
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
     this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
-    const sandbox = await this.ensureSandbox();
+    await this.ensureRunning();
+    const sandbox = this.instance;
 
     const startTime = Date.now();
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
