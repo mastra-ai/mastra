@@ -87,7 +87,16 @@ class LocalProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    return this.proc.kill('SIGKILL');
+    // Kill the entire process group (negative PID) to ensure child processes
+    // spawned by the shell are also terminated. Without this, commands like
+    // "echo foo; sleep 60" would leave orphaned children holding stdio open.
+    try {
+      process.kill(-this.pid, 'SIGKILL');
+      return true;
+    } catch {
+      // Fallback to direct kill if process group kill fails
+      return this.proc.kill('SIGKILL');
+    }
   }
 
   async sendStdin(data: string): Promise<void> {
@@ -122,7 +131,8 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       ...options.env,
     };
 
-    const proc = childProcess.spawn(command, { cwd, env, shell: true });
+    // detached: true creates a new process group so we can kill the entire tree
+    const proc = childProcess.spawn(command, { cwd, env, shell: true, detached: true });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
     this._tracked.set(handle.pid, { handle, command });
     return handle;

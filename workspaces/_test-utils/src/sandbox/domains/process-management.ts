@@ -302,6 +302,68 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       );
 
       it(
+        'retrieved handle has accumulated stdout from spawn',
+        async () => {
+          const handle = await processes.spawn('echo get-test');
+          await handle.wait();
+
+          const retrieved = await processes.get(handle.pid);
+          // Some providers may not track exited processes
+          if (retrieved) {
+            expect(retrieved.stdout).toContain('get-test');
+          }
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'retrieved handle has accumulated stdout while still running',
+        async () => {
+          // Single-process command: outputs then stays alive without forking
+          const handle = await processes.spawn(
+            `node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`,
+          );
+
+          // Wait for output to arrive
+          await new Promise(r => setTimeout(r, 100));
+
+          const retrieved = await processes.get(handle.pid);
+          expect(retrieved).toBeDefined();
+          expect(retrieved!.stdout).toContain('running-get-test');
+
+          await handle.kill();
+          await handle.wait();
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'spawn then get output then kill (tool flow)',
+        async () => {
+          // Simulates the full tool flow: execute_command(background:true) → get_process_output → kill_process
+          const handle = await processes.spawn(
+            `node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`,
+          );
+          const pid = handle.pid;
+
+          // Wait for output
+          await new Promise(r => setTimeout(r, 100));
+
+          // Get output via PID (simulates get_process_output tool)
+          const retrieved = await processes.get(pid);
+          expect(retrieved).toBeDefined();
+          expect(retrieved!.stdout).toContain('spawn-get-kill');
+
+          // Kill via manager (simulates kill_process tool)
+          const killed = await processes.kill(pid);
+          expect(killed).toBe(true);
+
+          await handle.wait();
+        },
+        getContext().testTimeout,
+      );
+
+      it(
         'returns undefined for unknown pid',
         async () => {
           const retrieved = await processes.get(99999);
