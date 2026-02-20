@@ -257,20 +257,10 @@ function WithInlineCreationExample() {
             <Tree.FolderTrigger
               actions={
                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    tooltip="New file"
-                    onClick={() => setCreating('file')}
-                  >
+                  <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
                     <Plus />
                   </IconButton>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    tooltip="New folder"
-                    onClick={() => setCreating('folder')}
-                  >
+                  <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
                     <FolderPlus />
                   </IconButton>
                 </span>

@@ -24,7 +24,7 @@ import {
 export interface SkillEditDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSkillCreated: (skill: StoredSkillResponse) => void;
+  onSkillCreated: (skill: StoredSkillResponse, workspaceId: string) => void;
   readOnly?: boolean;
 }
 
@@ -203,7 +203,7 @@ export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: S
       workspaceId,
       files,
     });
-    onSkillCreated(result);
+    onSkillCreated(result, workspaceId);
     onClose();
   }, [name, description, workspaceId, files, createSkill, onSkillCreated, onClose]);
 

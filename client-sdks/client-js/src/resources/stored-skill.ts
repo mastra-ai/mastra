@@ -1,11 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type {
-  ClientOptions,
-  StoredSkillResponse,
-  UpdateStoredSkillParams,
-  DeleteStoredSkillResponse,
-} from '../types';
+import type { ClientOptions, StoredSkillResponse, UpdateStoredSkillParams, DeleteStoredSkillResponse } from '../types';
 import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';

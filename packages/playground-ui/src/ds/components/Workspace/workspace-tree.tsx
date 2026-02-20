@@ -250,12 +250,7 @@ export const WorkspaceTree = React.forwardRef<HTMLDivElement, WorkspaceTreeProps
           <Tree selectedId={selectedPath ?? undefined} onSelect={setSelectedPath}>
             {allowCreate && (
               <div className="flex justify-end px-1 pb-1">
-                <IconButton
-                  tooltip="New file"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleStartCreate('file', '/')}
-                >
+                <IconButton tooltip="New file" size="sm" variant="ghost" onClick={() => handleStartCreate('file', '/')}>
                   <Plus />
                 </IconButton>
                 <IconButton

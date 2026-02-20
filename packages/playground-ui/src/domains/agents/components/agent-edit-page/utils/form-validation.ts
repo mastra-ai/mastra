@@ -84,6 +84,13 @@ const entityConfigSchema = z.object({
   rules: ruleGroupSchema.optional(),
 });
 
+const skillConfigSchema = z.object({
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  pin: z.string().optional(),
+  strategy: z.enum(['latest', 'live']).optional(),
+});
+
 const scorerConfigSchema = z.object({
   description: z.string().max(500).optional(),
   sampling: scoringSamplingConfigSchema.optional(),
@@ -209,9 +216,16 @@ export const agentFormSchema = z.object({
     .optional()
     .default([]),
   mcpClientsToDelete: z.array(z.string()).optional().default([]),
-  skills: z.record(z.string(), entityConfigSchema).optional().default({}),
+  skills: z.record(z.string(), skillConfigSchema).optional().default({}),
+  workspace: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('id'), workspaceId: z.string() }),
+      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+    ])
+    .optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
 export type EntityConfig = z.infer<typeof entityConfigSchema>;
 export type ScorerConfig = z.infer<typeof scorerConfigSchema>;
+export type SkillConfig = z.infer<typeof skillConfigSchema>;

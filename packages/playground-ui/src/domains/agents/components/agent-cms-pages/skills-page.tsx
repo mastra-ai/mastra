@@ -33,24 +33,27 @@ export function SkillsPage() {
   };
 
   const handleToggleSkill = (skillId: string) => {
-    const isSelected = selectedSkills[skillId] !== undefined;
+    const currentSkills = form.getValues('skills') ?? {};
+    const isSelected = currentSkills[skillId] !== undefined;
     if (isSelected) {
-      const next = { ...selectedSkills };
+      const next = { ...currentSkills };
       delete next[skillId];
       form.setValue('skills', next);
     } else {
       form.setValue('skills', {
-        ...selectedSkills,
+        ...currentSkills,
         [skillId]: { description: getSkillDescription(skillId) },
       });
     }
   };
 
-  const handleSkillCreated = (skill: StoredSkillResponse) => {
+  const handleSkillCreated = (skill: StoredSkillResponse, workspaceId: string) => {
+    const currentSkills = form.getValues('skills') ?? {};
     form.setValue('skills', {
-      ...selectedSkills,
+      ...currentSkills,
       [skill.id]: { description: skill.description || '' },
     });
+    form.setValue('workspace', { type: 'id', workspaceId });
     setDialogOpen(false);
   };
 

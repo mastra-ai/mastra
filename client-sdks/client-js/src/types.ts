@@ -773,6 +773,27 @@ export interface StoredAgentScorerConfig {
   rules?: RuleGroup;
 }
 
+/**
+ * Per-skill config stored in agent snapshots.
+ * Allows overriding skill description and instructions for a specific agent context.
+ */
+export interface StoredAgentSkillConfig {
+  description?: string;
+  instructions?: string;
+  /** Pin to a specific version ID. Takes precedence over strategy. */
+  pin?: string;
+  /** Resolution strategy: 'latest' = latest published version, 'live' = read from filesystem */
+  strategy?: 'latest' | 'live';
+}
+
+/**
+ * Workspace reference stored in agent snapshots.
+ * Can reference a stored workspace by ID or provide inline workspace config.
+ */
+export type StoredWorkspaceRef =
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: Record<string, unknown> };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -814,6 +835,8 @@ export interface StoredAgentResponse {
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -885,6 +908,8 @@ export interface CreateStoredAgentParams {
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -912,6 +937,8 @@ export interface UpdateStoredAgentParams {
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
