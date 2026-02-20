@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMdx from 'remark-mdx'
 import { visit } from 'unist-util-visit'
 
-const DISABLE_PRETTIER_RE = /[{,\s]prettier\s*:\s*false[},\s]/
+const DISABLE_PRETTIER_RE = /(^|[{,\s])prettier\s*:\s*false([},\s]|$)/
 
 const processor = remark()
   .data('settings', {
