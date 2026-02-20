@@ -843,6 +843,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const countSuffix = count > 0 ? theme.fg('muted', ` (${count} tasks)`) : '';
     const header = `${theme.bold(theme.fg('toolTitle', 'todo_write'))}${countSuffix}${status}`;
     this.contentBox.addChild(new Text(header, 0, 0));
+
+    // Surface error details when the tool call fails
+    if (!this.isPartial && this.result?.isError) {
+      const output = this.getFormattedOutput();
+      if (output) {
+        this.contentBox.addChild(new Text(theme.fg('error', output), 0, 0));
+      }
+    }
   }
 
   private renderGenericToolEnhanced(): void {
