@@ -24,26 +24,6 @@ function remarkFormatCodeBlocks(prettierOptions) {
   return async function traverse(tree) {
     let promises = []
 
-    // For YAML files the mark characters must appear at the very start of the line
-    // (no whitespace), because the `-` character is used for lists.
-    let markStrictLangs = ['yaml']
-
-    let markReLoose = {
-      anyMark: /^\s*[-+=]( |$)/m,
-      markOrIndent: /^\s*[-+= ]( |$)/,
-      del: /^\s*-( |$)/,
-      ins: /^\s*\+( |$)/,
-      mark: /^\s*=( |$)/,
-    }
-
-    let markReStrict = {
-      anyMark: /^[-+=]( |$)/m,
-      markOrIndent: /^[-+= ]( |$)/,
-      del: /^-( |$)/,
-      ins: /^\+( |$)/,
-      mark: /^=( |$)/,
-    }
-
     visit(tree, 'code', node => {
       let prettierDisabled = !prettierOptions.mdxFormatCodeBlocks || DISABLE_PRETTIER_RE.test(node.meta ?? '')
       let prettierEnabled = !prettierDisabled
@@ -52,66 +32,15 @@ function remarkFormatCodeBlocks(prettierOptions) {
         let parser = inferParser(prettierOptions, { language: node.lang })
 
         if (parser) {
-          let code = node.value
-
-          let markRe = markStrictLangs.includes(node.lang) ? markReStrict : markReLoose
-
-          // Exclude Markdown files because `-` is used for lists
-          let hasMarks = markRe.anyMark.test(code) && !['md', 'markdown', 'mdx'].includes(node.lang)
-          let del = []
-          let ins = []
-          let mark = []
-
-          if (hasMarks) {
-            let lines = code.split('\n')
-            let newLines = []
-
-            for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-              let line = lines[lineIndex]
-
-              if (markRe.del.test(line)) {
-                del.push(lineIndex)
-              } else if (markRe.ins.test(line)) {
-                ins.push(lineIndex)
-              } else if (markRe.mark.test(line)) {
-                mark.push(lineIndex)
-              }
-
-              newLines.push(line.replace(markRe.markOrIndent, '  '))
-            }
-
-            code = newLines.join('\n')
-          }
-
           promises.push(
             prettier
-              .format(code, {
+              .format(node.value, {
                 ...prettierOptions,
                 parser,
                 printWidth: 100,
               })
               .then(formatted => {
                 let newValue = formatted.trimEnd()
-
-                if (hasMarks) {
-                  let lines = newValue.split('\n')
-                  let newLines = []
-                  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-                    let line = lines[lineIndex]
-                    if (del.includes(lineIndex)) {
-                      newLines.push(`- ${line}`)
-                    } else if (ins.includes(lineIndex)) {
-                      newLines.push(`+ ${line}`)
-                    } else if (mark.includes(lineIndex)) {
-                      newLines.push(`= ${line}`)
-                    } else if (line.trim()) {
-                      newLines.push(`  ${line}`)
-                    } else {
-                      newLines.push('')
-                    }
-                  }
-                  newValue = newLines.join('\n')
-                }
 
                 /**
                  * If the formatter added a semi-colon to the start then remove it.
