@@ -19,7 +19,8 @@ export function applyTail(output: string, tail: number | null | undefined): stri
   const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
   if (lines.length <= n) return output;
   const sliced = lines.slice(-n).join('\n');
-  return trailingNewline ? sliced + '\n' : sliced;
+  const body = trailingNewline ? sliced + '\n' : sliced;
+  return `[showing last ${n} of ${lines.length} lines]\n${body}`;
 }
 
 /**
