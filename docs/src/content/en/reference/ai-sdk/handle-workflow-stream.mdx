@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleWorkflowStream()
 
-Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature. 
+Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
 
 `handleWorkflowStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
@@ -28,18 +28,18 @@ See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
 Next.js App Router example:
 
 ```typescript title="app/api/workflow/route.ts"
-import { handleWorkflowStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '@/src/mastra';
+import { handleWorkflowStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = await req.json()
   const stream = await handleWorkflowStream({
     mastra,
     workflowId: 'weatherWorkflow',
     params,
-  });
-  return createUIMessageStreamResponse({ stream });
+  })
+  return createUIMessageStreamResponse({ stream })
 }
 ```
 
@@ -47,72 +47,72 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "The Mastra instance containing registered workflows.",
-      isOptional: false,
-    },
-    {
-      name: "workflowId",
-      type: "string",
-      description: "The ID of the workflow to execute.",
-      isOptional: false,
-    },
-    {
-      name: "params",
-      type: "WorkflowStreamHandlerParams",
-      description: "Parameters for the workflow stream.",
-      isOptional: false,
-    },
-    {
-      name: "params.runId",
-      type: "string",
-      description: "Optional run ID for the workflow execution.",
-      isOptional: true,
-    },
-    {
-      name: "params.resourceId",
-      type: "string",
-      description: "Optional resource ID for the workflow run.",
-      isOptional: true,
-    },
-    {
-      name: "params.inputData",
-      type: "Record<string, any>",
-      description: "Input data for starting a new workflow execution.",
-      isOptional: true,
-    },
-    {
-      name: "params.resumeData",
-      type: "Record<string, any>",
-      description: "Data for resuming a suspended workflow execution.",
-      isOptional: true,
-    },
-    {
-      name: "params.requestContext",
-      type: "RequestContext",
-      description: "Request context to pass to the workflow execution.",
-      isOptional: true,
-    },
-    {
-      name: "params.tracingOptions",
-      type: "TracingOptions",
-      description: "Options for tracing and observability.",
-      isOptional: true,
-    },
-    {
-      name: "params.step",
-      type: "string",
-      description: "Specific step to target in the workflow.",
-      isOptional: true,
-    },
-    {
-      name: "includeTextStreamParts",
-      type: "boolean",
-      description: "Whether to include text stream parts in the output.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "mastra",
+type: "Mastra",
+description: "The Mastra instance containing registered workflows.",
+isOptional: false,
+},
+{
+name: "workflowId",
+type: "string",
+description: "The ID of the workflow to execute.",
+isOptional: false,
+},
+{
+name: "params",
+type: "WorkflowStreamHandlerParams",
+description: "Parameters for the workflow stream.",
+isOptional: false,
+},
+{
+name: "params.runId",
+type: "string",
+description: "Optional run ID for the workflow execution.",
+isOptional: true,
+},
+{
+name: "params.resourceId",
+type: "string",
+description: "Optional resource ID for the workflow run.",
+isOptional: true,
+},
+{
+name: "params.inputData",
+type: "Record<string, any>",
+description: "Input data for starting a new workflow execution.",
+isOptional: true,
+},
+{
+name: "params.resumeData",
+type: "Record<string, any>",
+description: "Data for resuming a suspended workflow execution.",
+isOptional: true,
+},
+{
+name: "params.requestContext",
+type: "RequestContext",
+description: "Request context to pass to the workflow execution.",
+isOptional: true,
+},
+{
+name: "params.tracingOptions",
+type: "TracingOptions",
+description: "Options for tracing and observability.",
+isOptional: true,
+},
+{
+name: "params.step",
+type: "string",
+description: "Specific step to target in the workflow.",
+isOptional: true,
+},
+{
+name: "includeTextStreamParts",
+type: "boolean",
+description: "Whether to include text stream parts in the output.",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />

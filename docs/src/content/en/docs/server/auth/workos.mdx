@@ -19,9 +19,9 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 This example uses WorkOS authentication. Make sure to:
 
 1. Create a WorkOS account at [workos.com](https://workos.com/)
-2. Set up an Application in your WorkOS Dashboard
-3. Configure your redirect URIs and allowed origins
-4. Set up Organizations and configure user roles as needed
+1. Set up an Application in your WorkOS Dashboard
+1. Configure your redirect URIs and allowed origins
+1. Set up Organizations and configure user roles as needed
 
 ```env title=".env"
 WORKOS_API_KEY=sk_live_...
@@ -49,21 +49,21 @@ npm install @mastra/auth-workos@latest
 ### Basic usage with environment variables
 
 ```typescript {2,6} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthWorkos } from "@mastra/auth-workos";
+import { Mastra } from '@mastra/core'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 export const mastra = new Mastra({
   server: {
     auth: new MastraAuthWorkos(),
   },
-});
+})
 ```
 
 ### Custom configuration
 
 ```typescript {2,6-9} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthWorkos } from "@mastra/auth-workos";
+import { Mastra } from '@mastra/core'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 export const mastra = new Mastra({
   server: {
@@ -72,7 +72,7 @@ export const mastra = new Mastra({
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
   },
-});
+})
 ```
 
 ## Configuration
@@ -82,22 +82,22 @@ export const mastra = new Mastra({
 By default, `MastraAuthWorkos` checks whether the authenticated user has an 'admin' role in any of their organization memberships. The authorization process:
 
 1. Retrieves the user's organization memberships using their user ID
-2. Extracts all roles from their memberships
-3. Checks if any role has the slug 'admin'
-4. Grants access only if the user has admin role in at least one organization
+1. Extracts all roles from their memberships
+1. Checks if any role has the slug 'admin'
+1. Grants access only if the user has admin role in at least one organization
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
 ```typescript title="src/mastra/auth.ts"
-import { MastraAuthWorkos } from "@mastra/auth-workos";
+import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 const workosAuth = new MastraAuthWorkos({
   apiKey: process.env.WORKOS_API_KEY,
   clientId: process.env.WORKOS_CLIENT_ID,
-  authorizeUser: async (user) => {
-    return !!user;
+  authorizeUser: async user => {
+    return !!user
   },
-});
+})
 ```
 
 :::info
@@ -123,22 +123,18 @@ npm install @workos-inc/node
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
 ```typescript title="lib/auth.ts"
-import { WorkOS } from "@workos-inc/node";
+import { WorkOS } from '@workos-inc/node'
 
-const workos = new WorkOS(process.env.WORKOS_API_KEY);
+const workos = new WorkOS(process.env.WORKOS_API_KEY)
 
-export const authenticateWithWorkos = async (
-  code: string,
-  clientId: string,
-) => {
-  const authenticationResponse =
-    await workos.userManagement.authenticateWithCode({
-      code,
-      clientId,
-    });
+export const authenticateWithWorkos = async (code: string, clientId: string) => {
+  const authenticationResponse = await workos.userManagement.authenticateWithCode({
+    code,
+    clientId,
+  })
 
-  return authenticationResponse.accessToken;
-};
+  return authenticationResponse.accessToken
+}
 ```
 
 :::note
@@ -152,16 +148,16 @@ Refer to the [WorkOS User Management documentation](https://workos.com/docs/auth
 When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts"
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
+    baseUrl: 'https://<mastra-api-url>',
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  });
-};
+  })
+}
 ```
 
 :::info
@@ -178,38 +174,36 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="react" label="React">
-
     ```typescript title="src/api/agents.ts"
-    import { WorkOS } from '@workos-inc/node';
-    import { MastraClient } from '@mastra/client-js';
+    import { WorkOS } from '@workos-inc/node'
+    import { MastraClient } from '@mastra/client-js'
 
-    const workos = new WorkOS(process.env.WORKOS_API_KEY);
+    const workos = new WorkOS(process.env.WORKOS_API_KEY)
 
     export const callMastraWithWorkos = async (code: string, clientId: string) => {
       const authenticationResponse = await workos.userManagement.authenticateWithCode({
         code,
         clientId,
-      });
+      })
 
-      const token = authenticationResponse.accessToken;
+      const token = authenticationResponse.accessToken
 
       const mastra = new MastraClient({
-        baseUrl: "http://localhost:4111",
+        baseUrl: 'http://localhost:4111',
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
-      const weatherAgent = mastra.getAgent("weatherAgent");
-      const response = await weatherAgent.generate("What's the weather like in Nairobi");
+      const weatherAgent = mastra.getAgent('weatherAgent')
+      const response = await weatherAgent.generate("What's the weather like in Nairobi")
 
-      return response.text;
-    };
+      return response.text
+    }
     ```
-
   </TabItem>
-  <TabItem value="curl" label="cURL">
 
+  <TabItem value="curl" label="cURL">
     ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -218,6 +212,5 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
         "messages": "Weather in London"
       }'
     ```
-
   </TabItem>
 </Tabs>

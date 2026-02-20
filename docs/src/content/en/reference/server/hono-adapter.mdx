@@ -30,111 +30,110 @@ npm install @mastra/hono@latest hono
 ## Usage example
 
 ```typescript title="server.ts"
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
-import { mastra } from './mastra';
+import { Hono } from 'hono'
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
+import { mastra } from './mastra'
 
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-const server = new MastraServer({ app, mastra });
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
+const server = new MastraServer({ app, mastra })
 
-await server.init();
+await server.init()
 
-export default app;
+export default app
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "app",
-      type: "Hono",
-      description: "Hono app instance",
-      isOptional: false,
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Mastra instance",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Route path prefix (e.g., `/api/v2`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "openapiPath",
-      type: "string",
-      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "bodyLimitOptions",
-      type: "{ maxSize: number, onError: (err) => unknown }",
-      description: "Request body size limits",
-      isOptional: true,
-    },
-    {
-      name: "streamOptions",
-      type: "{ redact?: boolean }",
-      description: "Stream redaction config. When true, redacts sensitive data from streams.",
-      isOptional: true,
-      defaultValue: "{ redact: true }",
-    },
-    {
-      name: "customRouteAuthConfig",
-      type: "Map<string, boolean>",
-      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
-      isOptional: true,
-    },
-    {
-      name: "tools",
-      type: "Record<string, Tool>",
-      description: "Available tools for the server",
-      isOptional: true,
-    },
-    {
-      name: "taskStore",
-      type: "InMemoryTaskStore",
-      description: "Task store for A2A (Agent-to-Agent) operations",
-      isOptional: true,
-    },
-    {
-      name: "mcpOptions",
-      type: "MCPOptions",
-      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "app",
+type: "Hono",
+description: "Hono app instance",
+isOptional: false,
+},
+{
+name: "mastra",
+type: "Mastra",
+description: "Mastra instance",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Route path prefix (e.g., `/api/v2`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "openapiPath",
+type: "string",
+description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "bodyLimitOptions",
+type: "{ maxSize: number, onError: (err) => unknown }",
+description: "Request body size limits",
+isOptional: true,
+},
+{
+name: "streamOptions",
+type: "{ redact?: boolean }",
+description: "Stream redaction config. When true, redacts sensitive data from streams.",
+isOptional: true,
+defaultValue: "{ redact: true }",
+},
+{
+name: "customRouteAuthConfig",
+type: "Map<string, boolean>",
+description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+isOptional: true,
+},
+{
+name: "tools",
+type: "Record<string, Tool>",
+description: "Available tools for the server",
+isOptional: true,
+},
+{
+name: "taskStore",
+type: "InMemoryTaskStore",
+description: "Task store for A2A (Agent-to-Agent) operations",
+isOptional: true,
+},
+{
+name: "mcpOptions",
+type: "MCPOptions",
+typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
+isOptional: true,
+},
+]}
 />
-
 
 ## Adding custom routes
 
 Add routes directly to the Hono app:
 
 ```typescript title="server.ts"
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+import { Hono } from 'hono'
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
 
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-const server = new MastraServer({ app, mastra });
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
+const server = new MastraServer({ app, mastra })
 
 // Before init - runs before Mastra middleware
-app.get('/early-health', (c) => c.json({ status: 'ok' }));
+app.get('/early-health', c => c.json({ status: 'ok' }))
 
-await server.init();
+await server.init()
 
 // After init - has access to Mastra context
-app.get('/custom', (c) => {
-  const mastraInstance = c.get('mastra');
-  return c.json({ agents: Object.keys(mastraInstance.listAgents()) });
-});
+app.get('/custom', c => {
+  const mastraInstance = c.get('mastra')
+  return c.json({ agents: Object.keys(mastraInstance.listAgents()) })
+})
 ```
 
 :::tip
@@ -148,20 +147,20 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
 ```typescript
-app.get('/custom', async (c) => {
-  const mastra = c.get('mastra');
-  const requestContext = c.get('requestContext');
-  const abortSignal = c.get('abortSignal');
+app.get('/custom', async c => {
+  const mastra = c.get('mastra')
+  const requestContext = c.get('requestContext')
+  const abortSignal = c.get('abortSignal')
 
-  const agent = mastra.getAgent('myAgent');
-  return c.json({ agent: agent.name });
-});
+  const agent = mastra.getAgent('myAgent')
+  return c.json({ agent: agent.name })
+})
 ```
 
 Available context keys:
 
 | Key | Description |
-|-----|-------------|
+| - | - |
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
@@ -175,25 +174,25 @@ Available context keys:
 Add Hono middleware before or after `init()`:
 
 ```typescript title="server.ts"
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+import { Hono } from 'hono'
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
 
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
 
 // Middleware before init
 app.use('*', async (c, next) => {
-  console.log(`${c.req.method} ${c.req.url}`);
-  await next();
-});
+  console.log(`${c.req.method} ${c.req.url}`)
+  await next()
+})
 
-const server = new MastraServer({ app, mastra });
-await server.init();
+const server = new MastraServer({ app, mastra })
+await server.init()
 
 // Middleware after init has access to Mastra context
 app.use('*', async (c, next) => {
-  const mastra = c.get('mastra');
-  await next();
-});
+  const mastra = c.get('mastra')
+  await next()
+})
 ```
 
 ## Manual initialization

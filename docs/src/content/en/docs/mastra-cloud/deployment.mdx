@@ -23,7 +23,7 @@ The **Overview** page shows your project's domain URL, status, latest deployment
 
 ![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
-Click the **Deployments** menu item to view build logs. Open **Settings** to configure environment variables, branch, storage, and endpoint URLs. 
+Click the **Deployments** menu item to view build logs. Open **Settings** to configure environment variables, branch, storage, and endpoint URLs.
 
 :::note
 Changes to settings require a new deployment to take effect
@@ -43,33 +43,33 @@ When using the managed Mastra Cloud Store (enabled in your project settings), st
 Configure storage on your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    id: "mastra-store",
-    url: "file:./mastra.db",
+    id: 'mastra-store',
+    url: 'file:./mastra.db',
   }),
   agents: { myAgent },
-});
+})
 ```
 
 Agents can use Memory without specifying storage as they inherit from the Mastra instance:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 export const myAgent = new Agent({
-  id: "my-agent",
+  id: 'my-agent',
   memory: new Memory({
     // No storage here - uses instance-level storage from Mastra Cloud Store
     options: {
       lastMessages: 20,
     },
   }),
-});
+})
 ```
 
 ### Bring your own database

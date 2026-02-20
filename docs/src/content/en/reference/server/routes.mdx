@@ -12,7 +12,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Agents
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/agents` | List all agents |
 | `GET` | `/api/agents/:agentId` | Get agent by ID |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
@@ -22,7 +22,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Generate request body
 
-```typescript
+```typescript prettier:false
 {
   messages: CoreMessage[] | string;       // Required
   instructions?: string;                   // System instructions
@@ -42,7 +42,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Generate response
 
-```typescript
+```typescript prettier:false
 {
   text: string;
   toolCalls?: ToolCall[];
@@ -57,7 +57,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Workflows
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/workflows` | List all workflows |
 | `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
 | `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
@@ -70,7 +70,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Create run request body
 
-```typescript
+```typescript prettier:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   disableScorers?: boolean; // Disable scorers for this run
@@ -79,7 +79,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Start-async request body
 
-```typescript
+```typescript prettier:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
@@ -94,7 +94,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Stream workflow request body
 
-```typescript
+```typescript prettier:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
@@ -106,7 +106,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Resume request body
 
-```typescript
+```typescript prettier:false
 {
   step?: string | string[];
   resumeData?: unknown;
@@ -117,14 +117,14 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Tools
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/tools` | List all tools |
 | `GET` | `/api/tools/:toolId` | Get tool by ID |
 | `POST` | `/api/tools/:toolId/execute` | Execute tool |
 
 ### Execute tool request body
 
-```typescript
+```typescript prettier:false
 {
   data: unknown;  // Tool input data
   requestContext?: Record<string, unknown>;
@@ -134,7 +134,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Memory
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/memory/threads` | List threads |
 | `GET` | `/api/memory/threads/:threadId` | Get thread |
 | `POST` | `/api/memory/threads` | Create thread |
@@ -145,7 +145,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Create thread request body
 
-```typescript
+```typescript prettier:false
 {
   resourceId: string;
   title?: string;
@@ -155,7 +155,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Clone thread request body
 
-```typescript
+```typescript prettier:false
 {
   newThreadId?: string;           // Custom ID for cloned thread
   resourceId?: string;            // Override resource ID
@@ -174,7 +174,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 ### Clone thread response
 
-```typescript
+```typescript prettier:false
 {
   thread: {
     id: string;
@@ -198,7 +198,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Vectors
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `POST` | `/api/vectors/:vectorName/upsert` | Upsert vectors |
 | `POST` | `/api/vectors/:vectorName/query` | Query vectors |
 | `POST` | `/api/vectors/:vectorName/delete` | Delete vectors |
@@ -208,16 +208,16 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ```typescript
 {
   vectors: Array<{
-    id: string;
-    values: number[];
-    metadata?: Record<string, unknown>;
-  }>;
+    id: string
+    values: number[]
+    metadata?: Record<string, unknown>
+  }>
 }
 ```
 
 ### Query request body
 
-```typescript
+```typescript prettier:false
 {
   vector: number[];
   topK?: number;
@@ -229,7 +229,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## MCP
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `GET` | `/api/mcp/servers/:serverId/tools` | List server tools |
 | `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
@@ -238,13 +238,13 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Logs
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/logs` | List logs |
 | `GET` | `/api/logs/:runId` | Get logs by run ID |
 
 ### Query parameters
 
-```typescript
+```typescript prettier:false
 {
   page?: number;
   perPage?: number;
@@ -255,7 +255,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 ## Telemetry
 
 | Method | Path | Description |
-|--------|------|-------------|
+| - | - | - |
 | `GET` | `/api/telemetry/traces` | List traces |
 | `GET` | `/api/telemetry/traces/:traceId` | Get trace |
 | `GET` | `/api/telemetry/traces/:traceId/spans` | Get trace spans |
@@ -266,7 +266,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 
 Most list endpoints support:
 
-```typescript
+```typescript prettier:false
 {
   page?: number;   // Page number (0-indexed)
   perPage?: number; // Items per page (default: 10)
@@ -277,7 +277,7 @@ Most list endpoints support:
 
 Workflow runs support:
 
-```typescript
+```typescript prettier:false
 {
   fromDate?: string;  // ISO date string
   toDate?: string;    // ISO date string
@@ -290,7 +290,7 @@ Workflow runs support:
 
 All routes return errors in this format:
 
-```typescript
+```typescript prettier:false
 {
   error: string;      // Error message
   details?: unknown;  // Additional details
@@ -300,7 +300,7 @@ All routes return errors in this format:
 Common status codes:
 
 | Code | Meaning |
-|------|---------|
+| - | - |
 | 400 | Bad Request - Invalid parameters |
 | 401 | Unauthorized - Missing/invalid auth |
 | 403 | Forbidden - Insufficient permissions |

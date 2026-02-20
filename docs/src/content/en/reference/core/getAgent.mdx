@@ -12,33 +12,33 @@ The `.getAgent()` method is used to retrieve an agent. The method accepts a sing
 ## Usage example
 
 ```typescript
-mastra.getAgent("testAgent");
+mastra.getAgent('testAgent')
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "TAgentName extends keyof TAgents",
-      description:
-        "The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.",
-    },
-  ]}
+{
+name: "name",
+type: "TAgentName extends keyof TAgents",
+description:
+"The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "agent",
-      type: "TAgents[TAgentName]",
-      description:
-        "The agent instance with the specified name. Throws an error if the agent is not found.",
-    },
-  ]}
+{
+name: "agent",
+type: "TAgents[TAgentName]",
+description:
+"The agent instance with the specified name. Throws an error if the agent is not found.",
+},
+]}
 />
 
 ## Related

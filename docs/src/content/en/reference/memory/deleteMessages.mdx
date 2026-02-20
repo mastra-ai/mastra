@@ -12,49 +12,47 @@ The `.deleteMessages()` method deletes multiple messages by their IDs.
 ## Usage Example
 
 ```typescript
-await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
+await memory?.deleteMessages(['671ae63f-3a91-4082-a907-fe7de78e10ec'])
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "messageIds",
-      type: "string[]",
-      description: "Array of message IDs to delete",
-      isOptional: false,
-    },
-  ]}
+{
+name: "messageIds",
+type: "string[]",
+description: "Array of message IDs to delete",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "void",
-      type: "Promise<void>",
-      description: "A promise that resolves when all messages are deleted",
-    },
-  ]}
+{
+name: "void",
+type: "Promise<void>",
+description: "A promise that resolves when all messages are deleted",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/test-memory.ts"
-import { mastra } from "./mastra";
-import { MastraDBMessage } from "@mastra/core";
+import { mastra } from './mastra'
+import { MastraDBMessage } from '@mastra/core'
 
-const agent = mastra.getAgent("agent");
-const memory = await agent.getMemory();
+const agent = mastra.getAgent('agent')
+const memory = await agent.getMemory()
 
-const { messages } = await memory!.recall({ threadId: "thread-123" });
+const { messages } = await memory!.recall({ threadId: 'thread-123' })
 
-const messageIds = messages.map(
-  (message: MastraDBMessage) => message.id,
-);
-await memory?.deleteMessages([...messageIds]);
+const messageIds = messages.map((message: MastraDBMessage) => message.id)
+await memory?.deleteMessages([...messageIds])
 ```
 
 ## Related

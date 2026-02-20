@@ -14,33 +14,35 @@ Deletes a dataset by ID, including all items, versions, and experiments.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-await mastra.datasets.delete({ id: "dataset-id" });
+await mastra.datasets.delete({ id: 'dataset-id' })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the dataset to delete.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "ID of the dataset to delete.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<void>",
-      description: "Resolves when the dataset is deleted.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<void>",
+description: "Resolves when the dataset is deleted.",
+},
+]}
 />

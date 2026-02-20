@@ -16,49 +16,53 @@ The `Dataset` class provides methods for item CRUD, versioning, and experiment m
 ### Add items and run an experiment
 
 ```typescript title="src/mastra/datasets/usage.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
 const dataset = await mastra.datasets.create({
-  name: "QA pairs",
-});
+  name: 'QA pairs',
+})
 
 // Add items
 await dataset.addItems({
   items: [
-    { input: { question: "What is AI?" }, groundTruth: { answer: "Artificial Intelligence" } },
-    { input: { question: "What is ML?" }, groundTruth: { answer: "Machine Learning" } },
+    { input: { question: 'What is AI?' }, groundTruth: { answer: 'Artificial Intelligence' } },
+    { input: { question: 'What is ML?' }, groundTruth: { answer: 'Machine Learning' } },
   ],
-});
+})
 
 // Run an experiment
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "my-agent",
-  scorers: ["accuracy"],
-});
+  targetType: 'agent',
+  targetId: 'my-agent',
+  scorers: ['accuracy'],
+})
 
-console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`);
+console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`)
 ```
 
 ### Manage versions and history
 
 ```typescript title="src/mastra/datasets/versioning.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // List versions
-const { versions } = await dataset.listVersions();
+const { versions } = await dataset.listVersions()
 
 // List items at a specific version
-const items = await dataset.listItems({ version: 2 });
+const items = await dataset.listItems({ version: 2 })
 
 // Get item change history
-const history = await dataset.getItemHistory({ itemId: "item-id" });
+const history = await dataset.getItemHistory({ itemId: 'item-id' })
 ```
 
 ## Access
@@ -66,9 +70,9 @@ const history = await dataset.getItemHistory({ itemId: "item-id" });
 `Dataset` is not instantiated directly. Obtain one via `DatasetsManager`:
 
 ```typescript
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 // or
-const dataset = await mastra.datasets.create({ name: "My dataset" });
+const dataset = await mastra.datasets.create({ name: 'My dataset' })
 ```
 
 ## Properties
@@ -77,12 +81,12 @@ For the full dataset record (name, description, schemas, version, timestamps), c
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "The unique identifier of the dataset. Read-only.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "The unique identifier of the dataset. Read-only.",
+},
+]}
 />
 
 ## Related

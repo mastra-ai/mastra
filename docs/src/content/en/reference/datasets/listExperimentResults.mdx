@@ -14,20 +14,22 @@ Lists individual item results for a specific experiment with pagination.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const { results, pagination } = await dataset.listExperimentResults({
-  experimentId: "exp-id",
+  experimentId: 'exp-id',
   page: 0,
   perPage: 50,
-});
+})
 
 for (const result of results) {
-  console.log(`Item ${result.itemId}: ${result.error ? "FAILED" : "OK"}`);
+  console.log(`Item ${result.itemId}: ${result.error ? 'FAILED' : 'OK'}`)
 }
 ```
 
@@ -35,119 +37,119 @@ for (const result of results) {
 
 <PropertiesTable
   content={[
-    {
-      name: "experimentId",
-      type: "string",
-      description: "ID of the experiment to list results for.",
-    },
-    {
-      name: "page",
-      type: "number",
-      isOptional: true,
-      description: "Page number. Defaults to `0`.",
-    },
-    {
-      name: "perPage",
-      type: "number",
-      isOptional: true,
-      description: "Number of results per page. Defaults to `20`.",
-    },
-  ]}
+{
+name: "experimentId",
+type: "string",
+description: "ID of the experiment to list results for.",
+},
+{
+name: "page",
+type: "number",
+isOptional: true,
+description: "Page number. Defaults to `0`.",
+},
+{
+name: "perPage",
+type: "number",
+isOptional: true,
+description: "Number of results per page. Defaults to `20`.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<object>",
-      description: "Paginated experiment results.",
-      properties: [{
-        type: "object",
-        parameters: [
-          {
-            name: "results",
-            type: "ExperimentResult[]",
-            description: "Array of item-level results.",
-            properties: [{
-              type: "ExperimentResult",
-              parameters: [
-                {
-                  name: "id",
-                  type: "string",
-                  description: "Unique result ID.",
-                },
-                {
-                  name: "experimentId",
-                  type: "string",
-                  description: "ID of the parent experiment.",
-                },
-                {
-                  name: "itemId",
-                  type: "string",
-                  description: "ID of the dataset item.",
-                },
-                {
-                  name: "itemDatasetVersion",
-                  type: "number | null",
-                  description: "Dataset version of the item when executed.",
-                },
-                {
-                  name: "input",
-                  type: "unknown",
-                  description: "Input data passed to the target.",
-                },
-                {
-                  name: "output",
-                  type: "unknown | null",
-                  description: "Output from the target.",
-                },
-                {
-                  name: "groundTruth",
-                  type: "unknown | null",
-                  description: "Expected output.",
-                },
-                {
-                  name: "error",
-                  type: "{ message: string; stack?: string; code?: string } | null",
-                  description: "Structured error if execution failed.",
-                },
-                {
-                  name: "startedAt",
-                  type: "Date",
-                  description: "When execution started.",
-                },
-                {
-                  name: "completedAt",
-                  type: "Date",
-                  description: "When execution completed.",
-                },
-                {
-                  name: "retryCount",
-                  type: "number",
-                  description: "Number of retry attempts.",
-                },
-                {
-                  name: "traceId",
-                  type: "string | null",
-                  description: "Trace ID for observability.",
-                },
-                {
-                  name: "createdAt",
-                  type: "Date",
-                  description: "When the result record was created.",
-                },
-              ],
-            }],
-          },
-          {
-            name: "pagination",
-            type: "PaginationInfo",
-            description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<object>",
+description: "Paginated experiment results.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "results",
+type: "ExperimentResult[]",
+description: "Array of item-level results.",
+properties: [{
+type: "ExperimentResult",
+parameters: [
+{
+name: "id",
+type: "string",
+description: "Unique result ID.",
+},
+{
+name: "experimentId",
+type: "string",
+description: "ID of the parent experiment.",
+},
+{
+name: "itemId",
+type: "string",
+description: "ID of the dataset item.",
+},
+{
+name: "itemDatasetVersion",
+type: "number | null",
+description: "Dataset version of the item when executed.",
+},
+{
+name: "input",
+type: "unknown",
+description: "Input data passed to the target.",
+},
+{
+name: "output",
+type: "unknown | null",
+description: "Output from the target.",
+},
+{
+name: "groundTruth",
+type: "unknown | null",
+description: "Expected output.",
+},
+{
+name: "error",
+type: "{ message: string; stack?: string; code?: string } | null",
+description: "Structured error if execution failed.",
+},
+{
+name: "startedAt",
+type: "Date",
+description: "When execution started.",
+},
+{
+name: "completedAt",
+type: "Date",
+description: "When execution completed.",
+},
+{
+name: "retryCount",
+type: "number",
+description: "Number of retry attempts.",
+},
+{
+name: "traceId",
+type: "string | null",
+description: "Trace ID for observability.",
+},
+{
+name: "createdAt",
+type: "Date",
+description: "When the result record was created.",
+},
+],
+}],
+},
+{
+name: "pagination",
+type: "PaginationInfo",
+description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
+},
+],
+}],
+},
+]}
 />

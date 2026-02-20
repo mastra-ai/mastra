@@ -23,7 +23,7 @@ npm install @mastra/s3vectors@latest
 ## Usage Example
 
 ```typescript
-import { S3Vectors } from "@mastra/s3vectors";
+import { S3Vectors } from '@mastra/s3vectors'
 
 const store = new S3Vectors({
   vectorBucketName: process.env.S3_VECTORS_BUCKET_NAME!, // e.g. "my-vector-bucket"
@@ -31,70 +31,70 @@ const store = new S3Vectors({
     region: process.env.AWS_REGION!, // credentials use the default AWS provider chain
   },
   // Optional: mark large/long-text fields as non-filterable at index creation time
-  nonFilterableMetadataKeys: ["content"],
-});
+  nonFilterableMetadataKeys: ['content'],
+})
 
 // Create an index (names are normalized: "_" → "-" and lowercased)
 await store.createIndex({
-  indexName: "my_index",
+  indexName: 'my_index',
   dimension: 1536,
-  metric: "cosine", // "euclidean" also supported; "dotproduct" is NOT supported
-});
+  metric: 'cosine', // "euclidean" also supported; "dotproduct" is NOT supported
+})
 
 // Upsert vectors (ids auto-generated if omitted). Date values in metadata are serialized to epoch ms.
 const ids = await store.upsert({
-  indexName: "my_index",
+  indexName: 'my_index',
   vectors: [
     [0.1, 0.2 /* … */],
     [0.3, 0.4 /* … */],
   ],
   metadata: [
     {
-      text: "doc1",
-      genre: "documentary",
+      text: 'doc1',
+      genre: 'documentary',
       year: 2023,
-      createdAt: new Date("2024-01-01"),
+      createdAt: new Date('2024-01-01'),
     },
-    { text: "doc2", genre: "comedy", year: 2021 },
+    { text: 'doc2', genre: 'comedy', year: 2021 },
   ],
-});
+})
 
 // Query with metadata filters (implicit AND is canonicalized)
 const results = await store.query({
-  indexName: "my-index",
+  indexName: 'my-index',
   queryVector: [0.1, 0.2 /* … */],
   topK: 10, // Service-side limits may apply (commonly 30)
-  filter: { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } },
+  filter: { genre: { $in: ['documentary', 'comedy'] }, year: { $gte: 2020 } },
   includeVector: false, // set true to include raw vectors (may trigger a secondary fetch)
-});
+})
 
 // Clean up resources (closes the underlying HTTP handler)
-await store.disconnect();
+await store.disconnect()
 ```
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
-    {
-      name: "vectorBucketName",
-      type: "string",
-      description: "Target S3 Vectors vector bucket name.",
-    },
-    {
-      name: "clientConfig",
-      type: "S3VectorsClientConfig",
-      isOptional: true,
-      description: "AWS SDK v3 client options (e.g., `region`, `credentials`).",
-    },
-    {
-      name: "nonFilterableMetadataKeys",
-      type: "string[]",
-      isOptional: true,
-      description:
-        "Metadata keys that should NOT be filterable (applied to the index at creation time). Use this for large text fields like `content`.",
-    },
-  ]}
+{
+name: "vectorBucketName",
+type: "string",
+description: "Target S3 Vectors vector bucket name.",
+},
+{
+name: "clientConfig",
+type: "S3VectorsClientConfig",
+isOptional: true,
+description: "AWS SDK v3 client options (e.g., `region`, `credentials`).",
+},
+{
+name: "nonFilterableMetadataKeys",
+type: "string[]",
+isOptional: true,
+description:
+"Metadata keys that should NOT be filterable (applied to the index at creation time). Use this for large text fields like `content`.",
+},
+]}
 />
 
 ## Methods
@@ -105,26 +105,26 @@ Creates a new vector index in the configured vector bucket. If the index already
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description:
-        "Logical index name. Normalized internally: underscores are replaced with hyphens and the name is lowercased.",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search. `dotproduct` is not supported by S3 Vectors.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description:
+"Logical index name. Normalized internally: underscores are replaced with hyphens and the name is lowercased.",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean'",
+isOptional: true,
+defaultValue: "cosine",
+description:
+"Distance metric for similarity search. `dotproduct` is not supported by S3 Vectors.",
+},
+]}
 />
 
 ### upsert()
@@ -133,29 +133,29 @@ Adds or replaces vectors (full-record put). If `ids` are not provided, UUIDs are
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
@@ -164,38 +164,38 @@ Searches for nearest neighbors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "S3VectorsFilter",
-      isOptional: true,
-      description:
-        "JSON-based metadata filter supporting `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`.",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "S3VectorsFilter",
+isOptional: true,
+description:
+"JSON-based metadata filter supporting `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`.",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+]}
 />
 
 > **Scoring:** Results include `score = 1/(1 + distance)` so that higher is better while preserving the underlying distance ranking.
@@ -206,21 +206,21 @@ Returns information about the index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Index name to describe.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Index name to describe.",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number; // computed via ListVectors pagination (O(n))
-  metric: "cosine" | "euclidean";
+  dimension: number
+  count: number // computed via ListVectors pagination (O(n))
+  metric: 'cosine' | 'euclidean'
 }
 ```
 
@@ -230,12 +230,12 @@ Deletes an index and its data.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Index to delete.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Index to delete.",
+},
+]}
 />
 
 ### listIndexes()
@@ -250,34 +250,34 @@ Updates a vector or metadata for a specific ID within an index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Index containing the vector.",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID to update.",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data to update",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Index containing the vector.",
+},
+{
+name: "id",
+type: "string",
+description: "ID to update.",
+},
+{
+name: "update",
+type: "object",
+description: "Update data containing vector and/or metadata",
+},
+{
+name: "update.vector",
+type: "number[]",
+isOptional: true,
+description: "New vector data to update",
+},
+{
+name: "update.metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -286,17 +286,17 @@ Deletes a specific vector by ID.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Index containing the vector.",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID to delete.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Index containing the vector.",
+},
+{
+name: "id",
+type: "string",
+description: "ID to delete.",
+},
+]}
 />
 
 ### disconnect()
@@ -309,10 +309,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number; // 1/(1 + distance)
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number // 1/(1 + distance)
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -339,7 +339,7 @@ S3 Vectors supports a strict subset of operators and value types. The Mastra fil
 
 **Examples:**
 
-```typescript
+```typescript prettier:false
 // Implicit AND
 { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } }
 
@@ -364,13 +364,13 @@ The store throws typed errors that can be caught:
 ```typescript
 try {
   await store.query({
-    indexName: "index-name",
+    indexName: 'index-name',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // Additional error context
+    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details) // Additional error context
   }
 }
 ```

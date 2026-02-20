@@ -12,40 +12,40 @@ Retrieves a gateway by its registration key (the key used when adding the gatewa
 ## Usage example
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
   gateways: {
     myGateway: new MyCustomGateway(),
   },
-});
+})
 
-const gateway = mastra.getGateway('myGateway');
-console.log(gateway.name); // 'My Custom Gateway'
+const gateway = mastra.getGateway('myGateway')
+console.log(gateway.name) // 'My Custom Gateway'
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: 'key',
-      type: 'string',
-      description: 'The registration key of the gateway',
-    },
-  ]}
+{
+name: 'key',
+type: 'string',
+description: 'The registration key of the gateway',
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: 'gateway',
-      type: 'MastraModelGateway',
-      description: 'The gateway instance',
-    },
-  ]}
+{
+name: 'gateway',
+type: 'MastraModelGateway',
+description: 'The gateway instance',
+},
+]}
 />
 
 ## Throws

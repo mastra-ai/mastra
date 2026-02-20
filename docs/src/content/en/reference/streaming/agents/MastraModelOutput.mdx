@@ -13,7 +13,7 @@ The `MastraModelOutput` class is returned by [.stream()](./stream) and provides 
 
 ```typescript
 // MastraModelOutput is returned by agent.stream()
-const stream = await agent.stream("Hello world");
+const stream = await agent.stream('Hello world')
 ```
 
 For setup and basic usage, see the [.stream()](./stream) method documentation.
@@ -24,57 +24,57 @@ These properties provide real-time access to model outputs as they're generated:
 
 <PropertiesTable
   content={[
-    {
-      name: "fullStream",
-      type: "ReadableStream<ChunkType<OUTPUT>>",
-      description:
-        "Complete stream of all chunk types including text, tool calls, reasoning, metadata, and control chunks. Provides granular access to every aspect of the model's response.",
-      properties: [
-        {
-          type: "ReadableStream",
-          parameters: [
-            {
-              name: "ChunkType",
-              type: "ChunkType<OUTPUT>",
-              description:
-                "All possible chunk types that can be emitted during streaming",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "textStream",
-      type: "ReadableStream<string>",
-      description:
-        "Stream of incremental text content only. Filters out all metadata, tool calls, and control chunks to provide just the text being generated.",
-    },
-    {
-      name: "objectStream",
-      type: "ReadableStream<Partial<OUTPUT>>",
-      description:
-        "Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
-      properties: [
-        {
-          type: "ReadableStream",
-          parameters: [
-            {
-              name: "PartialSchemaOutput",
-              type: "Partial<OUTPUT>",
-              description:
-                "Partially completed object matching the defined schema",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "elementStream",
-      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
-      description:
-        "Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
-    },
-  ]}
+{
+name: "fullStream",
+type: "ReadableStream<ChunkType<OUTPUT>>",
+description:
+"Complete stream of all chunk types including text, tool calls, reasoning, metadata, and control chunks. Provides granular access to every aspect of the model's response.",
+properties: [
+{
+type: "ReadableStream",
+parameters: [
+{
+name: "ChunkType",
+type: "ChunkType<OUTPUT>",
+description:
+"All possible chunk types that can be emitted during streaming",
+},
+],
+},
+],
+},
+{
+name: "textStream",
+type: "ReadableStream<string>",
+description:
+"Stream of incremental text content only. Filters out all metadata, tool calls, and control chunks to provide just the text being generated.",
+},
+{
+name: "objectStream",
+type: "ReadableStream<Partial<OUTPUT>>",
+description:
+"Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
+properties: [
+{
+type: "ReadableStream",
+parameters: [
+{
+name: "PartialSchemaOutput",
+type: "Partial<OUTPUT>",
+description:
+"Partially completed object matching the defined schema",
+},
+],
+},
+],
+},
+{
+name: "elementStream",
+type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
+description:
+"Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
+},
+]}
 />
 
 ## Promise-based Properties
@@ -83,329 +83,329 @@ These properties resolve to final values after the stream completes:
 
 <PropertiesTable
   content={[
-    {
-      name: "text",
-      type: "Promise<string>",
-      description:
-        "The complete concatenated text response from the model. Resolves when text generation is finished.",
-    },
-    {
-      name: "object",
-      type: "Promise<OUTPUT>",
-      description:
-        "The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
-      properties: [
-        {
-          type: "Promise",
-          parameters: [
-            {
-              name: "InferSchemaOutput",
-              type: "OUTPUT",
-              description:
-                "Fully typed object matching the exact schema definition",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "reasoning",
-      type: "Promise<string>",
-      description:
-        "Complete reasoning text for models that support reasoning (like OpenAI's o1 series). Returns empty string for models without reasoning capability.",
-    },
-    {
-      name: "reasoningText",
-      type: "Promise<string | undefined>",
-      description:
-        "Alternative access to reasoning content. May be undefined for models that don't support reasoning, while 'reasoning' returns empty string.",
-    },
-    {
-      name: "toolCalls",
-      type: "Promise<ToolCallChunk[]>",
-      description:
-        "Array of all tool call chunks made during execution. Each chunk contains tool metadata and execution details.",
-      properties: [
-        {
-          type: "ToolCallChunk",
-          parameters: [
-            {
-              name: "type",
-              type: "'tool-call'",
-              description: "Chunk type identifier",
-            },
-            {
-              name: "runId",
-              type: "string",
-              description: "Execution run identifier",
-            },
-            {
-              name: "from",
-              type: "ChunkFrom",
-              description: "Source of the chunk (AGENT, WORKFLOW, etc.)",
-            },
-            {
-              name: "payload",
-              type: "ToolCallPayload",
-              description:
-                "Tool call data including toolCallId, toolName, args, and execution details",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "toolResults",
-      type: "Promise<ToolResultChunk[]>",
-      description:
-        "Array of all tool result chunks corresponding to the tool calls. Contains execution results and error information.",
-      properties: [
-        {
-          type: "ToolResultChunk",
-          parameters: [
-            {
-              name: "type",
-              type: "'tool-result'",
-              description: "Chunk type identifier",
-            },
-            {
-              name: "runId",
-              type: "string",
-              description: "Execution run identifier",
-            },
-            {
-              name: "from",
-              type: "ChunkFrom",
-              description: "Source of the chunk (AGENT, WORKFLOW, etc.)",
-            },
-            {
-              name: "payload",
-              type: "ToolResultPayload",
-              description:
-                "Tool result data including toolCallId, toolName, result, and error status",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "usage",
-      type: "Promise<LanguageModelUsage>",
-      description:
-        "Token usage statistics including input tokens, output tokens, total tokens, and reasoning tokens (for reasoning models).",
-      properties: [
-        {
-          type: "Record",
-          parameters: [
-            {
-              name: "inputTokens",
-              type: "number",
-              description: "Tokens consumed by the input prompt",
-            },
-            {
-              name: "outputTokens",
-              type: "number",
-              description: "Tokens generated in the response",
-            },
-            {
-              name: "totalTokens",
-              type: "number",
-              description: "Sum of input and output tokens",
-            },
-            {
-              name: "reasoningTokens",
-              type: "number",
-              isOptional: true,
-              description: "Hidden reasoning tokens (for reasoning models)",
-            },
-            {
-              name: "cachedInputTokens",
-              type: "number",
-              isOptional: true,
-              description: "Number of input tokens that were a cache hit",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "finishReason",
-      type: "Promise<string | undefined>",
-      description:
-        "Reason why generation stopped (e.g., 'stop', 'length', 'tool_calls', 'content_filter'). Undefined if the stream hasn't finished.",
-      properties: [
-        {
-          type: "enum",
-          parameters: [
-            {
-              name: "stop",
-              type: "'stop'",
-              description: "Model finished naturally",
-            },
-            {
-              name: "length",
-              type: "'length'",
-              description: "Hit maximum token limit",
-            },
-            {
-              name: "tool_calls",
-              type: "'tool_calls'",
-              description: "Model called tools",
-            },
-            {
-              name: "content_filter",
-              type: "'content_filter'",
-              description: "Content was filtered",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "response",
-      type: "Promise<Response>",
-      description:
-        "Response metadata and messages from the model provider.",
-      properties: [
-        {
-          type: "Response",
-          parameters: [
-            {
-              name: "id",
-              type: "string",
-              isOptional: true,
-              description: "Response ID from the model provider",
-            },
-            {
-              name: "timestamp",
-              type: "Date",
-              isOptional: true,
-              description: "Response timestamp",
-            },
-            {
-              name: "modelId",
-              type: "string",
-              isOptional: true,
-              description: "Model identifier used for this response",
-            },
-            {
-              name: "headers",
-              type: "Record<string, string>",
-              isOptional: true,
-              description: "Response headers from the model provider",
-            },
-            {
-              name: "messages",
-              type: "ResponseMessage[]",
-              isOptional: true,
-              description: "Response messages in model format",
-            },
-            {
-              name: "uiMessages",
-              type: "UIMessage[]",
-              isOptional: true,
-              description: "Response messages in UI format, includes any metadata added by output processors",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "text",
+type: "Promise<string>",
+description:
+"The complete concatenated text response from the model. Resolves when text generation is finished.",
+},
+{
+name: "object",
+type: "Promise<OUTPUT>",
+description:
+"The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
+properties: [
+{
+type: "Promise",
+parameters: [
+{
+name: "InferSchemaOutput",
+type: "OUTPUT",
+description:
+"Fully typed object matching the exact schema definition",
+},
+],
+},
+],
+},
+{
+name: "reasoning",
+type: "Promise<string>",
+description:
+"Complete reasoning text for models that support reasoning (like OpenAI's o1 series). Returns empty string for models without reasoning capability.",
+},
+{
+name: "reasoningText",
+type: "Promise<string | undefined>",
+description:
+"Alternative access to reasoning content. May be undefined for models that don't support reasoning, while 'reasoning' returns empty string.",
+},
+{
+name: "toolCalls",
+type: "Promise<ToolCallChunk[]>",
+description:
+"Array of all tool call chunks made during execution. Each chunk contains tool metadata and execution details.",
+properties: [
+{
+type: "ToolCallChunk",
+parameters: [
+{
+name: "type",
+type: "'tool-call'",
+description: "Chunk type identifier",
+},
+{
+name: "runId",
+type: "string",
+description: "Execution run identifier",
+},
+{
+name: "from",
+type: "ChunkFrom",
+description: "Source of the chunk (AGENT, WORKFLOW, etc.)",
+},
+{
+name: "payload",
+type: "ToolCallPayload",
+description:
+"Tool call data including toolCallId, toolName, args, and execution details",
+},
+],
+},
+],
+},
+{
+name: "toolResults",
+type: "Promise<ToolResultChunk[]>",
+description:
+"Array of all tool result chunks corresponding to the tool calls. Contains execution results and error information.",
+properties: [
+{
+type: "ToolResultChunk",
+parameters: [
+{
+name: "type",
+type: "'tool-result'",
+description: "Chunk type identifier",
+},
+{
+name: "runId",
+type: "string",
+description: "Execution run identifier",
+},
+{
+name: "from",
+type: "ChunkFrom",
+description: "Source of the chunk (AGENT, WORKFLOW, etc.)",
+},
+{
+name: "payload",
+type: "ToolResultPayload",
+description:
+"Tool result data including toolCallId, toolName, result, and error status",
+},
+],
+},
+],
+},
+{
+name: "usage",
+type: "Promise<LanguageModelUsage>",
+description:
+"Token usage statistics including input tokens, output tokens, total tokens, and reasoning tokens (for reasoning models).",
+properties: [
+{
+type: "Record",
+parameters: [
+{
+name: "inputTokens",
+type: "number",
+description: "Tokens consumed by the input prompt",
+},
+{
+name: "outputTokens",
+type: "number",
+description: "Tokens generated in the response",
+},
+{
+name: "totalTokens",
+type: "number",
+description: "Sum of input and output tokens",
+},
+{
+name: "reasoningTokens",
+type: "number",
+isOptional: true,
+description: "Hidden reasoning tokens (for reasoning models)",
+},
+{
+name: "cachedInputTokens",
+type: "number",
+isOptional: true,
+description: "Number of input tokens that were a cache hit",
+},
+],
+},
+],
+},
+{
+name: "finishReason",
+type: "Promise<string | undefined>",
+description:
+"Reason why generation stopped (e.g., 'stop', 'length', 'tool_calls', 'content_filter'). Undefined if the stream hasn't finished.",
+properties: [
+{
+type: "enum",
+parameters: [
+{
+name: "stop",
+type: "'stop'",
+description: "Model finished naturally",
+},
+{
+name: "length",
+type: "'length'",
+description: "Hit maximum token limit",
+},
+{
+name: "tool_calls",
+type: "'tool_calls'",
+description: "Model called tools",
+},
+{
+name: "content_filter",
+type: "'content_filter'",
+description: "Content was filtered",
+},
+],
+},
+],
+},
+{
+name: "response",
+type: "Promise<Response>",
+description:
+"Response metadata and messages from the model provider.",
+properties: [
+{
+type: "Response",
+parameters: [
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "Response ID from the model provider",
+},
+{
+name: "timestamp",
+type: "Date",
+isOptional: true,
+description: "Response timestamp",
+},
+{
+name: "modelId",
+type: "string",
+isOptional: true,
+description: "Model identifier used for this response",
+},
+{
+name: "headers",
+type: "Record<string, string>",
+isOptional: true,
+description: "Response headers from the model provider",
+},
+{
+name: "messages",
+type: "ResponseMessage[]",
+isOptional: true,
+description: "Response messages in model format",
+},
+{
+name: "uiMessages",
+type: "UIMessage[]",
+isOptional: true,
+description: "Response messages in UI format, includes any metadata added by output processors",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Error Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "error",
-      type: "string | Error | { message: string; stack: string; } | undefined",
-      description:
-        "Error information if the stream encountered an error. Undefined if no errors occurred. Can be a string message, Error object, or serialized error with stack trace.",
-    },
-  ]}
+{
+name: "error",
+type: "string | Error | { message: string; stack: string; } | undefined",
+description:
+"Error information if the stream encountered an error. Undefined if no errors occurred. Can be a string message, Error object, or serialized error with stack trace.",
+},
+]}
 />
 
 ## Methods
 
 <PropertiesTable
   content={[
-    {
-      name: "getFullOutput",
-      type: "() => Promise<FullOutput>",
-      description:
-        "Returns a comprehensive output object containing all results: text, structured object, tool calls, usage statistics, reasoning, and metadata. Convenient single method to access all stream results.",
-      properties: [
-        {
-          type: "FullOutput",
-          parameters: [
-            {
-              name: "text",
-              type: "string",
-              description: "Complete text response",
-            },
-            {
-              name: "object",
-              type: "OUTPUT",
-              isOptional: true,
-              description: "Structured output if schema was provided",
-            },
-            {
-              name: "toolCalls",
-              type: "ToolCallChunk[]",
-              description: "All tool call chunks made",
-            },
-            {
-              name: "toolResults",
-              type: "ToolResultChunk[]",
-              description: "All tool result chunks",
-            },
-            {
-              name: "usage",
-              type: "Record<string, number>",
-              description: "Token usage statistics",
-            },
-            {
-              name: "reasoning",
-              type: "string",
-              isOptional: true,
-              description: "Reasoning text if available",
-            },
-            {
-              name: "finishReason",
-              type: "string",
-              isOptional: true,
-              description: "Why generation finished",
-            },
-            {
-              name: "response",
-              type: "Response",
-              description: "Response metadata and messages from the model provider",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "consumeStream",
-      type: "(options?: ConsumeStreamOptions) => Promise<void>",
-      description:
-        "Manually consume the entire stream without processing chunks. Useful when you only need the final promise-based results and want to trigger stream consumption.",
-      properties: [
-        {
-          type: "ConsumeStreamOptions",
-          parameters: [
-            {
-              name: "onError",
-              type: "(error: Error) => void",
-              isOptional: true,
-              description: "Callback for handling stream errors",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "getFullOutput",
+type: "() => Promise<FullOutput>",
+description:
+"Returns a comprehensive output object containing all results: text, structured object, tool calls, usage statistics, reasoning, and metadata. Convenient single method to access all stream results.",
+properties: [
+{
+type: "FullOutput",
+parameters: [
+{
+name: "text",
+type: "string",
+description: "Complete text response",
+},
+{
+name: "object",
+type: "OUTPUT",
+isOptional: true,
+description: "Structured output if schema was provided",
+},
+{
+name: "toolCalls",
+type: "ToolCallChunk[]",
+description: "All tool call chunks made",
+},
+{
+name: "toolResults",
+type: "ToolResultChunk[]",
+description: "All tool result chunks",
+},
+{
+name: "usage",
+type: "Record<string, number>",
+description: "Token usage statistics",
+},
+{
+name: "reasoning",
+type: "string",
+isOptional: true,
+description: "Reasoning text if available",
+},
+{
+name: "finishReason",
+type: "string",
+isOptional: true,
+description: "Why generation finished",
+},
+{
+name: "response",
+type: "Response",
+description: "Response metadata and messages from the model provider",
+},
+],
+},
+],
+},
+{
+name: "consumeStream",
+type: "(options?: ConsumeStreamOptions) => Promise<void>",
+description:
+"Manually consume the entire stream without processing chunks. Useful when you only need the final promise-based results and want to trigger stream consumption.",
+properties: [
+{
+type: "ConsumeStreamOptions",
+parameters: [
+{
+name: "onError",
+type: "(error: Error) => void",
+isOptional: true,
+description: "Callback for handling stream errors",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Usage Examples
@@ -413,22 +413,22 @@ These properties resolve to final values after the stream completes:
 ### Basic Text Streaming
 
 ```typescript
-const stream = await agent.stream("Write a haiku");
+const stream = await agent.stream('Write a haiku')
 
 // Stream text as it's generated
 for await (const text of stream.textStream) {
-  process.stdout.write(text);
+  process.stdout.write(text)
 }
 
 // Or get the complete text
-const fullText = await stream.text;
-console.log(fullText);
+const fullText = await stream.text
+console.log(fullText)
 ```
 
 ### Structured Output Streaming
 
 ```typescript
-const stream = await agent.stream("Generate user data", {
+const stream = await agent.stream('Generate user data', {
   structuredOutput: {
     schema: z.object({
       name: z.string(),
@@ -436,16 +436,16 @@ const stream = await agent.stream("Generate user data", {
       email: z.string(),
     }),
   },
-});
+})
 
 // Stream partial objects
 for await (const partial of stream.objectStream) {
-  console.log("Progress:", partial); // { name: "John" }, { name: "John", age: 30 }, ...
+  console.log('Progress:', partial) // { name: "John" }, { name: "John", age: 30 }, ...
 }
 
 // Get final validated object
-const user = await stream.object;
-console.log("Final:", user); // { name: "John", age: 30, email: "john@example.com" }
+const user = await stream.object
+console.log('Final:', user) // { name: "John", age: 30, email: "john@example.com" }
 ```
 
 ````
@@ -468,41 +468,41 @@ console.log("Results:", toolResults);
 ### Complete Output Access
 
 ```typescript
-const stream = await agent.stream("Analyze this data");
+const stream = await agent.stream('Analyze this data')
 
-const output = await stream.getFullOutput();
+const output = await stream.getFullOutput()
 console.log({
   text: output.text,
   usage: output.usage,
   reasoning: output.reasoning,
   finishReason: output.finishReason,
-});
+})
 ```
 
 ### Full Stream Processing
 
 ```typescript
-const stream = await agent.stream("Complex task");
+const stream = await agent.stream('Complex task')
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
-    case "text-delta":
-      process.stdout.write(chunk.payload.text);
-      break;
-    case "tool-call":
-      console.log(`Calling ${chunk.payload.toolName}...`);
-      break;
-    case "reasoning-delta":
-      console.log(`Reasoning: ${chunk.payload.text}`);
-      break;
-    case "finish":
-      console.log(`Done! Reason: ${chunk.payload.stepResult.reason}`);
+    case 'text-delta':
+      process.stdout.write(chunk.payload.text)
+      break
+    case 'tool-call':
+      console.log(`Calling ${chunk.payload.toolName}...`)
+      break
+    case 'reasoning-delta':
+      console.log(`Reasoning: ${chunk.payload.text}`)
+      break
+    case 'finish':
+      console.log(`Done! Reason: ${chunk.payload.stepResult.reason}`)
       // Access response messages with any metadata added by output processors
-      const uiMessages = chunk.payload.response?.uiMessages;
+      const uiMessages = chunk.payload.response?.uiMessages
       if (uiMessages) {
-        console.log("Response messages:", uiMessages);
+        console.log('Response messages:', uiMessages)
       }
-      break;
+      break
   }
 }
 ```
@@ -510,25 +510,25 @@ for await (const chunk of stream.fullStream) {
 ### Error Handling
 
 ```typescript
-const stream = await agent.stream("Analyze this data");
+const stream = await agent.stream('Analyze this data')
 
 try {
   // Option 1: Handle errors in consumeStream
   await stream.consumeStream({
-    onError: (error) => {
-      console.error("Stream error:", error);
+    onError: error => {
+      console.error('Stream error:', error)
     },
-  });
+  })
 
-  const result = await stream.text;
+  const result = await stream.text
 } catch (error) {
-  console.error("Failed to get result:", error);
+  console.error('Failed to get result:', error)
 }
 
 // Option 2: Check error property
-const result = await stream.getFullOutput();
+const result = await stream.getFullOutput()
 if (stream.error) {
-  console.error("Stream had errors:", stream.error);
+  console.error('Stream had errors:', stream.error)
 }
 ```
 

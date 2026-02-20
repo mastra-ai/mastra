@@ -18,10 +18,10 @@ You can use any testing framework that supports ESM modules, such as [Vitest](ht
 Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
 ```typescript title="src/mastra/agents/weather-agent.test.ts"
-import { describe, it, expect } from 'vitest';
-import { createScorer, runEvals } from "@mastra/core/evals";
-import { weatherAgent } from "./weather-agent";
-import { locationScorer } from "../scorers/location-scorer";
+import { describe, it, expect } from 'vitest'
+import { createScorer, runEvals } from '@mastra/core/evals'
+import { weatherAgent } from './weather-agent'
+import { locationScorer } from '../scorers/location-scorer'
 
 describe('Weather Agent Tests', () => {
   it('should correctly extract locations from queries', async () => {
@@ -29,26 +29,26 @@ describe('Weather Agent Tests', () => {
       data: [
         {
           input: 'weather in Berlin',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' }
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
         },
         {
           input: 'weather in Berlin, Maryland',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' }
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' },
         },
         {
           input: 'weather in Berlin, Russia',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' }
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' },
         },
       ],
       target: weatherAgent,
-      scorers: [locationScorer]
-    });
+      scorers: [locationScorer],
+    })
 
     // Assert aggregate score meets threshold
-    expect(result.scores['location-accuracy']).toBe(1);
-    expect(result.summary.totalItems).toBe(3);
-  });
-});
+    expect(result.scores['location-accuracy']).toBe(1)
+    expect(result.summary.totalItems).toBe(3)
+  })
+})
 ```
 
 ## Understanding Results
@@ -58,7 +58,7 @@ The `runEvals` function returns an object with:
 - `scores`: Average scores for each scorer across all test cases
 - `summary.totalItems`: Total number of test cases processed
 
-```typescript
+```typescript prettier:false
 {
   scores: {
     'location-accuracy': 1.0,  // Average score across all items
@@ -76,34 +76,52 @@ Create separate test cases for different evaluation scenarios:
 
 ```typescript title="src/mastra/agents/weather-agent.test.ts"
 describe('Weather Agent Tests', () => {
-  const locationScorer = createScorer({ /* ... */ });
+  const locationScorer = createScorer({
+    /* ... */
+  })
 
   it('should handle location disambiguation', async () => {
     const result = await runEvals({
       data: [
-        { input: 'weather in Berlin', groundTruth: { /* ... */ } },
-        { input: 'weather in Berlin, Maryland', groundTruth: { /* ... */ } },
+        {
+          input: 'weather in Berlin',
+          groundTruth: {
+            /* ... */
+          },
+        },
+        {
+          input: 'weather in Berlin, Maryland',
+          groundTruth: {
+            /* ... */
+          },
+        },
       ],
       target: weatherAgent,
-      scorers: [locationScorer]
-    });
+      scorers: [locationScorer],
+    })
 
-    expect(result.scores['location-accuracy']).toBe(1);
-  });
+    expect(result.scores['location-accuracy']).toBe(1)
+  })
 
   it('should handle typos and misspellings', async () => {
     const result = await runEvals({
       data: [
-        { input: 'weather in Berln', groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' } },
-        { input: 'weather in Parris', groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' } },
+        {
+          input: 'weather in Berln',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
+        },
+        {
+          input: 'weather in Parris',
+          groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' },
+        },
       ],
       target: weatherAgent,
-      scorers: [locationScorer]
-    });
+      scorers: [locationScorer],
+    })
 
-    expect(result.scores['location-accuracy']).toBe(1);
-  });
-});
+    expect(result.scores['location-accuracy']).toBe(1)
+  })
+})
 ```
 
 ## Next Steps

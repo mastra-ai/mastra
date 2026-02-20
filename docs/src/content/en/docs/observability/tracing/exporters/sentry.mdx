@@ -21,8 +21,8 @@ npm install @mastra/sentry@beta
 ### Prerequisites
 
 1. **Sentry Account**: Sign up at [sentry.io](https://sentry.io/)
-2. **DSN**: Get your [Data Source Name](https://docs.sentry.io/concepts/key-terms/dsn-explainer/) from Project Settings → Client Keys
-3. **Environment Variables**: Set your configuration
+1. **DSN**: Get your [Data Source Name](https://docs.sentry.io/concepts/key-terms/dsn-explainer/) from Project Settings → Client Keys
+1. **Environment Variables**: Set your configuration
 
 ```bash title=".env"
 SENTRY_DSN=https://...@...sentry.io/...
@@ -37,20 +37,20 @@ SENTRY_RELEASE=1.0.0
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { SentryExporter } from "@mastra/sentry";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { SentryExporter } from '@mastra/sentry'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       sentry: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new SentryExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -58,26 +58,26 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { SentryExporter } from "@mastra/sentry";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { SentryExporter } from '@mastra/sentry'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       sentry: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new SentryExporter({
             dsn: process.env.SENTRY_DSN!,
-            environment: "production",
+            environment: 'production',
             tracesSampleRate: 1.0, // Send 100% of transactions to Sentry
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ## Configuration Options
@@ -90,21 +90,21 @@ new SentryExporter({
   dsn: process.env.SENTRY_DSN!, // Data Source Name - tells the SDK where to send events
 
   // Optional settings
-  environment: "production", // Deployment environment (enables filtering issues and alerts by environment)
+  environment: 'production', // Deployment environment (enables filtering issues and alerts by environment)
   tracesSampleRate: 1.0, // Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%)
-  release: "1.0.0", // Version of your code deployed (helps identify regressions and track deployments)
+  release: '1.0.0', // Version of your code deployed (helps identify regressions and track deployments)
 
   // Advanced Sentry options
   options: {
     // Any additional Sentry.NodeOptions
     integrations: [],
-    beforeSend: (event) => event,
+    beforeSend: event => event,
     // ... other Sentry SDK options
   },
 
   // Diagnostic logging
-  logLevel: "info", // debug | info | warn | error
-});
+  logLevel: 'info', // debug | info | warn | error
+})
 ```
 
 ### Sampling Configuration
@@ -115,7 +115,7 @@ Control the percentage of transactions sent to Sentry. This is useful for high-v
 new SentryExporter({
   dsn: process.env.SENTRY_DSN!,
   tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
-});
+})
 ```
 
 :::tip
@@ -126,30 +126,30 @@ Set to `1.0` (100%) for development and `0.1` to `0.2` (10-20%) for production h
 
 Mastra span types are automatically mapped to Sentry operations:
 
-| Mastra SpanType             | Sentry Operation       | Notes                                            |
-| --------------------------- | ---------------------- | ------------------------------------------------ |
-| `AGENT_RUN`                 | `gen_ai.invoke_agent`  | Contains tokens from child MODEL_GENERATION span |
-| `MODEL_GENERATION`          | `gen_ai.chat`          | Includes usage stats, streaming data             |
-| `MODEL_STEP`                | _(skipped)_            | Skipped to simplify trace hierarchy              |
-| `MODEL_CHUNK`               | _(skipped)_            | Data aggregated in MODEL_GENERATION              |
-| `TOOL_CALL`                 | `gen_ai.execute_tool`  | Tool execution with input/output                 |
-| `MCP_TOOL_CALL`             | `gen_ai.execute_tool`  | MCP tool execution                               |
-| `WORKFLOW_RUN`              | `workflow.run`         |                                                  |
-| `WORKFLOW_STEP`             | `workflow.step`        |                                                  |
-| `WORKFLOW_CONDITIONAL`      | `workflow.conditional` |                                                  |
-| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` |                                                  |
-| `WORKFLOW_PARALLEL`         | `workflow.parallel`    |                                                  |
-| `WORKFLOW_LOOP`             | `workflow.loop`        |                                                  |
-| `WORKFLOW_SLEEP`            | `workflow.sleep`       |                                                  |
-| `WORKFLOW_WAIT_EVENT`       | `workflow.wait`        |                                                  |
-| `PROCESSOR_RUN`             | `ai.processor`         |                                                  |
-| `GENERIC`                   | `ai.span`              |                                                  |
+| Mastra SpanType | Sentry Operation | Notes |
+| - | - | - |
+| `AGENT_RUN` | `gen_ai.invoke_agent` | Contains tokens from child MODEL\_GENERATION span |
+| `MODEL_GENERATION` | `gen_ai.chat` | Includes usage stats, streaming data |
+| `MODEL_STEP` | _(skipped)_ | Skipped to simplify trace hierarchy |
+| `MODEL_CHUNK` | _(skipped)_ | Data aggregated in MODEL\_GENERATION |
+| `TOOL_CALL` | `gen_ai.execute_tool` | Tool execution with input/output |
+| `MCP_TOOL_CALL` | `gen_ai.execute_tool` | MCP tool execution |
+| `WORKFLOW_RUN` | `workflow.run` | |
+| `WORKFLOW_STEP` | `workflow.step` | |
+| `WORKFLOW_CONDITIONAL` | `workflow.conditional` | |
+| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` | |
+| `WORKFLOW_PARALLEL` | `workflow.parallel` | |
+| `WORKFLOW_LOOP` | `workflow.loop` | |
+| `WORKFLOW_SLEEP` | `workflow.sleep` | |
+| `WORKFLOW_WAIT_EVENT` | `workflow.wait` | |
+| `PROCESSOR_RUN` | `ai.processor` | |
+| `GENERIC` | `ai.span` | |
 
 ## OpenTelemetry Semantic Conventions
 
 The exporter uses standard GenAI semantic conventions with Sentry-specific attributes:
 
-**For MODEL_GENERATION spans:**
+**For MODEL\_GENERATION spans:**
 
 - `gen_ai.system`: Model provider (e.g., `openai`, `anthropic`)
 - `gen_ai.request.model`: Model identifier (e.g., `gpt-4`)
@@ -163,7 +163,7 @@ The exporter uses standard GenAI semantic conventions with Sentry-specific attri
 - `gen_ai.request.messages`: Input messages/prompts (JSON)
 - `gen_ai.completion_start_time`: Time first token arrived
 
-**For TOOL_CALL spans:**
+**For TOOL\_CALL spans:**
 
 - `gen_ai.tool.name`: Tool identifier
 - `gen_ai.tool.type`: `function`
@@ -172,7 +172,7 @@ The exporter uses standard GenAI semantic conventions with Sentry-specific attri
 - `gen_ai.tool.output`: Tool output (JSON)
 - `tool.success`: Whether the tool call succeeded
 
-**For AGENT_RUN spans:**
+**For AGENT\_RUN spans:**
 
 - `gen_ai.agent.name`: Agent identifier
 - `gen_ai.pipeline.name`: Agent name (for Sentry AI view)
@@ -189,7 +189,7 @@ The exporter uses standard GenAI semantic conventions with Sentry-specific attri
 - **Streaming support**: Aggregates streaming responses
 - **Error tracking**: Automatic error status and exception capture
 - **Workflow support**: Tracks workflow execution steps
-- **Simplified hierarchy**: MODEL_STEP and MODEL_CHUNK spans are skipped to reduce noise
+- **Simplified hierarchy**: MODEL\_STEP and MODEL\_CHUNK spans are skipped to reduce noise
 
 ## Related
 

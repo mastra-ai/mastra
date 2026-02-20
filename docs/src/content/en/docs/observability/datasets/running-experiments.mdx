@@ -19,20 +19,20 @@ An experiment runs every item in a dataset through a target (an agent, a workflo
 Call [`startExperiment()`](/reference/datasets/startExperiment) with a target and scorers:
 
 ```typescript title="src/mastra/experiments/basic.ts"
-import { mastra } from "../index";
+import { mastra } from '../index'
 
-const dataset = await mastra.datasets.get({ id: "translation-dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'translation-dataset-id' })
 
 const summary = await dataset.startExperiment({
-  name: "gpt-5.1-baseline",
-  targetType: "agent",
-  targetId: "translation-agent",
-  scorers: ["accuracy", "fluency"],
-});
+  name: 'gpt-5.1-baseline',
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy', 'fluency'],
+})
 
-console.log(summary.status);          // 'completed' | 'failed'
-console.log(summary.succeededCount);  // number of items that ran successfully
-console.log(summary.failedCount);     // number of items that failed
+console.log(summary.status) // 'completed' | 'failed'
+console.log(summary.succeededCount) // number of items that ran successfully
+console.log(summary.failedCount) // number of items that failed
 ```
 
 `startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
@@ -47,11 +47,11 @@ Point to an agent registered on your Mastra instance:
 
 ```typescript title="src/mastra/experiments/agent-target.ts"
 const summary = await dataset.startExperiment({
-  name: "agent-v2-eval",
-  targetType: "agent",
-  targetId: "translation-agent",
-  scorers: ["accuracy"],
-});
+  name: 'agent-v2-eval',
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+})
 ```
 
 Each item's `input` is passed directly to `agent.generate()`, so it must be a `string`, `string[]`, or `CoreMessage[]`.
@@ -62,11 +62,11 @@ Point to a workflow registered on your Mastra instance:
 
 ```typescript title="src/mastra/experiments/workflow-target.ts"
 const summary = await dataset.startExperiment({
-  name: "workflow-eval",
-  targetType: "workflow",
-  targetId: "translation-workflow",
-  scorers: ["accuracy"],
-});
+  name: 'workflow-eval',
+  targetType: 'workflow',
+  targetId: 'translation-workflow',
+  scorers: ['accuracy'],
+})
 ```
 
 The workflow receives each item's `input` as its trigger data.
@@ -77,10 +77,10 @@ Point to a scorer to evaluate an LLM judge against ground truth:
 
 ```typescript title="src/mastra/experiments/scorer-target.ts"
 const summary = await dataset.startExperiment({
-  name: "judge-accuracy-eval",
-  targetType: "scorer",
-  targetId: "accuracy",
-});
+  name: 'judge-accuracy-eval',
+  targetType: 'scorer',
+  targetId: 'accuracy',
+})
 ```
 
 The scorer receives each item's `input` and `groundTruth`. LLM-based judges can drift over time as underlying models change, so it's important to periodically realign them against known-good labels. A dataset gives you a stable benchmark to detect that drift.
@@ -90,44 +90,41 @@ The scorer receives each item's `input` and `groundTruth`. LLM-based judges can 
 Scorers automatically run after each item's target execution. Pass scorer instances or registered scorer IDs:
 
 <Tabs>
-<TabItem value="ids" label="Scorer IDs">
+  <TabItem value="ids" label="Scorer IDs">
+    ```typescript
+    // Reference scorers registered on the Mastra instance
+    const summary = await dataset.startExperiment({
+      name: 'with-registered-scorers',
+      targetType: 'agent',
+      targetId: 'translation-agent',
+      scorers: ['accuracy', 'fluency'],
+    })
+    ```
+  </TabItem>
 
-```typescript
-// Reference scorers registered on the Mastra instance
-const summary = await dataset.startExperiment({
-  name: "with-registered-scorers",
-  targetType: "agent",
-  targetId: "translation-agent",
-  scorers: ["accuracy", "fluency"],
-});
-```
+  <TabItem value="instances" label="Scorer instances">
+    ```typescript
+    import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
 
-</TabItem>
-<TabItem value="instances" label="Scorer instances">
+    const relevancy = createAnswerRelevancyScorer({ model: 'openai/gpt-4.1-nano' })
 
-```typescript
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
-
-const relevancy = createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" });
-
-const summary = await dataset.startExperiment({
-  name: "with-scorer-instances",
-  targetType: "agent",
-  targetId: "translation-agent",
-  scorers: [relevancy],
-});
-```
-
-</TabItem>
+    const summary = await dataset.startExperiment({
+      name: 'with-scorer-instances',
+      targetType: 'agent',
+      targetId: 'translation-agent',
+      scorers: [relevancy],
+    })
+    ```
+  </TabItem>
 </Tabs>
 
 Each item's results include per-scorer scores:
 
 ```typescript
 for (const item of summary.results) {
-  console.log(item.itemId, item.output);
+  console.log(item.itemId, item.output)
   for (const score of item.scores) {
-    console.log(`  ${score.scorerName}: ${score.score} — ${score.reason}`);
+    console.log(`  ${score.scorerName}: ${score.score} — ${score.reason}`)
   }
 }
 ```
@@ -144,27 +141,27 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 ```typescript title="src/mastra/experiments/async.ts"
 const { experimentId, status } = await dataset.startExperimentAsync({
-  name: "large-dataset-run",
-  targetType: "agent",
-  targetId: "translation-agent",
-  scorers: ["accuracy"],
-});
+  name: 'large-dataset-run',
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+})
 
-console.log(experimentId); // UUID
-console.log(status);       // 'pending'
+console.log(experimentId) // UUID
+console.log(status) // 'pending'
 ```
 
 Poll for completion using [`getExperiment()`](/reference/datasets/getExperiment):
 
 ```typescript
-let experiment = await dataset.getExperiment({ experimentId });
+let experiment = await dataset.getExperiment({ experimentId })
 
-while (experiment.status === "pending" || experiment.status === "running") {
-  await new Promise(resolve => setTimeout(resolve, 5000));
-  experiment = await dataset.getExperiment({ experimentId });
+while (experiment.status === 'pending' || experiment.status === 'running') {
+  await new Promise(resolve => setTimeout(resolve, 5000))
+  experiment = await dataset.getExperiment({ experimentId })
 }
 
-console.log(experiment.status); // 'completed' | 'failed'
+console.log(experiment.status) // 'completed' | 'failed'
 ```
 
 ## Configuration options
@@ -175,10 +172,10 @@ Control how many items run in parallel (default: 5):
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "translation-agent",
+  targetType: 'agent',
+  targetId: 'translation-agent',
   maxConcurrency: 10,
-});
+})
 ```
 
 ### Timeouts and retries
@@ -187,11 +184,11 @@ Set a per-item timeout (in milliseconds) and retry count:
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "translation-agent",
-  itemTimeout: 30_000,  // 30 seconds per item
-  maxRetries: 2,        // retry failed items up to 2 times
-});
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  itemTimeout: 30_000, // 30 seconds per item
+  maxRetries: 2, // retry failed items up to 2 times
+})
 ```
 
 Retries use exponential backoff. Abort errors are never retried.
@@ -201,16 +198,16 @@ Retries use exponential backoff. Abort errors are never retried.
 Pass an `AbortSignal` to cancel a running experiment:
 
 ```typescript
-const controller = new AbortController();
+const controller = new AbortController()
 
 // Cancel after 60 seconds
-setTimeout(() => controller.abort(), 60_000);
+setTimeout(() => controller.abort(), 60_000)
 
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "translation-agent",
+  targetType: 'agent',
+  targetId: 'translation-agent',
   signal: controller.signal,
-});
+})
 ```
 
 Remaining items are marked as skipped in the summary.
@@ -221,10 +218,10 @@ Run against a specific snapshot of the dataset:
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "translation-agent",
+  targetType: 'agent',
+  targetId: 'translation-agent',
   version: 3, // use items from dataset version 3
-});
+})
 ```
 
 ## Viewing results
@@ -235,10 +232,10 @@ const summary = await dataset.startExperiment({
 const { experiments, pagination } = await dataset.listExperiments({
   page: 0,
   perPage: 10,
-});
+})
 
 for (const exp of experiments) {
-  console.log(`${exp.name} — ${exp.status} (${exp.succeededCount}/${exp.totalItems})`);
+  console.log(`${exp.name} — ${exp.status} (${exp.succeededCount}/${exp.totalItems})`)
 }
 ```
 
@@ -246,25 +243,25 @@ for (const exp of experiments) {
 
 ```typescript
 const experiment = await dataset.getExperiment({
-  experimentId: "exp-abc-123",
-});
+  experimentId: 'exp-abc-123',
+})
 
-console.log(experiment.status);
-console.log(experiment.startedAt);
-console.log(experiment.completedAt);
+console.log(experiment.status)
+console.log(experiment.startedAt)
+console.log(experiment.completedAt)
 ```
 
 ### Item-level results
 
 ```typescript
 const { results, pagination } = await dataset.listExperimentResults({
-  experimentId: "exp-abc-123",
+  experimentId: 'exp-abc-123',
   page: 0,
   perPage: 50,
-});
+})
 
 for (const result of results) {
-  console.log(result.itemId, result.output, result.error);
+  console.log(result.itemId, result.output, result.error)
 }
 ```
 

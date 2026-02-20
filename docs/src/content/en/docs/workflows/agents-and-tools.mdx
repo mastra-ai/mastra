@@ -20,24 +20,24 @@ Call agents inside a step's `execute` function using `.generate()` or `.stream()
 ```typescript {6-14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   execute: async ({ inputData, mastra }) => {
-    const { message } = inputData;
+    const { message } = inputData
 
-    const testAgent = mastra.getAgent("testAgent");
+    const testAgent = mastra.getAgent('testAgent')
     const response = await testAgent.generate(
       `Convert this message into bullet points: ${message}`,
       {
         memory: {
-          thread: "user-123",
-          resource: "test-123",
+          thread: 'user-123',
+          resource: 'test-123',
         },
       },
-    );
+    )
 
     return {
       list: response.text,
-    };
+    }
   },
-});
+})
 ```
 
 ### Agents as steps
@@ -47,21 +47,20 @@ Compose an agent as a step using `createStep()` when you don't need to modify th
 ![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
 
 ```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
-import { testAgent } from "../agents/test-agent";
+import { testAgent } from '../agents/test-agent'
 
-const step1 = createStep(testAgent);
+const step1 = createStep(testAgent)
 
-export const testWorkflow = createWorkflow({
-})
+export const testWorkflow = createWorkflow({})
   .map(async ({ inputData }) => {
-    const { message } = inputData;
+    const { message } = inputData
     return {
       prompt: `Convert this message into bullet points: ${message}`,
-    };
+    }
   })
   .then(step1)
   .then(step2)
-  .commit();
+  .commit()
 ```
 
 :::info
@@ -72,7 +71,7 @@ Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for 
 
 When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
-```json
+```typescript prettier:false
 {
   inputSchema: {
     prompt: string
@@ -92,21 +91,21 @@ const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),
   tags: z.array(z.string()),
-});
+})
 
 const agentStep = createStep(testAgent, {
   structuredOutput: { schema: articleSchema },
-});
+})
 
 // Next step receives typed structured data
 const processStep = createStep({
-  id: "process",
+  id: 'process',
   inputSchema: articleSchema, // Matches agent's outputSchema
   outputSchema: z.object({ tagCount: z.number() }),
   execute: async ({ inputData }) => ({
     tagCount: inputData.tags.length, // Fully typed
   }),
-});
+})
 
 export const testWorkflow = createWorkflow({})
   .map(async ({ inputData }) => ({
@@ -114,7 +113,7 @@ export const testWorkflow = createWorkflow({})
   }))
   .then(agentStep)
   .then(processStep)
-  .commit();
+  .commit()
 ```
 
 The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
@@ -134,22 +133,19 @@ Use tools in workflow steps to leverage existing tool logic. Call from a step's 
 Call tools inside a step's `execute` function using `.execute()`. This gives you more control over the tool's input context, or process its response before passing it to the next step.
 
 ```typescript {7-12} title="src/mastra/workflows/test-workflow.ts"
-import { testTool } from "../tools/test-tool";
+import { testTool } from '../tools/test-tool'
 
 const step2 = createStep({
   execute: async ({ inputData, requestContext }) => {
-    const { formatted } = inputData;
+    const { formatted } = inputData
 
-    const response = await testTool.execute(
-      { text: formatted },
-      { requestContext },
-    );
+    const response = await testTool.execute({ text: formatted }, { requestContext })
 
     return {
       emphasized: response.emphasized,
-    };
+    }
   },
-});
+})
 ```
 
 :::info
@@ -165,20 +161,20 @@ Compose a tool as a step using `createStep()` when the previous step's output ma
 ![Tool as step](/img/workflows/workflows-agent-tools-tool-step.jpg)
 
 ```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
-import { testTool } from "../tools/test-tool";
+import { testTool } from '../tools/test-tool'
 
-const step2 = createStep(testTool);
+const step2 = createStep(testTool)
 
 export const testWorkflow = createWorkflow({})
   .then(step1)
   .map(async ({ inputData }) => {
-    const { formatted } = inputData;
+    const { formatted } = inputData
     return {
       text: formatted,
-    };
+    }
   })
   .then(step2)
-  .commit();
+  .commit()
 ```
 
 :::info

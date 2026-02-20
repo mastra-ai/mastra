@@ -14,50 +14,51 @@ The `answer()` method is used in real-time voice providers to trigger the AI to 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { getMicrophoneStream } from "@mastra/node-audio";
-import Speaker from "@mastra/node-speaker";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { getMicrophoneStream } from '@mastra/node-audio'
+import Speaker from '@mastra/node-speaker'
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
   channels: 1, // Mono audio output (as opposed to stereo which would be 2)
   bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
-});
+})
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1",
+    model: 'gpt-5.1',
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: "alloy", // Default voice
-});
+  speaker: 'alloy', // Default voice
+})
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 // Register event listener for responses
-voice.on("speaker", (stream) => {
+voice.on('speaker', stream => {
   // Handle audio response
-  stream.pipe(speaker);
-});
+  stream.pipe(speaker)
+})
 // Send user audio input
-const microphoneStream = getMicrophoneStream();
-await voice.send(microphoneStream);
+const microphoneStream = getMicrophoneStream()
+await voice.send(microphoneStream)
 // Trigger the AI to respond
-await voice.answer();
+await voice.answer()
 ```
 
 ## Parameters
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "Record<string, unknown>",
-      description: "Provider-specific options for the response",
-      isOptional: true,
-    },
-  ]}
+{
+name: "options",
+type: "Record<string, unknown>",
+description: "Provider-specific options for the response",
+isOptional: true,
+},
+]}
 />
 
 ## Return Value

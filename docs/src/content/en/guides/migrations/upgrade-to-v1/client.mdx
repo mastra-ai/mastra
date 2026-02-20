@@ -93,7 +93,7 @@ The `useChat` hook internally passes the memory option when you provide a `threa
 
 The `memory` option also supports passing thread metadata when creating new threads:
 
-```typescript
+```typescript prettier:false
 await agent.generate([...], {
   memory: {
     thread: {
@@ -299,7 +299,6 @@ To migrate, use workflow streaming APIs instead of watch.
 ### Run-related methods cannot be called directly on workflow instance
 
 Run-related methods cannot be called directly on workflow instance. You need to create a run instance first using `createRun()` method.
-
 
 ```diff
 - const result = await workflow.start({ runId: '123', inputData: { ... } });

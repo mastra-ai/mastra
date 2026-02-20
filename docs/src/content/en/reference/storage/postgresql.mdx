@@ -20,124 +20,124 @@ npm install @mastra/pg@latest
 ## Usage
 
 ```typescript
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore } from '@mastra/pg'
 
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "Unique identifier for this storage instance.",
-      isOptional: false,
-    },
-    {
-      name: "connectionString",
-      type: "string",
-      description:
-        "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname). Required unless using `pool` or individual host-based parameters (`host`, `port`, `database`, `user`, `password`).",
-      isOptional: true,
-    },
-    {
-      name: "host",
-      type: "string",
-      description:
-        "Database server hostname or IP address. Used with other host-based parameters as an alternative to connectionString.",
-      isOptional: true,
-    },
-    {
-      name: "port",
-      type: "number",
-      description:
-        "Database server port number. Defaults to 5432 if not specified.",
-      isOptional: true,
-    },
-    {
-      name: "database",
-      type: "string",
-      description:
-        "Name of the database to connect to.",
-      isOptional: true,
-    },
-    {
-      name: "user",
-      type: "string",
-      description:
-        "Database user for authentication.",
-      isOptional: true,
-    },
-    {
-      name: "password",
-      type: "string",
-      description:
-        "Password for the database user.",
-      isOptional: true,
-    },
-    {
-      name: "pool",
-      type: "pg.Pool",
-      description:
-        "Pre-configured pg.Pool instance. Use this to reuse an existing connection pool. When provided, Mastra will not create its own pool and will not close it when `store.close()` is called.",
-      isOptional: true,
-    },
-    {
-      name: "schemaName",
-      type: "string",
-      description:
-        "The name of the schema you want the storage to use. Defaults to 'public'.",
-      isOptional: true,
-    },
-    {
-      name: "ssl",
-      type: "boolean | ConnectionOptions",
-      description:
-        "SSL configuration for the connection; set to true to use default SSL or provide a ConnectionOptions object for custom SSL settings.",
-      isOptional: true,
-    },
-    {
-      name: "max",
-      type: "number",
-      description:
-        "Maximum number of connections in the pool. Defaults to 20.",
-      isOptional: true,
-    },
-    {
-      name: "idleTimeoutMillis",
-      type: "number",
-      description:
-        "How long a connection can sit idle before being closed. Defaults to 30000 (30 seconds).",
-      isOptional: true,
-    },
-    {
-      name: "disableInit",
-      type: "boolean",
-      description:
-        "When true, automatic table creation/migrations are disabled. Useful for CI/CD pipelines where migrations are run separately.",
-      isOptional: true,
-    },
-    {
-      name: "skipDefaultIndexes",
-      type: "boolean",
-      description:
-        "When true, default indexes will not be created during initialization.",
-      isOptional: true,
-    },
-    {
-      name: "indexes",
-      type: "CreateIndexOptions[]",
-      description:
-        "Custom indexes to create during initialization.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description:
+"Unique identifier for this storage instance.",
+isOptional: false,
+},
+{
+name: "connectionString",
+type: "string",
+description:
+"PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname). Required unless using `pool` or individual host-based parameters (`host`, `port`, `database`, `user`, `password`).",
+isOptional: true,
+},
+{
+name: "host",
+type: "string",
+description:
+"Database server hostname or IP address. Used with other host-based parameters as an alternative to connectionString.",
+isOptional: true,
+},
+{
+name: "port",
+type: "number",
+description:
+"Database server port number. Defaults to 5432 if not specified.",
+isOptional: true,
+},
+{
+name: "database",
+type: "string",
+description:
+"Name of the database to connect to.",
+isOptional: true,
+},
+{
+name: "user",
+type: "string",
+description:
+"Database user for authentication.",
+isOptional: true,
+},
+{
+name: "password",
+type: "string",
+description:
+"Password for the database user.",
+isOptional: true,
+},
+{
+name: "pool",
+type: "pg.Pool",
+description:
+"Pre-configured pg.Pool instance. Use this to reuse an existing connection pool. When provided, Mastra will not create its own pool and will not close it when `store.close()` is called.",
+isOptional: true,
+},
+{
+name: "schemaName",
+type: "string",
+description:
+"The name of the schema you want the storage to use. Defaults to 'public'.",
+isOptional: true,
+},
+{
+name: "ssl",
+type: "boolean | ConnectionOptions",
+description:
+"SSL configuration for the connection; set to true to use default SSL or provide a ConnectionOptions object for custom SSL settings.",
+isOptional: true,
+},
+{
+name: "max",
+type: "number",
+description:
+"Maximum number of connections in the pool. Defaults to 20.",
+isOptional: true,
+},
+{
+name: "idleTimeoutMillis",
+type: "number",
+description:
+"How long a connection can sit idle before being closed. Defaults to 30000 (30 seconds).",
+isOptional: true,
+},
+{
+name: "disableInit",
+type: "boolean",
+description:
+"When true, automatic table creation/migrations are disabled. Useful for CI/CD pipelines where migrations are run separately.",
+isOptional: true,
+},
+{
+name: "skipDefaultIndexes",
+type: "boolean",
+description:
+"When true, default indexes will not be created during initialization.",
+isOptional: true,
+},
+{
+name: "indexes",
+type: "CreateIndexOptions[]",
+description:
+"Custom indexes to create during initialization.",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -145,47 +145,47 @@ const storage = new PostgresStore({
 You can instantiate `PostgresStore` in the following ways:
 
 ```ts
-import { PostgresStore } from "@mastra/pg";
-import { Pool } from "pg";
+import { PostgresStore } from '@mastra/pg'
+import { Pool } from 'pg'
 
 // Using a connection string
 const store1 = new PostgresStore({
   id: 'pg-storage-1',
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
-});
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+})
 
 // Using a connection string with pool options
 const store2 = new PostgresStore({
   id: 'pg-storage-2',
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema",
-  max: 30,                    // Max pool connections
-  idleTimeoutMillis: 60000,   // Idle timeout
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema',
+  max: 30, // Max pool connections
+  idleTimeoutMillis: 60000, // Idle timeout
   ssl: { rejectUnauthorized: false },
-});
+})
 
 // Using individual connection parameters
 const store3 = new PostgresStore({
   id: 'pg-storage-3',
-  host: "localhost",
+  host: 'localhost',
   port: 5432,
-  database: "mydb",
-  user: "user",
-  password: "password",
-});
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+})
 
 // Using a pre-configured pg.Pool (recommended for pool reuse)
 const existingPool = new Pool({
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
   max: 20,
   // ... your custom pool configuration
-});
+})
 
 const store4 = new PostgresStore({
   id: 'pg-storage-4',
   pool: existingPool,
-  schemaName: "custom_schema", // optional
-});
+  schemaName: 'custom_schema', // optional
+})
 ```
 
 ## Additional Notes
@@ -215,35 +215,35 @@ PostgreSQL supports observability and can handle low trace volumes. Throughput c
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
 
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 const mastra = new Mastra({
   storage, // init() is called automatically
-});
+})
 ```
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
 ```typescript
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore } from '@mastra/pg'
 
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 // Required when using storage directly
-await storage.init();
+await storage.init()
 
 // Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore('memory');
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
@@ -255,19 +255,19 @@ If `init()` is not called, tables won't be created and storage operations will f
 If you already have a `pg.Pool` in your application (e.g., shared with an ORM or for Row Level Security), you can pass it directly to `PostgresStore`:
 
 ```typescript
-import { Pool } from "pg";
-import { PostgresStore } from "@mastra/pg";
+import { Pool } from 'pg'
+import { PostgresStore } from '@mastra/pg'
 
 // Your existing pool (shared across your application)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,
-});
+})
 
 const storage = new PostgresStore({
-  id: "shared-storage",
+  id: 'shared-storage',
   pool: pool,
-});
+})
 ```
 
 **Pool lifecycle behavior:**
@@ -280,37 +280,37 @@ const storage = new PostgresStore({
 `PostgresStore` exposes the underlying database client and pool for advanced use cases:
 
 ```typescript
-store.db;   // DbClient - query interface with helpers (any, one, tx, etc.)
-store.pool; // pg.Pool - the underlying connection pool
+store.db // DbClient - query interface with helpers (any, one, tx, etc.)
+store.pool // pg.Pool - the underlying connection pool
 ```
 
 **Using `store.db` for queries:**
 
 ```typescript
 // Execute queries with helper methods
-const users = await store.db.any("SELECT * FROM users WHERE active = $1", [true]);
-const user = await store.db.one("SELECT * FROM users WHERE id = $1", [userId]);
-const maybeUser = await store.db.oneOrNone("SELECT * FROM users WHERE email = $1", [email]);
+const users = await store.db.any('SELECT * FROM users WHERE active = $1', [true])
+const user = await store.db.one('SELECT * FROM users WHERE id = $1', [userId])
+const maybeUser = await store.db.oneOrNone('SELECT * FROM users WHERE email = $1', [email])
 
 // Use transactions
-const result = await store.db.tx(async (t) => {
-  await t.none("INSERT INTO logs (message) VALUES ($1)", ["Started"]);
-  const data = await t.any("SELECT * FROM items");
-  return data;
-});
+const result = await store.db.tx(async t => {
+  await t.none('INSERT INTO logs (message) VALUES ($1)', ['Started'])
+  const data = await t.any('SELECT * FROM items')
+  return data
+})
 ```
 
 **Using `store.pool` directly:**
 
 ```typescript
 // Get a client for manual connection management
-const client = await store.pool.connect();
+const client = await store.pool.connect()
 try {
-  await client.query("SET LOCAL app.user_id = $1", [userId]);
-  const result = await client.query("SELECT * FROM protected_table");
-  return result.rows;
+  await client.query('SET LOCAL app.user_id = $1', [userId])
+  const result = await client.query('SELECT * FROM protected_table')
+  return result.rows
 } finally {
-  client.release();
+  client.release()
 }
 ```
 
@@ -333,31 +333,28 @@ WARNING: Creating a duplicate database object for the same connection.
 To prevent this, store the `PostgresStore` instance on the global object so it persists across HMR reloads:
 
 ```typescript title="src/mastra/storage.ts"
-import { PostgresStore } from "@mastra/pg";
-import { Memory } from "@mastra/memory";
+import { PostgresStore } from '@mastra/pg'
+import { Memory } from '@mastra/memory'
 
 // Extend the global type to include our instances
 declare global {
-  var pgStore: PostgresStore | undefined;
-  var memory: Memory | undefined;
+  var pgStore: PostgresStore | undefined
+  var memory: Memory | undefined
 }
 
 // Get or create the PostgresStore instance
 function getPgStore(): PostgresStore {
   if (!global.pgStore) {
     if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL is not defined in environment variables");
+      throw new Error('DATABASE_URL is not defined in environment variables')
     }
     global.pgStore = new PostgresStore({
-      id: "pg-storage",
+      id: 'pg-storage',
       connectionString: process.env.DATABASE_URL,
-      ssl:
-        process.env.DATABASE_SSL === "true"
-          ? { rejectUnauthorized: false }
-          : false,
-    });
+      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    })
   }
-  return global.pgStore;
+  return global.pgStore
 }
 
 // Get or create the Memory instance
@@ -365,25 +362,25 @@ function getMemory(): Memory {
   if (!global.memory) {
     global.memory = new Memory({
       storage: getPgStore(),
-    });
+    })
   }
-  return global.memory;
+  return global.memory
 }
 
-export const storage = getPgStore();
-export const memory = getMemory();
+export const storage = getPgStore()
+export const memory = getMemory()
 ```
 
 Then use the exported instances in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { storage } from "./storage";
+import { Mastra } from '@mastra/core/mastra'
+import { storage } from './storage'
 
 export const mastra = new Mastra({
   storage,
   // ...other config
-});
+})
 ```
 
 This pattern ensures only one `PostgresStore` instance is created regardless of how many times the module is reloaded during development. The same pattern can be applied to other storage providers like `LibSQLStore`.
@@ -399,16 +396,16 @@ This singleton pattern is only necessary during local development with HMR. In p
 To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
 
 ```typescript title="src/mastra/agents/example-pg-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { PostgresStore } from "@mastra/pg";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { PostgresStore } from '@mastra/pg'
 
 export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
+  id: 'pg-agent',
+  name: 'PG Agent',
   instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -418,7 +415,7 @@ export const pgAgent = new Agent({
       generateTitle: true, // Explicitly enable automatic title generation
     },
   }),
-});
+})
 ```
 
 ### Using the agent
@@ -426,23 +423,23 @@ export const pgAgent = new Agent({
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
 ```typescript title="src/test-pg-agent.ts" 
-import "dotenv/config";
+import 'dotenv/config'
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123'
+const resourceId = 'user-456'
 
-const agent = mastra.getAgent("pg-agent");
+const agent = mastra.getAgent('pg-agent')
 
-const message = await agent.stream("My name is Mastra", {
+const message = await agent.stream('My name is Mastra', {
   memory: {
     thread: threadId,
     resource: resourceId,
   },
-});
+})
 
-await message.textStream.pipeTo(new WritableStream());
+await message.textStream.pipeTo(new WritableStream())
 
 const stream = await agent.stream("What's my name?", {
   memory: {
@@ -456,10 +453,10 @@ const stream = await agent.stream("What's my name?", {
       messageRange: 2,
     },
   },
-});
+})
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
+  process.stdout.write(chunk)
 }
 ```
 
@@ -472,7 +469,7 @@ PostgreSQL storage provides index management to optimize query performance.
 PostgreSQL storage creates composite indexes during initialization for common query patterns:
 
 - `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
-- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread\_id, createdAt DESC)
 - `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC)
 - `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC)
 - `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
@@ -486,14 +483,14 @@ These indexes improve performance for filtered queries with sorting, including `
 You can control index creation via constructor options:
 
 ```typescript
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore } from '@mastra/pg'
 
 // Skip default indexes (manage indexes separately)
 const store = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
   skipDefaultIndexes: true,
-});
+})
 
 // Add custom indexes during initialization
 const storeWithCustomIndexes = new PostgresStore({
@@ -501,17 +498,17 @@ const storeWithCustomIndexes = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
   indexes: [
     {
-      name: "idx_threads_metadata_type",
-      table: "mastra_threads",
+      name: 'idx_threads_metadata_type',
+      table: 'mastra_threads',
       columns: ["metadata->>'type'"],
     },
     {
-      name: "idx_messages_status",
-      table: "mastra_messages",
+      name: 'idx_messages_status',
+      table: 'mastra_messages',
       columns: ["metadata->>'status'"],
     },
   ],
-});
+})
 ```
 
 For advanced index types, you can specify additional options:
@@ -526,68 +523,68 @@ For advanced index types, you can specify additional options:
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Unique name for the index",
-      isOptional: false,
-    },
-    {
-      name: "table",
-      type: "string",
-      description: "Table name (e.g., 'mastra_threads')",
-      isOptional: false,
-    },
-    {
-      name: "columns",
-      type: "string[]",
-      description:
-        "Array of column names with optional sort order (e.g., ['id', 'createdAt DESC'])",
-      isOptional: false,
-    },
-    {
-      name: "unique",
-      type: "boolean",
-      description: "Creates a unique constraint index",
-      isOptional: true,
-    },
-    {
-      name: "concurrent",
-      type: "boolean",
-      description: "Creates index without locking table (default: true)",
-      isOptional: true,
-    },
-    {
-      name: "where",
-      type: "string",
-      description: "Partial index condition (PostgreSQL specific)",
-      isOptional: true,
-    },
-    {
-      name: "method",
-      type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
-      description: "Index method (default: 'btree')",
-      isOptional: true,
-    },
-    {
-      name: "opclass",
-      type: "string",
-      description: "Operator class for GIN/GIST indexes",
-      isOptional: true,
-    },
-    {
-      name: "storage",
-      type: "Record<string, any>",
-      description: "Storage parameters (e.g., { fillfactor: 90 })",
-      isOptional: true,
-    },
-    {
-      name: "tablespace",
-      type: "string",
-      description: "Tablespace name for index placement",
-      isOptional: true,
-    },
-  ]}
+{
+name: "name",
+type: "string",
+description: "Unique name for the index",
+isOptional: false,
+},
+{
+name: "table",
+type: "string",
+description: "Table name (e.g., 'mastra_threads')",
+isOptional: false,
+},
+{
+name: "columns",
+type: "string[]",
+description:
+"Array of column names with optional sort order (e.g., ['id', 'createdAt DESC'])",
+isOptional: false,
+},
+{
+name: "unique",
+type: "boolean",
+description: "Creates a unique constraint index",
+isOptional: true,
+},
+{
+name: "concurrent",
+type: "boolean",
+description: "Creates index without locking table (default: true)",
+isOptional: true,
+},
+{
+name: "where",
+type: "string",
+description: "Partial index condition (PostgreSQL specific)",
+isOptional: true,
+},
+{
+name: "method",
+type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
+description: "Index method (default: 'btree')",
+isOptional: true,
+},
+{
+name: "opclass",
+type: "string",
+description: "Operator class for GIN/GIST indexes",
+isOptional: true,
+},
+{
+name: "storage",
+type: "Record<string, any>",
+description: "Storage parameters (e.g., { fillfactor: 90 })",
+isOptional: true,
+},
+{
+name: "tablespace",
+type: "string",
+description: "Tablespace name for index placement",
+isOptional: true,
+},
+]}
 />
 
 ### Schema-Specific Indexes
@@ -598,15 +595,15 @@ When using custom schemas, index names are prefixed with the schema name:
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-  schemaName: "custom_schema",
+  schemaName: 'custom_schema',
   indexes: [
     {
-      name: "idx_threads_status",
-      table: "mastra_threads",
-      columns: ["status"],
+      name: 'idx_threads_status',
+      table: 'mastra_threads',
+      columns: ['status'],
     },
   ],
-});
+})
 
 // Creates index as: custom_schema_idx_threads_status
 ```
@@ -621,28 +618,28 @@ const indexes = await storage.db.any(`
   SELECT indexname, indexdef
   FROM pg_indexes
   WHERE tablename = 'mastra_messages'
-`);
+`)
 
 // Drop an index
-await storage.db.none('DROP INDEX IF EXISTS idx_my_custom_index');
+await storage.db.none('DROP INDEX IF EXISTS idx_my_custom_index')
 
 // Analyze index usage
 const stats = await storage.db.one(`
   SELECT idx_scan, idx_tup_read
   FROM pg_stat_user_indexes
   WHERE indexrelname = 'mastra_messages_thread_id_createdat_idx'
-`);
+`)
 ```
 
 ### Index Types and Use Cases
 
 PostgreSQL offers different index types optimized for specific scenarios:
 
-| Index Type          | Best For                                | Storage    | Speed                      |
-| ------------------- | --------------------------------------- | ---------- | -------------------------- |
-| **btree** (default) | Range queries, sorting, general purpose | Moderate   | Fast                       |
-| **hash**            | Equality comparisons only               | Small      | Very fast for `=`          |
-| **gin**             | JSONB, arrays, full-text search         | Large      | Fast for contains          |
-| **gist**            | Geometric data, full-text search        | Moderate   | Fast for nearest-neighbor  |
-| **spgist**          | Non-balanced data, text patterns        | Small      | Fast for specific patterns |
-| **brin**            | Large tables with natural ordering      | Very small | Fast for ranges            |
+| Index Type | Best For | Storage | Speed |
+| - | - | - | - |
+| **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
+| **hash** | Equality comparisons only | Small | Very fast for `=` |
+| **gin** | JSONB, arrays, full-text search | Large | Fast for contains |
+| **gist** | Geometric data, full-text search | Moderate | Fast for nearest-neighbor |
+| **spgist** | Non-balanced data, text patterns | Small | Fast for specific patterns |
+| **brin** | Large tables with natural ordering | Very small | Fast for ranges |

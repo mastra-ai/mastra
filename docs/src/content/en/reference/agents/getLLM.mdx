@@ -12,35 +12,35 @@ The `.getLLM()` method retrieves the language model instance configured for an a
 ## Usage example
 
 ```typescript
-await agent.getLLM();
+await agent.getLLM()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
-      isOptional: true,
-      defaultValue: "{}",
-      description:
-        "Optional configuration object containing request context and optional model override.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+isOptional: true,
+defaultValue: "{}",
+description:
+"Optional configuration object containing request context and optional model override.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "llm",
-      type: "MastraLLMV1 | Promise<MastraLLMV1>",
-      description:
-        "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
-    },
-  ]}
+{
+name: "llm",
+type: "MastraLLMV1 | Promise<MastraLLMV1>",
+description:
+"The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
+},
+]}
 />
 
 ## Extended usage example
@@ -48,30 +48,30 @@ await agent.getLLM();
 ```typescript
 await agent.getLLM({
   requestContext: new RequestContext(),
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-    {
-      name: "model",
-      type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
-      isOptional: true,
-      description:
-        "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+{
+name: "model",
+type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
+isOptional: true,
+description:
+"Optional model override. If provided, this model will be used used instead of the agent's configured model.",
+},
+]}
 />
 
 ## Related

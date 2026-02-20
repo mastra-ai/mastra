@@ -33,10 +33,11 @@ You can also place additional information into `<details>` blocks:
   This is the detailed content
 
   ```js
-  console.log("Markdown features including the code block are available");
+  console.log('Markdown features including the code block are available')
   ```
 
   You can use Markdown here including **bold** and _italic_ text, and [inline link](https://docusaurus.io)
+
   <details>
     <summary>Nested toggle! Some surprise inside...</summary>
 
@@ -46,7 +47,7 @@ You can also place additional information into `<details>` blocks:
 
 We also have images:
 
-![Image alt text](https://images.unsplash.com/photo-1634129366530-61d3e56a84fb?q=80&w=2532&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
+![Image alt text](https://images.unsplash.com/photo-1634129366530-61d3e56a84fb?q=80\&w=2532\&auto=format\&fit=crop\&ixlib=rb-4.1.0\&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
 
 ## Tabs
 
@@ -54,9 +55,11 @@ We also have images:
   <TabItem value="apple" label="Apple" default>
     This is an apple 🍎
   </TabItem>
+
   <TabItem value="orange" label="Orange">
     This is an orange 🍊
   </TabItem>
+
   <TabItem value="banana" label="Banana">
     This is a banana 🍌
   </TabItem>
@@ -66,25 +69,21 @@ We also have images:
 
 <Steps>
   <StepItem>
+    Content of step one. Can also contain code blocks or admonitions.
 
-Content of step one. Can also contain code blocks or admonitions.
+    ```typescript {7-11} title="src/mastra/agents/memory-agent.ts" prettier:false
+    code goes here
+    ```
 
-```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
-code goes here
-```
+    :::info
 
-:::info
+    Visit stuff for a full list of configuration options.
 
-Visit stuff for a full list of configuration options.
-
-:::
-
+    :::
   </StepItem>
 
   <StepItem>
-
-step content
-
+    step content
   </StepItem>
 </Steps>
 
@@ -95,17 +94,17 @@ A normal `inline code` block.
 An example with only language:
 
 ```typescript
-const greeting: string = "Hello, world!";
-console.log(greeting);
+const greeting: string = 'Hello, world!'
+console.log(greeting)
 ```
 
 An example with title and highlighted lines:
 
 ```typescript {4} title="src/example.ts"
 function add(a: number, b: number): number {
-  return a + b;
+  return a + b
 }
-console.log(add(2, 3));
+console.log(add(2, 3))
 ```
 
 ## Admonitions
@@ -151,47 +150,74 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 ## Card Grid
 
 <CardGrid>
-  <CardGridItem
-    title="Gateways"
-    href="/models/gateways"
-  >
+  <CardGridItem title="Gateways" href="/models/gateways">
     <div className="space-y-3">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm">
-          <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <img
+            src="https://models.dev/logos/openrouter.svg"
+            alt="OpenRouter"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
+
           <span>OpenRouter</span>
         </div>
+
         <div className="flex items-center gap-2 text-sm">
           <NetlifyLogo className="w-4 h-4" />
+
           <span>Netlify</span>
         </div>
+
         <div className="flex items-center gap-2 text-sm">
-          <img src="https://models.dev/logos/vercel.svg" alt="Vercel" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <img
+            src="https://models.dev/logos/vercel.svg"
+            alt="Vercel"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
+
           <span>Vercel</span>
         </div>
       </div>
+
       <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 1 more</div>
     </div>
   </CardGridItem>
-  <CardGridItem
-    title="Providers"
-    href="/models/providers"
-  >
+
+  <CardGridItem title="Providers" href="/models/providers">
     <div className="space-y-3">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm">
-          <img src="https://models.dev/logos/openai.svg" alt="OpenAI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <img
+            src="https://models.dev/logos/openai.svg"
+            alt="OpenAI"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
+
           <span>OpenAI</span>
         </div>
+
         <div className="flex items-center gap-2 text-sm">
-          <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <img
+            src="https://models.dev/logos/anthropic.svg"
+            alt="Anthropic"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
+
           <span>Anthropic</span>
         </div>
+
         <div className="flex items-center gap-2 text-sm">
-          <img src="https://models.dev/logos/google.svg" alt="Google" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <img
+            src="https://models.dev/logos/google.svg"
+            alt="Google"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
+
           <span>Google</span>
         </div>
       </div>
+
       <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 68 more</div>
     </div>
   </CardGridItem>
@@ -209,37 +235,37 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 <PropertiesTable
   content={[
-    {
-      name: "domain",
-      type: "string",
-      description:
-        "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_DOMAIN",
-    },
-    {
-      name: "audience",
-      type: "string",
-      description:
-        "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_AUDIENCE",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-      defaultValue: '"auth0"',
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: Auth0User) => Promise<boolean> | boolean",
-      description:
-        "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "domain",
+type: "string",
+description:
+"Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_DOMAIN",
+},
+{
+name: "audience",
+type: "string",
+description:
+"Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_AUDIENCE",
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"auth0"',
+},
+{
+name: "authorizeUser",
+type: "(user: Auth0User) => Promise<boolean> | boolean",
+description:
+"Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
+isOptional: true,
+},
+]}
 />
 
 ## Markdown Kitchen Sink
@@ -249,8 +275,8 @@ What follows from here is just a bunch of absolute nonsense I've written to dogf
 It's important to cover all of these use cases for a few reasons:
 
 1. We want everything to look good out of the box.
-2. Really just the first reason, that's the whole point of the plugin.
-3. Here's a third pretend reason though a list with three items looks more realistic than a list with two items.
+1. Really just the first reason, that's the whole point of the plugin.
+1. Here's a third pretend reason though a list with three items looks more realistic than a list with two items.
 
 Now we're going to try out another header style.
 
@@ -269,6 +295,7 @@ It's probably important that images look okay here by default as well:
     src="https://images.unsplash.com/photo-1556740758-90de374c12ad?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=1000&q=80"
     alt=""
   />
+
   <figcaption>
     Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of
     classical Latin literature from 45 BC, making it over 2000 years old.
@@ -334,11 +361,11 @@ Nested lists basically always look bad which is why editors like Medium don't ev
    - You might feel like you are being really "organized" or something but you are just creating a gross shape on the screen that is hard to read.
    - Nested navigation in UIs is a bad idea too, keep things as flat as possible.
    - Nesting tons of folders in your source code is also not helpful.
-2. **Since we need to have more items, here's another one.**
+1. **Since we need to have more items, here's another one.**
    - I'm not sure if we'll bother styling more than two levels deep.
    - Two is already too much, three is guaranteed to be a bad idea.
    - If you nest four levels deep you belong in prison.
-3. **Two items isn't really a list, three is good though.**
+1. **Two items isn't really a list, three is good though.**
    - Again please don't nest lists if you want people to actually read your content.
    - Nobody wants to look at this.
    - I'm upset that we even have to bother styling this.
@@ -368,20 +395,25 @@ And finally a sentence to close off this section.
 
 ### We didn't forget about description lists
 
-Well, that's not exactly true, we first released this plugin back in 2020 and it took three years before we added description lists. But they're here now, so let's just be happy about that&hellip;okay? They can be great for things like FAQs.
+Well, that's not exactly true, we first released this plugin back in 2020 and it took three years before we added description lists. But they're here now, so let's just be happy about that…okay? They can be great for things like FAQs.
 
 <dl>
   <dt>Why do you never see elephants hiding in trees?</dt>
+
   <dd>
     Because they're so good at it. Lorem ipsum dolor sit amet consectetur adipisicing elit. Quas
     cupiditate laboriosam fugiat.
   </dd>
+
   <dt>What do you call someone with no body and no nose?</dt>
+
   <dd>
     Nobody knows. Lorem ipsum dolor sit amet consectetur adipisicing elit. Culpa, voluptas ipsa quia
     excepturi, quibusdam natus exercitationem sapiente tempore labore voluptatem.
   </dd>
+
   <dt>Why can't you hear a pterodactyl go to the bathroom?</dt>
+
   <dd>
     Because the pee is silent. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Ipsam, quas
     voluptatibus ex culpa ipsum, aspernatur blanditiis fugiat ullam magnam suscipit deserunt illum
@@ -395,13 +427,13 @@ I almost forgot to mention links, like [this link to the Tailwind CSS website](h
 
 We even included table styles, check it out:
 
-| Wrestler                | Origin       | Finisher           |
-| ----------------------- | ------------ | ------------------ |
-| Bret "The Hitman" Hart  | Calgary, AB  | Sharpshooter       |
-| Stone Cold Steve Austin | Austin, TX   | Stone Cold Stunner |
-| Randy Savage            | Sarasota, FL | Elbow Drop         |
-| Vader                   | Boulder, CO  | Vader Bomb         |
-| Razor Ramon             | Chuluota, FL | Razor's Edge       |
+| Wrestler | Origin | Finisher |
+| - | - | - |
+| Bret "The Hitman" Hart | Calgary, AB | Sharpshooter |
+| Stone Cold Steve Austin | Austin, TX | Stone Cold Stunner |
+| Randy Savage | Sarasota, FL | Elbow Drop |
+| Vader | Boulder, CO | Vader Bomb |
+| Razor Ramon | Chuluota, FL | Razor's Edge |
 
 We also need to make sure inline code looks good, like if I wanted to talk about `<span>` elements or tell you the good news about `@tailwindcss/typography`.
 

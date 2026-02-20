@@ -14,79 +14,79 @@ The `createAnswerSimilarityScorer()` function creates a scorer that evaluates ho
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description:
-        "The language model used to evaluate semantic similarity between outputs and ground truth.",
-    },
-    {
-      name: "options",
-      type: "AnswerSimilarityOptions",
-      required: false,
-      description: "Configuration options for the scorer.",
-    },
-  ]}
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description:
+"The language model used to evaluate semantic similarity between outputs and ground truth.",
+},
+{
+name: "options",
+type: "AnswerSimilarityOptions",
+required: false,
+description: "Configuration options for the scorer.",
+},
+]}
 />
 
 ### AnswerSimilarityOptions
 
 <PropertiesTable
   content={[
-    {
-      name: "requireGroundTruth",
-      type: "boolean",
-      required: false,
-      defaultValue: "true",
-      description:
-        "Whether to require ground truth for evaluation. If false, missing ground truth returns score 0.",
-    },
-    {
-      name: "semanticThreshold",
-      type: "number",
-      required: false,
-      defaultValue: "0.8",
-      description: "Weight for semantic matches vs exact matches (0-1).",
-    },
-    {
-      name: "exactMatchBonus",
-      type: "number",
-      required: false,
-      defaultValue: "0.2",
-      description: "Additional score bonus for exact matches (0-1).",
-    },
-    {
-      name: "missingPenalty",
-      type: "number",
-      required: false,
-      defaultValue: "0.15",
-      description: "Penalty per missing key concept from ground truth.",
-    },
-    {
-      name: "contradictionPenalty",
-      type: "number",
-      required: false,
-      defaultValue: "1.0",
-      description:
-        "Penalty for contradictory information. High value ensures wrong answers score near 0.",
-    },
-    {
-      name: "extraInfoPenalty",
-      type: "number",
-      required: false,
-      defaultValue: "0.05",
-      description:
-        "Mild penalty for extra information not present in ground truth (capped at 0.2).",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Score scaling factor.",
-    },
-  ]}
+{
+name: "requireGroundTruth",
+type: "boolean",
+required: false,
+defaultValue: "true",
+description:
+"Whether to require ground truth for evaluation. If false, missing ground truth returns score 0.",
+},
+{
+name: "semanticThreshold",
+type: "number",
+required: false,
+defaultValue: "0.8",
+description: "Weight for semantic matches vs exact matches (0-1).",
+},
+{
+name: "exactMatchBonus",
+type: "number",
+required: false,
+defaultValue: "0.2",
+description: "Additional score bonus for exact matches (0-1).",
+},
+{
+name: "missingPenalty",
+type: "number",
+required: false,
+defaultValue: "0.15",
+description: "Penalty per missing key concept from ground truth.",
+},
+{
+name: "contradictionPenalty",
+type: "number",
+required: false,
+defaultValue: "1.0",
+description:
+"Penalty for contradictory information. High value ensures wrong answers score near 0.",
+},
+{
+name: "extraInfoPenalty",
+type: "number",
+required: false,
+defaultValue: "0.05",
+description:
+"Mild penalty for extra information not present in ground truth (capped at 0.2).",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Score scaling factor.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but **requires ground truth** to be provided in the run object.
@@ -95,50 +95,50 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Similarity score between 0-1 (or 0-scale if custom scale used). Higher scores indicate better similarity to ground truth.",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description:
-        "Human-readable explanation of the score with actionable feedback.",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Extracted semantic units from output and ground truth.",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Detailed analysis of matches, contradictions, and extra information.",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt used for semantic unit extraction.",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt used for similarity analysis.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt used for generating the explanation.",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "score",
+type: "number",
+description:
+"Similarity score between 0-1 (or 0-scale if custom scale used). Higher scores indicate better similarity to ground truth.",
+},
+{
+name: "reason",
+type: "string",
+description:
+"Human-readable explanation of the score with actionable feedback.",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Extracted semantic units from output and ground truth.",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Detailed analysis of matches, contradictions, and extra information.",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "The prompt used for semantic unit extraction.",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt used for similarity analysis.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt used for generating the explanation.",
+},
+]}
 />
 
 ## Scoring Details
@@ -146,9 +146,9 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 The scorer uses a multi-step process:
 
 1. **Extract**: Breaks down output and ground truth into semantic units
-2. **Analyze**: Compares units and identifies matches, contradictions, and gaps
-3. **Score**: Calculates weighted similarity with penalties for contradictions
-4. **Reason**: Generates human-readable explanation
+1. **Analyze**: Compares units and identifies matches, contradictions, and gaps
+1. **Score**: Calculates weighted similarity with penalties for contradictions
+1. **Reason**: Generates human-readable explanation
 
 Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`
 
@@ -157,38 +157,38 @@ Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty 
 Evaluate agent responses for similarity to ground truth across different scenarios:
 
 ```typescript title="src/example-answer-similarity.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o" });
+const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o' })
 
 const result = await runEvals({
   data: [
     {
-      input: "What is 2+2?",
-      groundTruth: "4",
+      input: 'What is 2+2?',
+      groundTruth: '4',
     },
     {
-      input: "What is the capital of France?",
-      groundTruth: "The capital of France is Paris",
+      input: 'What is the capital of France?',
+      groundTruth: 'The capital of France is Paris',
     },
     {
-      input: "What are the primary colors?",
-      groundTruth: "The primary colors are red, blue, and yellow",
+      input: 'What are the primary colors?',
+      groundTruth: 'The primary colors are red, blue, and yellow',
     },
   ],
   scorers: [scorer],
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
-    console.log({ 
+    console.log({
       score: scorerResults[scorer.id].score,
       reason: scorerResults[scorer.id].reason,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

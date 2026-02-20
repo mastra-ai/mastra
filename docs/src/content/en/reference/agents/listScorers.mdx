@@ -12,34 +12,34 @@ The `.listScorers()` method retrieves the scoring configuration configured for a
 ## Usage example
 
 ```typescript
-await agent.listScorers();
+await agent.listScorers()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing request context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scorers",
-      type: "MastraScorers | Promise<MastraScorers>",
-      description:
-        "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
-    },
-  ]}
+{
+name: "scorers",
+type: "MastraScorers | Promise<MastraScorers>",
+description:
+"The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
+},
+]}
 />
 
 ## Extended usage example
@@ -47,22 +47,22 @@ await agent.listScorers();
 ```typescript
 await agent.listScorers({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related

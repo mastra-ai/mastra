@@ -14,247 +14,249 @@ Runs an experiment on the dataset and waits for completion. Executes all items a
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Run against a registered agent with scorers
 const summary = await dataset.startExperiment({
-  targetType: "agent",
-  targetId: "my-agent",
-  scorers: ["accuracy", "relevancy"],
+  targetType: 'agent',
+  targetId: 'my-agent',
+  scorers: ['accuracy', 'relevancy'],
   maxConcurrency: 10,
-});
+})
 
-console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`);
-console.log(`Status: ${summary.status}`);
+console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`)
+console.log(`Status: ${summary.status}`)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "targetType",
-      type: "'agent' | 'workflow' | 'scorer'",
-      isOptional: true,
-      description: "Type of registered target to run items against. Use with `targetId`.",
-    },
-    {
-      name: "targetId",
-      type: "string",
-      isOptional: true,
-      description: "ID of the registered target. Use with `targetType`.",
-    },
-    {
-      name: "scorers",
-      type: "(MastraScorer | string)[]",
-      isOptional: true,
-      description: "Scorers to evaluate each result. Pass `MastraScorer` instances or registered scorer IDs.",
-    },
-    {
-      name: "name",
-      type: "string",
-      isOptional: true,
-      description: "Display name for the experiment.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description: "Description of the experiment.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "Arbitrary metadata for the experiment.",
-    },
-    {
-      name: "version",
-      type: "number",
-      isOptional: true,
-      description: "Pin to a specific dataset version. Defaults to the latest version.",
-    },
-    {
-      name: "maxConcurrency",
-      type: "number",
-      isOptional: true,
-      description: "Maximum concurrent item executions. Defaults to `5`.",
-    },
-    {
-      name: "signal",
-      type: "AbortSignal",
-      isOptional: true,
-      description: "AbortSignal for cancelling the experiment.",
-    },
-    {
-      name: "itemTimeout",
-      type: "number",
-      isOptional: true,
-      description: "Per-item execution timeout in milliseconds.",
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      isOptional: true,
-      description: "Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.",
-    },
-  ]}
+{
+name: "targetType",
+type: "'agent' | 'workflow' | 'scorer'",
+isOptional: true,
+description: "Type of registered target to run items against. Use with `targetId`.",
+},
+{
+name: "targetId",
+type: "string",
+isOptional: true,
+description: "ID of the registered target. Use with `targetType`.",
+},
+{
+name: "scorers",
+type: "(MastraScorer | string)[]",
+isOptional: true,
+description: "Scorers to evaluate each result. Pass `MastraScorer` instances or registered scorer IDs.",
+},
+{
+name: "name",
+type: "string",
+isOptional: true,
+description: "Display name for the experiment.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "Description of the experiment.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata for the experiment.",
+},
+{
+name: "version",
+type: "number",
+isOptional: true,
+description: "Pin to a specific dataset version. Defaults to the latest version.",
+},
+{
+name: "maxConcurrency",
+type: "number",
+isOptional: true,
+description: "Maximum concurrent item executions. Defaults to `5`.",
+},
+{
+name: "signal",
+type: "AbortSignal",
+isOptional: true,
+description: "AbortSignal for cancelling the experiment.",
+},
+{
+name: "itemTimeout",
+type: "number",
+isOptional: true,
+description: "Per-item execution timeout in milliseconds.",
+},
+{
+name: "maxRetries",
+type: "number",
+isOptional: true,
+description: "Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<ExperimentSummary>",
-      description: "Summary of the completed experiment.",
-      properties: [{
-        type: "ExperimentSummary",
-        parameters: [
-          {
-            name: "experimentId",
-            type: "string",
-            description: "Unique ID of the experiment.",
-          },
-          {
-            name: "status",
-            type: "'pending' | 'running' | 'completed' | 'failed'",
-            description: "Final status of the experiment.",
-          },
-          {
-            name: "totalItems",
-            type: "number",
-            description: "Total number of items in the dataset.",
-          },
-          {
-            name: "succeededCount",
-            type: "number",
-            description: "Number of items that succeeded.",
-          },
-          {
-            name: "failedCount",
-            type: "number",
-            description: "Number of items that failed.",
-          },
-          {
-            name: "skippedCount",
-            type: "number",
-            description: "Number of items skipped (e.g., due to abort).",
-          },
-          {
-            name: "completedWithErrors",
-            type: "boolean",
-            description: "`true` if the run completed but some items failed.",
-          },
-          {
-            name: "startedAt",
-            type: "Date",
-            description: "When the experiment started.",
-          },
-          {
-            name: "completedAt",
-            type: "Date",
-            description: "When the experiment completed.",
-          },
-          {
-            name: "results",
-            type: "ItemWithScores[]",
-            description: "All item results with their scores.",
-            properties: [{
-              type: "ItemWithScores",
-              parameters: [
-                {
-                  name: "itemId",
-                  type: "string",
-                  description: "ID of the dataset item.",
-                },
-                {
-                  name: "itemVersion",
-                  type: "number",
-                  description: "Dataset version of the item when executed.",
-                },
-                {
-                  name: "input",
-                  type: "unknown",
-                  description: "Input data passed to the target.",
-                },
-                {
-                  name: "output",
-                  type: "unknown | null",
-                  description: "Output from the target, or `null` if failed.",
-                },
-                {
-                  name: "groundTruth",
-                  type: "unknown | null",
-                  description: "Expected output from the dataset item.",
-                },
-                {
-                  name: "error",
-                  type: "{ message: string; stack?: string; code?: string } | null",
-                  description: "Structured error if execution failed.",
-                },
-                {
-                  name: "startedAt",
-                  type: "Date",
-                  description: "When item execution started.",
-                },
-                {
-                  name: "completedAt",
-                  type: "Date",
-                  description: "When item execution completed.",
-                },
-                {
-                  name: "retryCount",
-                  type: "number",
-                  description: "Number of retry attempts.",
-                },
-                {
-                  name: "scores",
-                  type: "ScorerResult[]",
-                  description: "Results from all scorers for this item.",
-                  properties: [{
-                    type: "ScorerResult",
-                    parameters: [
-                      {
-                        name: "scorerId",
-                        type: "string",
-                        description: "ID of the scorer.",
-                      },
-                      {
-                        name: "scorerName",
-                        type: "string",
-                        description: "Display name of the scorer.",
-                      },
-                      {
-                        name: "score",
-                        type: "number | null",
-                        description: "Computed score, or `null` if the scorer failed.",
-                      },
-                      {
-                        name: "reason",
-                        type: "string | null",
-                        description: "Reason/explanation for the score.",
-                      },
-                      {
-                        name: "error",
-                        type: "string | null",
-                        description: "Error message if the scorer failed.",
-                      },
-                    ],
-                  }],
-                },
-              ],
-            }],
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<ExperimentSummary>",
+description: "Summary of the completed experiment.",
+properties: [{
+type: "ExperimentSummary",
+parameters: [
+{
+name: "experimentId",
+type: "string",
+description: "Unique ID of the experiment.",
+},
+{
+name: "status",
+type: "'pending' | 'running' | 'completed' | 'failed'",
+description: "Final status of the experiment.",
+},
+{
+name: "totalItems",
+type: "number",
+description: "Total number of items in the dataset.",
+},
+{
+name: "succeededCount",
+type: "number",
+description: "Number of items that succeeded.",
+},
+{
+name: "failedCount",
+type: "number",
+description: "Number of items that failed.",
+},
+{
+name: "skippedCount",
+type: "number",
+description: "Number of items skipped (e.g., due to abort).",
+},
+{
+name: "completedWithErrors",
+type: "boolean",
+description: "`true` if the run completed but some items failed.",
+},
+{
+name: "startedAt",
+type: "Date",
+description: "When the experiment started.",
+},
+{
+name: "completedAt",
+type: "Date",
+description: "When the experiment completed.",
+},
+{
+name: "results",
+type: "ItemWithScores[]",
+description: "All item results with their scores.",
+properties: [{
+type: "ItemWithScores",
+parameters: [
+{
+name: "itemId",
+type: "string",
+description: "ID of the dataset item.",
+},
+{
+name: "itemVersion",
+type: "number",
+description: "Dataset version of the item when executed.",
+},
+{
+name: "input",
+type: "unknown",
+description: "Input data passed to the target.",
+},
+{
+name: "output",
+type: "unknown | null",
+description: "Output from the target, or `null` if failed.",
+},
+{
+name: "groundTruth",
+type: "unknown | null",
+description: "Expected output from the dataset item.",
+},
+{
+name: "error",
+type: "{ message: string; stack?: string; code?: string } | null",
+description: "Structured error if execution failed.",
+},
+{
+name: "startedAt",
+type: "Date",
+description: "When item execution started.",
+},
+{
+name: "completedAt",
+type: "Date",
+description: "When item execution completed.",
+},
+{
+name: "retryCount",
+type: "number",
+description: "Number of retry attempts.",
+},
+{
+name: "scores",
+type: "ScorerResult[]",
+description: "Results from all scorers for this item.",
+properties: [{
+type: "ScorerResult",
+parameters: [
+{
+name: "scorerId",
+type: "string",
+description: "ID of the scorer.",
+},
+{
+name: "scorerName",
+type: "string",
+description: "Display name of the scorer.",
+},
+{
+name: "score",
+type: "number | null",
+description: "Computed score, or `null` if the scorer failed.",
+},
+{
+name: "reason",
+type: "string | null",
+description: "Reason/explanation for the score.",
+},
+{
+name: "error",
+type: "string | null",
+description: "Error message if the scorer failed.",
+},
+],
+}],
+},
+],
+}],
+},
+],
+}],
+},
+]}
 />
 
 ## Related

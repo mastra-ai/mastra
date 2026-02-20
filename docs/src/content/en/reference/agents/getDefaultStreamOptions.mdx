@@ -18,34 +18,34 @@ Agents can be configured with default streaming options for memory usage, output
 ## Usage example
 
 ```typescript
-await agent.getDefaultStreamOptionsLegacy();
+await agent.getDefaultStreamOptionsLegacy()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing request context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "defaultOptions",
-      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
-      description:
-        "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
-    },
-  ]}
+{
+name: "defaultOptions",
+type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+description:
+"The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+},
+]}
 />
 
 ## Extended usage example
@@ -53,22 +53,22 @@ await agent.getDefaultStreamOptionsLegacy();
 ```typescript
 await agent.getDefaultStreamOptionsLegacy({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related

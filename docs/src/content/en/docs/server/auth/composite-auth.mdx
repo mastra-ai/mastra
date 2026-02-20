@@ -21,7 +21,7 @@ The `CompositeAuth` class allows you to combine multiple authentication provider
 CompositeAuth is included in `@mastra/core`, no additional packages required.
 
 ```typescript
-import { CompositeAuth } from '@mastra/core/server';
+import { CompositeAuth } from '@mastra/core/server'
 ```
 
 ## Usage Example
@@ -29,16 +29,16 @@ import { CompositeAuth } from '@mastra/core/server';
 Combine SimpleAuth (for API keys) with Clerk (for user sessions):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { CompositeAuth, SimpleAuth } from '@mastra/core/server';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core'
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 // API key users
 type ApiKeyUser = {
-  id: string;
-  name: string;
-  type: 'api-key';
-};
+  id: string
+  name: string
+  type: 'api-key'
+}
 
 const apiKeyAuth = new SimpleAuth<ApiKeyUser>({
   tokens: {
@@ -48,20 +48,20 @@ const apiKeyAuth = new SimpleAuth<ApiKeyUser>({
       type: 'api-key',
     },
   },
-});
+})
 
 // Clerk users (from web app)
 const clerkAuth = new MastraAuthClerk({
   publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.CLERK_SECRET_KEY,
   jwksUri: process.env.CLERK_JWKS_URI,
-});
+})
 
 export const mastra = new Mastra({
   server: {
     auth: new CompositeAuth([apiKeyAuth, clerkAuth]),
   },
-});
+})
 ```
 
 ## How It Works
@@ -69,13 +69,13 @@ export const mastra = new Mastra({
 When a request comes in, CompositeAuth:
 
 1. Extracts the token from the `Authorization` header
-2. Tries each provider's `authenticateToken()` method in order
-3. Returns the user from the first provider that succeeds
-4. Returns `null` (401 Unauthorized) if all providers fail
+1. Tries each provider's `authenticateToken()` method in order
+1. Returns the user from the first provider that succeeds
+1. Returns `null` (401 Unauthorized) if all providers fail
 
 For authorization, it calls each provider's `authorizeUser()` method until one returns `true`.
 
-```typescript
+```typescript prettier:false
 // Pseudocode of CompositeAuth behavior
 async authenticateToken(token, request) {
   for (const provider of this.providers) {
@@ -93,15 +93,15 @@ The order of providers matters. Place the most common authentication method firs
 ```typescript
 // If most requests use Clerk, put it first
 new CompositeAuth([
-  clerkAuth,      // Checked first (most common)
-  apiKeyAuth,     // Checked second (less common)
-]);
+  clerkAuth, // Checked first (most common)
+  apiKeyAuth, // Checked second (less common)
+])
 
 // If most requests use API keys, put it first
 new CompositeAuth([
-  apiKeyAuth,     // Checked first (most common)
-  clerkAuth,      // Checked second (less common)
-]);
+  apiKeyAuth, // Checked first (most common)
+  clerkAuth, // Checked second (less common)
+])
 ```
 
 ## Multiple OAuth Providers
@@ -109,26 +109,26 @@ new CompositeAuth([
 Support users from different identity providers:
 
 ```typescript
-import { CompositeAuth } from '@mastra/core/server';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { CompositeAuth } from '@mastra/core/server'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 const clerkAuth = new MastraAuthClerk({
   publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.CLERK_SECRET_KEY,
   jwksUri: process.env.CLERK_JWKS_URI,
-});
+})
 
 const auth0Auth = new MastraAuthAuth0({
   domain: process.env.AUTH0_DOMAIN,
   audience: process.env.AUTH0_AUDIENCE,
-});
+})
 
 export const mastra = new Mastra({
   server: {
     auth: new CompositeAuth([clerkAuth, auth0Auth]),
   },
-});
+})
 ```
 
 ## Migration Example
@@ -136,31 +136,31 @@ export const mastra = new Mastra({
 Migrate from JWT to Clerk while maintaining backwards compatibility:
 
 ```typescript
-import { CompositeAuth } from '@mastra/core/server';
-import { MastraJwtAuth } from '@mastra/auth';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { CompositeAuth } from '@mastra/core/server'
+import { MastraJwtAuth } from '@mastra/auth'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 // Legacy JWT auth (existing clients)
 const legacyAuth = new MastraJwtAuth({
   secret: process.env.JWT_SECRET,
-});
+})
 
 // New Clerk auth (new clients)
 const clerkAuth = new MastraAuthClerk({
   publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.CLERK_SECRET_KEY,
   jwksUri: process.env.CLERK_JWKS_URI,
-});
+})
 
 // Support both during migration
 export const mastra = new Mastra({
   server: {
     auth: new CompositeAuth([
-      clerkAuth,    // New auth method (preferred)
-      legacyAuth,   // Legacy support
+      clerkAuth, // New auth method (preferred)
+      legacyAuth, // Legacy support
     ]),
   },
-});
+})
 ```
 
 ## With Custom Providers
@@ -168,24 +168,24 @@ export const mastra = new Mastra({
 Combine built-in providers with custom implementations:
 
 ```typescript
-import { CompositeAuth, SimpleAuth } from '@mastra/core/server';
-import { MyCustomAuth } from './my-custom-auth';
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server'
+import { MyCustomAuth } from './my-custom-auth'
 
 const apiKeyAuth = new SimpleAuth({
   tokens: {
     'sk-key-123': { id: 'user-1', name: 'API User' },
   },
-});
+})
 
 const customAuth = new MyCustomAuth({
   apiUrl: process.env.CUSTOM_AUTH_URL,
-});
+})
 
 export const mastra = new Mastra({
   server: {
     auth: new CompositeAuth([apiKeyAuth, customAuth]),
   },
-});
+})
 ```
 
 ## Error Handling
@@ -194,7 +194,7 @@ CompositeAuth silently catches errors from individual providers and moves to the
 
 ```typescript
 // If clerkAuth throws an error, apiKeyAuth still gets tried
-new CompositeAuth([clerkAuth, apiKeyAuth]);
+new CompositeAuth([clerkAuth, apiKeyAuth])
 ```
 
 To debug authentication issues, add logging to your custom providers or check individual provider configurations.
@@ -211,25 +211,25 @@ When providers return different user types, use a discriminated union:
 
 ```typescript
 type ApiKeyUser = {
-  type: 'api-key';
-  id: string;
-  name: string;
-};
+  type: 'api-key'
+  id: string
+  name: string
+}
 
 type ClerkUser = {
-  type: 'clerk';
-  sub: string;
-  email: string;
-};
+  type: 'clerk'
+  sub: string
+  email: string
+}
 
-type User = ApiKeyUser | ClerkUser;
+type User = ApiKeyUser | ClerkUser
 
 // In your application code
 function handleUser(user: User) {
   if (user.type === 'api-key') {
-    console.log('API key user:', user.name);
+    console.log('API key user:', user.name)
   } else {
-    console.log('Clerk user:', user.email);
+    console.log('Clerk user:', user.email)
   }
 }
 ```

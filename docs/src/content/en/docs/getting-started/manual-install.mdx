@@ -15,203 +15,187 @@ Use this guide to manually build a standalone Mastra server step by step. In mos
 If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
 
 <Steps>
+  <StepItem>
+    Create a new project and change directory:
 
-<StepItem>
+    ```bash
+    mkdir my-first-agent && cd my-first-agent
+    ```
 
-Create a new project and change directory:
+    Generate a new `package.json` file:
 
-```bash
-mkdir my-first-agent && cd my-first-agent
-```
+    ```bash npm2yarn
+    npm init
+    ```
 
-Generate a new `package.json` file:
+    Install the following dependencies:
 
-```bash npm2yarn
-npm init
-```
+    ```bash npm2yarn
+    npm install -D typescript @types/node mastra@latest
+    npm install @mastra/core@latest zod@^4
+    ```
 
-Install the following dependencies:
+    Add `dev` and `build` scripts to your `package.json` file:
 
-```bash npm2yarn
-npm install -D typescript @types/node mastra@latest
-npm install @mastra/core@latest zod@^4
-```
+    ```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+    {
+      "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "dev": "mastra dev",
+        "build": "mastra build"
+      }
+    }
+    ```
+  </StepItem>
 
-Add `dev` and `build` scripts to your `package.json` file:
+  <StepItem>
+    Create a `tsconfig.json` file:
 
-```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
-{
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
-    "build": "mastra build"
-  }
-}
-```
+    ```bash
+    touch tsconfig.json
+    ```
 
-</StepItem>
+    Add the following configuration:
 
-<StepItem>
+    ```json title="tsconfig.json"
+    {
+      "compilerOptions": {
+        "target": "ES2022",
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "outDir": "dist"
+      },
+      "include": ["src/**/*"]
+    }
+    ```
 
-Create a `tsconfig.json` file:
+    :::info
 
-```bash
-touch tsconfig.json
-```
+    Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
 
-Add the following configuration:
+    :::
+  </StepItem>
 
-```json title="tsconfig.json"
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
-}
-```
+  <StepItem>
+    Create an `.env` file:
 
-:::info
+    ```bash
+    touch .env
+    ```
 
-Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
+    Add your API key:
 
-:::
+    ```bash title=".env"
+    GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
+    ```
 
-</StepItem>
+    :::note
 
-<StepItem>
+    This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
 
-Create an `.env` file:
+    :::
+  </StepItem>
 
-```bash
-touch .env
-```
+  <StepItem>
+    Create a `weather-tool.ts` file:
 
-Add your API key:
+    ```bash
+    mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+    ```
 
-```bash title=".env"
-GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
-```
+    Add the following code:
 
-:::note
+    ```ts title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
 
-This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
+    export const weatherTool = createTool({
+      id: 'get-weather',
+      description: 'Get current weather for a location',
+      inputSchema: z.object({
+        location: z.string().describe('City name'),
+      }),
+      outputSchema: z.object({
+        output: z.string(),
+      }),
+      execute: async () => {
+        return {
+          output: 'The weather is sunny',
+        }
+      },
+    })
+    ```
 
-:::
+    :::info
 
-</StepItem>
+    We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
 
-<StepItem>
+    :::
+  </StepItem>
 
-Create a `weather-tool.ts` file:
+  <StepItem>
+    Create a `weather-agent.ts` file:
 
-```bash
-mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
-```
+    ```bash
+    mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
+    ```
 
-Add the following code:
+    Add the following code:
 
-```ts title="src/mastra/tools/weather-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+    ```ts title="src/mastra/agents/weather-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { weatherTool } from '../tools/weather-tool'
 
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
-  inputSchema: z.object({
-    location: z.string().describe("City name"),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  execute: async () => {
-    return {
-      output: "The weather is sunny",
-    };
-  },
-});
-```
+    export const weatherAgent = new Agent({
+      id: 'weather-agent',
+      name: 'Weather Agent',
+      instructions: `
+          You are a helpful weather assistant that provides accurate weather information.
 
-:::info
+          Your primary function is to help users get weather details for specific locations. When responding:
+          - Always ask for a location if none is provided
+          - If the location name isn't in English, please translate it
+          - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+          - Include relevant details like humidity, wind conditions, and precipitation
+          - Keep responses concise but informative
 
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
+          Use the weatherTool to fetch current weather data.
+    `,
+      model: 'google/gemini-2.5-pro',
+      tools: { weatherTool },
+    })
+    ```
+  </StepItem>
 
-:::
+  <StepItem>
+    Create the Mastra entry point and register your agent:
 
-</StepItem>
+    ```bash
+    touch src/mastra/index.ts
+    ```
 
-<StepItem>
+    Add the following code:
 
-Create a `weather-agent.ts` file:
+    ```ts title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { weatherAgent } from './agents/weather-agent'
 
-```bash
-mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
-```
+    export const mastra = new Mastra({
+      agents: { weatherAgent },
+    })
+    ```
+  </StepItem>
 
-Add the following code:
+  <StepItem>
+    You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
-```ts title="src/mastra/agents/weather-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
-
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
-  instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
-
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-
-      Use the weatherTool to fetch current weather data.
-`,
-  model: "google/gemini-2.5-pro",
-  tools: { weatherTool },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-Create the Mastra entry point and register your agent:
-
-```bash
-touch src/mastra/index.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { weatherAgent } from "./agents/weather-agent";
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-You can now launch [Studio](/docs/getting-started/studio) and test your agent.
-
-```bash npm2yarn
-npm run dev
-```
-
-</StepItem>
-
+    ```bash npm2yarn
+    npm run dev
+    ```
+  </StepItem>
 </Steps>

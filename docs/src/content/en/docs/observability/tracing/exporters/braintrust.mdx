@@ -22,9 +22,9 @@ npm install @mastra/braintrust@latest
 ### Prerequisites
 
 1. **Braintrust Account**: Sign up at [braintrust.dev](https://www.braintrust.dev/)
-2. **Project**: Create or select a project for your traces
-3. **API Key**: Generate in Braintrust Settings → API Keys
-4. **Environment Variables**: Set your credentials:
+1. **Project**: Create or select a project for your traces
+1. **API Key**: Generate in Braintrust Settings → API Keys
+1. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
@@ -38,20 +38,20 @@ BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       braintrust: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new BraintrustExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -59,25 +59,25 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       braintrust: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
-            projectName: "my-project",
+            projectName: 'my-project',
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ### Complete Configuration
@@ -88,10 +88,10 @@ new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY!,
 
   // Optional settings
-  projectName: "my-project", // Default: 'mastra-tracing'
-  endpoint: "https://api.braintrust.dev", // Custom endpoint if needed
-  logLevel: "info", // Diagnostic logging: debug | info | warn | error
-});
+  projectName: 'my-project', // Default: 'mastra-tracing'
+  endpoint: 'https://api.braintrust.dev', // Custom endpoint if needed
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+})
 ```
 
 ## Related

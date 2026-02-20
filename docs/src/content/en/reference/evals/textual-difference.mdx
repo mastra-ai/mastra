@@ -20,28 +20,28 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Similarity ratio (0-1) where 1 indicates identical texts.",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
+},
+{
+name: "score",
+type: "number",
+description: "Similarity ratio (0-1) where 1 indicates identical texts.",
+},
+]}
 />
 
 `.run()` returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   analyzeStepResult: {
@@ -69,7 +69,7 @@ The scorer calculates several measures:
    - Performs sequence matching between input and output
    - Counts the number of change operations required
    - Measures length differences
-2. Calculates metrics:
+1. Calculates metrics:
    - Computes similarity ratio
    - Determines confidence score
    - Combines into weighted score
@@ -91,22 +91,22 @@ A textual difference score between 0 and 1:
 Measure textual differences between expected and actual agent outputs:
 
 ```typescript title="src/example-textual-difference.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createTextualDifferenceScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createTextualDifferenceScorer();
+const scorer = createTextualDifferenceScorer()
 
 const result = await runEvals({
   data: [
     {
-      input: "Summarize the concept of recursion",
+      input: 'Summarize the concept of recursion',
       groundTruth:
-        "Recursion is when a function calls itself to solve a problem by breaking it into smaller subproblems.",
+        'Recursion is when a function calls itself to solve a problem by breaking it into smaller subproblems.',
     },
     {
-      input: "What is the capital of France?",
-      groundTruth: "The capital of France is Paris.",
+      input: 'What is the capital of France?',
+      groundTruth: 'The capital of France is Paris.',
     },
   ],
   scorers: [scorer],
@@ -115,11 +115,11 @@ const result = await runEvals({
     console.log({
       score: scorerResults[scorer.id].score,
       groundTruth: scorerResults[scorer.id].groundTruth,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

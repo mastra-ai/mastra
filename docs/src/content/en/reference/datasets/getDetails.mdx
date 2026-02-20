@@ -14,15 +14,17 @@ Retrieves the full dataset record from storage, including metadata, schemas, and
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Get dataset details
-const details = await dataset.getDetails();
-console.log(details.name, details.version);
+const details = await dataset.getDetails()
+console.log(details.name, details.version)
 ```
 
 ## Parameters
@@ -35,54 +37,54 @@ Returns a `Promise<DatasetRecord>`. Throws `MastraError` if the dataset is not f
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the dataset.",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Display name of the dataset.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description: "Description of the dataset.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "Arbitrary metadata associated with the dataset.",
-    },
-    {
-      name: "inputSchema",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "JSON Schema for item inputs.",
-    },
-    {
-      name: "groundTruthSchema",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "JSON Schema for item ground truths.",
-    },
-    {
-      name: "version",
-      type: "number",
-      description: "Current version number of the dataset.",
-    },
-    {
-      name: "createdAt",
-      type: "Date",
-      description: "When the dataset was created.",
-    },
-    {
-      name: "updatedAt",
-      type: "Date",
-      description: "When the dataset was last updated.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the dataset.",
+},
+{
+name: "name",
+type: "string",
+description: "Display name of the dataset.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "Description of the dataset.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata associated with the dataset.",
+},
+{
+name: "inputSchema",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "JSON Schema for item inputs.",
+},
+{
+name: "groundTruthSchema",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "JSON Schema for item ground truths.",
+},
+{
+name: "version",
+type: "number",
+description: "Current version number of the dataset.",
+},
+{
+name: "createdAt",
+type: "Date",
+description: "When the dataset was created.",
+},
+{
+name: "updatedAt",
+type: "Date",
+description: "When the dataset was last updated.",
+},
+]}
 />

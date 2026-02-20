@@ -12,127 +12,127 @@ The `PIIDetector` is a **hybrid processor** that can be used for both input and 
 ## Usage example
 
 ```typescript
-import { PIIDetector } from "@mastra/core/processors";
+import { PIIDetector } from '@mastra/core/processors'
 
 const processor = new PIIDetector({
-  model: "openrouter/openai/gpt-oss-safeguard-20b",
+  model: 'openrouter/openai/gpt-oss-safeguard-20b',
   threshold: 0.6,
-  strategy: "redact",
-  detectionTypes: ["email", "phone", "credit-card", "ssn"]
-});
+  strategy: 'redact',
+  detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for PII detection and redaction",
-      isOptional: false,
-    },
-  ]}
+{
+name: "options",
+type: "Options",
+description: "Configuration options for PII detection and redaction",
+isOptional: false,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "MastraModelConfig",
-      description: "Model configuration for the detection agent",
-      isOptional: false,
-    },
-    {
-      name: "detectionTypes",
-      type: "string[]",
-      description: "PII types to detect. If not specified, uses default types",
-      isOptional: true,
-      default: "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description: "Confidence threshold for flagging (0-1). PII is flagged if any category score exceeds this threshold",
-      isOptional: true,
-      default: "0.6",
-    },
-    {
-      name: "strategy",
-      type: "'block' | 'warn' | 'filter' | 'redact'",
-      description: "Strategy when PII is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces PII with redacted versions",
-      isOptional: true,
-      default: "'redact'",
-    },
-    {
-      name: "redactionMethod",
-      type: "'mask' | 'hash' | 'remove' | 'placeholder'",
-      description: "Redaction method for PII: 'mask' replaces with asterisks, 'hash' replaces with SHA256 hash, 'remove' removes entirely, 'placeholder' replaces with type placeholder",
-      isOptional: true,
-      default: "'mask'",
-    },
-    {
-      name: "instructions",
-      type: "string",
-      description: "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
-      isOptional: true,
-      default: "undefined",
-    },
-    {
-      name: "includeDetections",
-      type: "boolean",
-      description: "Whether to include detection details in logs. Useful for compliance auditing and debugging",
-      isOptional: true,
-      default: "false",
-    },
-    {
-      name: "preserveFormat",
-      type: "boolean",
-      description: "Whether to preserve PII format during redaction. When true, maintains structure like ***-**-1234 for phone numbers",
-      isOptional: true,
-      default: "true",
-    },
-    {
-      name: "providerOptions",
-      type: "ProviderOptions",
-      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
-      isOptional: true,
-      default: "undefined",
-    },
-  ]}
+{
+name: "model",
+type: "MastraModelConfig",
+description: "Model configuration for the detection agent",
+isOptional: false,
+},
+{
+name: "detectionTypes",
+type: "string[]",
+description: "PII types to detect. If not specified, uses default types",
+isOptional: true,
+default: "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
+},
+{
+name: "threshold",
+type: "number",
+description: "Confidence threshold for flagging (0-1). PII is flagged if any category score exceeds this threshold",
+isOptional: true,
+default: "0.6",
+},
+{
+name: "strategy",
+type: "'block' | 'warn' | 'filter' | 'redact'",
+description: "Strategy when PII is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces PII with redacted versions",
+isOptional: true,
+default: "'redact'",
+},
+{
+name: "redactionMethod",
+type: "'mask' | 'hash' | 'remove' | 'placeholder'",
+description: "Redaction method for PII: 'mask' replaces with asterisks, 'hash' replaces with SHA256 hash, 'remove' removes entirely, 'placeholder' replaces with type placeholder",
+isOptional: true,
+default: "'mask'",
+},
+{
+name: "instructions",
+type: "string",
+description: "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
+isOptional: true,
+default: "undefined",
+},
+{
+name: "includeDetections",
+type: "boolean",
+description: "Whether to include detection details in logs. Useful for compliance auditing and debugging",
+isOptional: true,
+default: "false",
+},
+{
+name: "preserveFormat",
+type: "boolean",
+description: "Whether to preserve PII format during redaction. When true, maintains structure like ***-**-1234 for phone numbers",
+isOptional: true,
+default: "true",
+},
+{
+name: "providerOptions",
+type: "ProviderOptions",
+description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+isOptional: true,
+default: "undefined",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'pii-detector'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Optional processor display name",
-      isOptional: true,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
-      description: "Processes input messages to detect and redact PII before sending to LLM",
-      isOptional: false,
-    },
-    {
-      name: "processOutputStream",
-      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
-      description: "Processes streaming output parts to detect and redact PII during streaming",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Processor identifier set to 'pii-detector'",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Optional processor display name",
+isOptional: true,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
+description: "Processes input messages to detect and redact PII before sending to LLM",
+isOptional: false,
+},
+{
+name: "processOutputStream",
+type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+description: "Processes streaming output parts to detect and redact PII during streaming",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
@@ -140,26 +140,27 @@ const processor = new PIIDetector({
 ### Input processing
 
 ```typescript title="src/mastra/agents/private-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { PIIDetector } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { PIIDetector } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "private-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  name: 'private-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [
     new PIIDetector({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
-      detectionTypes: ["email", "phone", "credit-card", "ssn"],
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
+      detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
       threshold: 0.6,
-      strategy: "redact",
-      redactionMethod: "mask",
-      instructions: "Detect and redact personally identifiable information while preserving message intent",
+      strategy: 'redact',
+      redactionMethod: 'mask',
+      instructions:
+        'Detect and redact personally identifiable information while preserving message intent',
       includeDetections: true,
-      preserveFormat: true
-    })
-  ]
-});
+      preserveFormat: true,
+    }),
+  ],
+})
 ```
 
 ### Output processing with batching
@@ -167,13 +168,13 @@ export const agent = new Agent({
 When using `PIIDetector` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the PII detector, reducing the number of LLM calls required for detection.
 
 ```typescript title="src/mastra/agents/output-pii-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { BatchPartsProcessor, PIIDetector } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "output-pii-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  name: 'output-pii-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -181,11 +182,11 @@ export const agent = new Agent({
     }),
     // Then apply PII detection on batched content
     new PIIDetector({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
-      strategy: "redact",
-    })
-  ]
-});
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
+      strategy: 'redact',
+    }),
+  ],
+})
 ```
 
 ## Related

@@ -15,31 +15,34 @@ Converts messages from various input formats to AI SDK V5 (and later) UI message
 ## Usage example
 
 ```typescript title="app/chat/page.tsx"
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
-import { useChat } from "ai/react";
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { useChat } from 'ai/react'
 
 // Stored messages from your database, memory or API
 const storedMessages = [
-  { id: "1", role: "user", content: "Hello", parts: [{ type: "text", text: "Hello" }] },
-  { id: "2", role: "assistant", content: "Hi there!", parts: [{ type: "text", text: "Hi there!" }] }
-];
+  { id: '1', role: 'user', content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+  {
+    id: '2',
+    role: 'assistant',
+    content: 'Hi there!',
+    parts: [{ type: 'text', text: 'Hi there!' }],
+  },
+]
 
 export default function Chat() {
   const { messages } = useChat({
-    initialMessages: toAISdkV5Messages(storedMessages)
-  });
+    initialMessages: toAISdkV5Messages(storedMessages),
+  })
 
   return (
     <div>
-      {messages.map((message) => (
+      {messages.map(message => (
         <div key={message.id}>
-          {message.role}: {message.parts.map(part => 
-            part.type === "text" ? part.text : null
-          )}
+          {message.role}: {message.parts.map(part => (part.type === 'text' ? part.text : null))}
         </div>
       ))}
     </div>
-  );
+  )
 }
 ```
 
@@ -47,13 +50,13 @@ export default function Chat() {
 
 <PropertiesTable
   content={[
-    {
-      name: "messages",
-      type: "MessageListInput",
-      description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "messages",
+type: "MessageListInput",
+description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
@@ -62,28 +65,28 @@ Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique message identifier.",
-    },
-    {
-      name: "role",
-      type: "'user' | 'assistant' | 'system'",
-      description: "The role of the message sender.",
-    },
-    {
-      name: "parts",
-      type: "UIMessagePart[]",
-      description: "Array of UI parts including text, tool results, files, reasoning, sources, and step markers.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Optional metadata including createdAt, threadId, resourceId, and custom fields.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique message identifier.",
+},
+{
+name: "role",
+type: "'user' | 'assistant' | 'system'",
+description: "The role of the message sender.",
+},
+{
+name: "parts",
+type: "UIMessagePart[]",
+description: "Array of UI parts including text, tool results, files, reasoning, sources, and step markers.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+description: "Optional metadata including createdAt, threadId, resourceId, and custom fields.",
+isOptional: true,
+},
+]}
 />
 
 ## Examples
@@ -91,20 +94,20 @@ Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 ### Converting simple text messages
 
 ```typescript
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
 
-const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
+const messages = toAISdkV5Messages(['Hello', 'How can I help you today?'])
 // Returns array of UIMessage objects with user role
 ```
 
 ### Loading messages with Mastra client
 
 ```typescript
-import { MastraClient } from "@mastra/client-js";
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { MastraClient } from '@mastra/client-js'
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
 
-const client = new MastraClient();
+const client = new MastraClient()
 
-const { messages } = await client.listThreadMessages("thread-id", { agentId: "myAgent" });
-const uiMessages = toAISdkV5Messages(messages);
+const { messages } = await client.listThreadMessages('thread-id', { agentId: 'myAgent' })
+const uiMessages = toAISdkV5Messages(messages)
 ```

@@ -13,18 +13,18 @@ The MDocument class processes documents for RAG applications. The main methods a
 
 <PropertiesTable
   content={[
-    {
-      name: "docs",
-      type: "Array<{ text: string, metadata?: Record<string, any> }>",
-      description:
-        "Array of document chunks with their text content and optional metadata",
-    },
-    {
-      name: "type",
-      type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
-      description: "Type of document content",
-    },
-  ]}
+{
+name: "docs",
+type: "Array<{ text: string, metadata?: Record<string, any> }>",
+description:
+"Array of document chunks with their text content and optional metadata",
+},
+{
+name: "type",
+type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
+description: "Type of document content",
+},
+]}
 />
 
 ## Static Methods
@@ -33,7 +33,7 @@ The MDocument class processes documents for RAG applications. The main methods a
 
 Creates a document from plain text content.
 
-```typescript
+```typescript prettier:false
 static fromText(text: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -41,7 +41,7 @@ static fromText(text: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from HTML content.
 
-```typescript
+```typescript prettier:false
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -49,7 +49,7 @@ static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from Markdown content.
 
-```typescript
+```typescript prettier:false
 static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -57,7 +57,7 @@ static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from JSON content.
 
-```typescript
+```typescript prettier:false
 static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -67,7 +67,7 @@ static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 
 Splits document into chunks and optionally extracts metadata.
 
-```typescript
+```typescript prettier:false
 async chunk(params?: ChunkParams): Promise<Chunk[]>
 ```
 
@@ -77,7 +77,7 @@ See [chunk() reference](./chunk) for detailed options.
 
 Returns array of processed document chunks.
 
-```typescript
+```typescript prettier:false
 getDocs(): Chunk[]
 ```
 
@@ -85,7 +85,7 @@ getDocs(): Chunk[]
 
 Returns array of text strings from chunks.
 
-```typescript
+```typescript prettier:false
 getText(): string[]
 ```
 
@@ -93,7 +93,7 @@ getText(): string[]
 
 Returns array of metadata objects from chunks.
 
-```typescript
+```typescript prettier:false
 getMetadata(): Record<string, any>[]
 ```
 
@@ -101,33 +101,33 @@ getMetadata(): Record<string, any>[]
 
 Extracts metadata using specified extractors. See [ExtractParams reference](./extract-params) for details.
 
-```typescript
+```typescript prettier:false
 async extractMetadata(params: ExtractParams): Promise<MDocument>
 ```
 
 ## Examples
 
 ```typescript
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag'
 
 // Create document from text
-const doc = MDocument.fromText("Your content here");
+const doc = MDocument.fromText('Your content here')
 
 // Split into chunks with metadata extraction
 const chunks = await doc.chunk({
-  strategy: "markdown",
+  strategy: 'markdown',
   headers: [
-    ["#", "title"],
-    ["##", "section"],
+    ['#', 'title'],
+    ['##', 'section'],
   ],
   extract: {
     summary: true, // Extract summaries with default settings
     keywords: true, // Extract keywords with default settings
   },
-});
+})
 
 // Get processed chunks
-const docs = doc.getDocs();
-const texts = doc.getText();
-const metadata = doc.getMetadata();
+const docs = doc.getDocs()
+const texts = doc.getText()
+const metadata = doc.getMetadata()
 ```

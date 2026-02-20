@@ -14,14 +14,16 @@ Lists all datasets with pagination.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const { datasets, pagination } = await mastra.datasets.list({ page: 0, perPage: 10 });
+const { datasets, pagination } = await mastra.datasets.list({ page: 0, perPage: 10 })
 
 for (const ds of datasets) {
-  console.log(`${ds.id}: ${ds.name} (v${ds.version})`);
+  console.log(`${ds.id}: ${ds.name} (v${ds.version})`)
 }
 ```
 
@@ -29,44 +31,44 @@ for (const ds of datasets) {
 
 <PropertiesTable
   content={[
-    {
-      name: "page",
-      type: "number",
-      isOptional: true,
-      description: "Page number. Defaults to `0`.",
-    },
-    {
-      name: "perPage",
-      type: "number",
-      isOptional: true,
-      description: "Number of datasets per page. Defaults to `20`.",
-    },
-  ]}
+{
+name: "page",
+type: "number",
+isOptional: true,
+description: "Page number. Defaults to `0`.",
+},
+{
+name: "perPage",
+type: "number",
+isOptional: true,
+description: "Number of datasets per page. Defaults to `20`.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<object>",
-      description: "Paginated dataset list.",
-      properties: [{
-        type: "object",
-        parameters: [
-          {
-            name: "datasets",
-            type: "DatasetRecord[]",
-            description: "Array of dataset records. See dataset.getDetails() for the record shape.",
-          },
-          {
-            name: "pagination",
-            type: "PaginationInfo",
-            description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<object>",
+description: "Paginated dataset list.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "datasets",
+type: "DatasetRecord[]",
+description: "Array of dataset records. See dataset.getDetails() for the record shape.",
+},
+{
+name: "pagination",
+type: "PaginationInfo",
+description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
+},
+],
+}],
+},
+]}
 />

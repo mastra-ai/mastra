@@ -14,35 +14,37 @@ Deletes an experiment (run) by ID, including all associated results.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-await dataset.deleteExperiment({ experimentId: "exp-id" });
+await dataset.deleteExperiment({ experimentId: 'exp-id' })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "experimentId",
-      type: "string",
-      description: "ID of the experiment to delete.",
-    },
-  ]}
+{
+name: "experimentId",
+type: "string",
+description: "ID of the experiment to delete.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<void>",
-      description: "Resolves when the experiment and its results are deleted.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<void>",
+description: "Resolves when the experiment and its results are deleted.",
+},
+]}
 />

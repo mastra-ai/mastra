@@ -5,45 +5,45 @@ packages:
   - "@mastra/core"
 ---
 
-# Workflow.sleep()
+# Workflow\.sleep()
 
 The `.sleep()` method pauses execution for a specified number of milliseconds. It accepts either a static number or a callback function for dynamic delays.
 
 ## Usage example
 
 ```typescript
-workflow.sleep(5000);
+workflow.sleep(5000)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "milliseconds",
-      type: "number | ((context: { inputData: any }) => number | Promise<number>)",
-      description:
-        "The number of milliseconds to pause execution, or a callback that returns the delay",
-      isOptional: false,
-    },
-  ]}
+{
+name: "milliseconds",
+type: "number | ((context: { inputData: any }) => number | Promise<number>)",
+description:
+"The number of milliseconds to pause execution, or a callback that returns the delay",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Extended usage example
 
-```typescript
+```typescript prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({...});

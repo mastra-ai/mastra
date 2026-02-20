@@ -13,30 +13,30 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraJwtAuth } from "@mastra/auth";
+import { Mastra } from '@mastra/core'
+import { MastraJwtAuth } from '@mastra/auth'
 
 export const mastra = new Mastra({
   server: {
     auth: new MastraJwtAuth({
-      secret: "<your-secret>",
+      secret: '<your-secret>',
     }),
   },
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "secret",
-      type: "string",
-      description:
-        "A unique string used to sign and verify JSON Web Tokens (JWTs) for authenticating incoming requests.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "secret",
+type: "string",
+description:
+"A unique string used to sign and verify JSON Web Tokens (JWTs) for authenticating incoming requests.",
+isOptional: false,
+},
+]}
 />
 
 ## Related

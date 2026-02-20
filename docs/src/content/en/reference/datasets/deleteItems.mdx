@@ -14,37 +14,39 @@ Deletes multiple items from the dataset in a single bulk operation.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 await dataset.deleteItems({
-  itemIds: ["item-1", "item-2", "item-3"],
-});
+  itemIds: ['item-1', 'item-2', 'item-3'],
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "itemIds",
-      type: "string[]",
-      description: "Array of item IDs to delete.",
-    },
-  ]}
+{
+name: "itemIds",
+type: "string[]",
+description: "Array of item IDs to delete.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<void>",
-      description: "Resolves when all items are deleted.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<void>",
+description: "Resolves when all items are deleted.",
+},
+]}
 />

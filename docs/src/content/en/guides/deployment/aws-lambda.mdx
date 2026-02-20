@@ -38,12 +38,12 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 ### Option 1: In-Memory (Simplest)
 
 ```typescript title="src/mastra/index.ts"
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: ":memory:", // in-memory storage
-});
+  url: ':memory:', // in-memory storage
+})
 ```
 
 ### Option 2: External Storage Providers
@@ -51,13 +51,13 @@ const storage = new LibSQLStore({
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
 ```typescript title="src/mastra/index.ts"
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: "libsql://your-database.turso.io", // External Turso database
+  url: 'libsql://your-database.turso.io', // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
-});
+})
 ```
 
 For more memory configuration options, see the [Memory documentation](/docs/memory/overview).
@@ -95,114 +95,94 @@ CMD ["node", ".mastra/output/index.mjs"]
 ## Building and Deploying
 
 <Steps>
+  <StepItem>
+    Set up your environment variables for the deployment process:
 
-<StepItem>
+    ```bash
+    export PROJECT_NAME="your-mastra-app"
+    export AWS_REGION="us-east-1"
+    export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    ```
+  </StepItem>
 
-Set up your environment variables for the deployment process:
+  <StepItem>
+    Build your Docker image locally:
 
-```bash
-export PROJECT_NAME="your-mastra-app"
-export AWS_REGION="us-east-1"
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-```
+    ```bash
+    docker build -t "$PROJECT_NAME" .
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Create an Amazon ECR repository to store your Docker image:
 
-<StepItem>
+    ```bash
+    aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
+    ```
+  </StepItem>
 
-Build your Docker image locally:
+  <StepItem>
+    Log in to Amazon ECR:
 
-```bash
-docker build -t "$PROJECT_NAME" .
-```
+    ```bash
+    aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Tag your image with the ECR repository URI and push it:
 
-<StepItem>
+    ```bash
+    docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+    docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+    ```
+  </StepItem>
 
-Create an Amazon ECR repository to store your Docker image:
+  <StepItem>
+    Create a Lambda function using the AWS Console:
 
-```bash
-aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
-```
+    1. Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/)
+    1. Click **Create function**
+    1. Select **Container image**
+    1. Configure the function:
+       - **Function name**: Your function name (e.g., `mastra-app`)
+       - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
+       - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Enable Function URL for external access:
 
-<StepItem>
+    1. In the Lambda function configuration, go to **Configuration** > **Function URL**
+    1. Click **Create function URL**
+    1. Set **Auth type** to **NONE** (for public access)
+    1. Configure **CORS** settings:
+       - **Allow-Origin**: `*` (restrict to your domain in production)
+       - **Allow-Headers**: `content-type` (`x-amzn-request-context` is also required when used with services like Cloudfront/API Gateway)
+       - **Allow-Methods**: `*` (audit and restrict in production)
+    1. Click **Save**
+  </StepItem>
 
-Log in to Amazon ECR:
+  <StepItem>
+    Add your environment variables in the Lambda function configuration:
 
-```bash
-aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-```
+    1. Go to **Configuration** > **Environment variables**
+    1. Add the required variables for your Mastra application:
+       - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
+       - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
+       - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using libSQL with Turso)
+       - Other provider-specific API keys as needed
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Configure the function's memory and timeout settings:
 
-<StepItem>
-
-Tag your image with the ECR repository URI and push it:
-
-```bash
-docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
-docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a Lambda function using the AWS Console:
-
-1. Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/)
-2. Click **Create function**
-3. Select **Container image**
-4. Configure the function:
-   - **Function name**: Your function name (e.g., `mastra-app`)
-   - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
-   - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
-
-</StepItem>
-
-<StepItem>
-
-Enable Function URL for external access:
-
-1. In the Lambda function configuration, go to **Configuration** > **Function URL**
-2. Click **Create function URL**
-3. Set **Auth type** to **NONE** (for public access)
-4. Configure **CORS** settings:
-   - **Allow-Origin**: `*` (restrict to your domain in production)
-   - **Allow-Headers**: `content-type` (`x-amzn-request-context` is also required when used with services like Cloudfront/API Gateway)
-   - **Allow-Methods**: `*` (audit and restrict in production)
-5. Click **Save**
-
-</StepItem>
-
-<StepItem>
-
-Add your environment variables in the Lambda function configuration:
-
-1. Go to **Configuration** > **Environment variables**
-2. Add the required variables for your Mastra application:
-   - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
-   - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
-   - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using libSQL with Turso)
-   - Other provider-specific API keys as needed
-
-</StepItem>
-
-<StepItem>
-
-Configure the function's memory and timeout settings:
-
-1. Go to **Configuration** > **General configuration**
-2. Set the following recommended values:
-   - **Memory**: 512 MB (adjust based on your application needs)
-   - **Timeout**: 30 seconds (adjust based on your application needs)
-   - **Ephemeral storage**: 512 MB (optional, for temporary files)
-
-</StepItem>
-
+    1. Go to **Configuration** > **General configuration**
+    1. Set the following recommended values:
+       - **Memory**: 512 MB (adjust based on your application needs)
+       - **Timeout**: 30 seconds (adjust based on your application needs)
+       - **Ephemeral storage**: 512 MB (optional, for temporary files)
+  </StepItem>
 </Steps>
 
 ## Testing your deployment
@@ -210,8 +190,8 @@ Configure the function's memory and timeout settings:
 Once deployed, test your Lambda function:
 
 1. Copy the **Function URL** from the Lambda console
-2. Visit the URL in your browser to see your Mastra's server home screen
-3. Test your agents and workflows using the generated API endpoints
+1. Visit the URL in your browser to see your Mastra's server home screen
+1. Test your agents and workflows using the generated API endpoints
 
 For more information about available API endpoints, see the [Server documentation](/docs/deployment/mastra-server).
 
@@ -220,11 +200,11 @@ For more information about available API endpoints, see the [Server documentatio
 Update your client application to use the Lambda function URL:
 
 ```typescript title="src/client.ts"
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
-});
+  baseUrl: 'https://your-function-url.lambda-url.us-east-1.on.aws',
+})
 ```
 
 ## Troubleshooting

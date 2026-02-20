@@ -14,16 +14,18 @@ Lists all experiments (runs) for this dataset with pagination.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-const { experiments, pagination } = await dataset.listExperiments({ page: 0, perPage: 10 });
+const { experiments, pagination } = await dataset.listExperiments({ page: 0, perPage: 10 })
 
 for (const exp of experiments) {
-  console.log(`${exp.id}: ${exp.status} (${exp.succeededCount}/${exp.totalItems})`);
+  console.log(`${exp.id}: ${exp.status} (${exp.succeededCount}/${exp.totalItems})`)
 }
 ```
 
@@ -31,137 +33,137 @@ for (const exp of experiments) {
 
 <PropertiesTable
   content={[
-    {
-      name: "page",
-      type: "number",
-      isOptional: true,
-      description: "Page number. Defaults to `0`.",
-    },
-    {
-      name: "perPage",
-      type: "number",
-      isOptional: true,
-      description: "Number of experiments per page. Defaults to `20`.",
-    },
-  ]}
+{
+name: "page",
+type: "number",
+isOptional: true,
+description: "Page number. Defaults to `0`.",
+},
+{
+name: "perPage",
+type: "number",
+isOptional: true,
+description: "Number of experiments per page. Defaults to `20`.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<object>",
-      description: "Paginated experiment list.",
-      properties: [{
-        type: "object",
-        parameters: [
-          {
-            name: "experiments",
-            type: "Experiment[]",
-            description: "Array of experiment records.",
-            properties: [{
-              type: "Experiment",
-              parameters: [
-                {
-                  name: "id",
-                  type: "string",
-                  description: "Unique experiment ID.",
-                },
-                {
-                  name: "name",
-                  type: "string",
-                  isOptional: true,
-                  description: "Display name.",
-                },
-                {
-                  name: "description",
-                  type: "string",
-                  isOptional: true,
-                  description: "Description.",
-                },
-                {
-                  name: "metadata",
-                  type: "Record<string, unknown>",
-                  isOptional: true,
-                  description: "Arbitrary metadata.",
-                },
-                {
-                  name: "datasetId",
-                  type: "string",
-                  description: "ID of the parent dataset.",
-                },
-                {
-                  name: "datasetVersion",
-                  type: "number | null",
-                  description: "Dataset version used for the experiment.",
-                },
-                {
-                  name: "targetType",
-                  type: "'agent' | 'workflow' | 'scorer' | 'processor'",
-                  description: "Type of target used.",
-                },
-                {
-                  name: "targetId",
-                  type: "string",
-                  description: "ID of the target used.",
-                },
-                {
-                  name: "status",
-                  type: "'pending' | 'running' | 'completed' | 'failed'",
-                  description: "Current status of the experiment.",
-                },
-                {
-                  name: "totalItems",
-                  type: "number",
-                  description: "Total number of items.",
-                },
-                {
-                  name: "succeededCount",
-                  type: "number",
-                  description: "Number of successful items.",
-                },
-                {
-                  name: "failedCount",
-                  type: "number",
-                  description: "Number of failed items.",
-                },
-                {
-                  name: "skippedCount",
-                  type: "number",
-                  description: "Number of skipped items.",
-                },
-                {
-                  name: "startedAt",
-                  type: "Date | null",
-                  description: "When the experiment started.",
-                },
-                {
-                  name: "completedAt",
-                  type: "Date | null",
-                  description: "When the experiment completed.",
-                },
-                {
-                  name: "createdAt",
-                  type: "Date",
-                  description: "When the experiment record was created.",
-                },
-                {
-                  name: "updatedAt",
-                  type: "Date",
-                  description: "When the experiment record was last updated.",
-                },
-              ],
-            }],
-          },
-          {
-            name: "pagination",
-            type: "PaginationInfo",
-            description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<object>",
+description: "Paginated experiment list.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "experiments",
+type: "Experiment[]",
+description: "Array of experiment records.",
+properties: [{
+type: "Experiment",
+parameters: [
+{
+name: "id",
+type: "string",
+description: "Unique experiment ID.",
+},
+{
+name: "name",
+type: "string",
+isOptional: true,
+description: "Display name.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "Description.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata.",
+},
+{
+name: "datasetId",
+type: "string",
+description: "ID of the parent dataset.",
+},
+{
+name: "datasetVersion",
+type: "number | null",
+description: "Dataset version used for the experiment.",
+},
+{
+name: "targetType",
+type: "'agent' | 'workflow' | 'scorer' | 'processor'",
+description: "Type of target used.",
+},
+{
+name: "targetId",
+type: "string",
+description: "ID of the target used.",
+},
+{
+name: "status",
+type: "'pending' | 'running' | 'completed' | 'failed'",
+description: "Current status of the experiment.",
+},
+{
+name: "totalItems",
+type: "number",
+description: "Total number of items.",
+},
+{
+name: "succeededCount",
+type: "number",
+description: "Number of successful items.",
+},
+{
+name: "failedCount",
+type: "number",
+description: "Number of failed items.",
+},
+{
+name: "skippedCount",
+type: "number",
+description: "Number of skipped items.",
+},
+{
+name: "startedAt",
+type: "Date | null",
+description: "When the experiment started.",
+},
+{
+name: "completedAt",
+type: "Date | null",
+description: "When the experiment completed.",
+},
+{
+name: "createdAt",
+type: "Date",
+description: "When the experiment record was created.",
+},
+{
+name: "updatedAt",
+type: "Date",
+description: "When the experiment record was last updated.",
+},
+],
+}],
+},
+{
+name: "pagination",
+type: "PaginationInfo",
+description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
+},
+],
+}],
+},
+]}
 />

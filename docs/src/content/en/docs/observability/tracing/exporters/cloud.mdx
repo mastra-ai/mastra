@@ -15,9 +15,9 @@ The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and 
 ### Prerequisites
 
 1. **Mastra Cloud Account**: Sign up at [cloud.mastra.ai](https://cloud.mastra.ai)
-2. **Mastra Cloud Project**: Create a project in Mastra Cloud. Traces are scoped per project, so even if you only want observability, you need a project to act as the destination for your traces.
-3. **Access Token**: Generate in your project's sidebar under **Project Settings → Access Tokens**
-4. **Environment Variables**: Set your credentials:
+1. **Mastra Cloud Project**: Create a project in Mastra Cloud. Traces are scoped per project, so even if you only want observability, you need a project to act as the destination for your traces.
+1. **Access Token**: Generate in your project's sidebar under **Project Settings → Access Tokens**
+1. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
@@ -26,21 +26,21 @@ MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ### Basic Setup
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability, CloudExporter } from "@mastra/observability";
+import { Mastra } from '@mastra/core'
+import { Observability, CloudExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       production: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
         ],
       },
     },
   }),
-});
+})
 ```
 
 ### Recommended Configuration
@@ -48,30 +48,28 @@ export const mastra = new Mastra({
 Include CloudExporter in your observability configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 import {
   Observability,
   DefaultExporter,
   CloudExporter,
   SensitiveDataFilter,
-} from "@mastra/observability";
+} from '@mastra/observability'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "mastra",
+        serviceName: 'mastra',
         exporters: [
           new DefaultExporter(),
           new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(),
-        ],
+        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Complete Configuration
@@ -82,15 +80,15 @@ new CloudExporter({
   accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
 
   // Optional - for self-hosted Mastra Cloud
-  endpoint: "https://cloud.your-domain.com",
+  endpoint: 'https://cloud.your-domain.com',
 
   // Batching configuration
   maxBatchSize: 1000, // Max spans per batch
   maxBatchWaitMs: 5000, // Max wait before sending batch
 
   // Diagnostic logging
-  logLevel: "info", // debug | info | warn | error
-});
+  logLevel: 'info', // debug | info | warn | error
+})
 ```
 
 ## Viewing Traces
@@ -98,9 +96,9 @@ new CloudExporter({
 ### Mastra Cloud Dashboard
 
 1. Navigate to [cloud.mastra.ai](https://cloud.mastra.ai)
-2. Select the project associated with your access token
-3. Go to **Observability → Traces**
-4. Use filters to find specific traces:
+1. Select the project associated with your access token
+1. Go to **Observability → Traces**
+1. Use filters to find specific traces:
    - Service name
    - Time range
    - Trace ID

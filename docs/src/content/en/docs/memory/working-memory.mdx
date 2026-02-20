@@ -32,15 +32,15 @@ Working memory can persist at two different scopes:
 Here's a minimal example of setting up an agent with working memory:
 
 ```typescript {11-15}
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 // Create agent with working memory enabled
 const agent = new Agent({
-  id: "personal-assistant",
-  name: "PersonalAssistant",
-  instructions: "You are a helpful personal assistant.",
-  model: "openai/gpt-5.1",
+  id: 'personal-assistant',
+  name: 'PersonalAssistant',
+  instructions: 'You are a helpful personal assistant.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     options: {
       workingMemory: {
@@ -48,7 +48,7 @@ const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 ## How it Works
@@ -71,7 +71,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      scope: "resource", // Memory persists across all user threads
+      scope: 'resource', // Memory persists across all user threads
       template: `# User Profile
 - **Name**:
 - **Location**:
@@ -81,7 +81,7 @@ const memory = new Memory({
 `,
     },
   },
-});
+})
 ```
 
 **Use cases:**
@@ -96,12 +96,12 @@ When using resource-scoped memory, make sure to pass the `resource` parameter in
 
 ```typescript
 // Resource-scoped memory requires resource
-const response = await agent.generate("Hello!", {
+const response = await agent.generate('Hello!', {
   memory: {
-    thread: "conversation-123",
-    resource: "user-alice-456", // Same user across different threads
+    thread: 'conversation-123',
+    resource: 'user-alice-456', // Same user across different threads
   },
-});
+})
 ```
 
 ### Thread-Scoped Memory
@@ -114,7 +114,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      scope: "thread", // Memory is isolated per thread
+      scope: 'thread', // Memory is isolated per thread
       template: `# User Profile
 - **Name**:
 - **Interests**:
@@ -122,7 +122,7 @@ const memory = new Memory({
 `,
     },
   },
-});
+})
 ```
 
 **Use cases:**
@@ -179,7 +179,7 @@ const memory = new Memory({
 `,
     },
   },
-});
+})
 ```
 
 ## Designing Effective Templates
@@ -210,7 +210,7 @@ const basicMemory = new Memory({
       template: `User Facts:\n- Name:\n- Favorite Color:\n- Current Topic:`,
     },
   },
-});
+})
 ```
 
 You can also store the key facts in a short paragraph format if you prefer a more narrative style:
@@ -223,7 +223,7 @@ const paragraphMemory = new Memory({
       template: `Important Details:\n\nKeep a short paragraph capturing the user's important facts (name, main goal, current task).`,
     },
   },
-});
+})
 ```
 
 ## Structured Working Memory
@@ -235,8 +235,8 @@ Working memory can also be defined using a structured schema instead of a Markdo
 ### Example: Schema-Based Working Memory
 
 ```typescript
-import { z } from "zod";
-import { Memory } from "@mastra/memory";
+import { z } from 'zod'
+import { Memory } from '@mastra/memory'
 
 const userProfileSchema = z.object({
   name: z.string().optional(),
@@ -249,7 +249,7 @@ const userProfileSchema = z.object({
       deadlines: z.array(z.string()).optional(),
     })
     .optional(),
-});
+})
 
 const memory = new Memory({
   options: {
@@ -259,7 +259,7 @@ const memory = new Memory({
       // template: ... (do not set)
     },
   },
-});
+})
 ```
 
 When a schema is provided, the agent receives the working memory as a JSON object. For example:
@@ -337,9 +337,9 @@ When creating a thread, you can provide initial working memory through the metad
 ```typescript title="src/app/medical-consultation.ts"
 // Create a thread with initial working memory
 const thread = await memory.createThread({
-  threadId: "thread-123",
-  resourceId: "user-456",
-  title: "Medical Consultation",
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  title: 'Medical Consultation',
   metadata: {
     workingMemory: `# Patient Profile
 - Name: John Doe
@@ -349,15 +349,15 @@ const thread = await memory.createThread({
 - Medical History: Hypertension (controlled)
 `,
   },
-});
+})
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
   memory: {
     thread: thread.id,
-    resource: "user-456",
+    resource: 'user-456',
   },
-});
+})
 // Response: "Your blood type is O+."
 ```
 
@@ -368,7 +368,7 @@ You can also update an existing thread's working memory:
 ```typescript title="src/app/medical-consultation.ts"
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
-  id: "thread-123",
+  id: 'thread-123',
   title: thread.title,
   metadata: {
     ...thread.metadata,
@@ -380,7 +380,7 @@ await memory.updateThread({
 - Medical History: Hypertension (controlled)
 `,
   },
-});
+})
 ```
 
 ### Direct Memory Update
@@ -389,10 +389,10 @@ Alternatively, use the `updateWorkingMemory` method directly:
 
 ```typescript title="src/app/medical-consultation.ts"
 await memory.updateWorkingMemory({
-  threadId: "thread-123",
-  resourceId: "user-456", // Required for resource-scoped memory
-  workingMemory: "Updated memory content...",
-});
+  threadId: 'thread-123',
+  resourceId: 'user-456', // Required for resource-scoped memory
+  workingMemory: 'Updated memory content...',
+})
 ```
 
 ## Read-Only Working Memory
@@ -405,15 +405,15 @@ In some scenarios, you may want an agent to have access to working memory data w
 To enable read-only mode, set `readOnly: true` in the memory options:
 
 ```typescript
-const response = await agent.generate("What do you know about me?", {
+const response = await agent.generate('What do you know about me?', {
   memory: {
-    thread: "conversation-123",
-    resource: "user-alice-456",
+    thread: 'conversation-123',
+    resource: 'user-alice-456',
     options: {
       readOnly: true, // Working memory is provided but cannot be updated
     },
   },
-});
+})
 ```
 
 ## Examples

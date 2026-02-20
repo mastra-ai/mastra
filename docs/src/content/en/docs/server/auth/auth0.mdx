@@ -19,9 +19,9 @@ The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It v
 This example uses Auth0 authentication. Make sure to:
 
 1. Create an Auth0 account at [auth0.com](https://auth0.com/)
-2. Set up an Application in your Auth0 Dashboard
-3. Configure an API in your Auth0 Dashboard with an identifier (audience)
-4. Configure your application's allowed callback URLs, web origins, and logout URLs
+1. Set up an Application in your Auth0 Dashboard
+1. Configure an API in your Auth0 Dashboard with an identifier (audience)
+1. Configure your application's allowed callback URLs, web origins, and logout URLs
 
 ```env title=".env"
 AUTH0_DOMAIN=your-tenant.auth0.com
@@ -49,21 +49,21 @@ npm install @mastra/auth-auth0@latest
 ### Basic usage with environment variables
 
 ```typescript {2,6} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 export const mastra = new Mastra({
   server: {
     auth: new MastraAuthAuth0(),
   },
-});
+})
 ```
 
 ### Custom configuration
 
 ```typescript {2,6-9} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 export const mastra = new Mastra({
   server: {
@@ -72,7 +72,7 @@ export const mastra = new Mastra({
       audience: process.env.AUTH0_AUDIENCE,
     }),
   },
-});
+})
 ```
 
 ## Configuration
@@ -82,21 +82,21 @@ export const mastra = new Mastra({
 By default, `MastraAuthAuth0` allows all authenticated users who have valid Auth0 tokens for the specified audience. The token verification ensures that:
 
 1. The token is properly signed by Auth0
-2. The token is not expired
-3. The token audience matches your configured audience
-4. The token issuer matches your Auth0 domain
+1. The token is not expired
+1. The token audience matches your configured audience
+1. The token issuer matches your Auth0 domain
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
 ```typescript title="src/mastra/auth.ts"
-import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 const auth0Provider = new MastraAuthAuth0({
-  authorizeUser: async (user) => {
+  authorizeUser: async user => {
     // Custom authorization logic
-    return user.email?.endsWith("@yourcompany.com") || false;
+    return user.email?.endsWith('@yourcompany.com') || false
   },
-});
+})
 ```
 
 :::info
@@ -118,8 +118,8 @@ npm install @auth0/auth0-react
 ```
 
 ```typescript title="src/auth0-provider.tsx"
-import React from 'react';
-import { Auth0Provider } from '@auth0/auth0-react';
+import React from 'react'
+import { Auth0Provider } from '@auth0/auth0-react'
 
 const Auth0ProviderWithHistory = ({ children }) => {
   return (
@@ -129,15 +129,15 @@ const Auth0ProviderWithHistory = ({ children }) => {
       authorizationParams={{
         redirect_uri: window.location.origin,
         audience: process.env.REACT_APP_AUTH0_AUDIENCE,
-        scope: "read:current_user update:current_user_metadata"
+        scope: 'read:current_user update:current_user_metadata',
       }}
     >
       {children}
     </Auth0Provider>
-  );
-};
+  )
+}
 
-export default Auth0ProviderWithHistory;
+export default Auth0ProviderWithHistory
 ```
 
 ### Retrieving access tokens
@@ -145,18 +145,18 @@ export default Auth0ProviderWithHistory;
 Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 
 ```typescript title="lib/auth.ts"
-import { useAuth0 } from "@auth0/auth0-react";
+import { useAuth0 } from '@auth0/auth0-react'
 
 export const useAuth0Token = () => {
-  const { getAccessTokenSilently } = useAuth0();
+  const { getAccessTokenSilently } = useAuth0()
 
   const getAccessToken = async () => {
-    const token = await getAccessTokenSilently();
-    return token;
-  };
+    const token = await getAccessTokenSilently()
+    return token
+  }
 
-  return { getAccessToken };
-};
+  return { getAccessToken }
+}
 ```
 
 :::note
@@ -170,16 +170,16 @@ Refer to the [Auth0 React SDK documentation](https://auth0.com/docs/libraries/au
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts"
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
+    baseUrl: 'https://<mastra-api-url>',
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  });
-};
+  })
+}
 ```
 
 :::info
@@ -196,37 +196,34 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
-
     ```tsx title="src/components/mastra-api-test.tsx"
-    import React, { useState } from 'react';
-    import { useAuth0 } from '@auth0/auth0-react';
-    import { MastraClient } from '@mastra/client-js';
+    import React, { useState } from 'react'
+    import { useAuth0 } from '@auth0/auth0-react'
+    import { MastraClient } from '@mastra/client-js'
 
     export const MastraApiTest = () => {
-      const { getAccessTokenSilently } = useAuth0();
-      const [result, setResult] = useState(null);
+      const { getAccessTokenSilently } = useAuth0()
+      const [result, setResult] = useState(null)
 
       const callMastraApi = async () => {
-        const token = await getAccessTokenSilently();
+        const token = await getAccessTokenSilently()
 
         const mastra = new MastraClient({
-          baseUrl: "http://localhost:4111",
+          baseUrl: 'http://localhost:4111',
           headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+            Authorization: `Bearer ${token}`,
+          },
+        })
 
-        const weatherAgent = mastra.getAgent("weatherAgent");
-        const response = await weatherAgent.generate("What's the weather like in New York");
+        const weatherAgent = mastra.getAgent('weatherAgent')
+        const response = await weatherAgent.generate("What's the weather like in New York")
 
-        setResult(response.text);
-      };
+        setResult(response.text)
+      }
 
       return (
         <div>
-          <button onClick={callMastraApi}>
-            Test Mastra API
-          </button>
+          <button onClick={callMastraApi}>Test Mastra API</button>
 
           {result && (
             <div className="result">
@@ -235,13 +232,12 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
             </div>
           )}
         </div>
-      );
-    };
+      )
+    }
     ```
-
   </TabItem>
-  <TabItem value="curl" label="cURL">
 
+  <TabItem value="curl" label="cURL">
     ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -250,6 +246,5 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
-
   </TabItem>
 </Tabs>

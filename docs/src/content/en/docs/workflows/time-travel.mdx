@@ -15,9 +15,9 @@ You can also use time travel to execute a workflow that has not been run yet, st
 When you call `timeTravel()` on a workflow run:
 
 1. The workflow loads the existing snapshot from storage (if available)
-2. Step results before the target step are reconstructed from the snapshot or provided context
-3. Execution begins from the specified step with the provided or reconstructed input data
-4. The workflow continues to completion from that point forward
+1. Step results before the target step are reconstructed from the snapshot or provided context
+1. Execution begins from the specified step with the provided or reconstructed input data
+1. The workflow continues to completion from that point forward
 
 Time travel requires storage to be configured since it relies on persisted workflow snapshots.
 
@@ -26,15 +26,15 @@ Time travel requires storage to be configured since it relies on persisted workf
 Use `run.timeTravel()` to re-execute a workflow from a specific step:
 
 ```typescript
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const workflow = mastra.getWorkflow("myWorkflow");
-const run = await workflow.createRun();
+const workflow = mastra.getWorkflow('myWorkflow')
+const run = await workflow.createRun()
 
 const result = await run.timeTravel({
-  step: "step2",
-  inputData: { previousStepResult: "custom value" },
-});
+  step: 'step2',
+  inputData: { previousStepResult: 'custom value' },
+})
 ```
 
 ## Specifying the target step
@@ -47,16 +47,16 @@ You can specify the target step using either a step reference or a step ID:
 const result = await run.timeTravel({
   step: step2,
   inputData: { value: 10 },
-});
+})
 ```
 
 ### Using step ID
 
 ```typescript
 const result = await run.timeTravel({
-  step: "step2",
+  step: 'step2',
   inputData: { value: 10 },
-});
+})
 ```
 
 ### Nested workflow steps
@@ -66,21 +66,21 @@ For steps inside nested workflows, use dot notation, an array of step IDS or an 
 ```typescript
 // Using dot notation
 const result = await run.timeTravel({
-  step: "nestedWorkflow.step3",
+  step: 'nestedWorkflow.step3',
   inputData: { value: 10 },
-});
+})
 
 // Using array of step IDs
 const result = await run.timeTravel({
-  step: ["nestedWorkflow", "step3"],
+  step: ['nestedWorkflow', 'step3'],
   inputData: { value: 10 },
-});
+})
 
 // Using array of step references
 const result = await run.timeTravel({
   step: [nestedWorkflow, step3],
   inputData: { value: 10 },
-});
+})
 ```
 
 ## Providing execution context
@@ -89,17 +89,17 @@ You can provide context to specify the state of previous steps when time traveli
 
 ```typescript {3-13}
 const result = await run.timeTravel({
-  step: "step2",
+  step: 'step2',
   context: {
     step1: {
-      status: "success",
+      status: 'success',
       payload: { value: 0 },
       output: { step1Result: 2 },
       startedAt: Date.now(),
       endedAt: Date.now(),
     },
   },
-});
+})
 ```
 
 The context object contains step results keyed by step ID. Each step result includes:
@@ -117,20 +117,20 @@ The context object contains step results keyed by step ID. Each step result incl
 Time travel is particularly useful for debugging and recovering from failed workflow executions:
 
 ```typescript
-const workflow = mastra.getWorkflow("myWorkflow");
-const run = await workflow.createRun();
+const workflow = mastra.getWorkflow('myWorkflow')
+const run = await workflow.createRun()
 
 // Initial run fails at step2
 const failedResult = await run.start({
   inputData: { value: 1 },
-});
+})
 
-if (failedResult.status === "failed") {
+if (failedResult.status === 'failed') {
   // Re-run from step2 with corrected input
   const recoveredResult = await run.timeTravel({
-    step: "step2",
+    step: 'step2',
     inputData: { step1Result: 5 }, // Provide corrected input
-  });
+  })
 }
 ```
 
@@ -139,21 +139,21 @@ if (failedResult.status === "failed") {
 You can time travel to resume a suspended workflow from an earlier step:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 // Start workflow - suspends at promptAgent step
 const initialResult = await run.start({
-  inputData: { input: "test" },
-});
+  inputData: { input: 'test' },
+})
 
-if (initialResult.status === "suspended") {
+if (initialResult.status === 'suspended') {
   // Time travel back to an earlier step with resume data
   const result = await run.timeTravel({
-    step: "getUserInput",
+    step: 'getUserInput',
     resumeData: {
-      userInput: "corrected input",
+      userInput: 'corrected input',
     },
-  });
+  })
 }
 ```
 
@@ -162,21 +162,21 @@ if (initialResult.status === "suspended") {
 Use `timeTravelStream()` to receive streaming events during time travel execution:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const stream = run.timeTravelStream({
-  step: "step2",
+  step: 'step2',
   inputData: { value: 10 },
-});
+})
 
 for await (const event of stream.fullStream) {
-  console.log(event.type, event.payload);
+  console.log(event.type, event.payload)
 }
 
-const result = await stream.result;
+const result = await stream.result
 
-if (result.status === "success") {
-  console.log(result.result);
+if (result.status === 'success') {
+  console.log(result.result)
 }
 ```
 
@@ -186,13 +186,13 @@ You can provide initial state when time traveling to set workflow-level state:
 
 ```typescript
 const result = await run.timeTravel({
-  step: "step2",
+  step: 'step2',
   inputData: { value: 10 },
   initialState: {
     counter: 5,
-    metadata: { source: "time-travel" },
+    metadata: { source: 'time-travel' },
   },
-});
+})
 ```
 
 ## Error handling
@@ -205,7 +205,7 @@ You cannot time travel to a workflow that is currently running:
 
 ```typescript
 try {
-  await run.timeTravel({ step: "step2" });
+  await run.timeTravel({ step: 'step2' })
 } catch (error) {
   // "This workflow run is still running, cannot time travel"
 }
@@ -217,7 +217,7 @@ Time travel throws if the target step doesn't exist in the workflow:
 
 ```typescript
 try {
-  await run.timeTravel({ step: "nonExistentStep" });
+  await run.timeTravel({ step: 'nonExistentStep' })
 } catch (error) {
   // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
 }
@@ -230,9 +230,9 @@ When `validateInputs` is enabled, time travel validates the input data against t
 ```typescript
 try {
   await run.timeTravel({
-    step: "step2",
-    inputData: { invalidField: "value" },
-  });
+    step: 'step2',
+    inputData: { invalidField: 'value' },
+  })
 } catch (error) {
   // "Invalid inputData: \n- step1Result: Required"
 }
@@ -244,17 +244,17 @@ When time traveling into a nested workflow, you can provide context for both the
 
 ```typescript
 const result = await run.timeTravel({
-  step: "nestedWorkflow.step3",
+  step: 'nestedWorkflow.step3',
   context: {
     step1: {
-      status: "success",
+      status: 'success',
       payload: { value: 0 },
       output: { step1Result: 2 },
       startedAt: Date.now(),
       endedAt: Date.now(),
     },
     nestedWorkflow: {
-      status: "running",
+      status: 'running',
       payload: { step1Result: 2 },
       startedAt: Date.now(),
     },
@@ -262,7 +262,7 @@ const result = await run.timeTravel({
   nestedStepsContext: {
     nestedWorkflow: {
       step2: {
-        status: "success",
+        status: 'success',
         payload: { step1Result: 2 },
         output: { step2Result: 3 },
         startedAt: Date.now(),
@@ -270,7 +270,7 @@ const result = await run.timeTravel({
       },
     },
   },
-});
+})
 ```
 
 ## Use cases
@@ -283,7 +283,7 @@ Re-run a failed step with the same or modified input to diagnose issues:
 const result = await run.timeTravel({
   step: failedStepId,
   context: originalContext, // Use context from the failed run
-});
+})
 ```
 
 ### Testing step logic on new workflow run
@@ -292,9 +292,9 @@ Test individual steps with specific inputs on a new workflow run, useful for tes
 
 ```typescript
 const result = await run.timeTravel({
-  step: "processData",
-  inputData: { testData: "specific test case" },
-});
+  step: 'processData',
+  inputData: { testData: 'specific test case' },
+})
 ```
 
 ### Recovering from transient failures
@@ -304,9 +304,9 @@ Re-run steps that failed due to temporary issues (network errors, rate limits):
 ```typescript
 // After fixing the external service issue
 const result = await run.timeTravel({
-  step: "callExternalApi",
+  step: 'callExternalApi',
   inputData: savedInputData,
-});
+})
 ```
 
 ## Related

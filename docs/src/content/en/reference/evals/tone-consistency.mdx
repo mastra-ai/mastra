@@ -20,28 +20,28 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Tone consistency/stability score (0-1).",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
+},
+{
+name: "score",
+type: "number",
+description: "Tone consistency/stability score (0-1).",
+},
+]}
 />
 
 `.run()` returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   analyzeStepResult: {
@@ -65,15 +65,15 @@ The scorer evaluates sentiment consistency through tone pattern analysis and mod
    - Extracts sentiment features
    - Computes sentiment scores
    - Measures tone variations
-2. Calculates mode-specific score:
+1. Calculates mode-specific score:
    **Tone Consistency** (input and output):
    - Compares sentiment between texts
    - Calculates sentiment difference
-   - Score = 1 - (sentiment_difference / max_difference)
+   - Score = 1 - (sentiment\_difference / max\_difference)
      **Tone Stability** (single input):
    - Analyzes sentiment across sentences
    - Calculates sentiment variance
-   - Score = 1 - (sentiment_variance / max_variance)
+   - Score = 1 - (sentiment\_variance / max\_variance)
 
 Final score: `mode_specific_score * scale`
 
@@ -102,21 +102,21 @@ Object with tone metrics:
 Evaluate tone consistency between related agent responses:
 
 ```typescript title="src/example-tone-consistency.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createToneScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createToneScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createToneScorer();
+const scorer = createToneScorer()
 
 const result = await runEvals({
   data: [
     {
-      input: "How was your experience with our service?",
-      groundTruth: "The service was excellent and exceeded expectations!",
+      input: 'How was your experience with our service?',
+      groundTruth: 'The service was excellent and exceeded expectations!',
     },
     {
-      input: "Tell me about the customer support",
-      groundTruth: "The support team was friendly and very helpful.",
+      input: 'Tell me about the customer support',
+      groundTruth: 'The support team was friendly and very helpful.',
     },
   ],
   scorers: [scorer],
@@ -124,11 +124,11 @@ const result = await runEvals({
   onItemComplete: ({ scorerResults }) => {
     console.log({
       score: scorerResults[scorer.id].score,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

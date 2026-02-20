@@ -14,24 +14,26 @@ Starts an experiment asynchronously (fire-and-forget). Returns immediately with 
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Start experiment without waiting
 const { experimentId, status } = await dataset.startExperimentAsync({
-  targetType: "agent",
-  targetId: "my-agent",
-  scorers: ["accuracy"],
-});
+  targetType: 'agent',
+  targetId: 'my-agent',
+  scorers: ['accuracy'],
+})
 
-console.log(`Experiment ${experimentId} started with status: ${status}`);
+console.log(`Experiment ${experimentId} started with status: ${status}`)
 
 // Check progress later
-const experiment = await dataset.getExperiment({ experimentId });
-console.log(`Current status: ${experiment.status}`);
+const experiment = await dataset.getExperiment({ experimentId })
+console.log(`Current status: ${experiment.status}`)
 ```
 
 ## Parameters
@@ -42,27 +44,27 @@ Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/referen
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<object>",
-      description: "Immediate response with experiment ID.",
-      properties: [{
-        type: "object",
-        parameters: [
-          {
-            name: "experimentId",
-            type: "string",
-            description: "Unique ID of the created experiment.",
-          },
-          {
-            name: "status",
-            type: "'pending'",
-            description: "Always `'pending'` since the experiment hasn't started executing yet.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<object>",
+description: "Immediate response with experiment ID.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "experimentId",
+type: "string",
+description: "Unique ID of the created experiment.",
+},
+{
+name: "status",
+type: "'pending'",
+description: "Always `'pending'` since the experiment hasn't started executing yet.",
+},
+],
+}],
+},
+]}
 />
 
 ## Related

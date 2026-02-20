@@ -237,10 +237,10 @@ createStep({
   id: 'my-step',
   execute: async ({ writer }) => {
     // This API is unchanged
-    await writer.write({ data: 'some output' });
-    await writer.custom({ type: 'custom-event', payload: {} });
+    await writer.write({ data: 'some output' })
+    await writer.custom({ type: 'custom-event', payload: {} })
   },
-});
+})
 ```
 
 :::

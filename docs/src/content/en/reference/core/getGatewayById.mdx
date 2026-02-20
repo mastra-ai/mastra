@@ -12,17 +12,17 @@ Retrieves a gateway by its unique ID (the `id` property of the gateway instance)
 ## Usage example
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
   gateways: {
     customKey: new MyCustomGateway(), // id = 'my-custom-gateway'
   },
-});
+})
 
 // Retrieve by ID (not registration key)
-const gateway = mastra.getGatewayById('my-custom-gateway');
-console.log(gateway.name); // 'My Custom Gateway'
+const gateway = mastra.getGatewayById('my-custom-gateway')
+console.log(gateway.name) // 'My Custom Gateway'
 ```
 
 ## Use Cases
@@ -35,24 +35,24 @@ console.log(gateway.name); // 'My Custom Gateway'
 
 <PropertiesTable
   content={[
-    {
-      name: 'id',
-      type: 'string',
-      description: 'The unique ID of the gateway (gateway.id property)',
-    },
-  ]}
+{
+name: 'id',
+type: 'string',
+description: 'The unique ID of the gateway (gateway.id property)',
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: 'gateway',
-      type: 'MastraModelGateway | undefined',
-      description: 'The gateway instance, or undefined if not found',
-    },
-  ]}
+{
+name: 'gateway',
+type: 'MastraModelGateway | undefined',
+description: 'The gateway instance, or undefined if not found',
+},
+]}
 />
 
 ## Related

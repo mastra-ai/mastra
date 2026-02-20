@@ -16,7 +16,7 @@ function. If it returns a `Response` the request is short-circuited. Calling
 `next()` continues processing the next middleware or route handler.
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   server: {
@@ -24,42 +24,42 @@ export const mastra = new Mastra({
       {
         handler: async (c, next) => {
           // Example: Add authentication check
-          const authHeader = c.req.header("Authorization");
+          const authHeader = c.req.header('Authorization')
           if (!authHeader) {
-            return new Response("Unauthorized", { status: 401 });
+            return new Response('Unauthorized', { status: 401 })
           }
 
-          await next();
+          await next()
         },
-        path: "/api/*",
+        path: '/api/*',
       },
       // Add a global request logger
       async (c, next) => {
-        console.log(`${c.req.method} ${c.req.url}`);
-        await next();
+        console.log(`${c.req.method} ${c.req.url}`)
+        await next()
       },
     ],
   },
-});
+})
 ```
 
 To attach middleware to a single route pass the `middleware` option to
 `registerApiRoute`:
 
 ```typescript
-registerApiRoute("/my-custom-route", {
-  method: "GET",
+registerApiRoute('/my-custom-route', {
+  method: 'GET',
   middleware: [
     async (c, next) => {
-      console.log(`${c.req.method} ${c.req.url}`);
-      await next();
+      console.log(`${c.req.method} ${c.req.url}`)
+      await next()
     },
   ],
-  handler: async (c) => {
-    const mastra = c.get("mastra");
-    return c.json({ message: "Hello, world!" });
+  handler: async c => {
+    const mastra = c.get('mastra')
+    return c.json({ message: 'Hello, world!' })
   },
-});
+})
 ```
 
 ## Common examples
@@ -69,33 +69,30 @@ registerApiRoute("/my-custom-route", {
 You can populate `RequestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { RequestContext } from "@mastra/core/request-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
+import { Mastra } from '@mastra/core'
+import { RequestContext } from '@mastra/core/request-context'
+import { testWeatherAgent } from './agents/test-weather-agent'
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },
   server: {
     middleware: [
       async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const requestContext = context.get("requestContext");
+        const country = context.req.header('CF-IPCountry')
+        const requestContext = context.get('requestContext')
 
-        requestContext.set(
-          "temperature-unit",
-          country === "US" ? "fahrenheit" : "celsius",
-        );
+        requestContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius')
 
-        await next();
+        await next()
       },
     ],
   },
-});
+})
 ```
 
 ### Authentication
 
-```typescript
+```typescript prettier:false
 {
   handler: async (c, next) => {
     const authHeader = c.req.header('Authorization');
@@ -117,41 +114,42 @@ Authentication verifies who the user is. Authorization controls what they can ac
 Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values. The server automatically enforces these keys across memory and agent endpoints:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
+import { Mastra } from '@mastra/core'
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 
 export const mastra = new Mastra({
   server: {
     auth: {
-      authenticateToken: async (token) => {
+      authenticateToken: async token => {
         // Your auth logic returns the user
-        return verifyToken(token); // { id: 'user-123', ... }
+        return verifyToken(token) // { id: 'user-123', ... }
       },
     },
     middleware: [
       {
         path: '/api/*',
         handler: async (c, next) => {
-          const requestContext = c.get('requestContext');
-          const user = requestContext.get('user');
+          const requestContext = c.get('requestContext')
+          const user = requestContext.get('user')
 
           if (!user) {
-            return c.json({ error: 'Unauthorized' }, 401);
+            return c.json({ error: 'Unauthorized' }, 401)
           }
 
           // Force all API operations to use this user's ID
           // This takes precedence over any client-provided resourceId
-          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
 
-          return next();
+          return next()
         },
       },
     ],
   },
-});
+})
 ```
 
 With this middleware, the server automatically:
+
 - **Filters thread listing** to only return threads owned by the user
 - **Validates thread access** and returns 403 if accessing another user's thread
 - **Forces thread creation** to use the authenticated user's ID
@@ -164,17 +162,17 @@ Even if a client passes `?resourceId=other-user-id`, the middleware-set value ta
 You can also set `MASTRA_THREAD_ID_KEY` to override the client-provided thread ID:
 
 ```typescript
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context'
 
 // Force operations to use a specific thread
-requestContext.set(MASTRA_THREAD_ID_KEY, validatedThreadId);
+requestContext.set(MASTRA_THREAD_ID_KEY, validatedThreadId)
 ```
 
 This is useful when you want to restrict operations to a specific thread that you've validated through other means.
 
 ### CORS support
 
-```typescript
+```typescript prettier:false
 {
   handler: async (c, next) => {
     c.header('Access-Control-Allow-Origin', '*');
@@ -198,7 +196,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 
 ### Request logging
 
-```typescript
+```typescript prettier:false
 {
   handler: async (c, next) => {
     const start = Date.now();
@@ -214,7 +212,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 When integrating with Mastra Cloud or custom clients the following headers can
 be inspected by middleware to tailor behavior:
 
-```typescript
+```typescript prettier:false
 {
   handler: async (c, next) => {
     const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';

@@ -13,21 +13,21 @@ The `.getStoredAgentById()` method retrieves an agent configuration from storage
 
 ```typescript
 // Get an Agent instance from storage
-const agent = await mastra.getStoredAgentById("my-stored-agent");
+const agent = await mastra.getStoredAgentById('my-stored-agent')
 
 if (agent) {
-  const response = await agent.generate("Hello");
-  console.log(response.text);
+  const response = await agent.generate('Hello')
+  console.log(response.text)
 }
 ```
 
 ```typescript
 // Get the raw storage data instead of an Agent instance
-const storedConfig = await mastra.getStoredAgentById("my-stored-agent", { raw: true });
+const storedConfig = await mastra.getStoredAgentById('my-stored-agent', { raw: true })
 
 if (storedConfig) {
-  console.log(storedConfig.instructions);
-  console.log(storedConfig.createdAt);
+  console.log(storedConfig.instructions)
+  console.log(storedConfig.createdAt)
 }
 ```
 
@@ -35,48 +35,48 @@ if (storedConfig) {
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "The unique identifier of the stored agent to retrieve.",
-    },
-    {
-      name: "options",
-      type: "{ raw?: boolean }",
-      description:
-        "Optional configuration object.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description:
+"The unique identifier of the stored agent to retrieve.",
+},
+{
+name: "options",
+type: "{ raw?: boolean }",
+description:
+"Optional configuration object.",
+isOptional: true,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "raw",
-      type: "boolean",
-      description:
-        "When `true`, returns the raw `StorageAgentType` object from storage instead of creating an `Agent` instance. Useful for inspecting stored configuration or metadata.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "raw",
+type: "boolean",
+description:
+"When `true`, returns the raw `StorageAgentType` object from storage instead of creating an `Agent` instance. Useful for inspecting stored configuration or metadata.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Agent | StorageAgentType | null",
-      description:
-        "Returns an `Agent` instance by default, or `StorageAgentType` when `raw: true`. Returns `null` if no agent with the given ID exists.",
-    },
-  ]}
+{
+name: "result",
+type: "Agent | StorageAgentType | null",
+description:
+"Returns an `Agent` instance by default, or `StorageAgentType` when `raw: true`. Returns `null` if no agent with the given ID exists.",
+},
+]}
 />
 
 ## Primitive Resolution
@@ -97,85 +97,85 @@ When using `raw: true`, the returned object has the following structure:
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the agent.",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Display name of the agent.",
-    },
-    {
-      name: "description",
-      type: "string",
-      description: "Optional description of the agent.",
-      isOptional: true,
-    },
-    {
-      name: "instructions",
-      type: "string",
-      description: "System instructions for the agent.",
-    },
-    {
-      name: "model",
-      type: "Record<string, unknown>",
-      description: "Model configuration with provider and name.",
-    },
-    {
-      name: "tools",
-      type: "Record<string, unknown>",
-      description: "Tool references to resolve from registry.",
-      isOptional: true,
-    },
-    {
-      name: "workflows",
-      type: "Record<string, unknown>",
-      description: "Workflow references to resolve from registry.",
-      isOptional: true,
-    },
-    {
-      name: "agents",
-      type: "Record<string, unknown>",
-      description: "Subagent references to resolve from registry.",
-      isOptional: true,
-    },
-    {
-      name: "memory",
-      type: "Record<string, unknown>",
-      description: "Memory reference to resolve from registry.",
-      isOptional: true,
-    },
-    {
-      name: "scorers",
-      type: "Record<string, unknown>",
-      description: "Scorer references with optional sampling config.",
-      isOptional: true,
-    },
-    {
-      name: "defaultOptions",
-      type: "Record<string, unknown>",
-      description: "Default options passed to agent execution.",
-      isOptional: true,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Custom metadata stored with the agent.",
-      isOptional: true,
-    },
-    {
-      name: "createdAt",
-      type: "Date",
-      description: "Timestamp when the agent was created.",
-    },
-    {
-      name: "updatedAt",
-      type: "Date",
-      description: "Timestamp when the agent was last updated.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the agent.",
+},
+{
+name: "name",
+type: "string",
+description: "Display name of the agent.",
+},
+{
+name: "description",
+type: "string",
+description: "Optional description of the agent.",
+isOptional: true,
+},
+{
+name: "instructions",
+type: "string",
+description: "System instructions for the agent.",
+},
+{
+name: "model",
+type: "Record<string, unknown>",
+description: "Model configuration with provider and name.",
+},
+{
+name: "tools",
+type: "Record<string, unknown>",
+description: "Tool references to resolve from registry.",
+isOptional: true,
+},
+{
+name: "workflows",
+type: "Record<string, unknown>",
+description: "Workflow references to resolve from registry.",
+isOptional: true,
+},
+{
+name: "agents",
+type: "Record<string, unknown>",
+description: "Subagent references to resolve from registry.",
+isOptional: true,
+},
+{
+name: "memory",
+type: "Record<string, unknown>",
+description: "Memory reference to resolve from registry.",
+isOptional: true,
+},
+{
+name: "scorers",
+type: "Record<string, unknown>",
+description: "Scorer references with optional sampling config.",
+isOptional: true,
+},
+{
+name: "defaultOptions",
+type: "Record<string, unknown>",
+description: "Default options passed to agent execution.",
+isOptional: true,
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+description: "Custom metadata stored with the agent.",
+isOptional: true,
+},
+{
+name: "createdAt",
+type: "Date",
+description: "Timestamp when the agent was created.",
+},
+{
+name: "updatedAt",
+type: "Date",
+description: "Timestamp when the agent was last updated.",
+},
+]}
 />
 
 ## Related

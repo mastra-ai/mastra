@@ -12,15 +12,15 @@ Dynamically adds a gateway to the Mastra instance. Can be used during or after i
 ## Usage example
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra();
+const mastra = new Mastra()
 
 // Add with explicit key
-mastra.addGateway(new MyCustomGateway(), 'myGateway');
+mastra.addGateway(new MyCustomGateway(), 'myGateway')
 
 // Add using gateway's ID as the key
-mastra.addGateway(new MyCustomGateway());
+mastra.addGateway(new MyCustomGateway())
 // Stored with key 'my-custom-gateway' (the gateway's id)
 ```
 
@@ -28,18 +28,18 @@ mastra.addGateway(new MyCustomGateway());
 
 <PropertiesTable
   content={[
-    {
-      name: 'gateway',
-      type: 'MastraModelGateway',
-      description: 'The gateway instance to add',
-    },
-    {
-      name: 'key',
-      type: 'string',
-      isOptional: true,
-      description: 'Optional registration key. If not provided, uses gateway.getId()',
-    },
-  ]}
+{
+name: 'gateway',
+type: 'MastraModelGateway',
+description: 'The gateway instance to add',
+},
+{
+name: 'key',
+type: 'string',
+isOptional: true,
+description: 'Optional registration key. If not provided, uses gateway.getId()',
+},
+]}
 />
 
 ## Returns

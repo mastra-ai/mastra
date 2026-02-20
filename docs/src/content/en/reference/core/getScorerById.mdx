@@ -12,48 +12,48 @@ The `getScorerById()` method retrieves a scorer by searching for its `id` proper
 ## Usage Example
 
 ```typescript
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
 // Get a scorer by its id property
-const relevancyScorer = mastra.getScorerById("answer-relevancy-scorer");
+const relevancyScorer = mastra.getScorerById('answer-relevancy-scorer')
 
-const weatherAgent = mastra.getAgent("weatherAgent");
+const weatherAgent = mastra.getAgent('weatherAgent')
 
 // Use the scorer to evaluate an AI output
-await weatherAgent.generate("What is the weather in Rome", {
+await weatherAgent.generate('What is the weather in Rome', {
   scorers: {
     answerRelevancy: {
       scorer: relevancyScorer,
     },
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description:
+"The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scorer",
-      type: "MastraScorer",
-      description:
-        "The MastraScorer instance that has the matching id (or name) property.",
-    },
-  ]}
+{
+name: "scorer",
+type: "MastraScorer",
+description:
+"The MastraScorer instance that has the matching id (or name) property.",
+},
+]}
 />
 
 ## Error Handling
@@ -65,10 +65,10 @@ This method throws a `MastraError` if:
 
 ```typescript
 try {
-  const scorer = mastra.getScorerById("non-existent-scorer");
+  const scorer = mastra.getScorerById('non-existent-scorer')
 } catch (error) {
-  if (error.id === "MASTRA_GET_SCORER_BY_ID_NOT_FOUND") {
-    console.log("Scorer with that id not found");
+  if (error.id === 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND') {
+    console.log('Scorer with that id not found')
   }
 }
 ```
@@ -78,4 +78,3 @@ try {
 - [getScorer()](/reference/core/getScorer) - Get a scorer by its registration key
 - [listScorers()](/reference/core/listScorers) - Get all registered scorers
 - [createScorer()](/reference/evals/create-scorer) - Learn how to create scorers with ids
-
