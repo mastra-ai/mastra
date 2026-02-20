@@ -32,3 +32,4 @@ export * from './utils/collect-mcp-client-ids';
 export * from './utils/compute-agent-initial-values';
 export * from './hooks/use-agent-cms-form';
 export * from './components/agent-cms-form-shell';
+export * from './components/agent-version-panel';
