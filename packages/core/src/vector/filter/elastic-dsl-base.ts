@@ -240,6 +240,12 @@ export abstract class ElasticDSLFilterTranslator<Filter = VectorFilter> extends 
     return { term: { [fieldWithKeyword]: value } };
   }
 
+  protected escapeWildcardMetacharacters(pattern: string): string {
+    // First escape backslashes to avoid ambiguous encoding sequences
+    // Then escape * and ? which are wildcard metacharacters
+    return pattern.replace(/\\/g, '\\\\').replace(/\*/g, '\\*').replace(/\?/g, '\\?');
+  }
+
   protected addKeywordIfNeeded(field: string, value: any): string {
     // Add .keyword suffix for string fields
     if (typeof value === 'string') {
@@ -305,17 +311,6 @@ export abstract class ElasticDSLFilterTranslator<Filter = VectorFilter> extends 
             return {
               bool: {
                 must_not: [translatedCondition],
-              },
-            };
-          }
-
-          // Handle single nested operator
-          if (entries.length === 1 && entries[0] && this.isOperator(entries[0][0])) {
-            const [nestedOp, nestedVal] = entries[0] as [QueryOperator, any];
-            const translatedNested = this.translateFieldOperator(field, nestedOp, nestedVal);
-            return {
-              bool: {
-                must_not: [translatedNested],
               },
             };
           }
