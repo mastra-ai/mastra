@@ -249,6 +249,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'migrations/agentnetwork-to-supervisor',
+          label: 'AgentNetwork → Supervisor Pattern',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/network-to-supervisor',
+          label: '.network() → Supervisor Pattern',
+        },
+        {
+          type: 'doc',
           id: 'migrations/ai-sdk-v4-to-v5',
           label: 'AI SDK v4 → v5',
         },

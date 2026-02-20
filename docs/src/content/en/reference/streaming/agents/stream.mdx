@@ -545,9 +545,9 @@ const stream = await agent.stream("message for agent");
           parameters: [
             {
               name: "contextFilter",
-              type: "ContextFilterConfig",
+              type: "(context: ContextFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>",
               isOptional: true,
-              description: "Configuration for filtering messages before passing them to sub-agents. Use this to control what context information is shared with delegated tasks.",
+              description: "Callback function for filtering messages before passing them to sub-agents. Receives the full message list and context, returns filtered messages to share with the sub-agent.",
             },
           ],
         },
@@ -1076,17 +1076,17 @@ const stream = await supervisorAgent.stream(
       bailStrategy: 'first',
 
       // Filter context passed to sub-agents
-      contextFilter: {
-        maxMessages: 10,               // Only pass last 10 messages
-        includeSystem: false,           // Don't include system messages
-        includeToolMessages: true,      // Include tool calls
-        filter: (message) => {
-          // Custom filter: remove sensitive data
-          const content = typeof message.content === 'string'
-            ? message.content
-            : JSON.stringify(message.content);
-          return !content.includes('confidential');
-        },
+      contextFilter: ({ messages, primitiveId, prompt }) => {
+        // Filter out sensitive messages and limit to last 10
+        return messages
+          .filter(msg => {
+            const content = typeof msg.content === 'string'
+              ? msg.content
+              : JSON.stringify(msg.content);
+            // Remove sensitive data
+            return !content.includes('confidential');
+          })
+          .slice(-10); // Only pass last 10 messages
       },
     },
   }
