@@ -916,9 +916,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const maxLineWidth = termWidth - 4; // small margin
     const lines: string[] = [];
 
-    for (const key of keys) {
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!;
       if (lines.length >= maxLines) {
-        const remaining = keys.length - lines.length;
+        const remaining = keys.length - i;
         lines.push(theme.fg('muted', `  ... ${remaining} more`));
         break;
       }
@@ -942,12 +943,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       } else {
         val = String(raw);
       }
-      let line = `  ${theme.fg('muted', key + '=')}${val}`;
-      // Truncate the whole line if it exceeds terminal width (visual width approximation)
-      if (line.length > maxLineWidth + 40) {
-        // +40 for ANSI escape overhead
-        line = line.slice(0, maxLineWidth + 40) + theme.fg('muted', '…');
-      }
+      const line = truncateAnsi(`  ${theme.fg('muted', key + '=')}${val}`, maxLineWidth);
       lines.push(line);
     }
     return lines;
