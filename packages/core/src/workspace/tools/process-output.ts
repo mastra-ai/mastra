@@ -5,8 +5,8 @@ import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput } from './output-helpers';
 
-export const getProcessOutputTool = createTool({
-  id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
+export const processOutputTool = createTool({
+  id: WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT,
   description: `Get the current output (stdout, stderr) and status of a background process by its PID.
 
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
@@ -32,7 +32,7 @@ Use this after starting a background command with execute_command (background: t
       throw new SandboxFeatureNotSupportedError('processes');
     }
 
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT);
 
     const handle = await sandbox.processes.get(pid);
     if (!handle) {

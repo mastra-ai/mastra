@@ -18,12 +18,12 @@ import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
 import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
-import { getProcessOutputTool } from './get-process-output';
 import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
+import { processOutputTool } from './process-output';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
@@ -239,7 +239,7 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // Background process tools (only when process manager is available)
     if (workspace.sandbox.processes) {
-      addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
+      addTool(WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT, processOutputTool);
       addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }

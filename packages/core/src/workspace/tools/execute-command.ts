@@ -28,7 +28,7 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     .boolean()
     .optional()
     .describe(
-      'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use get_process_output to check on it later.',
+      'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use process_output to check on it later.',
     ),
 });
 
