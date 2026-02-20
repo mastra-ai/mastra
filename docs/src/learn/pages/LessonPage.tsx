@@ -13,22 +13,6 @@ import { YouTubePlayerWithResume } from '../components/YouTubePlayerWithResume'
 import { CourseSignupCTA } from '../components/CourseSignupCTA'
 import { getLessonIndex } from '../utils'
 
-function LearnNotFound() {
-  return (
-    <LearnLayout title="Lesson Not Found | Mastra Learn">
-      <div className="py-20 text-center">
-        <h1 className="text-3xl font-bold text-(--mastra-text-primary)">Lesson not found</h1>
-        <p className="mt-2 text-(--mastra-text-tertiary)">
-          The lesson you're looking for doesn't exist.{' '}
-          <a href="/learn" className="text-(--mastra-green-accent-3) hover:underline dark:text-(--mastra-green-accent)">
-            Back to course overview
-          </a>
-        </p>
-      </div>
-    </LearnLayout>
-  )
-}
-
 function PublishedContent({
   lesson,
   lessonNumber,
@@ -124,9 +108,7 @@ export default function LessonPage() {
   const slug = location.pathname.replace(/^\/learn\//, '').replace(/\/$/, '')
   const lessonIndex = getLessonIndex(course.lessons, slug)
 
-  if (lessonIndex === -1) {
-    return <LearnNotFound />
-  }
+  if (lessonIndex === -1) return null
 
   const lesson = course.lessons[lessonIndex]
   const prev = lessonIndex > 0 ? course.lessons[lessonIndex - 1] : undefined
