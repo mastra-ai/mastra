@@ -67,8 +67,8 @@
     "jsdom": "^26.1.0",
     "mastra": "*",
     "next": "^15.5.7",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.17"
   },
