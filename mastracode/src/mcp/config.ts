@@ -11,7 +11,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { McpConfig, McpServerConfig, McpStdioServerConfig, McpHttpServerConfig } from './types.js';
+import type { McpConfig, McpServerConfig } from './types.js';
 
 export function loadMcpConfig(projectDir: string): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
@@ -69,25 +69,28 @@ function validateConfig(raw: unknown): McpConfig {
   const rawServers = obj.mcpServers as Record<string, unknown>;
 
   for (const [name, entry] of Object.entries(rawServers)) {
-    if (!entry || typeof entry !== 'object') continue;
-    const obj = entry as Record<string, unknown>;
-
-    if (typeof obj.url === 'string') {
-      // HTTP-based server
-      servers[name] = { url: obj.url } as McpHttpServerConfig;
-    } else if (typeof obj.command === 'string') {
-      // Stdio-based server
+    if (isValidServerConfig(entry)) {
       servers[name] = {
-        command: obj.command as string,
-        args: Array.isArray(obj.args) ? (obj.args as string[]) : undefined,
+        command: (entry as Record<string, unknown>).command as string,
+        args: Array.isArray((entry as Record<string, unknown>).args)
+          ? ((entry as Record<string, unknown>).args as string[])
+          : undefined,
         env:
-          typeof obj.env === 'object' && obj.env !== null ? (obj.env as Record<string, string>) : undefined,
-      } as McpStdioServerConfig;
+          typeof (entry as Record<string, unknown>).env === 'object' && (entry as Record<string, unknown>).env !== null
+            ? ((entry as Record<string, unknown>).env as Record<string, string>)
+            : undefined,
+      };
     }
   }
 
   if (Object.keys(servers).length === 0) return {};
   return { mcpServers: servers };
+}
+
+function isValidServerConfig(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const obj = raw as Record<string, unknown>;
+  return typeof obj.command === 'string';
 }
 
 /**
