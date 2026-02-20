@@ -16,6 +16,22 @@ import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
 
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
+
 /**
  * Convert Koa context to Web API Request for cookie-based auth providers.
  */
@@ -631,15 +647,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // from route path/method unless explicitly set or route is public
       const authConfig = this.mastra.getServer()?.auth;
       if (authConfig) {
-        let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-        try {
-          ({ hasPermission } = await import('@mastra/core/auth'));
-        } catch {
-          console.error(
-            '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-          );
-        }
-
+        const hasPermission = await loadHasPermission();
         if (hasPermission) {
           const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
