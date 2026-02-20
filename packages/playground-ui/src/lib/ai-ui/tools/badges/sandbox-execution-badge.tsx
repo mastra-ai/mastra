@@ -161,14 +161,24 @@ export const SandboxExecutionBadge = ({
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const { Link } = useLinkComponent();
 
+  // Command info emitted by get_process_output (so we can show the original command)
+  const commandChunk = dataParts.find(
+    chunk => chunk.name === 'sandbox-command' && chunk.data?.toolCallId === toolCallId,
+  );
+
   // Parse args to get command info
   let commandDisplay = '';
   try {
     const parsedArgs = typeof args === 'object' ? args : JSON.parse(args);
     if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
-      const cmd = parsedArgs.command || '';
-      const cmdArgs = parsedArgs.args?.join(' ') || '';
-      commandDisplay = `${cmd} ${cmdArgs}`.trim();
+      commandDisplay = parsedArgs.command || '';
+    } else if (
+      toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
+      toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS
+    ) {
+      // Prefer the original command from streaming data, fall back to PID
+      const cmd = commandChunk?.data?.command as string | undefined;
+      commandDisplay = cmd || `PID ${parsedArgs.pid}`;
     }
   } catch {
     commandDisplay = toolName;
@@ -188,7 +198,7 @@ export const SandboxExecutionBadge = ({
 
   // Exit chunk scoped to this tool call
   const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
-    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
+    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs?: number; killed?: boolean } }
     | undefined;
 
   // Streaming is complete if we have exit chunk or a final result
@@ -202,6 +212,7 @@ export const SandboxExecutionBadge = ({
   const exitCode = exitChunk?.data?.exitCode;
   const exitSuccess = exitChunk?.data?.success;
   const executionTime = exitChunk?.data?.executionTimeMs;
+  const wasKilled = exitChunk?.data?.killed;
 
   // Combine streaming output into a single string
   const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
@@ -210,7 +221,14 @@ export const SandboxExecutionBadge = ({
   // Once the tool completes, show the final result — it's what the LLM saw.
   const outputContent = typeof result === 'string' ? result : streamingContent;
 
-  const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
+  const displayName =
+    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND
+      ? 'Execute Command'
+      : toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT
+        ? 'Get Process Output'
+        : toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS
+          ? 'Kill Process'
+          : toolName;
 
   // Get start time from first streaming chunk for live timer
   const firstChunkTime = sandboxChunks[0]?.data?.timestamp as number | undefined;
@@ -257,6 +275,10 @@ export const SandboxExecutionBadge = ({
               {exitCode !== undefined &&
                 (exitSuccess ? (
                   <CheckIcon className="text-green-400" size={14} />
+                ) : wasKilled ? (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/20 text-orange-400">
+                    killed
+                  </span>
                 ) : (
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-400">
                     exit {exitCode}
