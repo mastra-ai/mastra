@@ -222,15 +222,7 @@ export function createWorkspaceTools(workspace: Workspace) {
   if (workspace.sandbox) {
     const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
-      // Inject dynamic path context into description
-      const pathContext = workspace.getPathContext();
-      const pathInfo = pathContext.instructions ? `\n\n${pathContext.instructions}` : '';
-      const description = pathInfo ? `${executeCommandTool.description}${pathInfo}` : executeCommandTool.description;
-
-      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = {
-        ...wrapTool(executeCommandTool, workspace, executeCommandConfig),
-        description,
-      };
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = wrapTool(executeCommandTool, workspace, executeCommandConfig);
     }
   }
 

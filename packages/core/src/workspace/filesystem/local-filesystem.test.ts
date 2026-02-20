@@ -741,6 +741,29 @@ describe('LocalFilesystem', () => {
         expect(instructions).toContain(outsideDir);
       });
     });
+
+    describe('getInstructions with custom override', () => {
+      it('should return custom instructions when provided', () => {
+        const fs = new LocalFilesystem({
+          basePath: tempDir,
+          instructions: 'Custom filesystem instructions here.',
+        });
+        expect(fs.getInstructions()).toBe('Custom filesystem instructions here.');
+      });
+
+      it('should return empty string when override is empty string', () => {
+        const fs = new LocalFilesystem({
+          basePath: tempDir,
+          instructions: '',
+        });
+        expect(fs.getInstructions()).toBe('');
+      });
+
+      it('should return auto-generated instructions when no override', () => {
+        const fs = new LocalFilesystem({ basePath: tempDir });
+        expect(fs.getInstructions()).toContain('Local filesystem');
+      });
+    });
   });
 
   // ===========================================================================

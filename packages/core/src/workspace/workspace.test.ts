@@ -561,7 +561,121 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
-  // Path Context
+  // getInstructions
+  // ===========================================================================
+  describe('getInstructions', () => {
+    it('should return filesystem instructions when only filesystem configured', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const instructions = workspace.getInstructions();
+
+      expect(instructions).toContain('Local filesystem');
+      expect(instructions).not.toContain('command execution');
+    });
+
+    it('should return sandbox instructions when only sandbox configured', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      const instructions = workspace.getInstructions();
+
+      expect(instructions).toContain('Local command execution');
+      expect(instructions).toContain(tempDir);
+    });
+
+    it('should return both sandbox and filesystem instructions', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      const instructions = workspace.getInstructions();
+
+      expect(instructions).toContain('Local command execution');
+      expect(instructions).toContain('Local filesystem');
+    });
+
+    it('should classify mounted filesystems by mount state', () => {
+      // Create a workspace with a mock sandbox that has mounts in different states
+      const mockMountEntries = new Map([
+        [
+          '/mounted',
+          {
+            filesystem: { provider: 'local', displayName: 'LocalFS', readOnly: false } as any,
+            state: 'mounted' as const,
+          },
+        ],
+        [
+          '/pending',
+          {
+            filesystem: { provider: 's3', displayName: 'S3Bucket', readOnly: true } as any,
+            state: 'pending' as const,
+          },
+        ],
+        [
+          '/error',
+          {
+            filesystem: { provider: 'r2', displayName: '', readOnly: false } as any,
+            state: 'error' as const,
+          },
+        ],
+      ]);
+
+      const mockSandbox = {
+        provider: 'e2b',
+        status: 'running',
+        executeCommand: vi.fn(),
+        getInstructions: () => 'Cloud sandbox. Working directory: /home/user.',
+        mounts: { entries: mockMountEntries },
+      } as any;
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: mockSandbox,
+      });
+
+      const instructions = workspace.getInstructions();
+
+      // Sandbox-level instructions should be present
+      expect(instructions).toContain('Cloud sandbox');
+
+      // Mounted filesystem should be listed as sandbox-accessible
+      expect(instructions).toContain('Sandbox-mounted filesystems');
+      expect(instructions).toContain('/mounted: LocalFS (read-write)');
+
+      // Pending and error mounts should be listed as workspace-only
+      expect(instructions).toContain('Workspace-only filesystems');
+      expect(instructions).toContain('/pending: S3Bucket (read-only)');
+      expect(instructions).toContain('/error: r2 (read-write)');
+    });
+
+    it('should fall back to fs instructions when sandbox has no mounts', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      const instructions = workspace.getInstructions();
+
+      // No mounts → falls back to fs-level instructions
+      expect(instructions).toContain('Local filesystem');
+      expect(instructions).toContain('Local command execution');
+    });
+
+    it('should return empty string when workspace has no instructions', () => {
+      const mockSandbox = {
+        provider: 'custom',
+        status: 'running',
+        executeCommand: vi.fn(),
+      } as any;
+
+      const workspace = new Workspace({ sandbox: mockSandbox });
+
+      expect(workspace.getInstructions()).toBe('');
+    });
+  });
+
+  // ===========================================================================
+  // Path Context (deprecated — kept for backward compat)
   // ===========================================================================
   describe('getPathContext', () => {
     it('should combine instructions from both filesystem and sandbox', () => {

@@ -83,6 +83,12 @@ export interface E2BSandboxOptions extends MastraSandboxOptions {
   apiKey?: string;
   /** Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var. */
   accessToken?: string;
+  /**
+   * Custom instructions string that overrides the auto-generated instructions
+   * returned by `getInstructions()`. Pass an empty string to suppress
+   * instructions entirely.
+   */
+  instructions?: string;
 }
 
 // =============================================================================
@@ -146,6 +152,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly metadata: Record<string, unknown>;
   private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
+  private readonly _instructionsOverride?: string;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -167,6 +174,8 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.apiKey && { apiKey: options.apiKey }),
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
+
+    this._instructionsOverride = options.instructions;
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -828,9 +837,8 @@ export class E2BSandbox extends MastraSandbox {
    * Used by agents to understand the execution environment.
    */
   getInstructions(): string {
-    const mountCount = this.mounts.entries.size;
-    const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
-    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+    if (this._instructionsOverride !== undefined) return this._instructionsOverride;
+    return 'Cloud E2B sandbox. Working directory: /home/user.';
   }
 
   // ---------------------------------------------------------------------------

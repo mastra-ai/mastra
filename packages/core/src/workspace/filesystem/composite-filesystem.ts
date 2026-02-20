@@ -459,7 +459,7 @@ export class CompositeFilesystem<
       })
       .join('\n');
 
-    return `Mounted filesystems:\n${mountDescriptions}`;
+    return `Filesystem mount points:\n${mountDescriptions}`;
   }
 }
 

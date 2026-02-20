@@ -83,6 +83,12 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * ```
    */
   allowedPaths?: string[];
+  /**
+   * Custom instructions string that overrides the auto-generated instructions
+   * returned by `getInstructions()`. Pass an empty string to suppress
+   * instructions entirely.
+   */
+  instructions?: string;
 }
 
 /**
@@ -114,6 +120,7 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _basePath: string;
   private readonly _contained: boolean;
   private _allowedPaths: string[];
+  private readonly _instructionsOverride?: string;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -156,6 +163,7 @@ export class LocalFilesystem extends MastraFilesystem {
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+    this._instructionsOverride = options.instructions;
   }
 
   private generateId(): string {
@@ -705,6 +713,8 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   getInstructions(): string {
+    if (this._instructionsOverride !== undefined) return this._instructionsOverride;
+
     const allowedNote =
       this._allowedPaths.length > 0
         ? ` Additionally, the following paths outside basePath are accessible: ${this._allowedPaths.join(', ')}.`

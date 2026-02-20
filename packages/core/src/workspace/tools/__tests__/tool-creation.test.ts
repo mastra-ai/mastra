@@ -105,6 +105,19 @@ describe('createWorkspaceTools', () => {
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   });
 
+  it('should not inject path context into execute_command tool description', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+    const executeTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+    // The tool description should be the base description, not augmented with path context
+    expect(executeTool.description).not.toContain('Local filesystem');
+    expect(executeTool.description).not.toContain('Local command execution');
+  });
+
   it('should have all expected tool names with proper namespacing', () => {
     expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
     expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');

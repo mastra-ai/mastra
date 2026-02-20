@@ -136,6 +136,12 @@ export interface LocalSandboxOptions extends MastraSandboxOptions {
    * Only used when isolation is 'seatbelt' or 'bwrap'.
    */
   nativeSandbox?: NativeSandboxConfig;
+  /**
+   * Custom instructions string that overrides the auto-generated instructions
+   * returned by `getInstructions()`. Pass an empty string to suppress
+   * instructions entirely.
+   */
+  instructions?: string;
 }
 
 /**
@@ -174,6 +180,7 @@ export class LocalSandbox extends MastraSandbox {
   private _sandboxFolderPath?: string;
   private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
+  private readonly _instructionsOverride?: string;
 
   /**
    * The working directory where commands are executed.
@@ -222,6 +229,7 @@ export class LocalSandbox extends MastraSandbox {
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
     this._isolation = requestedIsolation;
+    this._instructionsOverride = options.instructions;
   }
 
   private generateId(): string {
@@ -372,6 +380,8 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   getInstructions(): string {
+    if (this._instructionsOverride !== undefined) return this._instructionsOverride;
+
     if (this.workingDirectory) {
       return `Local command execution. Working directory: "${this.workingDirectory}".`;
     }

@@ -116,6 +116,38 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // getInstructions
+  // ===========================================================================
+  describe('getInstructions', () => {
+    it('should return auto-generated instructions with working directory', () => {
+      const instructions = sandbox.getInstructions();
+      expect(instructions).toContain('Local command execution');
+      expect(instructions).toContain(tempDir);
+    });
+
+    it('should return custom instructions when override is provided', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: 'Custom sandbox instructions.',
+      });
+      expect(sb.getInstructions()).toBe('Custom sandbox instructions.');
+    });
+
+    it('should return empty string when override is empty string', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: '',
+      });
+      expect(sb.getInstructions()).toBe('');
+    });
+
+    it('should return auto-generated instructions when no override', () => {
+      const sb = new LocalSandbox({ workingDirectory: tempDir });
+      expect(sb.getInstructions()).toContain('Local command execution');
+    });
+  });
+
+  // ===========================================================================
   // executeCommand
   // ===========================================================================
   describe('executeCommand', () => {

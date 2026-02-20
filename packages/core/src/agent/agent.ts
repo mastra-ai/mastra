@@ -42,6 +42,7 @@ import type {
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
@@ -335,6 +336,30 @@ export class Agent<
   }
 
   /**
+   * Gets the workspace-instructions processors to add when the workspace has a
+   * filesystem or sandbox (i.e. something to describe).
+   * @internal
+   */
+  private async getWorkspaceInstructionsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    requestContext?: RequestContext,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (!workspace) return [];
+
+    // Skip if workspace has no filesystem or sandbox (nothing to describe)
+    if (!workspace.filesystem && !workspace.sandbox) return [];
+
+    // Check for existing processor to avoid duplicates
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-instructions-processor',
+    );
+    if (hasProcessor) return [];
+
+    return [new WorkspaceInstructionsProcessor({ workspace })];
+  }
+
+  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -570,13 +595,17 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get workspace instructions processors (with deduplication)
+    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
+
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    // Skills processors run after memory but before user-configured processors
-    const allProcessors = [...memoryProcessors, ...skillsProcessors, ...configuredProcessors];
+    // Workspace instructions run after memory
+    // Skills processors run after workspace but before user-configured processors
+    const allProcessors = [...memoryProcessors, ...workspaceProcessors, ...skillsProcessors, ...configuredProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
