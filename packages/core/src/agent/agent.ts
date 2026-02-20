@@ -3618,6 +3618,7 @@ export class Agent<
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
+        tracingContext: mergedOptions?.tracingContext,
       } as unknown as AgentExecutionOptions<OUTPUT>,
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
@@ -3692,6 +3693,7 @@ export class Agent<
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
+        tracingContext: mergedOptions?.tracingContext,
       },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
