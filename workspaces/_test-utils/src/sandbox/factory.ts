@@ -11,6 +11,7 @@ import { describe, beforeAll, afterAll } from 'vitest';
 import { createCommandExecutionTests } from './domains/command-execution';
 import { createSandboxLifecycleTests } from './domains/lifecycle';
 import { createMountOperationsTests } from './domains/mount-operations';
+import { createProcessManagementTests } from './domains/process-management';
 import { createReconnectionTests } from './domains/reconnection';
 import type { SandboxTestConfig, SandboxCapabilities } from './types';
 
@@ -109,6 +110,10 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
 
     if (testDomains.reconnection !== false && capabilities.supportsReconnection) {
       createReconnectionTests(getContext);
+    }
+
+    if (testDomains.processManagement !== false) {
+      createProcessManagementTests(getContext);
     }
   });
 }

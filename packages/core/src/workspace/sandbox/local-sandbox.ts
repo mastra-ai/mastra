@@ -41,9 +41,8 @@ function execWithStreaming(
   options: ExecStreamingOptions,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const { timeout, onStdout, onStderr, cwd, env, ...spawnOptions } = options;
-  const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
   return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(fullCommand, { cwd, env, shell: true, ...spawnOptions });
+    const proc = childProcess.spawn(command, args, { cwd, env, ...spawnOptions });
 
     let stdout = '';
     let stderr = '';

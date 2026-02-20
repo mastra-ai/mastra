@@ -80,4 +80,7 @@ export interface SandboxTestDomains {
 
   /** Sandbox reconnection tests */
   reconnection?: boolean;
+
+  /** Background process management tests */
+  processManagement?: boolean;
 }

@@ -249,6 +249,16 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * ```
    */
   async ensureRunning(): Promise<void> {
+    // Already destroyed — nothing to do
+    if (this.status === 'destroyed') {
+      throw new SandboxNotReadyError(this.id);
+    }
+    // During teardown the sandbox is still operational (e.g. destroy()
+    // may need to list/kill processes).  Allow operations to proceed
+    // without trying to restart.
+    if (this.status === 'destroying' || this.status === 'stopping') {
+      return;
+    }
     if (this.status !== 'running') {
       await this._start();
     }

@@ -151,7 +151,8 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
             cwd: '/tmp',
           });
 
-          expect(result.stdout.trim()).toBe('/tmp');
+          // macOS: /tmp symlinks to /private/tmp
+          expect(['/tmp', '/private/tmp']).toContain(result.stdout.trim());
         },
         getContext().testTimeout,
       );
@@ -166,7 +167,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
           if (!sandbox.executeCommand) return;
 
           const result = await sandbox.executeCommand('sleep', ['10'], {
-            timeout: 1000, // 1 second timeout
+            timeout: 100,
           });
 
           // Should either timeout (exit non-zero) or be killed
