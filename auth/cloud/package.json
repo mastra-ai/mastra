@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/auth-better-auth",
-  "version": "1.0.1",
-  "description": "Mastra Better Auth integration - self-hosted authentication",
+  "name": "@mastra/auth-cloud",
+  "version": "1.0.0",
+  "description": "Mastra Cloud authentication with PKCE OAuth",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.4.18"
+    "@mastra/auth": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
@@ -52,7 +52,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "auth/better-auth"
+    "directory": "auth/cloud"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
