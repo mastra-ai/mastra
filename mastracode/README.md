@@ -19,7 +19,7 @@ Install `mastracode` globally with your package manager of choice.
 npm install -g mastracode
 ```
 
-If you prefer to not install packages globally, you can use `npx`:
+If you prefer not to install packages globally, you can use `npx`:
 
 ```bash
 npx mastracode
