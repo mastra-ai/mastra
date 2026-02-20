@@ -97,7 +97,15 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       const rbac = getRBACProvider(mastra);
 
       // Dynamic import to avoid breaking `npx mastra dev` when user has older @mastra/core
-      const { buildCapabilities } = await import('@mastra/core/auth');
+      let buildCapabilities;
+      try {
+        ({ buildCapabilities } = await import('@mastra/core/auth'));
+      } catch {
+        console.error(
+          '[@mastra/server] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return { enabled: false, login: null };
+      }
       const capabilities = await buildCapabilities(auth, request, { rbac });
 
       return capabilities;
