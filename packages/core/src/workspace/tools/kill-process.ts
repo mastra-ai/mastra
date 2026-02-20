@@ -23,14 +23,33 @@ Use this to stop a long-running background process that was started with execute
     }
 
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+    const toolCallId = context?.agent?.toolCallId;
 
     // Snapshot output before kill
     const handle = await sandbox.processes.get(pid);
+
+    // Emit command info so the UI can display the original command
+    if (handle?.command) {
+      await context?.writer?.custom({
+        type: 'data-sandbox-command',
+        data: { command: handle.command, pid, toolCallId },
+      });
+    }
+
     const killed = await sandbox.processes.kill(pid);
 
     if (!killed) {
+      await context?.writer?.custom({
+        type: 'data-sandbox-exit',
+        data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, toolCallId },
+      });
       return `Process ${pid} was not found or had already exited.`;
     }
+
+    await context?.writer?.custom({
+      type: 'data-sandbox-exit',
+      data: { exitCode: handle?.exitCode ?? 137, success: false, killed: true, toolCallId },
+    });
 
     const parts: string[] = [`Process ${pid} has been killed.`];
 
