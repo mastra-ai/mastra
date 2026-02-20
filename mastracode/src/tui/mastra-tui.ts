@@ -1252,6 +1252,12 @@ ${instructions}`,
         if (typeof tState?.escapeAsCancel === 'boolean') {
           this.editor.escapeEnabled = tState.escapeAsCancel;
         }
+        // Clear stale todos from the previous thread
+        if (this.todoProgress) {
+          this.todoProgress.updateTodos([]);
+        }
+        this.previousTodos = [];
+        this.todoWriteInsertIndex = -1;
         this.updateStatusLine();
         break;
       }
@@ -3676,6 +3682,11 @@ ${instructions}`,
         this.allToolComponents = [];
         this.modifiedFiles.clear();
         this.pendingFileTools.clear();
+        if (this.todoProgress) {
+          this.todoProgress.updateTodos([]);
+        }
+        this.previousTodos = [];
+        this.todoWriteInsertIndex = -1;
         this.resetStatusLineState();
         this.ui.requestRender();
         this.showInfo('Ready for new conversation');
