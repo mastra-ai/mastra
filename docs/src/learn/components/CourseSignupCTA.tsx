@@ -64,7 +64,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
   if (submitted) {
     return (
       <div id="learn-signup-cta" className={cn('learn-subscribed rounded-lg border p-6 text-center', className)}>
-        <p className="text-lg font-medium text-(--mastra-text-primary)">You're subscribed!</p>
+        <p className="text-lg font-medium text-(--mastra-text-primary)">You signed up!</p>
         <p className="mt-1 text-sm text-(--mastra-text-tertiary)">We'll email you when new lessons are published.</p>
       </div>
     )
