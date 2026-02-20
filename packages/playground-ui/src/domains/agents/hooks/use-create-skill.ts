@@ -14,14 +14,6 @@ interface CreateSkillParams {
   files: InMemoryFileNode[];
 }
 
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
 function flattenFiles(nodes: InMemoryFileNode[], basePath: string): { path: string; content: string }[] {
   const results: { path: string; content: string }[] = [];
   for (const node of nodes) {
@@ -43,16 +35,13 @@ export function useCreateSkill() {
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
       const { name, description, workspaceId, files } = params;
-      const skillSlug = slugify(name);
-      const skillBasePath = `skills/${skillSlug}`;
-
       // Write all files to workspace filesystem
       const filesToWrite = flattenFiles(files, '');
       await Promise.all(
         filesToWrite.map(file =>
           writeFile.mutateAsync({
             workspaceId,
-            path: `${skillBasePath}/${file.path}`,
+            path: `skills/${file.path}`,
             content: file.content,
             recursive: true,
           }),
