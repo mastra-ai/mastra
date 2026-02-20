@@ -11,8 +11,8 @@ import { highlight } from 'cli-highlight';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import type { TodoItem } from './todo-progress.js';
+import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
 export type { ToolResult };
