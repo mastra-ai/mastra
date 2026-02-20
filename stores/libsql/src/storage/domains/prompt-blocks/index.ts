@@ -211,14 +211,16 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
-      conditions.push('status = ?');
-      queryParams.push(status);
+      if (status) {
+        conditions.push('status = ?');
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
@@ -242,7 +244,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         }
       }
 
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#client.execute({
@@ -310,6 +312,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
           description: input.description ?? null,
           content: input.content,
           rules: input.rules ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now.toISOString(),
@@ -557,6 +560,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       description: (row.description as string) ?? undefined,
       content: row.content as string,
       rules: safeParseJSON(row.rules) as PromptBlockVersion['rules'],
+      requestContextSchema: safeParseJSON(row.requestContextSchema) as Record<string, unknown> | undefined,
       changedFields: safeParseJSON(row.changedFields) as string[] | undefined,
       changeMessage: (row.changeMessage as string) ?? undefined,
       createdAt: new Date(row.createdAt as string),

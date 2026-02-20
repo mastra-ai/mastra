@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { FileText, Search } from 'lucide-react';
 
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDescription } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogTitle,
+  DialogDescription,
+} from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';

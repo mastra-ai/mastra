@@ -195,12 +195,8 @@ describe('mapInstructionBlocksToApi', () => {
   });
 
   it('maps ref blocks to prompt_block_ref with id', () => {
-    const blocks = [
-      { id: 'ui-1', type: 'prompt_block_ref' as const, promptBlockId: 'saved-block-123' },
-    ];
-    expect(mapInstructionBlocksToApi(blocks)).toEqual([
-      { type: 'prompt_block_ref', id: 'saved-block-123' },
-    ]);
+    const blocks = [{ id: 'ui-1', type: 'prompt_block_ref' as const, promptBlockId: 'saved-block-123' }];
+    expect(mapInstructionBlocksToApi(blocks)).toEqual([{ type: 'prompt_block_ref', id: 'saved-block-123' }]);
   });
 
   it('maps mixed inline and ref blocks', () => {

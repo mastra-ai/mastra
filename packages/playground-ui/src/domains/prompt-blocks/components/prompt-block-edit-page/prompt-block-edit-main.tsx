@@ -23,8 +23,16 @@ export function PromptBlockEditMain({ form }: PromptBlockEditMainProps) {
   return (
     <div className="flex flex-col gap-3 h-full px-4">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Content" subtitle="Write the prompt block content. Use {{variableName}} for template variables." />
-        <DisplayConditionsDialog entityName="Prompt Block" schema={schema} rules={rules} onRulesChange={handleRulesChange} />
+        <SectionHeader
+          title="Content"
+          subtitle="Write the prompt block content. Use {{variableName}} for template variables."
+        />
+        <DisplayConditionsDialog
+          entityName="Prompt Block"
+          schema={schema}
+          rules={rules}
+          onRulesChange={handleRulesChange}
+        />
       </div>
       <Controller
         name="content"

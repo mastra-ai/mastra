@@ -25,9 +25,7 @@ export function PromptBlocksTable({ promptBlocks, isLoading }: PromptBlocksTable
   const filteredData = useMemo(() => {
     const searchLower = search.toLowerCase();
     return promptBlocks.filter(
-      b =>
-        b.name?.toLowerCase().includes(searchLower) ||
-        b.description?.toLowerCase().includes(searchLower),
+      b => b.name?.toLowerCase().includes(searchLower) || b.description?.toLowerCase().includes(searchLower),
     );
   }, [promptBlocks, search]);
 

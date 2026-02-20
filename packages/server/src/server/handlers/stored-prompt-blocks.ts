@@ -18,7 +18,13 @@ import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
-const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'content',
+  'rules',
+  'requestContextSchema',
+] as const;
 
 // ============================================================================
 // Route Definitions
@@ -137,7 +143,17 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Creates a new prompt block in storage with the provided configuration',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, id: providedId, authorId, metadata, name, description, content, rules }) => {
+  handler: async ({
+    mastra,
+    id: providedId,
+    authorId,
+    metadata,
+    name,
+    description,
+    content,
+    rules,
+    requestContextSchema,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -174,6 +190,7 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
           description,
           content,
           rules,
+          requestContextSchema,
         },
       });
 
@@ -222,6 +239,7 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     description,
     content,
     rules,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -250,10 +268,11 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         description,
         content,
         rules,
+        requestContextSchema,
       });
 
       // Build the snapshot config for auto-versioning comparison
-      const configFields = { name, description, content, rules };
+      const configFields = { name, description, content, rules, requestContextSchema };
 
       // Filter out undefined values to get only the config fields that were provided
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));

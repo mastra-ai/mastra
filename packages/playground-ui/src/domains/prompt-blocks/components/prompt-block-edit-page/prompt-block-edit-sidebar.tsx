@@ -176,7 +176,12 @@ export function PromptBlockEditSidebar({
       <div className="flex-shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
+            <Button
+              variant="outline"
+              onClick={onSaveDraft}
+              disabled={!isDirty || isSavingDraft || isSubmitting}
+              className="flex-1"
+            >
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -191,7 +196,12 @@ export function PromptBlockEditSidebar({
                 </>
               )}
             </Button>
-            <Button variant="primary" onClick={onPublish} disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft} className="flex-1">
+            <Button
+              variant="primary"
+              onClick={onPublish}
+              disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
+              className="flex-1"
+            >
               {isSubmitting ? (
                 <>
                   <Spinner className="h-4 w-4" />

@@ -160,9 +160,7 @@ export const normalizeWorkspaceFromApi = (
 // ---------------------------------------------------------------------------
 
 /** Map form instruction blocks to the API instruction array. */
-export const mapInstructionBlocksToApi = (
-  blocks: InstructionBlock[] | undefined,
-): AgentInstructionBlock[] =>
+export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined): AgentInstructionBlock[] =>
   (blocks ?? []).map(block => {
     if (block.type === 'prompt_block_ref') {
       return { type: 'prompt_block_ref' as const, id: block.promptBlockId };
