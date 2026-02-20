@@ -175,9 +175,7 @@ export const printers = {
     async print(ast, prettierOptions) {
       let text = ast.stack[0].text
 
-      text = String(
-        await processor().use(remarkFormatCodeBlocks, prettierOptions).process(text),
-      )
+      text = String(await processor().use(remarkFormatCodeBlocks, prettierOptions).process(text))
 
       return text
     },
