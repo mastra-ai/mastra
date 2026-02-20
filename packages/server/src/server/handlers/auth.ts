@@ -31,6 +31,22 @@ import {
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
+type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any }) => Promise<any>;
+let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
+function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
+  if (!_buildCapabilitiesPromise) {
+    _buildCapabilitiesPromise = import('@mastra/core/auth')
+      .then(m => m.buildCapabilities as BuildCapabilitiesFn)
+      .catch(() => {
+        console.error(
+          '[@mastra/server] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _buildCapabilitiesPromise;
+}
+
 /**
  * Helper to get auth provider from Mastra instance.
  */
@@ -96,14 +112,8 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
-      // Dynamic import to avoid breaking `npx mastra dev` when user has older @mastra/core
-      let buildCapabilities;
-      try {
-        ({ buildCapabilities } = await import('@mastra/core/auth'));
-      } catch {
-        console.error(
-          '[@mastra/server] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
+      const buildCapabilities = await loadBuildCapabilities();
+      if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
       const capabilities = await buildCapabilities(auth, request, { rbac });
