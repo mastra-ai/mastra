@@ -195,6 +195,17 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * If not provided, all tools default to the "other" category.
    */
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+
+  /**
+   * Optional thread locking callbacks.
+   * Called during selectOrCreateThread, createThread, and switchThread
+   * to prevent concurrent access to the same thread from multiple processes.
+   * `acquire` should throw if the lock is held by another process.
+   */
+  threadLock?: {
+    acquire: (threadId: string) => void;
+    release: (threadId: string) => void;
+  };
 }
 
 /**
