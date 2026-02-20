@@ -25,7 +25,7 @@ If you prefer not to install packages globally, you can use `npx`:
 npx mastracode
 ```
 
-Once you started `mastracode`, execute the `/login` command to authenticate with your AI providers.
+Once you start `mastracode`, execute the `/login` command to authenticate with your AI providers.
 
 ## Usage
 
