@@ -43,7 +43,6 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           const { sandbox, capabilities } = getContext();
           if (!capabilities.supportsReconnection) return;
 
-
           const originalId = sandbox.id;
 
           // Stop and restart

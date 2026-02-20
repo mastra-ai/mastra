@@ -17,7 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
-import { LocalProcessManager } from './local-sandbox-process-manager';
+import { LocalProcessManager } from './local-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';

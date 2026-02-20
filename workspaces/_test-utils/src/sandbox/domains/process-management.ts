@@ -23,7 +23,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
 
     beforeAll(() => {
       const { sandbox } = getContext();
-      expect(sandbox.processes, 'sandbox.processes must be defined when processManagement tests are enabled').toBeDefined();
+      expect(
+        sandbox.processes,
+        'sandbox.processes must be defined when processManagement tests are enabled',
+      ).toBeDefined();
       processes = sandbox.processes!;
     });
 
@@ -413,7 +416,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
 
           try {
             expect(envSandbox.processes).toBeDefined();
-            const handle = await envSandbox.processes!.spawn('sh -c \'echo $SANDBOX_VAR $EXTRA $SPAWN_VAR\'', {
+            const handle = await envSandbox.processes!.spawn("sh -c 'echo $SANDBOX_VAR $EXTRA $SPAWN_VAR'", {
               env: { SANDBOX_VAR: 'overridden', SPAWN_VAR: 'added' },
             });
             const result = await handle.wait();
@@ -467,7 +470,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
 
           await handle.wait();
           // Reader should eventually emit 'end'
-          await expect(Promise.race([ended, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))])).resolves.toBeUndefined();
+          await expect(
+            Promise.race([ended, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]),
+          ).resolves.toBeUndefined();
         },
         getContext().testTimeout,
       );
