@@ -4,6 +4,7 @@
 '@mastra/libsql': patch
 '@mastra/pg': patch
 '@mastra/mongodb': patch
+'mastracode': patch
 ---
 
 Improve OM activation chunk selection to land closer to retention target
