@@ -37,13 +37,20 @@ export class MCPManager {
     }
 
     // Build server definitions for MCPClient
-    const serverDefs: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
+    const serverDefs: Record<
+      string,
+      { command: string; args?: string[]; env?: Record<string, string> } | { url: URL }
+    > = {};
     for (const [name, cfg] of Object.entries(servers)) {
-      serverDefs[name] = {
-        command: cfg.command,
-        args: cfg.args,
-        env: cfg.env,
-      };
+      if ('url' in cfg) {
+        serverDefs[name] = { url: new URL(cfg.url) };
+      } else {
+        serverDefs[name] = {
+          command: cfg.command,
+          args: cfg.args,
+          env: cfg.env,
+        };
+      }
     }
 
     try {
