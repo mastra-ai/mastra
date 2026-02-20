@@ -16,16 +16,17 @@ import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
-import { executeCommandTool } from './execute-command';
+import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
+import { getProcessOutputTool } from './get-process-output';
 import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
+import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
-
 import { writeFileTool } from './write-file';
 
 /**
@@ -222,15 +223,24 @@ export function createWorkspaceTools(workspace: Workspace) {
   if (workspace.sandbox) {
     const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
+      // Pick the right tool variant based on whether processes are available
+      const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
+
       // Inject dynamic path context into description
       const pathContext = workspace.getPathContext();
       const pathInfo = pathContext.instructions ? `\n\n${pathContext.instructions}` : '';
-      const description = pathInfo ? `${executeCommandTool.description}${pathInfo}` : executeCommandTool.description;
+      const description = pathInfo ? `${baseTool.description}${pathInfo}` : baseTool.description;
 
       tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = {
-        ...wrapTool(executeCommandTool, workspace, executeCommandConfig),
+        ...wrapTool(baseTool, workspace, executeCommandConfig),
         description,
       };
+    }
+
+    // Background process tools (only when process manager is available)
+    if (workspace.sandbox.processes) {
+      addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
+      addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }
 
