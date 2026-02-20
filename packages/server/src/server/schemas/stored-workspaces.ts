@@ -148,3 +148,5 @@ export const deleteStoredWorkspaceResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
+
+export { snapshotConfigSchema as workspaceSnapshotConfigSchema };
