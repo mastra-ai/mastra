@@ -148,6 +148,11 @@ export class WorkflowRunOutput<
               }
             });
 
+            // Release buffered chunks to prevent unbounded memory growth.
+            // For long-running workflows (e.g. forEach with many items),
+            // millions of events can accumulate here if nobody reads fullStream.
+            self.#bufferedChunks = [];
+
             self.#streamFinished = true;
             self.#emitter.emit('finish');
           },
@@ -316,6 +321,9 @@ export class WorkflowRunOutput<
                 ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
             });
+
+            // Release buffered chunks to prevent unbounded memory growth
+            self.#bufferedChunks = [];
 
             self.#streamFinished = true;
             self.#emitter.emit('finish');
