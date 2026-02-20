@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -888,6 +889,178 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     // Tool should now have been executed after approval
     expect(mockFindUser).toHaveBeenCalled();
+  });
+
+  it('should propagate tool approval decline from sub-agent through supervisor stream', async () => {
+    const mockFindUser = vi.fn().mockResolvedValue({ name: 'Bob', email: 'bob@example.com' });
+
+    const findUserTool = createTool({
+      id: 'find-user-tool-decline',
+      description: 'Find user information by name.',
+      inputSchema: z.object({ name: z.string().describe('User name to look up') }),
+      requireApproval: true,
+      execute: async (input: { name: string }) => mockFindUser(input),
+    });
+
+    // Sub-agent mock: calls findUserTool on first invocation using doStream
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doStream: async () => {
+        subCallCount++;
+        if (subCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'sub-call-decline-1',
+                toolName: 'find-user-tool-decline',
+                input: '{"name":"Bob"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Could not find Bob - request was declined.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'approval-decline-sub-agent',
+      name: 'Approval Decline Sub Agent',
+      description: 'An agent that looks up user info.',
+      instructions: 'You look up user info using the find-user-tool-decline.',
+      model: subAgentModel,
+      tools: { findUserTool },
+    });
+
+    // Supervisor mock: calls agent-approvalDeclineSubAgent using doStream
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'supervisor-call-decline-1',
+                toolName: 'agent-approvalDeclineSubAgent',
+                input: JSON.stringify({ prompt: 'find Bob' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Request declined' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const supervisorAgent = new Agent({
+      id: 'approval-decline-supervisor',
+      name: 'Approval Decline Supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: supervisorModel,
+      agents: { approvalDeclineSubAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    new Mastra({
+      agents: { approvalDeclineSupervisor: supervisorAgent },
+      storage: mockStorage,
+    });
+
+    const stream = await supervisorAgent.stream('Find Bob', { maxSteps: 5 });
+
+    let approvalChunkReceived = false;
+    let approvalToolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        approvalChunkReceived = true;
+        approvalToolCallId = chunk.payload?.toolCallId;
+      }
+    }
+
+    // Tool approval should have been requested before tool execution
+    expect(approvalChunkReceived).toBe(true);
+    expect(approvalToolCallId).toBeTruthy();
+
+    // Decline the tool call and verify tool is not executed
+    const resumeStream = await supervisorAgent.declineToolCall({
+      runId: stream.runId,
+      toolCallId: approvalToolCallId,
+    });
+
+    let toolDeclinedMessage = '';
+
+    for await (const _chunk of resumeStream.fullStream) {
+      // consume
+      if (_chunk.type === 'tool-output') {
+        const output = _chunk.payload.output;
+        if (output.type === 'tool-result' && output.payload.toolName === 'find-user-tool-decline') {
+          toolDeclinedMessage = output.payload.result;
+        }
+      }
+    }
+
+    const toolResults = await resumeStream.toolResults;
+
+    // Verify tool was NOT executed
+    expect(mockFindUser).not.toHaveBeenCalled();
+
+    // Verify we got tool results from the sub-agent delegation
+    expect(toolResults.length).toBeGreaterThan(0);
+
+    // The supervisor's tool result for the agent delegation should contain the sub-agent's response
+    const subAgentResult = toolResults.find(tr => tr.payload?.toolName === 'agent-approvalDeclineSubAgent');
+    expect(subAgentResult).toBeDefined();
+    expect(subAgentResult?.payload?.result).toBeDefined();
+    expect(toolDeclinedMessage).toBe('Tool call was not approved by the user');
   });
 });
 
@@ -2432,5 +2605,162 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 
     // Sub-agent SHOULD have received the non-secret task message
     expect(promptStr).toContain('Do the task please');
+  });
+
+  it('should save only the last user message and response to sub-agent memory (not full supervisor context)', async () => {
+    // The supervisor forwards ALL messages as context to the sub-agent (so it can see
+    // the full conversation history), but only the immediate delegation prompt + response
+    // should be saved to the sub-agent's thread memory. This prevents the sub-agent's
+    // memory from being polluted with the entire supervisor conversation history.
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          // text: 'Your name is alice',
+          content: [{ type: 'text', text: 'Your name is Alice ' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const memoryStore = new InMemoryStore();
+    const subAgentMemory = new MockMemory({ storage: memoryStore });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-memory-isolation-test',
+      name: 'Sub Agent Memory Isolation Test',
+      description: 'A sub-agent for testing memory isolation',
+      instructions: 'Answer questions.',
+      model: subAgentMockModel,
+      memory: subAgentMemory,
+    });
+
+    let supervisorCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'supervisor-memory-isolation',
+      name: 'Supervisor Memory Isolation',
+      instructions: 'Delegate to sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'What is my name?', threadId, resourceId }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            // text: 'Sub-agent says: Sub-agent response',
+            content: [{ type: 'text', text: 'Sub-agent says: Your name is Alice' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    const resourceId = randomUUID();
+    const threadId = randomUUID();
+
+    // Supervisor conversation has multiple user messages
+    await supervisorAgent.generate(
+      [
+        { role: 'user', content: 'My name is Alice.' },
+        { role: 'user', content: 'I live in Paris.' },
+        { role: 'user', content: 'What is my name?' },
+      ],
+      {
+        maxSteps: 3,
+        memory: {
+          resource: resourceId,
+          thread: threadId,
+        },
+      },
+    );
+
+    // PART 1: Verify full context IS forwarded to sub-agent
+    // Sub-agent should have received the full supervisor context (all 3 user messages + tool results)
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
+    const promptStr = JSON.stringify(subAgentReceivedPrompts[0]);
+    expect(promptStr).toContain('My name is Alice');
+    expect(promptStr).toContain('I live in Paris');
+    expect(promptStr).toContain('What is my name');
+
+    // PART 2: Verify only delegation prompt + response are saved to sub-agent memory
+    // When the supervisor doesn't pass memory config to generate(), the tool execution
+    // context has undefined threadId/resourceId. The sub-agent resource ID becomes
+    // `undefined-${agentName}` where agentName is extracted from tool name `agent-subAgent` → `subAgent`
+    const subAgentResourceId = `${resourceId}-subAgent`;
+    const memoryStorage = await subAgentMemory.storage.getStore('memory');
+
+    expect(memoryStorage).toBeDefined();
+
+    if (memoryStorage) {
+      const allThreadsResult = await memoryStorage.listThreads({ filter: { resourceId: subAgentResourceId } });
+      const allThreads = allThreadsResult.threads;
+
+      // Should have exactly one thread (the sub-agent's thread for this delegation)
+      expect(allThreads.length).toBeGreaterThan(0);
+
+      // Get the first thread (there should only be one for this test)
+      const subAgentThread = allThreads[0];
+      expect(subAgentThread).toBeDefined();
+
+      if (subAgentThread) {
+        // Get messages from the sub-agent's thread
+        const subAgentMessages = await memoryStorage.listMessages({
+          threadId: subAgentThread.id,
+          perPage: 100,
+        });
+
+        // Verify memory isolation: Should have exactly 3 messages in test environment
+        // (delegation prompt + response + test artifact duplicate response)
+        // Note: In production/studio, only 2 messages appear (no duplicate)
+        expect(subAgentMessages.messages.length).toBe(3);
+
+        // First message should be the delegation prompt (user role)
+        expect(subAgentMessages.messages[0].role).toBe('user');
+        const userContent =
+          typeof subAgentMessages.messages[0].content === 'string'
+            ? subAgentMessages.messages[0].content
+            : JSON.stringify(subAgentMessages.messages[0].content);
+        expect(userContent).toContain('What is my name');
+
+        // Second message should be the sub-agent's response (assistant role)
+        expect(subAgentMessages.messages[1].role).toBe('assistant');
+        const assistantContent =
+          typeof subAgentMessages.messages[1].content === 'string'
+            ? subAgentMessages.messages[1].content
+            : JSON.stringify(subAgentMessages.messages[1].content);
+        expect(assistantContent).toContain('Your name is Alice');
+
+        // CRITICAL: The saved messages should NOT include the supervisor's earlier context
+        // This confirms that lastMessages: 0 + explicit save prevents memory pollution
+        const allSavedContent = JSON.stringify(subAgentMessages.messages);
+        expect(allSavedContent).not.toContain('My name is Alice');
+        expect(allSavedContent).not.toContain('I live in Paris');
+      }
+    }
   });
 });

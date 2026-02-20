@@ -13,7 +13,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
+import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
@@ -909,6 +909,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
+    dbMessages?: MastraDBMessage[];
     uiMessages?: UIMessage<
       [OUTPUT] extends [undefined]
         ? undefined

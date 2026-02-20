@@ -2304,6 +2304,7 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            console.dir({ inputData }, { depth: null });
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 
@@ -2338,25 +2339,22 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const slugify = await import(`@sindresorhus/slugify`);
-            const subAgentThreadId =
-              `${
-                inputData.threadId ||
-                context?.mastra?.generateId({
+            const subAgentThreadId = inputData.threadId
+              ? `${inputData.threadId}-${randomUUID()}`
+              : context?.mastra?.generateId({
                   idType: 'thread',
                   source: 'agent',
                   entityId: agentName,
                   resourceId,
-                })
-              }-${randomUUID()}` || randomUUID(); //add randomUUID at end to make threadId always unique for every agent call and prevent possible message mix up
-            const subAgentResourceId =
-              `${
-                inputData.resourceId ||
-                context?.mastra?.generateId({
+                }) || randomUUID();
+
+            const subAgentResourceId = inputData.resourceId
+              ? `${inputData.resourceId}-${agentName}`
+              : context?.mastra?.generateId({
                   idType: 'generic',
                   source: 'agent',
                   entityId: agentName,
-                })
-              }-${agentName}` || `${slugify.default(this.id)}-${agentName}`;
+                }) || `${slugify.default(this.id)}-${agentName}`;
 
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
@@ -2436,7 +2434,7 @@ export class Agent<
                           id: this.#mastra?.generateId() || randomUUID(),
                           role: 'assistant',
                           type: 'text',
-                          createdAt: new Date(),
+                          createdAt: new Date(new Date().getTime() + 1),
                           threadId: subAgentThreadId,
                           resourceId: subAgentResourceId,
                           content: {
@@ -2501,8 +2499,6 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
-              console.dir({ contextMessages }, { depth: null });
-
               // Apply contextFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = contextMessages;
@@ -2527,14 +2523,12 @@ export class Agent<
                 }
               }
 
-              const hasContextMessages = filteredContextMessages.length > 0;
-
               const messagesForSubAgent: MessageListInput = [
                 ...filteredContextMessages,
                 { role: 'user' as const, content: effectivePrompt },
               ];
 
-              console.dir({ messagesForSubAgent }, { depth: null });
+              const subAgentPromptCreatedAt = new Date();
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
@@ -2548,7 +2542,13 @@ export class Agent<
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
-                        ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: { lastMessages: false },
+                            },
+                          }
                         : {}),
                     })
                   : await agent.generate(messagesForSubAgent, {
@@ -2561,10 +2561,51 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: { lastMessages: false },
                             },
                           }
                         : {}),
                     });
+
+                const agentResponseMessages = generateResult.response.dbMessages ?? [];
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    // Create user message with the original prompt
+                    const userMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'user',
+                      type: 'text',
+                      createdAt: subAgentPromptCreatedAt,
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: effectivePrompt,
+                          },
+                        ],
+                      },
+                    };
+
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: [userMessage, ...agentResponseMessages],
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
 
                 if (generateResult.finishReason === 'suspended') {
                   return suspend?.(generateResult.suspendPayload, {
@@ -2597,6 +2638,9 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
                             },
                           }
                         : {}),
@@ -2612,7 +2656,7 @@ export class Agent<
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
                               options: {
-                                lastMessages: hasContextMessages ? 1 : undefined,
+                                lastMessages: false,
                               },
                             },
                           }
@@ -2620,6 +2664,9 @@ export class Agent<
                     });
 
                 let fullText = '';
+                let requireToolApproval;
+                let suspendedPayload;
+                let resumeSchema;
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
@@ -2627,34 +2674,43 @@ export class Agent<
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
                       if (chunk.type === 'data-tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        // return suspend?.(
+                        //   {},
+                        //   { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        // );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'data-tool-call-suspended') {
-                        return suspend?.(chunk.data.suspendPayload, {
-                          resumeSchema: chunk.data.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        // return suspend?.(chunk.data.suspendPayload, {
+                        //   resumeSchema: chunk.data.resumeSchema,
+                        //   runId: streamResult.runId,
+                        //   isAgentSuspend: true,
+                        // });
+
+                        suspendedPayload = chunk.data.suspendPayload;
+                        resumeSchema = chunk.data.resumeSchema;
                       }
                     } else {
                       await context.writer.write(chunk);
                       if (chunk.type === 'tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        // return suspend?.(
+                        //   {},
+                        //   { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        // );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'tool-call-suspended') {
-                        return suspend?.(chunk.payload.suspendPayload, {
-                          resumeSchema: chunk.payload.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        // return suspend?.(chunk.payload.suspendPayload, {
+                        //   resumeSchema: chunk.payload.resumeSchema,
+                        //   runId: streamResult.runId,
+                        //   isAgentSuspend: true,
+                        // });
+                        suspendedPayload = chunk.payload.suspendPayload;
+                        resumeSchema = chunk.payload.resumeSchema;
                       }
                     }
                   }
@@ -2662,6 +2718,55 @@ export class Agent<
                   if (chunk.type === 'text-delta') {
                     fullText += chunk.payload.text;
                   }
+                }
+
+                const agentResponseMessages = streamResult.messageList.get.response.db();
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    // Create user message with the original prompt
+                    const userMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'user',
+                      type: 'text',
+                      createdAt: subAgentPromptCreatedAt,
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: effectivePrompt,
+                          },
+                        ],
+                      },
+                    };
+
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: [userMessage, ...agentResponseMessages],
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
                 }
 
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
@@ -2739,6 +2844,7 @@ export class Agent<
 
               return result;
             } catch (err) {
+              let bailed = false;
               // Call onDelegationComplete with error if hook is provided
               if (delegation?.onDelegationComplete) {
                 try {
@@ -2757,7 +2863,7 @@ export class Agent<
                     parentAgentName: this.name,
                     messages: contextMessages,
                     bail: () => {
-                      // Agent call failed, can't bail
+                      bailed = true;
                     },
                   };
 
@@ -2772,6 +2878,10 @@ export class Agent<
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
+              if (bailed) {
+                requestContext.set('__mastra_delegationBailed', true);
               }
 
               const mastraError = new MastraError(
