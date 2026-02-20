@@ -147,4 +147,6 @@ export const restoreVersionResponseSchema = agentVersionSchema.describe(
 /**
  * Response for GET /stored/agents/:agentId/versions/compare
  */
-export const compareVersionsResponseSchema = createCompareVersionsResponseSchema(agentVersionSchema);
+export const compareVersionsResponseSchema: ReturnType<
+  typeof createCompareVersionsResponseSchema<typeof agentVersionSchema>
+> = createCompareVersionsResponseSchema(agentVersionSchema);

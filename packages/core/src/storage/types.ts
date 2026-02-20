@@ -607,23 +607,42 @@ export interface ProcessorGraphStep {
 }
 
 /**
- * A condition for branching within a processor graph.
- * Uses RuleGroup (evaluated against the previous step's output) to decide which branch to take.
+ * Processor graph entry and condition types with a fixed nesting depth of 3 levels.
+ * Depth is capped to keep TypeScript and Zod/JSON-Schema types aligned
+ * (recursive types cause infinite-depth issues in JSON Schema generation).
+ *
+ * Innermost entries (depth 3) may only be step entries.
+ * Mid-level entries (depth 2) may contain step, parallel, or conditional — children limited to depth 3.
+ * Top-level entries (depth 1, exported as `ProcessorGraphEntry`) may contain step, parallel, or conditional — children limited to depth 2.
  */
+
+/** Depth 3 (leaf): only step entries allowed */
+export type ProcessorGraphEntryDepth3 = { type: 'step'; step: ProcessorGraphStep };
+
+/** Condition at depth 2 — children are depth 3 entries */
+export interface ProcessorGraphConditionDepth2 {
+  steps: ProcessorGraphEntryDepth3[];
+  rules?: RuleGroup;
+}
+
+/** Depth 2: step, parallel, and conditional — children limited to depth 3 */
+export type ProcessorGraphEntryDepth2 =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntryDepth3[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphConditionDepth2[] };
+
+/** Condition at depth 1 — children are depth 2 entries */
 export interface ProcessorGraphCondition {
   /** The steps to execute if this condition's rules match */
-  steps: ProcessorGraphEntry[];
+  steps: ProcessorGraphEntryDepth2[];
   /** Rules to evaluate against the previous step's output. If absent, this is the default branch. */
   rules?: RuleGroup;
 }
 
-/**
- * An entry in a stored processor graph.
- * Simplified version of SerializedStepFlowEntry, supporting only step, parallel, and conditional.
- */
+/** Depth 1 (top-level): step, parallel, and conditional — children limited to depth 2 */
 export type ProcessorGraphEntry =
   | { type: 'step'; step: ProcessorGraphStep }
-  | { type: 'parallel'; branches: ProcessorGraphEntry[][] }
+  | { type: 'parallel'; branches: ProcessorGraphEntryDepth2[][] }
   | { type: 'conditional'; conditions: ProcessorGraphCondition[] };
 
 /**
@@ -1171,10 +1190,13 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Ratio controlling how much context to retain after activation (0-1 float).
+   * Normalized ratio (0-1) controlling how much context to activate.
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
    * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
-   * Chunks are selected by boundary, biased under the target.
+   * Chunks are selected by boundary, biased over the target (to ensure remaining context stays at or below the retention floor).
+   *
+   * Note: this is always a ratio. The caller resolves absolute `bufferActivation` values (> 1)
+   * into the equivalent ratio before passing to the storage layer.
    */
   activationRatio: number;
   /**
@@ -1187,6 +1209,12 @@ export interface SwapBufferedToActiveInput {
    * Used to compute how many tokens need to be removed to reach the retention floor.
    */
   currentPendingTokens: number;
+  /**
+   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
+   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
+   * aggressively reducing context is more important than preserving the retention floor.
+   */
+  forceMaxActivation?: boolean;
   /**
    * Optional timestamp to use as lastObservedAt after swap.
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
