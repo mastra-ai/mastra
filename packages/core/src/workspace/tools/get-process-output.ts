@@ -41,6 +41,14 @@ Use this after starting a background command with execute_command (background: t
       return `No background process found with PID ${pid}.`;
     }
 
+    // Emit process info so the UI can display the command
+    if (handle.command) {
+      await context?.writer?.custom({
+        type: 'data-sandbox-command',
+        data: { command: handle.command, pid, toolCallId },
+      });
+    }
+
     // If wait requested, block until process exits with streaming callbacks
     if (shouldWait && handle.exitCode === undefined) {
       const result = await handle.wait({
