@@ -93,6 +93,12 @@ const response = await agent.generate('Run npm install');
       description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
       isOptional: true,
     },
+    {
+      name: "instructions",
+      type: "string | ((opts: { auto: string; requestContext?: RequestContext }) => string)",
+      description: "Custom instructions that override or extend the auto-generated instructions returned by `getInstructions()`. Pass a string to fully replace the auto-generated instructions (pass an empty string to suppress instructions entirely). Pass a function to receive the auto-generated instructions and return a modified version, with optional access to the current request context.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -285,14 +291,27 @@ const info = await sandbox.getInfo();
 // { status: 'running', resources: { ... } }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
-Returns a description of how this sandbox works. Used in tool descriptions.
+Returns a description of how this sandbox works. Used in tool descriptions. When `instructions` is a function, the auto-generated text and optional `requestContext` are passed to it.
 
 ```typescript
 const instructions = sandbox.getInstructions();
 // 'Local command execution. Working directory: "/workspace".'
 ```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "opts.requestContext",
+      type: "RequestContext",
+      description: "Optional request context, passed through to function-form instructions",
+      isOptional: true,
+    },
+  ]}
+/>
 
 ## Path Resolution
 
