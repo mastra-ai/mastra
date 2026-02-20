@@ -8,7 +8,7 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { askUserTool, createSubagentTool, submitPlanTool } from './tools';
+import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -1838,6 +1838,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)

@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MCPManager } from '../mcp';
+import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
 import {
   createViewTool,
@@ -14,12 +14,10 @@ import {
   hasTavilyKey,
   stringReplaceLspTool,
   astSmartEditTool,
-  todoWriteTool,
-  todoCheckTool,
   requestSandboxAccessTool,
 } from '../tools';
 
-export function createDynamicTools(mcpManager?: MCPManager) {
+export function createDynamicTools(mcpManager?: McpManager) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
@@ -44,8 +42,6 @@ export function createDynamicTools(mcpManager?: MCPManager) {
       search_content: grepTool,
       find_files: globTool,
       execute_command: executeCommandTool,
-      todo_write: todoWriteTool,
-      todo_check: todoCheckTool,
       request_sandbox_access: requestSandboxAccessTool,
     };
 

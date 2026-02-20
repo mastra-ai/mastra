@@ -21,6 +21,7 @@ import type {
   HarnessMessageContent,
   HarnessEventListener,
   TokenUsage,
+  TaskItem,
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
@@ -28,6 +29,7 @@ import { parse as parsePartialJson } from 'partial-json';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
+import type { McpManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -59,10 +61,9 @@ import { ShellOutputComponent } from './components/shell-output.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TaskProgressComponent } from './components/task-progress.js';
 import { ThreadSelectorComponent } from './components/thread-selector.js';
 
-import { TodoProgressComponent } from './components/todo-progress.js';
-import type { TodoItem } from './components/todo-progress.js';
 import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.js';
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
@@ -93,6 +94,9 @@ export interface MastraTUIOptions {
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
+
+  /** MCP manager for server status and reload */
+  mcpManager?: McpManager;
 
   /**
    * @deprecated Workspace is now obtained from the Harness.
@@ -126,6 +130,7 @@ export class MastraTUI {
   private options: MastraTUIOptions;
   private hookManager?: HookManager;
   private authStorage?: AuthStorage;
+  private mcpManager?: McpManager;
 
   // TUI components
   private ui: TUI;
@@ -142,7 +147,7 @@ export class MastraTUI {
   private streamingMessage?: HarnessMessage;
   private pendingTools = new Map<string, IToolExecutionComponent>();
   private toolInputBuffers = new Map<string, { text: string; toolName: string }>(); // Buffer partial JSON args text per toolCallId for streaming input
-  private todoWriteInsertIndex = -1; // Position hint for todo_write inline rendering when streaming
+  private taskWriteInsertIndex = -1; // Position hint for task_write inline rendering when streaming
   private seenToolCallIds = new Set<string>(); // Track all tool IDs seen during current stream (prevents duplicates)
   private subagentToolCallIds = new Set<string>(); // Track subagent tool call IDs to skip in trailing content logic
   private allToolComponents: IToolExecutionComponent[] = []; // Track all tools for expand/collapse
@@ -179,8 +184,8 @@ export class MastraTUI {
   // Buffering state — drives statusline label animation
   private bufferingMessages = false;
   private bufferingObservations = false;
-  private todoProgress?: TodoProgressComponent;
-  private previousTodos: TodoItem[] = []; // Track previous state for diff
+  private taskProgress?: TaskProgressComponent;
+  private previousTasks: TaskItem[] = []; // Track previous state for diff
 
   // Autocomplete
   private autocompleteProvider?: CombinedAutocompleteProvider;
@@ -203,6 +208,9 @@ export class MastraTUI {
   // Follow-up messages sent via Ctrl+F while streaming
   // These must stay anchored at the bottom of the chat stream
   private followUpComponents: UserMessageComponent[] = [];
+  // Slash commands queued via Ctrl+F while the agent is running.
+  // Drained in handleAgentEnd after all harness-level follow-ups complete.
+  private pendingSlashCommands: string[] = [];
 
   // Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog
   private pendingApprovalDismiss: (() => void) | null = null;
@@ -228,6 +236,7 @@ export class MastraTUI {
     this.options = options;
     this.hookManager = options.hookManager;
     this.authStorage = options.authStorage;
+    this.mcpManager = options.mcpManager;
     this.workspace = options.workspace;
 
     // Detect project info for status line
@@ -373,20 +382,28 @@ export class MastraTUI {
       if (!text) return;
       if (!this.harness.isRunning()) return; // Only relevant while streaming
 
-      // Clear editor and add user message to chat
+      // Clear editor
       this.editor.setText('');
-      this.addUserMessage({
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
       this.ui.requestRender();
 
-      // Queue the follow-up
-      this.harness.followUp(text).catch(error => {
-        this.showError(error instanceof Error ? error.message : 'Follow-up failed');
-      });
+      if (text.startsWith('/')) {
+        // Queue slash command for processing after the agent completes
+        this.pendingSlashCommands.push(text);
+        this.showInfo(`Slash command queued: ${text}`);
+      } else {
+        // Queue as a regular follow-up message
+        this.addUserMessage({
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+          createdAt: new Date(),
+        });
+        this.ui.requestRender();
+
+        this.harness.followUp(text).catch(error => {
+          this.showError(error instanceof Error ? error.message : 'Follow-up failed');
+        });
+      }
     });
   }
 
@@ -467,6 +484,7 @@ export class MastraTUI {
           // Agent is streaming → steer (abort + resend)
           // Clear follow-up tracking since steer replaces the current response
           this.followUpComponents = [];
+          this.pendingSlashCommands = [];
           this.harness.steer(userInput).catch(error => {
             this.showError(error instanceof Error ? error.message : 'Steer failed');
           });
@@ -560,8 +578,8 @@ export class MastraTUI {
     this.updateTerminalTitle();
     // Render existing messages
     await this.renderExistingMessages();
-    // Render existing todos if any
-    await this.renderExistingTodos();
+    // Render existing tasks if any
+    await this.renderExistingTasks();
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.pendingLockConflict) {
@@ -571,21 +589,21 @@ export class MastraTUI {
   }
 
   /**
-   * Render existing todos from the harness state on startup
+   * Render existing tasks from the harness state on startup
    */
-  private async renderExistingTodos(): Promise<void> {
+  private async renderExistingTasks(): Promise<void> {
     try {
       // Access the harness state using the public method
-      const state = this.harness.getState() as { todos?: TodoItem[] };
-      const todos = state.todos || [];
+      const state = this.harness.getState() as { tasks?: TaskItem[] };
+      const tasks = state.tasks || [];
 
-      if (todos.length > 0 && this.todoProgress) {
-        // Update the existing todo progress component
-        this.todoProgress.updateTodos(todos);
+      if (tasks.length > 0 && this.taskProgress) {
+        // Update the existing task progress component
+        this.taskProgress.updateTasks(tasks);
         this.ui.requestRender();
       }
     } catch {
-      // Silently ignore todo rendering errors
+      // Silently ignore task rendering errors
     }
   }
   /**
@@ -698,9 +716,9 @@ ${instructions}`,
 
     // Add main containers
     this.ui.addChild(this.chatContainer);
-    // Todo progress (between chat and editor, visible only when todos exist)
-    this.todoProgress = new TodoProgressComponent();
-    this.ui.addChild(this.todoProgress);
+    // Task progress (between chat and editor, visible only when tasks exist)
+    this.taskProgress = new TaskProgressComponent();
+    this.ui.addChild(this.taskProgress);
     this.ui.addChild(this.editorContainer);
     this.editorContainer.addChild(this.editor);
 
@@ -1265,12 +1283,12 @@ ${instructions}`,
         this.syncOMThresholdsFromHarness();
         this.tokenUsage = this.harness.getTokenUsage();
         this.updateStatusLine();
-        // Restore todos from thread state
+        // Restore tasks from thread state
         const threadState = this.harness.getState() as {
-          todos?: TodoItem[];
+          tasks?: TaskItem[];
         };
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos(threadState.todos ?? []);
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks(threadState.tasks ?? []);
           this.ui.requestRender();
         }
         break;
@@ -1282,12 +1300,12 @@ ${instructions}`,
         if (typeof tState?.escapeAsCancel === 'boolean') {
           this.editor.escapeEnabled = tState.escapeAsCancel;
         }
-        // Clear stale todos from the previous thread
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos([]);
+        // Clear stale tasks from the previous thread
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks([]);
         }
-        this.previousTodos = [];
-        this.todoWriteInsertIndex = -1;
+        this.previousTasks = [];
+        this.taskWriteInsertIndex = -1;
         this.updateStatusLine();
         break;
       }
@@ -1401,9 +1419,11 @@ ${instructions}`,
         this.ui.requestRender();
         break;
 
-      case 'follow_up_queued':
-        this.showInfo(`Follow-up queued (${event.count} pending)`);
+      case 'follow_up_queued': {
+        const totalPending = (event.count as number) + this.pendingSlashCommands.length;
+        this.showInfo(`Follow-up queued (${totalPending} pending)`);
         break;
+      }
 
       case 'workspace_ready':
         // Workspace initialized successfully - silent unless verbose
@@ -1441,16 +1461,16 @@ ${instructions}`,
         this.handleSubagentEnd(event.toolCallId, event.isError, event.durationMs, event.result);
         break;
 
-      case 'todo_updated': {
-        const todos = event.todos as TodoItem[];
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos(todos ?? []);
+      case 'task_updated': {
+        const tasks = event.tasks as TaskItem[];
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks(tasks ?? []);
 
-          // Find the most recent todo_write tool component and get its position
+          // Find the most recent task_write tool component and get its position
           let insertIndex = -1;
           for (let i = this.allToolComponents.length - 1; i >= 0; i--) {
             const comp = this.allToolComponents[i];
-            if ((comp as any).toolName === 'todo_write') {
+            if ((comp as any).toolName === 'task_write') {
               insertIndex = this.chatContainer.children.indexOf(comp as any);
               this.chatContainer.removeChild(comp as any);
               this.allToolComponents.splice(i, 1);
@@ -1458,23 +1478,23 @@ ${instructions}`,
             }
           }
           // Fall back to the position recorded during streaming (when no inline component was created)
-          if (insertIndex === -1 && this.todoWriteInsertIndex >= 0) {
-            insertIndex = this.todoWriteInsertIndex;
-            this.todoWriteInsertIndex = -1;
+          if (insertIndex === -1 && this.taskWriteInsertIndex >= 0) {
+            insertIndex = this.taskWriteInsertIndex;
+            this.taskWriteInsertIndex = -1;
           }
 
-          // Check if all todos are completed
-          const allCompleted = todos && todos.length > 0 && todos.every(t => t.status === 'completed');
+          // Check if all tasks are completed
+          const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
           if (allCompleted) {
             // Show collapsed completed list (pinned/live)
-            this.renderCompletedTodosInline(todos, insertIndex, true);
-          } else if (this.previousTodos.length > 0 && (!todos || todos.length === 0)) {
+            this.renderCompletedTasksInline(tasks, insertIndex, true);
+          } else if (this.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
             // Tasks were cleared
-            this.renderClearedTodosInline(this.previousTodos, insertIndex);
+            this.renderClearedTasksInline(this.previousTasks, insertIndex);
           }
 
           // Track for next diff
-          this.previousTodos = todos ? [...todos] : [];
+          this.previousTasks = tasks ? [...tasks] : [];
 
           this.ui.requestRender();
         }
@@ -1764,6 +1784,16 @@ ${instructions}`,
     // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
     this.notify('agent_done');
+
+    // Drain queued slash commands once all harness-level follow-ups are done.
+    // Each slash command that triggers sendMessage will start a new agent
+    // operation, and handleAgentEnd will fire again to drain the next one.
+    if (this.pendingSlashCommands.length > 0 && this.harness.getFollowUpCount() === 0) {
+      const nextCommand = this.pendingSlashCommands.shift()!;
+      this.handleSlashCommand(nextCommand).catch(error => {
+        this.showError(error instanceof Error ? error.message : 'Queued slash command failed');
+      });
+    }
   }
 
   private handleAgentAborted(): void {
@@ -1788,6 +1818,7 @@ ${instructions}`,
     this.userInitiatedAbort = false;
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
     this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after interruption
@@ -1807,6 +1838,7 @@ ${instructions}`,
     }
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
     this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after errors
@@ -2129,13 +2161,13 @@ ${instructions}`,
     }
 
     // Create the component early so deltas can update it
-    // Skip for subagent (handled by SubagentExecutionComponent) and todo_write (streams to pinned TodoProgressComponent)
-    if (toolName === 'todo_write') {
-      // Record position so todo_updated can place inline completed/cleared display here
-      this.todoWriteInsertIndex = this.chatContainer.children.length;
+    // Skip for subagent (handled by SubagentExecutionComponent) and task_write (streams to pinned TaskProgressComponent)
+    if (toolName === 'task_write') {
+      // Record position so task_updated can place inline completed/cleared display here
+      this.taskWriteInsertIndex = this.chatContainer.children.length;
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      // (even though todo_write doesn't render a tool component inline, we still need
+      // (even though task_write doesn't render a tool component inline, we still need
       // to split the streaming component so getTrailingContentParts doesn't overwrite it)
       this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
       this.addChildBeforeFollowUps(this.streamingComponent);
@@ -2181,32 +2213,32 @@ ${instructions}`,
           component.updateArgs(partialArgs);
         }
 
-        // For todo_write, stream partial todos into the pinned TodoProgressComponent.
+        // For task_write, stream partial tasks into the pinned TaskProgressComponent.
         // The last array item is actively being written so its content is unstable.
         // If all existing pinned items are already completed, the list is stable and
         // we can stream in new items immediately (including the last one).
         // Otherwise, exclude the last item to avoid jumpy partial-content matches.
-        if (buffer.toolName === 'todo_write' && this.todoProgress) {
-          const todos = (partialArgs as { todos?: TodoItem[] }).todos;
-          if (todos && todos.length > 0) {
-            const existing = this.todoProgress.getTodos();
+        if (buffer.toolName === 'task_write' && this.taskProgress) {
+          const tasks = (partialArgs as { tasks?: TaskItem[] }).tasks;
+          if (tasks && tasks.length > 0) {
+            const existing = this.taskProgress.getTasks();
             const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
             if (allExistingDone) {
               // Old list is done — start fresh, stream new items immediately
-              this.todoProgress.updateTodos(todos as TodoItem[]);
-            } else if (todos.length > 1) {
+              this.taskProgress.updateTasks(tasks as TaskItem[]);
+            } else if (tasks.length > 1) {
               // Merge only completed items (exclude the last still-streaming one)
               const merged = [...existing];
-              for (const todo of todos.slice(0, -1)) {
-                if (!todo.content) continue;
-                const idx = merged.findIndex(t => t.content === todo.content);
+              for (const task of tasks.slice(0, -1)) {
+                if (!task.content) continue;
+                const idx = merged.findIndex(t => t.content === task.content);
                 if (idx >= 0) {
-                  merged[idx] = todo;
+                  merged[idx] = task;
                 } else {
-                  merged.push(todo);
+                  merged.push(task);
                 }
               }
-              this.todoProgress.updateTodos(merged);
+              this.taskProgress.updateTasks(merged);
             }
           }
         }
@@ -2543,27 +2575,27 @@ ${instructions}`,
   }
 
   /**
-   * Render a completed todo list inline in the chat history.
-   * This mirrors the pinned TodoProgressComponent format but shows
+   * Render a completed task list inline in the chat history.
+   * This mirrors the pinned TaskProgressComponent format but shows
    * all items as completed, since the pinned component hides itself
    * when everything is done.
-   * @param todos The completed todo items
+   * @param tasks The completed task items
    * @param insertIndex Optional index to insert at (replaces tool component position)
    */
-  private renderCompletedTodosInline(todos: TodoItem[], insertIndex = -1, collapsed = false): void {
-    const headerText = bold(fg('accent', 'Tasks')) + fg('dim', ` [${todos.length}/${todos.length} completed]`);
+  private renderCompletedTasksInline(tasks: TaskItem[], insertIndex = -1, collapsed = false): void {
+    const headerText = bold(fg('accent', 'Tasks')) + fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
     const container = new Container();
     container.addChild(new Spacer(1));
     container.addChild(new Text(headerText, 0, 0));
     const MAX_VISIBLE = 4;
-    const shouldCollapse = collapsed && todos.length > MAX_VISIBLE + 1;
-    const visible = shouldCollapse ? todos.slice(0, MAX_VISIBLE) : todos;
-    const remaining = shouldCollapse ? todos.length - MAX_VISIBLE : 0;
+    const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
+    const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
+    const remaining = shouldCollapse ? tasks.length - MAX_VISIBLE : 0;
 
-    for (const todo of visible) {
+    for (const task of visible) {
       const icon = chalk.hex(mastra.green)('✓');
-      const text = chalk.hex(mastra.green)(todo.content);
+      const text = chalk.hex(mastra.green)(task.content);
       container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
     }
     if (remaining > 0) {
@@ -2577,7 +2609,7 @@ ${instructions}`,
     }
 
     if (insertIndex >= 0) {
-      // Insert at the position where the todo_write tool was
+      // Insert at the position where the task_write tool was
       this.chatContainer.children.splice(insertIndex, 0, container);
       this.chatContainer.invalidate();
     } else {
@@ -2590,15 +2622,15 @@ ${instructions}`,
    * Render inline display when tasks are cleared.
    * Shows what was cleared with strikethrough.
    */
-  private renderClearedTodosInline(clearedTodos: TodoItem[], insertIndex = -1): void {
+  private renderClearedTasksInline(clearedTasks: TaskItem[], insertIndex = -1): void {
     const container = new Container();
     container.addChild(new Spacer(1));
-    const count = clearedTodos.length;
+    const count = clearedTasks.length;
     const label = count === 1 ? 'Task' : 'Tasks';
     container.addChild(new Text(fg('accent', `${label} cleared`), 0, 0));
-    for (const todo of clearedTodos) {
-      const icon = todo.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-      const text = chalk.dim.strikethrough(todo.content);
+    for (const task of clearedTasks) {
+      const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
+      const text = chalk.dim.strikethrough(task.content);
       container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
     }
     if (insertIndex >= 0) {
@@ -3719,11 +3751,11 @@ ${instructions}`,
         this.allToolComponents = [];
         this.modifiedFiles.clear();
         this.pendingFileTools.clear();
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos([]);
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks([]);
         }
-        this.previousTodos = [];
-        this.todoWriteInsertIndex = -1;
+        this.previousTasks = [];
+        this.taskWriteInsertIndex = -1;
         this.resetStatusLineState();
         this.ui.requestRender();
         this.showInfo('Ready for new conversation');
@@ -4036,7 +4068,7 @@ Keyboard shortcuts:
       }
 
       case 'mcp': {
-        const mm = this.harness.getMcpManager?.();
+        const mm = this.mcpManager;
         if (!mm) {
           this.showInfo('MCP system not initialized.');
           return true;
@@ -4379,24 +4411,24 @@ Keyboard shortcuts:
               );
             }
 
-            // If this was todo_write with all completed or cleared, show inline instead of tool component
+            // If this was task_write with all completed or cleared, show inline instead of tool component
             let replacedWithInline = false;
-            if (content.name === 'todo_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-              const args = content.args as { todos?: TodoItem[] } | undefined;
-              const todos = args?.todos;
-              if (todos && todos.length > 0 && todos.every(t => t.status === 'completed')) {
-                this.renderCompletedTodosInline(todos);
+            if (content.name === 'task_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+              const args = content.args as { tasks?: TaskItem[] } | undefined;
+              const tasks = args?.tasks;
+              if (tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed')) {
+                this.renderCompletedTasksInline(tasks);
                 replacedWithInline = true;
-              } else if (!todos || todos.length === 0) {
-                // Tasks were cleared - show with previous todos if we have them
-                if (this.previousTodos.length > 0) {
-                  this.renderClearedTodosInline(this.previousTodos);
-                  this.previousTodos = [];
+              } else if (!tasks || tasks.length === 0) {
+                // Tasks were cleared - show with previous tasks if we have them
+                if (this.previousTasks.length > 0) {
+                  this.renderClearedTasksInline(this.previousTasks);
+                  this.previousTasks = [];
                   replacedWithInline = true;
                 }
               } else {
                 // Track for detecting clears
-                this.previousTodos = [...todos];
+                this.previousTasks = [...tasks];
               }
             }
 
@@ -4496,9 +4528,9 @@ Keyboard shortcuts:
       }
     }
 
-    // Restore pinned todo list from the last active todo_write in history
-    if (this.previousTodos.length > 0 && this.todoProgress) {
-      this.todoProgress.updateTodos(this.previousTodos);
+    // Restore pinned task list from the last active task_write in history
+    if (this.previousTasks.length > 0 && this.taskProgress) {
+      this.taskProgress.updateTasks(this.previousTasks);
     }
 
     this.ui.requestRender();
