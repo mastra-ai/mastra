@@ -2081,7 +2081,8 @@ ${instructions}`,
     }
 
     // Create the component early so deltas can update it
-    if (toolName !== 'subagent') {
+    // Skip for subagent (handled by SubagentExecutionComponent) and todo_write (streams to pinned TodoProgressComponent)
+    if (toolName !== 'subagent' && toolName !== 'todo_write') {
 
       this.addChildBeforeFollowUps(new Text('', 0, 0));
       const component = new ToolExecutionComponentEnhanced(
