@@ -500,7 +500,28 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
-  | { type: 'image'; data: string; mimeType: string };
+  | { type: 'image'; data: string; mimeType: string }
+  | {
+      type: 'om_observation_start';
+      tokensToObserve: number;
+      operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_observation_end';
+      tokensObserved: number;
+      observationTokens: number;
+      durationMs: number;
+      operationType?: 'observation' | 'reflection';
+      observations?: string;
+      currentTask?: string;
+      suggestedResponse?: string;
+    }
+  | {
+      type: 'om_observation_failed';
+      error: string;
+      tokensAttempted?: number;
+      operationType?: 'observation' | 'reflection';
+    };
 
 // =============================================================================
 // Request Context

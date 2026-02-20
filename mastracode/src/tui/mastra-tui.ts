@@ -3209,11 +3209,11 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.harness.setState({ observerModelId: modelId } as any);
+            await this.harness.switchObserverModel(modelId);
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.harness.setState({ reflectorModelId: modelId } as any);
+            await this.harness.switchReflectorModel(modelId);
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
