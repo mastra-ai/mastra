@@ -7,9 +7,8 @@ import { createCustomChangeset } from './changeset/createCustomChangeset.js';
 import { getChangesetMessage } from './changeset/getChangesetMessage.js';
 import { getVersionBumps } from './changeset/getVersionBumps.js';
 import { getChangedPackages } from './git/getChangedPackages.js';
-import type { CliArgs, VersionBumps, UpdatedPeerDependencies, ChangedPackage } from './types.js';
+import type { CliArgs, VersionBumps, ChangedPackage } from './types.js';
 import { getSummary } from './ui/getSummary.js';
-import { getDefaultUpdatedPeerDependencies, updatePeerDependencies } from './versions/updatePeerDependencies.js';
 
 function onCancel(message = 'Interrupted...'): never {
   p.cancel(message);
@@ -100,10 +99,10 @@ async function createChangesetWithMessage(
   return changesetId;
 }
 
-function displaySummary(versionBumps: VersionBumps, updatedPeerDeps: UpdatedPeerDependencies): void {
+function displaySummary(versionBumps: VersionBumps): void {
   const updatedPackagesList = Object.entries(versionBumps).map(([pkg, bump]) => `${pkg}: ${bump}`);
 
-  const summaryOutput = getSummary(updatedPackagesList, updatedPeerDeps);
+  const summaryOutput = getSummary(updatedPackagesList);
   p.note(summaryOutput, 'Summary');
 }
 
@@ -122,19 +121,13 @@ async function main() {
     // Get version bumps from user
     const versionBumps = await getVersionBumps(versionBumpInputs, onCancel, parsedArgs.skipPrompt);
 
-    // Initialize peer dependency tracking
-    let updatedPeerDeps: UpdatedPeerDependencies = getDefaultUpdatedPeerDependencies();
-
     // Process changesets if there are version bumps
     if (Object.keys(versionBumps).length > 0) {
       await createChangesetWithMessage(versionBumps, parsedArgs.message, parsedArgs.skipPrompt, onCancel);
-
-      // Handle peer dependencies updates
-      updatedPeerDeps = await updatePeerDependencies(versionBumps);
     }
 
     // Display summary
-    displaySummary(versionBumps, updatedPeerDeps);
+    displaySummary(versionBumps);
 
     p.outro('✨ Changeset process completed successfully!');
   } catch (error) {
