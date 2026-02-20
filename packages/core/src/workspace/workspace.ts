@@ -40,7 +40,7 @@ import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
 import { callLifecycle } from './lifecycle';
 import { isLSPAvailable, LSPManager } from './lsp';
-import type { LSPConfig } from './lsp';
+import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
@@ -404,7 +404,6 @@ export class Workspace<
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
-  private _lspConfig?: LSPConfig;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -482,9 +481,10 @@ export class Workspace<
       });
     }
 
-    // Normalize LSP config
-    if (config.lsp) {
-      this._lspConfig = config.lsp === true ? {} : config.lsp;
+    // Initialize LSP if configured and a process manager is available
+    if (config.lsp && this._sandbox?.processes && isLSPAvailable()) {
+      const lspConfig = config.lsp === true ? {} : config.lsp;
+      this._lsp = new LSPManager(this._sandbox.processes, lspConfig);
     }
 
     // Validate at least one provider is given
@@ -757,11 +757,6 @@ export class Workspace<
 
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'start');
-      }
-
-      // Initialize LSP if configured and a process manager is available
-      if (this._lspConfig && this._sandbox?.processes && isLSPAvailable()) {
-        this._lsp = new LSPManager(this._sandbox.processes, this._lspConfig);
       }
 
       // Auto-index files if autoIndexPaths is configured
