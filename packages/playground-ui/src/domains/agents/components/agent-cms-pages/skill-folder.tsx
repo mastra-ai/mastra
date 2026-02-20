@@ -38,7 +38,14 @@ interface SkillFolderProps {
   workspaceOptions: { value: string; label: string }[];
 }
 
-export function SkillFolder({ files, onChange, readOnly, workspaceId, setWorkspaceId, workspaceOptions }: SkillFolderProps) {
+export function SkillFolder({
+  files,
+  onChange,
+  readOnly,
+  workspaceId,
+  setWorkspaceId,
+  workspaceOptions,
+}: SkillFolderProps) {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 
   const handleFileContentChange = useCallback(

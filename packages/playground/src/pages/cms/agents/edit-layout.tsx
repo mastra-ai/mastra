@@ -178,11 +178,7 @@ function EditLayoutWrapper() {
                 </>
               )}
             </Button>
-            <Button
-              variant="primary"
-              onClick={handlePublish}
-              disabled={isSubmitting || isSavingDraft}
-            >
+            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
               {isSubmitting ? (
                 <>
                   <Spinner className="h-4 w-4" />
