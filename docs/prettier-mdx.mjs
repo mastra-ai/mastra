@@ -20,6 +20,25 @@ const processor = remark()
   .use(remarkGfm, { tablePipeAlign: false })
   .use(remarkMdx, { printWidth: 120 })
 
+/**
+ * remark will escape the opening bracket in Docusaurus admonitions: `:::warning\[Title]`
+ * We visit each admonition and replace the opening bracket with a temporary marker (`__ADMONITION_MARKER__`)
+ * _After_ remark does its thing we replace the marker with an opening bracket
+ */
+function remarkAddAdmonitionMarkers() {
+  return function traverse(tree) {
+    visit(tree, 'text', node => {
+      node.value = node.value.replace(
+        /^(:::(?:note|tip|info|warning|danger|important|caution))\[/gm,
+        '$1__ADMONITION_MARKER__',
+      )
+    })
+  }
+}
+function replaceAdmonitionMarkers(text) {
+  return text.replaceAll('\\_\\_ADMONITION\\_MARKER\\_\\_', '[')
+}
+
 function remarkFormatCodeBlocks(prettierOptions) {
   return async function traverse(tree) {
     let promises = []
@@ -104,7 +123,10 @@ export const printers = {
     async print(ast, prettierOptions) {
       let text = ast.stack[0].text
 
-      text = String(await processor().use(remarkFormatCodeBlocks, prettierOptions).process(text))
+      text = String(
+        await processor().use(remarkFormatCodeBlocks, prettierOptions).use(remarkAddAdmonitionMarkers).process(text),
+      )
+      text = replaceAdmonitionMarkers(text)
 
       return text
     },
