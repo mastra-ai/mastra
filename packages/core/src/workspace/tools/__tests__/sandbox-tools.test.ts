@@ -241,7 +241,7 @@ describe('execute_command tool', () => {
         { command: 'node', args: ['server.js'], background: true },
         ctx,
       );
-      expect(result).toBe('PID: 42');
+      expect(result).toBe('Started background process (PID: 42)');
     });
 
     it('runs foreground when background is not set', async () => {
