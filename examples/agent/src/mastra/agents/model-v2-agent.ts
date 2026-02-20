@@ -524,7 +524,9 @@ export const supervisorAgent = new Agent({
       // Receives the full parent message history and delegation metadata.
       // Returns the messages to forward to the sub-agent.
       contextFilter: ({ messages, primitiveId, iteration }) => {
-        console.log(`🔍 contextFilter: preparing context for ${primitiveId} (iteration ${iteration})`);
+        console.log(
+          `🔍 contextFilter: preparing context for ${primitiveId} (iteration ${iteration}). messages: ${messages.length}`,
+        );
 
         return (
           messages
@@ -532,8 +534,7 @@ export const supervisorAgent = new Agent({
             .filter(m => m.role !== 'system')
             // Strip messages containing sensitive data
             .filter(message => {
-              const content =
-                typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+              const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
               const hasSensitiveData =
                 content.toLowerCase().includes('confidential') ||
                 content.toLowerCase().includes('secret') ||
