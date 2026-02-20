@@ -34,8 +34,8 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
 
     const memory = values.memory?.enabled ? 'Enabled' : 'Disabled';
 
-    const skillCount = (values.skills ?? []).length;
-    const skills = skillCount === 0 ? 'None defined' : pluralize(skillCount, 'skill');
+    const skillCount = Object.keys(values.skills ?? {}).length;
+    const skills = skillCount === 0 ? 'None selected' : pluralize(skillCount, 'skill');
 
     const variableCount = Object.keys(values.variables?.properties ?? {}).length;
     const variables = variableCount === 0 ? 'None defined' : pluralize(variableCount, 'variable');

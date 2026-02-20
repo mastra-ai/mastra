@@ -20,7 +20,6 @@ export interface AgentDataSource {
   scorers?: unknown;
   memory?: unknown;
   mcpClients?: unknown;
-  skills?: unknown;
   requestContextSchema?: unknown;
 }
 
@@ -87,7 +86,6 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
         }
       : undefined,
     instructionBlocks,
-    skills: (dataSource.skills as AgentFormValues['skills']) ?? [],
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],
   };
 }

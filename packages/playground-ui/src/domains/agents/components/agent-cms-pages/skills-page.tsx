@@ -1,65 +1,62 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { Plus, Pencil, Trash2, Drill } from 'lucide-react';
+import { Plus, Drill } from 'lucide-react';
+import type { StoredSkillResponse } from '@mastra/client-js';
 
 import { SectionHeader } from '@/domains/cms';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { Switch } from '@/ds/components/Switch';
+import { Searchbar } from '@/ds/components/Searchbar';
+import { EmptyState } from '@/ds/components/EmptyState';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import type { SkillFormValue } from '../agent-edit-page/utils/form-validation';
+import { useStoredSkills } from '../../hooks/use-stored-skills';
 import { SkillEditDialog } from './skill-edit-dialog';
-import { EmptyState } from '@/ds/components/EmptyState';
 
 export function SkillsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const skills = useWatch({ control, name: 'skills' }) ?? [];
-
+  const { data: storedSkillsResponse, isLoading } = useStoredSkills();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingSkill, setEditingSkill] = useState<SkillFormValue | undefined>(undefined);
+  const [search, setSearch] = useState('');
 
-  const handleAdd = useCallback(() => {
-    setEditingSkill(undefined);
-    setDialogOpen(true);
-  }, []);
+  const selectedSkills = useWatch({ control, name: 'skills' }) ?? {};
+  const selectedSkillIds = Object.keys(selectedSkills);
 
-  const handleEdit = useCallback((skill: SkillFormValue) => {
-    setEditingSkill(skill);
-    setDialogOpen(true);
-  }, []);
+  const storedSkills = storedSkillsResponse?.skills ?? [];
 
-  const handleRemove = useCallback(
-    (localId: string) => {
-      const next = skills.filter(s => s.localId !== localId);
+  const getSkillDescription = (skillId: string): string => {
+    const skill = storedSkills.find(s => s.id === skillId);
+    return skill?.description || '';
+  };
+
+  const handleToggleSkill = (skillId: string) => {
+    const isSelected = selectedSkills[skillId] !== undefined;
+    if (isSelected) {
+      const next = { ...selectedSkills };
+      delete next[skillId];
       form.setValue('skills', next);
-    },
-    [skills, form],
-  );
+    } else {
+      form.setValue('skills', {
+        ...selectedSkills,
+        [skillId]: { description: getSkillDescription(skillId) },
+      });
+    }
+  };
 
-  const handleSave = useCallback(
-    (skill: SkillFormValue) => {
-      const existing = skills.findIndex(s => s.localId === skill.localId);
-      if (existing >= 0) {
-        const next = [...skills];
-        next[existing] = skill;
-        form.setValue('skills', next);
-      } else {
-        form.setValue('skills', [...skills, skill]);
-      }
-      setDialogOpen(false);
-      setEditingSkill(undefined);
-    },
-    [skills, form],
-  );
-
-  const handleClose = useCallback(() => {
+  const handleSkillCreated = (skill: StoredSkillResponse) => {
+    form.setValue('skills', {
+      ...selectedSkills,
+      [skill.id]: { description: skill.description || '' },
+    });
     setDialogOpen(false);
-    setEditingSkill(undefined);
-  }, []);
+  };
 
-  const showAddButton = !readOnly && skills.length > 0;
+  const filteredSkills = storedSkills.filter(skill => skill.name.toLowerCase().includes(search.toLowerCase()));
+
+  const totalCount = selectedSkillIds.length;
 
   return (
     <ScrollArea className="h-full">
@@ -67,52 +64,52 @@ export function SkillsPage() {
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Skills"
-            subtitle={`Give your agent specialized knowledge by using skills.${skills.length > 0 ? ` (${skills.length} configured)` : ''}`}
+            subtitle={`Give your agent specialized knowledge by using skills.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
           />
 
-          {showAddButton && (
-            <Button variant="outline" size="sm" onClick={handleAdd}>
+          {!readOnly && (
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
               <Plus className="size-3" />
               Add a skill
             </Button>
           )}
         </div>
 
-        {skills.length > 0 && (
+        <Searchbar onSearch={setSearch} label="Search skills" placeholder="Search skills" />
+
+        {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
-            {skills.map(skill => (
-              <Entity key={skill.localId} className="bg-surface2">
+            {filteredSkills.map(skill => (
+              <Entity key={skill.id} className="bg-surface2">
                 <EntityContent>
                   <EntityName>{skill.name}</EntityName>
                   <EntityDescription>{skill.description || 'No description'}</EntityDescription>
                 </EntityContent>
 
                 {!readOnly && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(skill)}>
-                      <Pencil className="size-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleRemove(skill.localId)}>
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </div>
+                  <Switch
+                    checked={selectedSkillIds.includes(skill.id)}
+                    onCheckedChange={() => handleToggleSkill(skill.id)}
+                  />
                 )}
               </Entity>
             ))}
           </div>
         )}
 
-        {skills.length === 0 && (
+        {!isLoading && storedSkills.length === 0 && (
           <div className="py-12">
             <EmptyState
               iconSlot={<Drill height={40} width={40} />}
-              titleSlot="No skills configured yet"
-              descriptionSlot="Skills are used to define the behavior of the agent. You can add a skill to get started."
+              titleSlot="No skills available"
+              descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
-                <Button variant="outline" size="sm" onClick={handleAdd}>
-                  <Plus className="size-3" />
-                  Add a skill
-                </Button>
+                !readOnly ? (
+                  <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+                    <Plus className="size-3" />
+                    Add a skill
+                  </Button>
+                ) : undefined
               }
             />
           </div>
@@ -121,9 +118,8 @@ export function SkillsPage() {
 
       <SkillEditDialog
         isOpen={dialogOpen}
-        onClose={handleClose}
-        onSave={handleSave}
-        initialSkill={editingSkill}
+        onClose={() => setDialogOpen(false)}
+        onSkillCreated={handleSkillCreated}
         readOnly={readOnly}
       />
     </ScrollArea>

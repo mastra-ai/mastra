@@ -209,7 +209,7 @@ export const agentFormSchema = z.object({
     .optional()
     .default([]),
   mcpClientsToDelete: z.array(z.string()).optional().default([]),
-  skills: z.array(skillFormValueSchema).optional().default([]),
+  skills: z.record(z.string(), entityConfigSchema).optional().default({}),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

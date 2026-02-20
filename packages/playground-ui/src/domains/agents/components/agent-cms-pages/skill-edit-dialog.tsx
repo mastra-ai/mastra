@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
+import type { StoredSkillResponse } from '@mastra/client-js';
 
 import { SideDialog } from '@/ds/components/SideDialog/side-dialog';
 import { Input } from '@/ds/components/Input/input';
@@ -11,7 +11,8 @@ import { Workspace } from '@/ds/components/Workspace';
 import { useWorkspaceContext } from '@/ds/components/Workspace/workspace-context';
 import { useWorkspaces } from '@/domains/workspace/hooks';
 
-import type { SkillFormValue, InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
+import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
+import { useCreateSkill } from '../../hooks/use-create-skill';
 import {
   SkillFileTree,
   updateNodeContent,
@@ -23,8 +24,7 @@ import {
 export interface SkillEditDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (skill: SkillFormValue) => void;
-  initialSkill?: SkillFormValue;
+  onSkillCreated: (skill: StoredSkillResponse) => void;
   readOnly?: boolean;
 }
 
@@ -156,13 +156,13 @@ function SkillWorkspaceContent({
   );
 }
 
-export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnly }: SkillEditDialogProps) {
+export function SkillEditDialog({ isOpen, onClose, onSkillCreated, readOnly }: SkillEditDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const [files, setFiles] = useState<InMemoryFileNode[]>([]);
-  const [localId, setLocalId] = useState('');
   const prevNameRef = useRef('');
+  const createSkill = useCreateSkill();
   const { data: workspacesData } = useWorkspaces();
   const workspaceOptions = useMemo(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ value: ws.id, label: ws.name })),
@@ -171,23 +171,13 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
 
   useEffect(() => {
     if (isOpen) {
-      if (initialSkill) {
-        setName(initialSkill.name);
-        setDescription(initialSkill.description);
-        setWorkspaceId(initialSkill.workspaceId);
-        setFiles(initialSkill.files);
-        setLocalId(initialSkill.localId);
-        prevNameRef.current = initialSkill.name;
-      } else {
-        setName('');
-        setDescription('');
-        setWorkspaceId(workspaceOptions.length === 1 ? workspaceOptions[0].value : '');
-        setFiles([]);
-        setLocalId(uuid());
-        prevNameRef.current = '';
-      }
+      setName('');
+      setDescription('');
+      setWorkspaceId(workspaceOptions.length === 1 ? workspaceOptions[0].value : '');
+      setFiles([]);
+      prevNameRef.current = '';
     }
-  }, [isOpen, initialSkill, workspaceOptions]);
+  }, [isOpen, workspaceOptions]);
 
   const handleNameChange = useCallback(
     (newName: string) => {
@@ -206,35 +196,36 @@ export function SkillEditDialog({ isOpen, onClose, onSave, initialSkill, readOnl
     [files],
   );
 
-  const handleSave = useCallback(() => {
-    onSave({
-      localId,
+  const handleSave = useCallback(async () => {
+    const result = await createSkill.mutateAsync({
       name,
       description,
       workspaceId,
       files,
     });
-  }, [localId, name, description, workspaceId, files, onSave]);
+    onSkillCreated(result);
+    onClose();
+  }, [name, description, workspaceId, files, createSkill, onSkillCreated, onClose]);
 
   return (
     <SideDialog
-      dialogTitle={initialSkill ? 'Edit Skill' : 'Add Skill'}
+      dialogTitle="Add Skill"
       dialogDescription="Configure skill details and workspace files"
       isOpen={isOpen}
       onClose={onClose}
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex-1">{initialSkill ? 'Edit Skill' : 'New Skill'}</span>
+        <span className="flex-1">New Skill</span>
         {!readOnly && (
           <Button
             variant="primary"
             size="sm"
             onClick={handleSave}
-            disabled={!name.trim() || !workspaceId}
+            disabled={!name.trim() || !workspaceId || createSkill.isPending}
             className="mr-6"
           >
-            Save
+            {createSkill.isPending ? 'Creating...' : 'Save'}
           </Button>
         )}
       </SideDialog.Top>
