@@ -135,6 +135,7 @@ export class MastraTUI {
   private streamingMessage?: HarnessMessage;
   private pendingTools = new Map<string, IToolExecutionComponent>();
   private toolInputBuffers = new Map<string, { text: string; toolName: string }>(); // Buffer partial JSON args text per toolCallId for streaming input
+  private todoWriteInsertIndex = -1; // Position hint for todo_write inline rendering when streaming
   private seenToolCallIds = new Set<string>(); // Track all tool IDs seen during current stream (prevents duplicates)
   private subagentToolCallIds = new Set<string>(); // Track subagent tool call IDs to skip in trailing content logic
   private allToolComponents: IToolExecutionComponent[] = []; // Track all tools for expand/collapse
@@ -1413,6 +1414,11 @@ ${instructions}`,
               break;
             }
           }
+          // Fall back to the position recorded during streaming (when no inline component was created)
+          if (insertIndex === -1 && this.todoWriteInsertIndex >= 0) {
+            insertIndex = this.todoWriteInsertIndex;
+            this.todoWriteInsertIndex = -1;
+          }
 
           // Check if all todos are completed
           const allCompleted = todos && todos.length > 0 && todos.every(t => t.status === 'completed');
@@ -2082,7 +2088,10 @@ ${instructions}`,
 
     // Create the component early so deltas can update it
     // Skip for subagent (handled by SubagentExecutionComponent) and todo_write (streams to pinned TodoProgressComponent)
-    if (toolName !== 'subagent' && toolName !== 'todo_write') {
+    if (toolName === 'todo_write') {
+      // Record position so todo_updated can place inline completed/cleared display here
+      this.todoWriteInsertIndex = this.chatContainer.children.length;
+    } else if (toolName !== 'subagent') {
       this.addChildBeforeFollowUps(new Text('', 0, 0));
       const component = new ToolExecutionComponentEnhanced(
         toolName,
