@@ -560,4 +560,58 @@ describe('ToolStream - writer.custom', () => {
     // data-* chunks should now be persisted to storage
     expect(hasDataParts).toBe(true);
   });
+
+  it('should pass custom data chunks from writer.custom through output processors', async () => {
+    const capturedChunkTypes: string[] = [];
+    const capturedDataChunks: any[] = [];
+
+    // Output processor that captures all chunks it sees
+    const trackingProcessor = {
+      id: 'tracking-processor',
+      async processOutputStream({ part }: any) {
+        capturedChunkTypes.push(part.type);
+        if (part.type.startsWith('data-')) {
+          capturedDataChunks.push(part);
+        }
+        return part;
+      },
+    };
+
+    const customTool = createTool({
+      id: 'custom-data-tool',
+      description: 'A tool that emits custom data chunks',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (inputData, context) => {
+        await context?.writer?.custom({
+          type: 'data-custom-event',
+          data: { eventType: 'progress', value: inputData.message },
+        });
+        return { success: true };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'processor-test-agent',
+      name: 'Processor Test Agent',
+      instructions: 'Test agent',
+      model: mockModel,
+      tools: { customTool },
+      outputProcessors: [trackingProcessor],
+    });
+
+    const stream = await agent.stream('Call custom-data-tool with message "hello"');
+    const chunks: ChunkType[] = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify the data chunk appeared in the stream
+    const dataChunk = chunks.find(c => c.type === 'data-custom-event');
+    expect(dataChunk).toBeDefined();
+
+    // BUG: The output processor should have seen the data-custom-event chunk
+    // but currently writer.custom() bypasses output processors
+    expect(capturedChunkTypes).toContain('data-custom-event');
+    expect(capturedDataChunks.length).toBeGreaterThan(0);
+  });
 });
