@@ -41,7 +41,7 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
 ]);
 
 export interface DeepCleanOptions {
-  keysToStrip: Set<string>;
+  keysToStrip: Set<string> | string[] | Record<string, unknown>;
   maxDepth: number;
   maxStringLength: number;
   maxArrayLength: number;
@@ -198,13 +198,12 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
 
   // Bundlers can transform `new Set([...])` into a plain object or array,
   // so we build a resilient lookup once (no per-object overhead).
-  const strip: unknown = keysToStrip;
   const shouldStripKey: (key: string) => boolean =
-    strip instanceof Set
-      ? (key: string) => (strip as Set<string>).has(key)
-      : Array.isArray(strip)
-        ? (key: string) => (strip as string[]).includes(key)
-        : (key: string) => key in (strip as Record<string, unknown>);
+    keysToStrip instanceof Set
+      ? (key: string) => keysToStrip.has(key)
+      : Array.isArray(keysToStrip)
+        ? (key: string) => keysToStrip.includes(key)
+        : (key: string) => key in keysToStrip;
 
   const seen = new WeakSet<any>();
 

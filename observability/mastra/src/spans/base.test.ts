@@ -581,7 +581,7 @@ describe('Span', () => {
       const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
       const options = {
         ...DEFAULT_DEEP_CLEAN_OPTIONS,
-        keysToStrip: { logger: true, tracingContext: true } as any,
+        keysToStrip: { logger: true, tracingContext: true },
       };
       const result = deepClean(input, options);
       expect(result.name).toBe('test');
@@ -594,7 +594,7 @@ describe('Span', () => {
       const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
       const options = {
         ...DEFAULT_DEEP_CLEAN_OPTIONS,
-        keysToStrip: ['logger', 'tracingContext'] as any,
+        keysToStrip: ['logger', 'tracingContext'],
       };
       const result = deepClean(input, options);
       expect(result.name).toBe('test');
