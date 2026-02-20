@@ -57,27 +57,39 @@ export function ToolsPage() {
     if (isSet) {
       const next = { ...selectedTools };
       delete next[toolId];
-      form.setValue('tools', next);
+      form.setValue('tools', next, { shouldDirty: true });
     } else {
-      form.setValue('tools', {
-        ...selectedTools,
-        [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
-      });
+      form.setValue(
+        'tools',
+        {
+          ...selectedTools,
+          [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+        },
+        { shouldDirty: true },
+      );
     }
   };
 
   const handleDescriptionChange = (toolId: string, description: string) => {
-    form.setValue('tools', {
-      ...selectedTools,
-      [toolId]: { ...selectedTools?.[toolId], description },
-    });
+    form.setValue(
+      'tools',
+      {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], description },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleRulesChange = (toolId: string, rules: RuleGroup | undefined) => {
-    form.setValue('tools', {
-      ...selectedTools,
-      [toolId]: { ...selectedTools?.[toolId], rules },
-    });
+    form.setValue(
+      'tools',
+      {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], rules },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleIntegrationToolsSubmit = useCallback(
@@ -96,7 +108,7 @@ export function ToolsPage() {
         next[id] = selectedIntegrationTools?.[id] || { description };
       }
 
-      form.setValue('integrationTools', next);
+      form.setValue('integrationTools', next, { shouldDirty: true });
     },
     [form, selectedIntegrationTools],
   );

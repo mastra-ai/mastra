@@ -235,13 +235,25 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Set status and headers via ctx.res directly since we're bypassing Koa's response
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     ctx.res.writeHead(200, {
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -575,6 +587,28 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           ctx.status = 400;
           ctx.body = {
             error: 'Invalid request body',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          };
+          return;
+        }
+      }
+
+      // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+      if (params.urlParams) {
+        try {
+          params.urlParams = await this.parsePathParams(route, params.urlParams);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error parsing path params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          if (error instanceof ZodError) {
+            ctx.status = 400;
+            ctx.body = formatZodError(error, 'path parameters');
+            return;
+          }
+          ctx.status = 400;
+          ctx.body = {
+            error: 'Invalid path parameters',
             issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
           };
           return;

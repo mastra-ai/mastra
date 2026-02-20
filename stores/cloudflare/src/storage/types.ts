@@ -24,6 +24,8 @@ import type {
   TABLE_SCORER_DEFINITION_VERSIONS,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
+  TABLE_MCP_SERVERS,
+  TABLE_MCP_SERVER_VERSIONS,
   TABLE_WORKSPACES,
   TABLE_WORKSPACE_VERSIONS,
   TABLE_SKILLS,
@@ -34,12 +36,14 @@ import type {
   StoragePromptBlockType,
   StorageScorerDefinitionType,
   StorageMCPClientType,
+  StorageMCPServerType,
   StorageWorkspaceType,
   StorageSkillType,
   StorageBlobEntry,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
+import type { MCPServerVersion } from '@mastra/core/storage/domains/mcp-servers';
 import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
 import type { ScorerDefinitionVersion } from '@mastra/core/storage/domains/scorer-definitions';
 import type { SkillVersion } from '@mastra/core/storage/domains/skills';
@@ -150,6 +154,8 @@ export type RecordTypes = {
   [TABLE_SCORER_DEFINITION_VERSIONS]: ScorerDefinitionVersion;
   [TABLE_MCP_CLIENTS]: StorageMCPClientType;
   [TABLE_MCP_CLIENT_VERSIONS]: MCPClientVersion;
+  [TABLE_MCP_SERVERS]: StorageMCPServerType;
+  [TABLE_MCP_SERVER_VERSIONS]: MCPServerVersion;
   [TABLE_WORKSPACES]: StorageWorkspaceType;
   [TABLE_WORKSPACE_VERSIONS]: WorkspaceVersion;
   [TABLE_SKILLS]: StorageSkillType;

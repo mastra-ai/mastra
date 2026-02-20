@@ -1,4 +1,4 @@
-import { LocalSkillSource, publishSkillFromSource } from '@mastra/core/workspace';
+import { LocalSkillSource } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -364,6 +364,8 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
 
       // Use LocalSkillSource to read from the server filesystem
       const source = new LocalSkillSource();
+      const { publishSkillFromSource } = await import('@mastra/core/workspace');
+
       const { snapshot, tree } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
       // Update the skill with new version data + tree
