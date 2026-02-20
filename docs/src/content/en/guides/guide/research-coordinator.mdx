@@ -71,33 +71,9 @@ export const writingAgent = new Agent({
 
 ## Configure memory
 
-The supervisor pattern requires memory to track conversation history and enable effective coordination. Configure memory storage in your Mastra instance.
+The supervisor pattern requires memory to track conversation history and enable effective coordination. Memory is configured directly on the supervisor agent.
 
-Update `src/mastra/index.ts`:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-// highlight-next-line
-import { Memory } from "@mastra/memory";
-// highlight-next-line
-import { LibSQLStore } from "@mastra/libsql";
-
-// highlight-start
-const memory = new Memory({
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: "file:mastra.db",
-  }),
-});
-// highlight-end
-
-export const mastra = new Mastra({
-  // highlight-next-line
-  memory,
-});
-```
-
-Install the required package:
+Install the required packages:
 
 ```bash npm2yarn
 npm install @mastra/memory @mastra/libsql
@@ -105,13 +81,14 @@ npm install @mastra/memory @mastra/libsql
 
 ## Create the supervisor agent
 
-The supervisor coordinates research and writing tasks. Its instructions define the delegation strategy - when to use each sub-agent and how to synthesize results.
+The supervisor coordinates research and writing tasks. Its instructions define the delegation strategy - when to use each sub-agent and how to synthesize results. Memory is configured directly on the agent.
 
 Create a new file `src/mastra/agents/supervisor-agent.ts`:
 
 ```typescript title="src/mastra/agents/supervisor-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { mastra } from "../index";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { researchAgent } from "./research-agent";
 import { writingAgent } from "./writing-agent";
 
@@ -140,7 +117,12 @@ Success criteria:
     researchAgent,
     writingAgent,
   },
-  memory: mastra.memory,
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:mastra.db",
+    }),
+  }),
 });
 ```
 
@@ -148,20 +130,10 @@ Register the supervisor with Mastra in `src/mastra/index.ts`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
 // highlight-next-line
 import { supervisorAgent } from "./agents/supervisor-agent";
 
-const memory = new Memory({
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: "file:mastra.db",
-  }),
-});
-
 export const mastra = new Mastra({
-  memory,
   // highlight-next-line
   agents: { supervisorAgent },
 });
