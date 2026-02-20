@@ -17,7 +17,12 @@ function createMockMessageList(): MockMessageList {
   };
 }
 
-function createMockWorkspace(instructions: string): Workspace {
+function createMockWorkspace(instructions: string | ((...args: any[]) => string)): Workspace {
+  if (typeof instructions === 'function') {
+    return {
+      getInstructions: vi.fn(instructions),
+    } as unknown as Workspace;
+  }
   return {
     getInstructions: vi.fn().mockReturnValue(instructions),
   } as unknown as Workspace;
@@ -92,5 +97,45 @@ describe('WorkspaceInstructionsProcessor', () => {
     } as any);
 
     expect(workspace.getInstructions).toHaveBeenCalledOnce();
+  });
+
+  it('should pass requestContext through to workspace.getInstructions', async () => {
+    const { RequestContext } = await import('../../request-context');
+    const ctx = new RequestContext([['locale', 'en']]);
+
+    const workspace = createMockWorkspace('instructions');
+    const processor = new WorkspaceInstructionsProcessor({ workspace });
+
+    const messageList = createMockMessageList();
+    await processor.processInputStep({
+      messageList: messageList as any,
+      stepNumber: 0,
+      steps: [],
+      systemMessages: [],
+      state: {},
+      model: {} as any,
+      tools: {},
+      requestContext: ctx,
+    } as any);
+
+    expect(workspace.getInstructions).toHaveBeenCalledWith({ requestContext: ctx });
+  });
+
+  it('should pass undefined requestContext when not provided', async () => {
+    const workspace = createMockWorkspace('instructions');
+    const processor = new WorkspaceInstructionsProcessor({ workspace });
+
+    const messageList = createMockMessageList();
+    await processor.processInputStep({
+      messageList: messageList as any,
+      stepNumber: 0,
+      steps: [],
+      systemMessages: [],
+      state: {},
+      model: {} as any,
+      tools: {},
+    } as any);
+
+    expect(workspace.getInstructions).toHaveBeenCalledWith({ requestContext: undefined });
   });
 });

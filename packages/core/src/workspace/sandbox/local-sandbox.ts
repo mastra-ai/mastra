@@ -15,7 +15,9 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { RequestContext } from '../../request-context';
 import type { ProviderStatus } from '../lifecycle';
+import type { InstructionsOption } from '../types';
 import { IsolationUnavailableError } from './errors';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
@@ -137,11 +139,15 @@ export interface LocalSandboxOptions extends MastraSandboxOptions {
    */
   nativeSandbox?: NativeSandboxConfig;
   /**
-   * Custom instructions string that overrides the auto-generated instructions
-   * returned by `getInstructions()`. Pass an empty string to suppress
-   * instructions entirely.
+   * Custom instructions that override the auto-generated instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the auto-generated instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the auto-generated instructions and
+   *   optional request context so you can extend or customise per-request.
    */
-  instructions?: string;
+  instructions?: InstructionsOption;
 }
 
 /**
@@ -180,7 +186,7 @@ export class LocalSandbox extends MastraSandbox {
   private _sandboxFolderPath?: string;
   private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
-  private readonly _instructionsOverride?: string;
+  private readonly _instructionsOverride?: InstructionsOption;
 
   /**
    * The working directory where commands are executed.
@@ -379,9 +385,14 @@ export class LocalSandbox extends MastraSandbox {
     };
   }
 
-  getInstructions(): string {
-    if (this._instructionsOverride !== undefined) return this._instructionsOverride;
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const auto = this._getAutoInstructions();
+    if (this._instructionsOverride === undefined) return auto;
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
+    return this._instructionsOverride({ auto, requestContext: opts?.requestContext });
+  }
 
+  private _getAutoInstructions(): string {
     if (this.workingDirectory) {
       return `Local command execution. Working directory: "${this.workingDirectory}".`;
     }

@@ -31,6 +31,7 @@
  */
 
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -809,13 +810,14 @@ export class Workspace<
    * workspace-only (pending / mounting / error / unsupported). When there's
    * no sandbox or no mounts, falls back to provider-level instructions.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns Combined instructions string (may be empty)
    */
-  getInstructions(): string {
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
     const parts: string[] = [];
 
     // Sandbox-level instructions (working directory, provider type)
-    const sandboxInstructions = this._sandbox?.getInstructions?.();
+    const sandboxInstructions = this._sandbox?.getInstructions?.(opts);
     if (sandboxInstructions) parts.push(sandboxInstructions);
 
     // Mount state overlay: check actual MountManager state
@@ -846,7 +848,7 @@ export class Workspace<
       }
     } else {
       // No mounts or no sandbox — fall back to filesystem-level instructions
-      const fsInstructions = this._fs?.getInstructions?.();
+      const fsInstructions = this._fs?.getInstructions?.(opts);
       if (fsInstructions) parts.push(fsInstructions);
     }
 

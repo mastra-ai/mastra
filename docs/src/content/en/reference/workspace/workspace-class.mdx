@@ -275,15 +275,33 @@ const info = await workspace.getInfo();
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
-#### `getInstructions()`
+#### `getInstructions(opts?)`
 
 Get human-readable instructions describing the workspace environment. When a sandbox with mounts exists, each mount path is classified as sandbox-accessible or workspace-only based on actual mount state. Otherwise falls back to provider-level instructions.
 
+When provider `instructions` are set to a function, the `requestContext` is passed through so instructions can vary per-request (e.g. by tenant or locale).
+
 ```typescript
 const instructions = workspace.getInstructions();
+
+// With request context
+const instructions = workspace.getInstructions({ requestContext });
 ```
 
 These instructions are automatically injected into the agent system message via `WorkspaceInstructionsProcessor`, so agents understand which paths are accessible in shell commands vs. file tools.
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "opts.requestContext",
+      type: "RequestContext",
+      description: "Optional request context, forwarded to provider getInstructions() calls",
+      isOptional: true,
+    },
+  ]}
+/>
 
 #### `getPathContext()` (deprecated)
 

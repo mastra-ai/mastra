@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { RequestContext } from '../request-context';
 import {
   WorkspaceError,
   FilesystemNotAvailableError,
@@ -671,6 +672,36 @@ Line 3 conclusion`;
       const workspace = new Workspace({ sandbox: mockSandbox });
 
       expect(workspace.getInstructions()).toBe('');
+    });
+
+    it('should pass requestContext to filesystem getInstructions', () => {
+      const ctx = new RequestContext([['locale', 'fr']]);
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: ({ auto, requestContext }: any) => {
+          return `${auto} locale=${requestContext?.get('locale')}`;
+        },
+      });
+      const workspace = new Workspace({ filesystem });
+
+      const instructions = workspace.getInstructions({ requestContext: ctx });
+      expect(instructions).toContain('locale=fr');
+      expect(instructions).toContain('Local filesystem');
+    });
+
+    it('should pass requestContext to sandbox getInstructions', () => {
+      const ctx = new RequestContext([['tenant', 'acme']]);
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: ({ auto, requestContext }: any) => {
+          return `${auto} tenant=${requestContext?.get('tenant')}`;
+        },
+      });
+      const workspace = new Workspace({ sandbox });
+
+      const instructions = workspace.getInstructions({ requestContext: ctx });
+      expect(instructions).toContain('tenant=acme');
+      expect(instructions).toContain('Local command execution');
     });
   });
 

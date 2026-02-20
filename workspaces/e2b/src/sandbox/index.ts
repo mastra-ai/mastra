@@ -7,6 +7,7 @@
  * @see https://e2b.dev/docs
  */
 
+import type { RequestContext } from '@mastra/core/di';
 import type {
   SandboxInfo,
   ExecuteCommandOptions,
@@ -18,6 +19,13 @@ import type {
   MountManager,
   MastraSandboxOptions,
 } from '@mastra/core/workspace';
+
+/**
+ * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
+ */
+type InstructionsOption =
+  | string
+  | ((opts: { auto: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
@@ -84,11 +92,15 @@ export interface E2BSandboxOptions extends MastraSandboxOptions {
   /** Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var. */
   accessToken?: string;
   /**
-   * Custom instructions string that overrides the auto-generated instructions
-   * returned by `getInstructions()`. Pass an empty string to suppress
-   * instructions entirely.
+   * Custom instructions that override the auto-generated instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the auto-generated instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the auto-generated instructions and
+   *   optional request context so you can extend or customise per-request.
    */
-  instructions?: string;
+  instructions?: InstructionsOption;
 }
 
 // =============================================================================
@@ -152,7 +164,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly metadata: Record<string, unknown>;
   private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
-  private readonly _instructionsOverride?: string;
+  private readonly _instructionsOverride?: InstructionsOption;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -836,8 +848,14 @@ export class E2BSandbox extends MastraSandbox {
    * Get instructions describing this E2B sandbox.
    * Used by agents to understand the execution environment.
    */
-  getInstructions(): string {
-    if (this._instructionsOverride !== undefined) return this._instructionsOverride;
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const auto = this._getAutoInstructions();
+    if (this._instructionsOverride === undefined) return auto;
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
+    return this._instructionsOverride({ auto, requestContext: opts?.requestContext });
+  }
+
+  private _getAutoInstructions(): string {
     return 'Cloud E2B sandbox. Working directory: /home/user.';
   }
 

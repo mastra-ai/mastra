@@ -1,8 +1,9 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -762,6 +763,43 @@ describe('LocalFilesystem', () => {
       it('should return auto-generated instructions when no override', () => {
         const fs = new LocalFilesystem({ basePath: tempDir });
         expect(fs.getInstructions()).toContain('Local filesystem');
+      });
+
+      it('should support function form that extends auto instructions', () => {
+        const fs = new LocalFilesystem({
+          basePath: tempDir,
+          instructions: ({ auto }) => `${auto}\nExtra info.`,
+        });
+        const result = fs.getInstructions();
+        expect(result).toContain('Local filesystem');
+        expect(result).toContain('Extra info.');
+      });
+
+      it('should pass requestContext to function form', () => {
+        const ctx = new RequestContext([['locale', 'fr']]);
+        const fn = vi.fn(({ auto, requestContext }: any) => {
+          return `${auto} locale=${requestContext?.get('locale')}`;
+        });
+        const fs = new LocalFilesystem({
+          basePath: tempDir,
+          instructions: fn,
+        });
+        const result = fs.getInstructions({ requestContext: ctx });
+        expect(fn).toHaveBeenCalledOnce();
+        expect(result).toContain('locale=fr');
+        expect(result).toContain('Local filesystem');
+      });
+
+      it('should pass undefined requestContext when not provided to function form', () => {
+        const fn = vi.fn(({ auto, requestContext }: any) => {
+          return `${auto} ctx=${String(requestContext)}`;
+        });
+        const fs = new LocalFilesystem({
+          basePath: tempDir,
+          instructions: fn,
+        });
+        const result = fs.getInstructions();
+        expect(result).toContain('ctx=undefined');
       });
     });
   });

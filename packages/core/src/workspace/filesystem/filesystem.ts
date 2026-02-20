@@ -19,6 +19,7 @@
  * ```
  */
 
+import type { RequestContext } from '../../request-context';
 import type { FilesystemLifecycle, ProviderStatus } from '../lifecycle';
 import type { FilesystemMountConfig, FilesystemIcon } from './mount';
 
@@ -191,9 +192,10 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    * Get instructions describing how this filesystem works.
    * Used in tool descriptions to help agents understand path semantics.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this filesystem
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   /**
    * Get mount configuration for this filesystem.
