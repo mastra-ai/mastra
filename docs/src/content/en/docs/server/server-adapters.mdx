@@ -205,7 +205,7 @@ See the [Koa Adapter](/reference/server/koa-adapter) documentation for full conf
 
 Calling `init()` runs three steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
 
-1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to every request. This makes Mastra available to all subsequent middleware and route handlers.
+1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to incoming requests. When a `prefix` is configured, this middleware only applies to routes under that prefix.
 2. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured.
 3. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
 
