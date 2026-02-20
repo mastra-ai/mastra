@@ -117,7 +117,7 @@ describe('createWorkspaceTools', () => {
     expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
     expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
     expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
-    expect(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT).toBe('mastra_workspace_get_process_output');
+    expect(WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT).toBe('mastra_workspace_process_output');
     expect(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS).toBe('mastra_workspace_kill_process');
   });
 
@@ -129,7 +129,7 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
     });
 
@@ -152,7 +152,7 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.PROCESS_OUTPUT);
       expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
     });
 
