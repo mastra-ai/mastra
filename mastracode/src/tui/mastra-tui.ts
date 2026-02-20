@@ -27,6 +27,7 @@ import chalk from 'chalk';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
+import type { MCPManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -87,7 +88,7 @@ export interface MastraTUIOptions {
   authStorage?: AuthStorage;
 
   /** MCP manager for server status and reload */
-  mcpManager?: import('../mcp/manager.js').MCPManager;
+  mcpManager?: MCPManager;
 
   /**
    * @deprecated Workspace is now obtained from the Harness.
@@ -121,7 +122,7 @@ export class MastraTUI {
   private options: MastraTUIOptions;
   private hookManager?: HookManager;
   private authStorage?: AuthStorage;
-  private mcpManager?: import('../mcp/manager.js').MCPManager;
+  private mcpManager?: MCPManager;
 
   // TUI components
   private ui: TUI;
