@@ -5,6 +5,7 @@
  * NOT a singleton — each Workspace instance creates its own LSPManager.
  */
 
+import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
 import { getServersForFile } from './servers';
@@ -29,9 +30,11 @@ function mapSeverity(severity: number | undefined): DiagnosticSeverity {
 export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
+  private processManager: SandboxProcessManager;
   private config: LSPConfig;
 
-  constructor(config: LSPConfig = {}) {
+  constructor(processManager: SandboxProcessManager, config: LSPConfig = {}) {
+    this.processManager = processManager;
     this.config = config;
   }
 
@@ -70,7 +73,7 @@ export class LSPManager {
     const initTimeout = this.config.initTimeout ?? 15000;
     let timedOut = false;
     const initPromise = (async () => {
-      const client = new LSPClient(serverDef, workspaceRoot);
+      const client = new LSPClient(serverDef, workspaceRoot, this.processManager);
       await client.initialize(initTimeout);
       if (timedOut) {
         // Timeout already fired — don't leak the client

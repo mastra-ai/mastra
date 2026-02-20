@@ -8,7 +8,6 @@ import type { ToolExecutionContext } from '../../tools/types';
 import { WorkspaceNotAvailableError, FilesystemNotAvailableError, SandboxNotAvailableError } from '../errors';
 import type { WorkspaceFilesystem } from '../filesystem';
 import { resolveWorkspacePath } from '../filesystem/fs-utils';
-import { LocalFilesystem } from '../filesystem/local-filesystem';
 import type { LSPDiagnostic, DiagnosticSeverity } from '../lsp/types';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
@@ -72,26 +71,22 @@ export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolN
  * Get LSP diagnostics text to append to edit tool results.
  * Non-blocking — returns empty string on any failure.
  *
- * LSP is a LocalFilesystem feature. This helper checks if the filesystem
+ * LSP is a Workspace-level feature. This helper checks if the workspace
  * has an LSP manager and uses it to get diagnostics for the edited file.
  *
- * @param filesystem - The workspace filesystem (must be LocalFilesystem with lsp for diagnostics)
+ * @param workspace - The workspace (must have an LSP manager for diagnostics)
  * @param filePath - Relative path within the filesystem (as used by the tool)
  * @param content - The file content after the edit
  * @returns Formatted diagnostics text, or empty string if unavailable
  */
-export async function getEditDiagnosticsText(
-  filesystem: WorkspaceFilesystem,
-  filePath: string,
-  content: string,
-): Promise<string> {
+export async function getEditDiagnosticsText(workspace: Workspace, filePath: string, content: string): Promise<string> {
   try {
-    if (!(filesystem instanceof LocalFilesystem)) return '';
-
-    const lspManager = filesystem.lsp;
+    const lspManager = workspace.lsp;
     if (!lspManager) return '';
 
-    const { basePath } = filesystem;
+    // Resolve workspace-relative path to absolute for LSP
+    const basePath = (workspace.filesystem as any)?.basePath ?? workspace.sandbox?.workingDirectory;
+    if (!basePath) return '';
 
     const absolutePath = resolveWorkspacePath(basePath, filePath);
 

@@ -4,12 +4,15 @@
  * JSON-RPC client wrapper for communicating with language servers.
  * Uses dynamic imports for vscode-jsonrpc and vscode-languageserver-protocol
  * to keep them as optional dependencies.
+ *
+ * Spawns LSP servers via a SandboxProcessManager, so it works with any
+ * sandbox backend (local, E2B, etc.) that has a process manager.
  */
 
-import type { ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
+import type { ProcessHandle, SandboxProcessManager } from '../sandbox/process-manager';
 import type { LSPServerDef } from './types';
 
 // =============================================================================
@@ -103,18 +106,21 @@ function toFileUri(fsPath: string): string {
 
 /**
  * Wraps a JSON-RPC connection to a single LSP server process.
+ * Uses a SandboxProcessManager to spawn the server process.
  */
 export class LSPClient {
   private connection: any = null;
-  private process: ChildProcess | null = null;
+  private handle: ProcessHandle | null = null;
   private serverDef: LSPServerDef;
   private workspaceRoot: string;
+  private processManager: SandboxProcessManager;
   private diagnostics: Map<string, any[]> = new Map();
   private initializationOptions: any = null;
 
-  constructor(serverDef: LSPServerDef, workspaceRoot: string) {
+  constructor(serverDef: LSPServerDef, workspaceRoot: string, processManager: SandboxProcessManager) {
     this.serverDef = serverDef;
     this.workspaceRoot = workspaceRoot;
+    this.processManager = processManager;
   }
 
   /**
@@ -127,26 +133,17 @@ export class LSPClient {
     }
     const { StreamMessageReader, StreamMessageWriter, createMessageConnection } = deps;
 
-    const spawnResult = await this.serverDef.spawn(this.workspaceRoot);
-    if (!spawnResult) {
-      throw new Error('Failed to spawn LSP server');
+    const command = this.serverDef.command(this.workspaceRoot);
+    if (!command) {
+      throw new Error('Failed to resolve LSP server command');
     }
 
-    let initializationOptions: any = undefined;
-    if ('process' in (spawnResult as any)) {
-      const result = spawnResult as { process: ChildProcess; initialization?: any };
-      this.process = result.process;
-      initializationOptions = result.initialization;
-    } else {
-      this.process = spawnResult as ChildProcess;
-    }
+    this.handle = await this.processManager.spawn(command, { cwd: this.workspaceRoot });
 
-    if (!this.process.stdin || !this.process.stdout) {
-      throw new Error('Failed to create LSP process with proper stdio');
-    }
+    const initializationOptions = this.serverDef.initialization?.(this.workspaceRoot);
 
-    const reader = new StreamMessageReader(this.process.stdout);
-    const writer = new StreamMessageWriter(this.process.stdin);
+    const reader = new StreamMessageReader(this.handle.reader);
+    const writer = new StreamMessageWriter(this.handle.writer);
     this.connection = createMessageConnection(reader, writer);
 
     // Silently ignore stream destroyed errors during shutdown
@@ -158,13 +155,6 @@ export class LSPClient {
     });
 
     this.connection.listen();
-
-    // Ignore stderr and process lifecycle events
-    if (this.process.stderr) {
-      this.process.stderr.on('data', () => {});
-    }
-    this.process.on('error', () => {});
-    this.process.on('exit', () => {});
 
     // Build initialize params
     const initParams: any = {
@@ -327,8 +317,7 @@ export class LSPClient {
   async shutdown(): Promise<void> {
     if (this.connection) {
       try {
-        const processAlive = this.process && !this.process.killed;
-        if (processAlive) {
+        if (this.handle && this.handle.exitCode === undefined) {
           await Promise.race([
             this.connection.sendRequest('shutdown'),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Shutdown request timed out')), 1000)),
@@ -346,15 +335,13 @@ export class LSPClient {
       this.connection = null;
     }
 
-    if (this.process) {
+    if (this.handle) {
       try {
-        if (!this.process.killed) {
-          this.process.kill();
-        }
+        await this.handle.kill();
       } catch {
         // Ignore kill errors
       }
-      this.process = null;
+      this.handle = null;
     }
 
     this.diagnostics = new Map();

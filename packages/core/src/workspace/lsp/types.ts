@@ -5,8 +5,6 @@
  * These types have no Node.js or runtime dependencies.
  */
 
-import type { ChildProcess } from 'node:child_process';
-
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -55,5 +53,6 @@ export interface LSPServerDef {
   name: string;
   languageIds: string[];
   root: (cwd: string) => string | null;
-  spawn: (root: string) => ChildProcess | Promise<{ process: ChildProcess; initialization?: any } | undefined>;
+  command: (root: string) => string | undefined;
+  initialization?: (root: string) => any;
 }

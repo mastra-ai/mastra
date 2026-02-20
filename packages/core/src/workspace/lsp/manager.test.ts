@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPManager } from './manager';
 
 const mockWaitForDiagnostics = vi.fn().mockResolvedValue([
@@ -42,7 +43,7 @@ vi.mock('./servers', () => ({
           name: 'TypeScript Language Server',
           languageIds: ['typescript', 'typescriptreact'],
           root: () => '/project',
-          spawn: vi.fn(),
+          command: () => 'typescript-language-server --stdio',
         },
       ];
     }
@@ -50,11 +51,19 @@ vi.mock('./servers', () => ({
   }),
 }));
 
+/** Minimal mock process manager for tests */
+const mockProcessManager = {
+  spawn: vi.fn().mockResolvedValue({ pid: 1, kill: vi.fn(), reader: {}, writer: {} }),
+  list: vi.fn().mockResolvedValue([]),
+  get: vi.fn().mockResolvedValue(undefined),
+  kill: vi.fn().mockResolvedValue(true),
+} as unknown as SandboxProcessManager;
+
 describe('LSPManager', () => {
   let manager: LSPManager;
 
   beforeEach(() => {
-    manager = new LSPManager();
+    manager = new LSPManager(mockProcessManager);
   });
 
   afterEach(async () => {
@@ -122,7 +131,7 @@ describe('LSPManager', () => {
   describe('config', () => {
     it('respects disableServers config', async () => {
       const { getServersForFile } = await import('./servers');
-      const restrictedManager = new LSPManager({ disableServers: ['eslint'] });
+      const restrictedManager = new LSPManager(mockProcessManager, { disableServers: ['eslint'] });
 
       await restrictedManager.getClient('/project/src/app.ts', '/project');
 

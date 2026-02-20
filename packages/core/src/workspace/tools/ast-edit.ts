@@ -428,7 +428,7 @@ Pattern replace (for everything else):
       .describe('Required for add-import transform. Specifies the module and names to import.'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
 
     if (filesystem.readOnly) {
@@ -524,7 +524,7 @@ Pattern replace (for everything else):
     }
 
     let output = `${path}: ${changes.join('; ')}`;
-    output += await getEditDiagnosticsText(filesystem, path, modifiedContent);
+    output += await getEditDiagnosticsText(workspace, path, modifiedContent);
     return output;
   },
 });
