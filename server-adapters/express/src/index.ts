@@ -1,6 +1,5 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
-import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -479,14 +478,21 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         // from route path/method unless explicitly set or route is public
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          try {
+            const { hasPermission } = await import('@mastra/core/auth');
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-          if (permissionError) {
-            return res.status(permissionError.status).json({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
+          } catch {
+            console.error(
+              '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+            );
           }
         }
 
@@ -554,13 +560,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-          if (permissionError) {
-            return res.status(permissionError.status).json({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+          try {
+            const { hasPermission } = await import('@mastra/core/auth');
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
+          } catch {
+            console.error(
+              '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+            );
           }
         }
       }

@@ -54,7 +54,7 @@
     "@types/swagger-ui-express": "^4.1.8"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.6.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "express": "^5.1.0",
     "@types/express": "^5.0.5"
   },

@@ -1,5 +1,4 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -463,16 +462,23 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // from route path/method unless explicitly set or route is public
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          try {
+            const { hasPermission } = await import('@mastra/core/auth');
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-          if (permissionError) {
-            return c.json(
-              {
-                error: permissionError.error,
-                message: permissionError.message,
-              },
-              permissionError.status as any,
+            if (permissionError) {
+              return c.json(
+                {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                },
+                permissionError.status as any,
+              );
+            }
+          } catch {
+            console.error(
+              '[@mastra/hono] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
             );
           }
         }
@@ -567,12 +573,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-          if (permissionError) {
-            return c.json(
-              { error: permissionError.error, message: permissionError.message },
-              permissionError.status as any,
+          try {
+            const { hasPermission } = await import('@mastra/core/auth');
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return c.json(
+                { error: permissionError.error, message: permissionError.message },
+                permissionError.status as any,
+              );
+            }
+          } catch {
+            console.error(
+              '[@mastra/hono] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
             );
           }
         }

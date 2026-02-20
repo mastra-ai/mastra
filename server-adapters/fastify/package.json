@@ -51,7 +51,7 @@
     "zod": "^3.25.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.6.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "fastify": "^5.0.0"
   },
   "engines": {
