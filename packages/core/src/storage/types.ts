@@ -1190,10 +1190,13 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Ratio controlling how much context to retain after activation (0-1 float).
+   * Normalized ratio (0-1) controlling how much context to activate.
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
    * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
    * Chunks are selected by boundary, biased over the target (to ensure remaining context stays at or below the retention floor).
+   *
+   * Note: this is always a ratio. The caller resolves absolute `bufferActivation` values (> 1)
+   * into the equivalent ratio before passing to the storage layer.
    */
   activationRatio: number;
   /**

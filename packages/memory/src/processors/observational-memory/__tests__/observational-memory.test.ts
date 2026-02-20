@@ -3919,26 +3919,6 @@ describe('Async Buffering Config Validation', () => {
     expect(om.isAsyncReflectionEnabled()).toBe(false);
   });
 
-  it('should throw if bufferActivation is out of range', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-          observation: {
-            messageTokens: 50000,
-            bufferTokens: 10000,
-            bufferActivation: 1.5,
-          },
-          reflection: {
-            observationTokens: 20000,
-            bufferActivation: 0.7,
-          },
-        }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
-  });
-
   it('should throw if bufferActivation is zero', () => {
     expect(
       () =>
@@ -3956,7 +3936,67 @@ describe('Async Buffering Config Validation', () => {
             bufferActivation: 0.7,
           },
         }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
+    ).toThrow('bufferActivation must be > 0');
+  });
+
+  it('should throw if bufferActivation is in dead zone (1, 1000)', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 1.5,
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('must be <= 1 (ratio) or >= 1000 (absolute token retention)');
+  });
+
+  it('should throw if absolute bufferActivation >= messageTokens', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 50000, // Invalid: must be < messageTokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('bufferActivation as absolute retention');
+  });
+
+  it('should accept bufferActivation > 1000 as absolute retention target', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 3000, // Valid: retain 3000 tokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).not.toThrow();
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
@@ -6522,6 +6562,33 @@ describe('Full Async Buffering Flow', () => {
       expect(result.messageTokensActivated).toBe(48000);
       expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3', 'c-4']);
       expect(remaining).toHaveLength(0);
+    });
+
+    it('absolute bufferActivation: equivalent to ratio when converted', async () => {
+      // threshold=50k, absolute retention=10000 → equivalent ratio = 1 - 10000/50000 = 0.8
+      // retentionFloor=10000, target=40000
+      // Chunks: 10k each, cumulative: 10k, 20k, 30k, 40k, 50k
+      // After 4: 40k (exactly on target) → activates 4
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 3' },
+        { cycleId: 'c-4', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 4' },
+      ];
+
+      // Using ratio 0.8 (equivalent of absolute 10000 with threshold 50000)
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(4);
+      expect(result.messageTokensActivated).toBe(40000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-4');
     });
 
     it('single chunk: always activates it regardless of ratio', async () => {

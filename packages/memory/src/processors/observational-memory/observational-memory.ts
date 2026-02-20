@@ -803,18 +803,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Resolve bufferActivation config into an absolute retention floor (tokens to keep).
+   * - Value in (0, 1]: ratio → retentionFloor = threshold * (1 - value)
+   * - Value >= 1000: absolute token count → retentionFloor = value
+   */
+  private resolveRetentionFloor(bufferActivation: number, messageTokensThreshold: number): number {
+    if (bufferActivation >= 1000) return bufferActivation;
+    return messageTokensThreshold * (1 - bufferActivation);
+  }
+
+  /**
+   * Convert bufferActivation to the equivalent ratio (0-1) for the storage layer.
+   * When bufferActivation >= 1000, it's an absolute retention target, so we compute
+   * the equivalent ratio: 1 - (bufferActivation / threshold).
+   */
+  private resolveActivationRatio(bufferActivation: number, messageTokensThreshold: number): number {
+    if (bufferActivation >= 1000) {
+      return Math.max(0, Math.min(1, 1 - bufferActivation / messageTokensThreshold));
+    }
+    return bufferActivation;
+  }
+
+  /**
    * Calculate the projected message tokens that would be removed if activation happened now.
    * This replicates the chunk boundary logic in swapBufferedToActive without actually activating.
    */
   private calculateProjectedMessageRemoval(
     chunks: BufferedObservationChunk[],
-    activationRatio: number,
+    bufferActivation: number,
     messageTokensThreshold: number,
     currentPendingTokens: number,
   ): number {
     if (chunks.length === 0) return 0;
 
-    const retentionFloor = messageTokensThreshold * (1 - activationRatio);
+    const retentionFloor = this.resolveRetentionFloor(bufferActivation, messageTokensThreshold);
     const targetMessageTokens = Math.max(0, currentPendingTokens - retentionFloor);
 
     // Find the closest chunk boundary to the target, biased over (prefer removing
@@ -1310,11 +1332,22 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     }
 
-    // Validate observation bufferActivation (0-1 float range)
+    // Validate observation bufferActivation: (0, 1] for ratio, or >= 1000 for absolute retention tokens
     if (this.observationConfig.bufferActivation !== undefined) {
-      if (this.observationConfig.bufferActivation <= 0 || this.observationConfig.bufferActivation > 1) {
+      if (this.observationConfig.bufferActivation <= 0) {
+        throw new Error(`observation.bufferActivation must be > 0, got ${this.observationConfig.bufferActivation}`);
+      }
+      if (this.observationConfig.bufferActivation > 1 && this.observationConfig.bufferActivation < 1000) {
         throw new Error(
-          `observation.bufferActivation must be in range (0, 1], got ${this.observationConfig.bufferActivation}`,
+          `observation.bufferActivation must be <= 1 (ratio) or >= 1000 (absolute token retention), got ${this.observationConfig.bufferActivation}`,
+        );
+      }
+      if (
+        this.observationConfig.bufferActivation >= 1000 &&
+        this.observationConfig.bufferActivation >= observationThreshold
+      ) {
+        throw new Error(
+          `observation.bufferActivation as absolute retention (${this.observationConfig.bufferActivation}) must be less than messageTokens (${observationThreshold})`,
         );
       }
     }
@@ -4584,10 +4617,11 @@ ${formattedMessages}
       }
     }
 
-    // Perform partial swap with bufferActivation percentage
-    const activationRatio = this.observationConfig.bufferActivation ?? 0.7;
+    // Perform partial swap with bufferActivation
+    const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
+    const activationRatio = this.resolveActivationRatio(bufferActivation, messageTokensThreshold);
     omDebug(
-      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
+      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
