@@ -393,6 +393,124 @@ describe('withMastra middleware', () => {
       expect(fullText).toBe('TEST RESPONSE');
       expect(outputText).toBe('TEST RESPONSE');
     });
+
+    it('should not run processOutputResult when stream errors without finishing', async () => {
+      let processOutputResultCalled = false;
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          processOutputResultCalled = true;
+          return args.messageList;
+        },
+      };
+
+      const errorModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Partial' },
+            { type: 'error', error: new Error('Provider crashed') },
+            // No 'finish' chunk
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const model = withMastra(errorModel, {
+        outputProcessors: [inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'Test',
+      });
+
+      const chunks: string[] = [];
+      try {
+        for await (const chunk of textStream) {
+          chunks.push(chunk);
+        }
+      } catch {
+        // Stream may throw on error chunk
+      }
+
+      expect(processOutputResultCalled).toBe(false);
+    });
+
+    it('should accumulate tool-call chunks for processOutputResult', async () => {
+      let responseParts: any[] = [];
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          const responseMessages = args.messageList.get.response.db();
+          for (const msg of responseMessages) {
+            if (msg.content?.parts) {
+              responseParts.push(...msg.content.parts);
+            }
+          }
+          return args.messageList;
+        },
+      };
+
+      const toolModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Calling tool' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'getWeather',
+              input: JSON.stringify({ city: 'London' }),
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'getWeather',
+              result: { type: 'json', value: { temp: 15 } },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const model = withMastra(toolModel, {
+        outputProcessors: [inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'What is the weather?',
+      });
+
+      for await (const _ of textStream) {
+        // consume
+      }
+
+      const textParts = responseParts.filter((p: any) => p.type === 'text');
+      const toolParts = responseParts.filter((p: any) => p.type === 'tool-invocation');
+
+      expect(textParts).toHaveLength(1);
+      expect(textParts[0].text).toBe('Calling tool');
+      expect(toolParts).toHaveLength(1);
+      expect(toolParts[0].toolInvocation.toolName).toBe('getWeather');
+      expect(toolParts[0].toolInvocation.toolCallId).toBe('call-1');
+      expect(toolParts[0].toolInvocation.state).toBe('result');
+      expect(toolParts[0].toolInvocation.result).toEqual({ type: 'json', value: { temp: 15 } });
+    });
   });
 
   describe('tripwire/abort functionality', () => {
