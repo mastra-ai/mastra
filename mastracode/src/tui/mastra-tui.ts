@@ -28,6 +28,7 @@ import { parse as parsePartialJson } from 'partial-json';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
+import type { MCPManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -93,6 +94,9 @@ export interface MastraTUIOptions {
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
 
+  /** MCP manager for server status and reload */
+  mcpManager?: MCPManager;
+
   /**
    * @deprecated Workspace is now obtained from the Harness.
    * Configure workspace via HarnessConfig.workspace instead.
@@ -125,6 +129,7 @@ export class MastraTUI {
   private options: MastraTUIOptions;
   private hookManager?: HookManager;
   private authStorage?: AuthStorage;
+  private mcpManager?: MCPManager;
 
   // TUI components
   private ui: TUI;
@@ -230,6 +235,7 @@ export class MastraTUI {
     this.options = options;
     this.hookManager = options.hookManager;
     this.authStorage = options.authStorage;
+    this.mcpManager = options.mcpManager;
     this.workspace = options.workspace;
 
     // Detect project info for status line
@@ -4061,7 +4067,7 @@ Keyboard shortcuts:
       }
 
       case 'mcp': {
-        const mm = this.harness.getMcpManager?.();
+        const mm = this.mcpManager;
         if (!mm) {
           this.showInfo('MCP system not initialized.');
           return true;
