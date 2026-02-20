@@ -8,7 +8,6 @@
  * - Logout users
  */
 
-import { buildCapabilities } from '@mastra/core/auth';
 import type {
   IUserProvider,
   ISessionProvider,
@@ -97,7 +96,8 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
-      // Use buildCapabilities from core/ee
+      // Dynamic import to avoid breaking `npx mastra dev` when user has older @mastra/core
+      const { buildCapabilities } = await import('@mastra/core/auth');
       const capabilities = await buildCapabilities(auth, request, { rbac });
 
       return capabilities;
