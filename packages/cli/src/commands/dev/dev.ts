@@ -36,6 +36,7 @@ interface StartOptions {
   https?: HTTPSOptions;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
+  transpileConfigPath?: string;
 }
 
 type ProcessOptions = {
@@ -96,6 +97,9 @@ const startServer = async (
       commands.push(...startOptions.customArgs);
     }
 
+    // Add the loader for runtime TypeScript transpilation of transpilePackages
+    commands.push('--import', '@mastra/deployer/loader');
+
     commands.push(join(dotMastraPath, 'index.mjs'));
 
     // Write mastra packages to a file and pass the file path via env var
@@ -114,6 +118,7 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
+        ...(startOptions?.transpileConfigPath ? { MASTRA_TRANSPILE_CONFIG: startOptions.transpileConfigPath } : {}),
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -437,6 +442,11 @@ export async function dev({
   const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
   logPeerDepWarnings(peerDepMismatches);
 
+  await bundler.prepare(dotMastraPath);
+
+  // Generate transpile config for runtime TypeScript compilation
+  const transpileConfigPath = await bundler.generateTranspileConfig(entryFile, dotMastraPath);
+
   const startOptions: StartOptions = {
     inspect,
     inspectBrk,
@@ -444,9 +454,8 @@ export async function dev({
     https: httpsOptions,
     mastraPackages,
     peerDepMismatches,
+    transpileConfigPath,
   };
-
-  await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
