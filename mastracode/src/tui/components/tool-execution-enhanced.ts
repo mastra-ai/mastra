@@ -706,9 +706,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       if (path.length > availableForPath && availableForPath > 10) {
         path = '…' + path.slice(-(availableForPath - 1));
       }
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('accent', path), fullPath)
-        : theme.fg('accent', path);
+      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
       const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
       this.contentBox.addChild(new Text('', 0, 0));
@@ -754,9 +752,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (path.length > availableForPath && availableForPath > 10) {
       path = '…' + path.slice(-(availableForPath - 1));
     }
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('accent', path), fullPath)
-      : theme.fg('accent', path);
+    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
     this.contentBox.addChild(new Text('', 0, 0));
