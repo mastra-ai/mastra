@@ -1363,10 +1363,10 @@ article p {
 }
 
 /* Override Infima's a:hover color for sidebar items */
-.learn-sidebar-item:hover {
+a.learn-sidebar-item:hover {
   color: var(--mastra-green-accent-3) !important;
 }
-[data-theme='dark'] .learn-sidebar-item:hover {
+[data-theme='dark'] a.learn-sidebar-item:hover {
   color: var(--mastra-green-accent) !important;
 }
 

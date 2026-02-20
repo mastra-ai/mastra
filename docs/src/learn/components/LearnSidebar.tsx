@@ -50,12 +50,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
           <Link to="/learn" className="learn-link text-sm font-semibold text-(--mastra-text-primary)">
             Mastra Learn
           </Link>
-          <LearnProgressBar
-            completed={watchedCount}
-            total={publishedTotal}
-            totalLessons={lessons.length}
-            className="mt-3"
-          />
+          <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mt-3" />
         </div>
 
         <div className="flex-1">
