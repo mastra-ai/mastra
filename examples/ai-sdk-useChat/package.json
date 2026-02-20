@@ -12,14 +12,15 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/react": "^1.2.12",
     "@mastra/core": "latest",
-    "next": "^15.5.7",
+    "next": "^15.5.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "link:../../packages/core"
+      "@mastra/core": "link:../../packages/core",
+      "next": "^15.5.8"
     }
   },
   "devDependencies": {
