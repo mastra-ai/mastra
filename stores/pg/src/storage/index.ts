@@ -20,6 +20,7 @@ import { BlobsPG } from './domains/blobs';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { MCPClientsPG } from './domains/mcp-clients';
+import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
@@ -77,6 +78,7 @@ export {
   DatasetsPG,
   ExperimentsPG,
   MCPClientsPG,
+  MCPServersPG,
   MemoryPG,
   ObservabilityPG,
   PromptBlocksPG,
@@ -155,6 +157,7 @@ export class PostgresStore extends MastraCompositeStore {
         promptBlocks: new PromptBlocksPG(domainConfig),
         scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
         mcpClients: new MCPClientsPG(domainConfig),
+        mcpServers: new MCPServersPG(domainConfig),
         workspaces: new WorkspacesPG(domainConfig),
         skills: new SkillsPG(domainConfig),
         blobs: new BlobsPG(domainConfig),

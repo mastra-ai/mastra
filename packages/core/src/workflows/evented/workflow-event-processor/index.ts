@@ -770,7 +770,96 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Run nested workflow - check for both EventedWorkflow and regular Workflow
     if (step.step instanceof EventedWorkflow || (step.step as any).component === 'WORKFLOW') {
-      if (resumeSteps?.length > 1) {
+      // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
+      if (resumeSteps?.length === 1 && resumeSteps[0] === step.step.id) {
+        const stepData = stepResults[step.step.id];
+        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) {
+          return this.errorWorkflow(
+            {
+              workflowId,
+              runId,
+              executionPath,
+              stepResults,
+              activeSteps,
+              resumeSteps,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              requestContext,
+            },
+            new MastraError({
+              id: 'MASTRA_WORKFLOW',
+              text: `Nested workflow run id not found for auto-detection: ${JSON.stringify(stepResults)}`,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.SYSTEM,
+            }),
+          );
+        }
+
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: step.step.id,
+          runId: nestedRunId,
+        });
+
+        // Auto-detect the suspended step within the nested workflow
+        const suspendedStepId = Object.keys(snapshot?.suspendedPaths ?? {})?.[0];
+        if (!suspendedStepId) {
+          return this.errorWorkflow(
+            {
+              workflowId,
+              runId,
+              executionPath,
+              stepResults,
+              activeSteps,
+              resumeSteps,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              requestContext,
+            },
+            new MastraError({
+              id: 'MASTRA_WORKFLOW',
+              text: `No suspended step found in nested workflow: ${step.step.id}`,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.SYSTEM,
+            }),
+          );
+        }
+
+        const nestedExecutionPath = snapshot?.suspendedPaths?.[suspendedStepId];
+        const nestedStepResults = snapshot?.context;
+
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.resume',
+          runId,
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              stepId: step.step.id,
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              input: prevResult,
+              parentWorkflow,
+            },
+            executionPath: nestedExecutionPath as any,
+            runId: nestedRunId,
+            resumeSteps: [suspendedStepId], // Resume the auto-detected inner step
+            stepResults: nestedStepResults,
+            prevResult,
+            resumeData,
+            activeSteps,
+            requestContext,
+            perStep,
+            initialState: currentState,
+            state: currentState,
+            outputOptions,
+          },
+        });
+      } else if (resumeSteps?.length > 1) {
         const stepData = stepResults[step.step.id];
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
@@ -1096,6 +1185,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel, //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
           stepResults: {
             ...stepResults,
+            [step.step.id]: stepResult,
             __state: updatedState,
           },
           prevResult: stepResult,
