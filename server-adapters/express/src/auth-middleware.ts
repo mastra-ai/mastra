@@ -17,7 +17,11 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
     return next();
   }
 
-  const path = req.path;
+  // Use baseUrl + path to get the full path regardless of mount prefix.
+  // When mounted via app.use('/prefix', middleware), Express strips the prefix
+  // from req.path. Prepending req.baseUrl restores it so auth pattern matching
+  // works correctly against full paths like '/api/agents/*'.
+  const path = req.baseUrl + req.path;
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
@@ -26,12 +30,12 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
     return next();
   }
 
-  if (!isProtectedPath(req.path, req.method, authConfig, customRouteAuthConfig)) {
+  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
   // Skip authentication for public routes
-  if (canAccessPublicly(req.path, req.method, authConfig)) {
+  if (canAccessPublicly(path, method, authConfig)) {
     return next();
   }
 
@@ -88,7 +92,8 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
     return next();
   }
 
-  const path = req.path;
+  // Use baseUrl + path to get the full path (see authenticationMiddleware comment).
+  const path = req.baseUrl + req.path;
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
@@ -97,7 +102,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
     return next();
   }
 
-  if (!isProtectedPath(req.path, req.method, authConfig, customRouteAuthConfig)) {
+  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
