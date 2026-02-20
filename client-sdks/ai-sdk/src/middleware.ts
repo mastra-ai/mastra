@@ -578,6 +578,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             await processor.processOutputResult({
               messages: messageList.get.all.db(),
               messageList,
+              state: {},
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -734,9 +735,11 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             for (const processor of outputResultProcessors) {
               if (!processor.processOutputResult) continue;
               try {
+                const procState = processorStates.get(processor.id);
                 await processor.processOutputResult({
                   messages: messageList.get.all.db(),
                   messageList,
+                  state: procState?.customState ?? {},
                   requestContext,
                   abort: (reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');
