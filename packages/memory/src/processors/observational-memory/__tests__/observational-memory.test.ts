@@ -6350,6 +6350,9 @@ describe('Full Async Buffering Flow', () => {
       chunks: Array<{ cycleId: string; messageTokens: number; observationTokens: number; obs: string }>;
       activationRatio: number;
       messageTokensThreshold: number;
+      currentPendingTokens?: number;
+      retentionFloor?: number;
+      forceMaxActivation?: boolean;
     }) {
       const storage = createInMemoryStorage();
       const threadId = `partial-${crypto.randomUUID()}`;
@@ -6387,7 +6390,9 @@ describe('Full Async Buffering Flow', () => {
         id: recordId,
         activationRatio: opts.activationRatio,
         messageTokensThreshold: opts.messageTokensThreshold,
-        currentPendingTokens: opts.messageTokensThreshold,
+        currentPendingTokens: opts.currentPendingTokens ?? opts.messageTokensThreshold,
+        retentionFloor: opts.retentionFloor,
+        forceMaxActivation: opts.forceMaxActivation,
       });
 
       const afterRecord = await storage.getObservationalMemory(threadId, resourceId);
@@ -6670,6 +6675,120 @@ describe('Full Async Buffering Flow', () => {
       expect(result.chunksActivated).toBe(1);
       expect(result.messageTokensActivated).toBe(10000);
       expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('forceMaxActivation: bypasses overshoot safeguard to aggressively reduce context', async () => {
+      // Same scenario as the safeguard test below, but with forceMaxActivation=true.
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k > maxOvershoot=950)
+      // Without forceMaxActivation: safeguard triggers, falls back to chunk 1.
+      // With forceMaxActivation: bypasses safeguard, activates both chunks.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+        forceMaxActivation: true,
+      });
+
+      // forceMaxActivation bypasses the safeguard — activates both chunks
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
+      // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under, distance=45k)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k)
+      // maxOvershoot = 1000 * 0.95 = 950. overshoot 1000 > 950 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 2k).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+      });
+
+      // Safeguard prevents activating both (overshoot > 95% of retentionFloor),
+      // falls back to chunk 1 only (2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: falls back to under boundary when over would leave < 1000 tokens', async () => {
+      // threshold=5000, ratio=0.9 → retentionFloor=500, target=4500
+      // currentPending=5000
+      // Chunk 1: 2k (under, distance=2.5k)
+      // Chunk 2: 2.8k → cumulative 4.8k (over, overshoot=300)
+      // maxOvershoot = 500 * 0.95 = 475. overshoot 300 <= 475 → overshoot safeguard allows it
+      // BUT remainingAfterOver = 5000 - 4800 = 200 < 1000 → low-retention floor triggers
+      // Falls back to under boundary (chunk 1, 2k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 2800, observationTokens: 80, obs: 'Chunk 1: more messages' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 5000,
+      });
+
+      // Over boundary would leave only 200 tokens — falls back to under (chunk 1, 2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: allows over boundary when remaining >= 1000 tokens', async () => {
+      // threshold=10000, ratio=0.9 → retentionFloor=1000, target=9000
+      // currentPending=10000
+      // Chunk 1: 4k (under)
+      // Chunk 2: 4.5k → cumulative 8.5k (under)
+      // Chunk 3: 0.5k → cumulative 9k (over, exactly on target, overshoot=0)
+      // remainingAfterOver = 10000 - 9000 = 1000 >= 1000 → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 4000, observationTokens: 50, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 4500, observationTokens: 60, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 500, observationTokens: 20, obs: 'Chunk 2' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 10000,
+      });
+
+      // Over boundary leaves exactly 1000 tokens — allowed
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(remaining).toHaveLength(0);
     });
   });

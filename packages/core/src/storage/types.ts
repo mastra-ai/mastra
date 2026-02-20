@@ -1210,6 +1210,12 @@ export interface SwapBufferedToActiveInput {
    */
   currentPendingTokens: number;
   /**
+   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
+   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
+   * aggressively reducing context is more important than preserving the retention floor.
+   */
+  forceMaxActivation?: boolean;
+  /**
    * Optional timestamp to use as lastObservedAt after swap.
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */

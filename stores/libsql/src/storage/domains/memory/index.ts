@@ -2068,11 +2068,22 @@ export class MemoryLibSQL extends MemoryStorage {
       // Safeguard: if the over boundary would eat into more than 95% of the
       // retention floor, fall back to the best under boundary instead.
       // This prevents edge cases where a large chunk overshoots dramatically.
+      // When forceMaxActivation is set (above blockAfter), skip the safeguard
+      // and always prefer the over boundary to aggressively reduce context.
+      // Additionally, never bias over if it would leave fewer than 500 tokens
+      // remaining — at that level the agent may lose all meaningful context.
       const maxOvershoot = retentionFloor * 0.95;
       const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
 
       let chunksToActivate: number;
-      if (bestOverBoundary > 0 && overshoot <= maxOvershoot) {
+      if (input.forceMaxActivation && bestOverBoundary > 0) {
+        chunksToActivate = bestOverBoundary;
+      } else if (
+        bestOverBoundary > 0 &&
+        overshoot <= maxOvershoot &&
+        (remainingAfterOver >= 1000 || retentionFloor === 0)
+      ) {
         chunksToActivate = bestOverBoundary;
       } else if (bestUnderBoundary > 0) {
         chunksToActivate = bestUnderBoundary;

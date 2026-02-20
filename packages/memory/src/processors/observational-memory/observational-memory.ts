@@ -871,12 +871,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Safeguard: if the over boundary would eat into more than 95% of the
     // retention floor, fall back to the best under boundary instead.
     // This prevents edge cases where a large chunk overshoots dramatically.
+    // Additionally, never bias over if it would leave fewer than 500 tokens
+    // remaining — at that level the agent may lose all meaningful context.
     const maxOvershoot = retentionFloor * 0.95;
     const overshoot = bestOverTokens - targetMessageTokens;
+    const remainingAfterOver = currentPendingTokens - bestOverTokens;
 
     let bestBoundaryMessageTokens: number;
 
-    if (bestOverBoundary > 0 && overshoot <= maxOvershoot) {
+    if (bestOverBoundary > 0 && overshoot <= maxOvershoot && (remainingAfterOver >= 1000 || retentionFloor === 0)) {
       bestBoundaryMessageTokens = bestOverTokens;
     } else if (bestUnderBoundary > 0) {
       bestBoundaryMessageTokens = bestUnderTokens;
@@ -4607,11 +4610,12 @@ ${formattedMessages}
     // brought us well below the threshold. Activating unnecessarily invalidates
     // the prompt cache, so we skip if we're already under the threshold.
     const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    let effectivePendingTokens = currentPendingTokens;
     if (messageList) {
-      const freshPendingTokens = this.tokenCounter.countMessages(messageList.get.all.db());
-      if (freshPendingTokens < messageTokensThreshold) {
+      effectivePendingTokens = this.tokenCounter.countMessages(messageList.get.all.db());
+      if (effectivePendingTokens < messageTokensThreshold) {
         omDebug(
-          `[OM:tryActivate] skipping activation: freshPendingTokens=${freshPendingTokens} < threshold=${messageTokensThreshold}`,
+          `[OM:tryActivate] skipping activation: freshPendingTokens=${effectivePendingTokens} < threshold=${messageTokensThreshold}`,
         );
         return { success: false };
       }
@@ -4620,14 +4624,22 @@ ${formattedMessages}
     // Perform partial swap with bufferActivation
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = this.resolveActivationRatio(bufferActivation, messageTokensThreshold);
+
+    // When above blockAfter, bypass the overshoot safeguard to aggressively reduce context.
+    // The system is about to do a synchronous observation anyway, so we should remove as much as possible.
+    const forceMaxActivation = !!(
+      this.observationConfig.blockAfter && effectivePendingTokens >= this.observationConfig.blockAfter
+    );
+
     omDebug(
-      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
+      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, forceMax=${forceMaxActivation}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
       activationRatio,
       messageTokensThreshold,
-      currentPendingTokens,
+      currentPendingTokens: effectivePendingTokens,
+      forceMaxActivation,
     });
     omDebug(
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
