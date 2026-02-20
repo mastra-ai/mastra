@@ -214,14 +214,14 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
       <EmptyState
         iconSlot={<Plus className="w-8 h-8 text-neutral3" />}
         titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in evaluation runs."
+        descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
           <div className="flex flex-col gap-2">
-            <Button size="default" variant="cta" onClick={onAddClick}>
-              <Plus />
-              Add Item
-            </Button>
-            <ButtonsGroup>
+            <ButtonsGroup spacing="close">
+              <Button size="default" variant="standard" onClick={onAddClick}>
+                <Plus />
+                Add Single Item
+              </Button>
               {onImportClick && (
                 <Button size="default" variant="standard" onClick={onImportClick}>
                   <Upload />

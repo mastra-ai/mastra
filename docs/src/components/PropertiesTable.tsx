@@ -5,6 +5,7 @@ interface Parameter {
   type: string
   isOptional?: boolean
   description: string
+  properties?: Property[]
 }
 
 interface Property {
@@ -36,9 +37,11 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
               className="relative m-2 my-4 flex flex-col rounded-lg border border-(--ifm-color-emphasis-300)"
             >
               <div className="flex flex-col">
-                <div className="absolute -top-3 right-2 z-20 cursor-pointer rounded-md bg-(--ifm-color-emphasis-200) px-2 py-1 font-(family-name:--ifm-font-family-monospace) text-xs text-(--ifm-color-emphasis-700)">
-                  {prop.type}
-                </div>
+                {prop.type ? (
+                  <div className="absolute -top-3 right-2 z-20 cursor-pointer rounded-md bg-(--ifm-color-emphasis-200) px-2 py-1 font-(family-name:--ifm-font-family-monospace) text-xs text-(--ifm-color-emphasis-700)">
+                    {prop.type}
+                  </div>
+                ) : null}
                 {prop.parameters &&
                   prop.parameters.map((param, paramIdx) => (
                     <div
@@ -55,6 +58,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                         </div>
                       </div>
                       <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{param.description}</div>
+                      {renderType({ properties: param.properties })}
                     </div>
                   ))}
               </div>
