@@ -1,0 +1,36 @@
+storage: ./storage
+
+max_body_size: 100mb
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  # Block npm fallback for @mastra/* packages - they MUST be published locally
+  '@mastra/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+    # No proxy - will 404 if not published locally
+
+  # All other packages can fall back to npm
+  '**':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+security:
+  api:
+    legacy: true
+
+middlewares:
+  audit:
+    enabled: false
+
+web:
+  enable: true
+
+log:
+  - { type: stdout, format: pretty, level: error }

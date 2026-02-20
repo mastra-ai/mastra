@@ -64,7 +64,28 @@ By default, `LocalFilesystem` runs in **contained mode** — all file operations
 
 In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
 
-If your agent needs to access paths outside `basePath` (for example, global skills directories or user home folders), disable containment:
+If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    allowedPaths: ['/home/user/.config', '/home/user/documents'],
+  }),
+});
+```
+
+Allowed paths can be updated at runtime using the `setAllowedPaths()` method:
+
+```typescript
+// Add a path dynamically
+workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/documents']);
+```
+
+This is the recommended approach for least-privilege access — the agent can only reach the specific directories you allow.
+
+If your agent needs unrestricted access to the entire filesystem, disable containment:
 
 ```typescript
 const workspace = new Workspace({
