@@ -344,6 +344,60 @@ describe('prepareToolsAndToolChoice', () => {
     });
   });
 
+  describe('agent-as-tools schema serialization (#13324)', () => {
+    it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', () => {
+      // Simulate what CoreToolBuilder does: inject resumeData and suspendedToolRunId
+      // into agent tool schemas. The resumeData field uses z.any() which serializes
+      // to {} (no type key) via Zod v4's toJSONSchema. OpenAI rejects schemas
+      // without a type key on every property.
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt for the agent'),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        }),
+        execute: async () => 'result',
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { 'agent-subAgent': agentTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools).toBeDefined();
+      expect(result.tools).toHaveLength(1);
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      // The critical assertion: every property in the schema must have a 'type' key.
+      // OpenAI rejects schemas where properties lack a 'type' key.
+      const properties = toolDef.inputSchema.properties;
+      expect(properties).toBeDefined();
+
+      for (const [propName, propSchema] of Object.entries(properties)) {
+        const schema = propSchema as Record<string, any>;
+        const hasTypeKey = 'type' in schema;
+        const hasRef = '$ref' in schema;
+        const hasAnyOf = 'anyOf' in schema;
+        const hasOneOf = 'oneOf' in schema;
+        const hasAllOf = 'allOf' in schema;
+
+        expect(
+          hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
+          `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
+        ).toBe(true);
+      }
+    });
+  });
+
   describe('default targetVersion', () => {
     it('should default to v2 when targetVersion is not specified', () => {
       const providerTool = {
