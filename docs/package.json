@@ -15,7 +15,7 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "validate:frontmatter": "tsx scripts/validate-frontmatter.ts",
-    "format": "prettier --experimental-cli --write .",
+    "format": "prettier --write .",
     "vale": "./node_modules/@vvago/vale/bin/vale",
     "vale:sync": "./node_modules/@vvago/vale/bin/vale sync",
     "lint:vale": "./node_modules/@vvago/vale/bin/vale src/content/en/docs src/content/en/guides src/content/en/reference",
