@@ -324,9 +324,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'retrieved handle has accumulated stdout while still running',
         async () => {
           // Single-process command: outputs then stays alive without forking
-          const handle = await processes.spawn(
-            `node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`,
-          );
+          const handle = await processes.spawn(`node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`);
 
           // Wait for output to arrive
           await new Promise(r => setTimeout(r, 100));
@@ -345,9 +343,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawn then get output then kill (tool flow)',
         async () => {
           // Simulates the full tool flow: execute_command(background:true) → get_process_output → kill_process
-          const handle = await processes.spawn(
-            `node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`,
-          );
+          const handle = await processes.spawn(`node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`);
           const pid = handle.pid;
 
           // Wait for output
@@ -450,9 +446,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'get after manager kill returns undefined (handle released)',
         async () => {
           // Simulates tool flow: kill_process releases the handle from tracking
-          const handle = await processes.spawn(
-            `node -e "setInterval(()=>{},60000)"`,
-          );
+          const handle = await processes.spawn(`node -e "setInterval(()=>{},60000)"`);
           const pid = handle.pid;
 
           const killed = await processes.kill(pid);
