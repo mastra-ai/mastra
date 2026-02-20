@@ -53,13 +53,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       timeout: timeout ?? undefined,
     });
 
-    return [
-      `Background process started (PID: ${handle.pid})`,
-      `Command: ${fullCommand}`,
-      '',
-      `Use ${WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT} with pid ${handle.pid} to check output.`,
-      `Use ${WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS} with pid ${handle.pid} to stop it.`,
-    ].join('\n');
+    return `PID: ${handle.pid}`;
   }
 
   // Foreground mode: execute and wait for completion
