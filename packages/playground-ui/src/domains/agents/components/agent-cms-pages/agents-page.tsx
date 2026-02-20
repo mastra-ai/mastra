@@ -1,28 +1,28 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Controller, useWatch } from 'react-hook-form';
-import { PlusIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useWatch } from 'react-hook-form';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { AgentIcon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Button } from '@/ds/components/Button';
-import { SideDialog } from '@/ds/components/SideDialog';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { useAgents } from '../../hooks/use-agents';
 import type { RuleGroup } from '@/lib/rule-engine';
-import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { AgentCreateContent } from '../agent-create-content';
 
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();
   const { control } = form;
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
   const variables = useWatch({ control, name: 'variables' });
-  const count = Object.keys(selectedAgents || {}).length;
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const options = useMemo(() => {
     if (!agents) return [];
@@ -42,120 +42,114 @@ export function AgentsPage() {
       }));
   }, [agents, currentAgentId]);
 
+  const selectedAgentIds = Object.keys(selectedAgents || {});
+  const count = selectedAgentIds.length;
+
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
     return option?.description || '';
   };
 
-  const handleAgentCreated = useCallback(
-    (agent: { id: string }) => {
-      const current = form.getValues('agents') || {};
-      form.setValue('agents', { ...current, [agent.id]: { description: '' } }, { shouldDirty: true });
-      setIsCreateDialogOpen(false);
-    },
-    [form],
-  );
+  const handleValueChange = (agentId: string) => {
+    const isSet = selectedAgents?.[agentId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedAgents };
+      delete next[agentId];
+      form.setValue('agents', next);
+    } else {
+      form.setValue('agents', {
+        ...selectedAgents,
+        [agentId]: { ...selectedAgents?.[agentId], description: getOriginalDescription(agentId) },
+      });
+    }
+  };
+
+  const handleDescriptionChange = (agentId: string, description: string) => {
+    form.setValue('agents', {
+      ...selectedAgents,
+      [agentId]: { ...selectedAgents?.[agentId], description },
+    });
+  };
+
+  const handleRulesChange = (agentId: string, rules: RuleGroup | undefined) => {
+    form.setValue('agents', {
+      ...selectedAgents,
+      [agentId]: { ...selectedAgents?.[agentId], rules },
+    });
+  };
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Sub-Agents"
             subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
-            icon={<AgentIcon className="text-accent1" />}
           />
-          {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <PlusIcon className="w-3 h-3 mr-1" />
-              Create
-            </Button>
-          )}
         </div>
 
-        <Controller
-          name="agents"
-          control={control}
-          render={({ field }) => {
-            const selectedIds = Object.keys(field.value || {});
-            const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
+          </Section.Header>
 
-            const handleValueChange = (newIds: string[]) => {
-              const newValue: Record<string, EntityConfig> = {};
-              for (const id of newIds) {
-                newValue[id] = field.value?.[id] || {
-                  description: getOriginalDescription(id),
-                };
-              }
-              field.onChange(newValue);
-            };
+          <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
 
-            const handleDescriptionChange = (agentIdVal: string, description: string) => {
-              field.onChange({
-                ...field.value,
-                [agentIdVal]: { ...field.value?.[agentIdVal], description },
-              });
-            };
+          {filteredOptions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(agent => {
+                const isSelected = selectedAgentIds.includes(agent.value);
 
-            const handleRemove = (agentIdVal: string) => {
-              const newValue = { ...field.value };
-              delete newValue[agentIdVal];
-              field.onChange(newValue);
-            };
+                const isDisabled = readOnly || !isSelected;
 
-            const handleRulesChange = (agentIdVal: string, rules: RuleGroup | undefined) => {
-              field.onChange({
-                ...field.value,
-                [agentIdVal]: { ...field.value?.[agentIdVal], rules },
-              });
-            };
+                return (
+                  <Entity key={agent.value} className="bg-surface2">
+                    <EntityContent>
+                      <EntityName>{agent.label}</EntityName>
+                      <EntityDescription>
+                        <input
+                          type="text"
+                          disabled={isDisabled}
+                          className={cn(
+                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                            !isDisabled && 'border-border1 border-dashed ',
+                          )}
+                          value={
+                            isSelected
+                              ? (selectedAgents?.[agent.value]?.description ?? agent.description)
+                              : agent.description
+                          }
+                          onChange={e => handleDescriptionChange(agent.value, e.target.value)}
+                        />
+                      </EntityDescription>
+                    </EntityContent>
 
-            return (
-              <div className="flex flex-col gap-2">
-                <MultiCombobox
-                  options={options}
-                  value={selectedIds}
-                  onValueChange={handleValueChange}
-                  placeholder="Select sub-agents..."
-                  searchPlaceholder="Search agents..."
-                  emptyText="No agents available"
-                  disabled={isLoading || readOnly}
-                  variant="light"
-                />
-                {selectedOptions.length > 0 && (
-                  <div className="flex flex-col gap-3 mt-2">
-                    {selectedOptions.map(agent => (
-                      <EntityAccordionItem
-                        key={agent.value}
-                        id={agent.value}
-                        name={agent.label}
-                        icon={<AgentIcon className="text-accent1" />}
-                        description={field.value?.[agent.value]?.description || ''}
-                        onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
-                        onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={agent.label}
                         schema={variables}
-                        rules={field.value?.[agent.value]?.rules || undefined}
-                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(agent.value, rules)}
+                        rules={selectedAgents?.[agent.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(agent.value, rules)}
                       />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }}
-        />
-      </div>
+                    )}
 
-      <SideDialog
-        dialogTitle="Create Sub-Agent"
-        dialogDescription="Create a new agent to use as a sub-agent"
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-      >
-        <SideDialog.Content className="p-0 overflow-hidden">
-          <AgentCreateContent onSuccess={handleAgentCreated} hideSubAgentCreate />
-        </SideDialog.Content>
-      </SideDialog>
+                    {!readOnly && (
+                      <Switch
+                        checked={selectedAgentIds.includes(agent.value)}
+                        onCheckedChange={() => handleValueChange(agent.value)}
+                      />
+                    )}
+                  </Entity>
+                );
+              })}
+            </div>
+          )}
+        </SubSectionRoot>
+      </div>
     </ScrollArea>
   );
 }

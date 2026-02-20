@@ -522,6 +522,19 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   blockAfter?: number;
+
+  /**
+   * Custom instructions appended to the Observer agent's system prompt.
+   * Use this to customize what the Observer focuses on or how it formats observations.
+   *
+   * @example
+   * ```ts
+   * observation: {
+   *   instruction: 'Focus on user dietary preferences and allergies.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**
@@ -611,6 +624,19 @@ export interface ObservationalMemoryReflectionConfig {
    * ```
    */
   bufferActivation?: number;
+
+  /**
+   * Custom instructions appended to the Reflector agent's system prompt.
+   * Use this to customize how the Reflector consolidates observations.
+   *
+   * @example
+   * ```ts
+   * reflection: {
+   *   instruction: 'Consolidate observations and remove duplicates.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**

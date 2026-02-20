@@ -57,7 +57,7 @@ export function WorkflowHeader({
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} target="_blank" to="/swagger-ui">
+          <Button as="a" target="_blank" href="/swagger-ui">
             <Icon>
               <ApiIcon />
             </Icon>

@@ -835,23 +835,25 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      // Update to create new version
-      await agentsStore?.update({
-        id: 'versioned-agent',
+      // Config changes require createVersion + update(activeVersionId)
+      await agentsStore?.createVersion({
+        id: randomUUID(),
+        agentId: 'versioned-agent',
+        versionNumber: 2,
         name: 'Version 2',
         instructions: 'You are version 2',
         model: { provider: 'openai', name: 'gpt-4' },
+        changedFields: ['name', 'instructions', 'model'],
       });
 
       // Get the latest version and activate it
-      const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'versioned-agent' });
-      const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
-      if (latestVersion) {
-        await agentsStore?.update({
-          id: 'versioned-agent',
-          activeVersionId: latestVersion.id,
-        });
-      }
+      const latestVersion = await agentsStore?.getLatestVersion('versioned-agent');
+      await agentsStore?.update({
+        id: 'versioned-agent',
+        activeVersionId: latestVersion!.id,
+        status: 'published',
+      });
+      editor.agent.clearCache('versioned-agent');
 
       // Retrieve latest version (should be version 2)
       const latestAgent = await editor.agent.getById('versioned-agent');
@@ -884,16 +886,24 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      // Update to create new version
-      await agentsStore?.update({
-        id: 'numbered-version-agent',
+      // Config changes require createVersion + update(activeVersionId)
+      await agentsStore?.createVersion({
+        id: randomUUID(),
+        agentId: 'numbered-version-agent',
+        versionNumber: 2,
         name: 'Version 2',
         instructions: 'You are version 2',
         model: { provider: 'openai', name: 'gpt-4' },
+        changedFields: ['name', 'instructions', 'model'],
       });
 
-      // List all versions to debug
-      const versions = await agentsStore?.listVersions({ agentId: 'numbered-version-agent' });
+      const latestVersion = await agentsStore?.getLatestVersion('numbered-version-agent');
+      await agentsStore?.update({
+        id: 'numbered-version-agent',
+        activeVersionId: latestVersion!.id,
+        status: 'published',
+      });
+      editor.agent.clearCache('numbered-version-agent');
 
       // Retrieve by version number
       const version1Agent = await editor.agent.getById('numbered-version-agent', {
@@ -1026,21 +1036,24 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agent1 = await editor.agent.getById('cached-agent');
       expect(agent1?.name).toBe('Cached Agent');
 
-      // Update the agent in storage
-      await agentsStore?.update({
-        id: 'cached-agent',
+      // Update the agent in storage — config changes require createVersion + update(activeVersionId)
+      await agentsStore?.createVersion({
+        id: randomUUID(),
+        agentId: 'cached-agent',
+        versionNumber: 2,
         name: 'Updated Cached Agent',
+        instructions: 'You are a cached agent',
+        model: { provider: 'openai', name: 'gpt-4' },
+        changedFields: ['name'],
       });
 
       // Get the latest version and activate it
-      const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'cached-agent' });
-      const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
-      if (latestVersion) {
-        await agentsStore?.update({
-          id: 'cached-agent',
-          activeVersionId: latestVersion.id,
-        });
-      }
+      const latestVersion = await agentsStore?.getLatestVersion('cached-agent');
+      await agentsStore?.update({
+        id: 'cached-agent',
+        activeVersionId: latestVersion!.id,
+        status: 'published',
+      });
 
       // Retrieve again (should get cached version)
       const agent2 = await editor.agent.getById('cached-agent');
@@ -1084,33 +1097,38 @@ describe('MastraEditor with LibSQL Integration', () => {
       await editor.agent.clearCache();
 
       // Verify cache is cleared by updating and retrieving
+      // Config changes require createVersion + update(activeVersionId)
+      await agentsStore?.createVersion({
+        id: randomUUID(),
+        agentId: 'cache-test-1',
+        versionNumber: 2,
+        name: 'Updated 1',
+        instructions: 'First agent',
+        model: { provider: 'openai', name: 'gpt-4' },
+        changedFields: ['name'],
+      });
+      const latestVersion1 = await agentsStore?.getLatestVersion('cache-test-1');
       await agentsStore?.update({
         id: 'cache-test-1',
-        name: 'Updated 1',
+        activeVersionId: latestVersion1!.id,
+        status: 'published',
       });
 
-      // Activate the new version
-      const versions1 = await agentsStore?.listVersions({ agentId: 'cache-test-1' });
-      if (versions1?.versions[0]) {
-        await agentsStore?.update({
-          id: 'cache-test-1',
-          activeVersionId: versions1.versions[0].id,
-        });
-      }
-
+      await agentsStore?.createVersion({
+        id: randomUUID(),
+        agentId: 'cache-test-2',
+        versionNumber: 2,
+        name: 'Updated 2',
+        instructions: 'Second agent',
+        model: { provider: 'openai', name: 'gpt-4' },
+        changedFields: ['name'],
+      });
+      const latestVersion2 = await agentsStore?.getLatestVersion('cache-test-2');
       await agentsStore?.update({
         id: 'cache-test-2',
-        name: 'Updated 2',
+        activeVersionId: latestVersion2!.id,
+        status: 'published',
       });
-
-      // Activate the new version
-      const versions2 = await agentsStore?.listVersions({ agentId: 'cache-test-2' });
-      if (versions2?.versions[0]) {
-        await agentsStore?.update({
-          id: 'cache-test-2',
-          activeVersionId: versions2.versions[0].id,
-        });
-      }
 
       const agent1 = await editor.agent.getById('cache-test-1');
       const agent2 = await editor.agent.getById('cache-test-2');
@@ -1977,11 +1995,19 @@ describe('MastraEditor with LibSQL Integration', () => {
       const v1 = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
       expect(v1).toBe('Version 1 content');
 
-      // Update content (creates a new version)
-      await editor.prompt.update({
-        id: 'versioned-block',
+      // Config changes require createVersion + update(activeVersionId)
+      const promptStore = await storage.getStore('promptBlocks');
+      await promptStore?.createVersion({
+        id: randomUUID(),
+        blockId: 'versioned-block',
+        versionNumber: 2,
+        name: 'Versioned Block',
         content: 'Version 2 content',
+        changedFields: ['content'],
       });
+      const latestVersion = await promptStore?.getLatestVersion('versioned-block');
+      await promptStore?.update({ id: 'versioned-block', activeVersionId: latestVersion!.id, status: 'published' });
+      editor.prompt.clearCache('versioned-block');
 
       // Verify updated content
       const v2 = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
@@ -2041,11 +2067,19 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(result1.text).toContain('You specialize in astronomy.');
       expect(result1.text).toContain('Be concise.');
 
-      // Update the prompt block content — no cache clearing needed
-      await editor.prompt.update({
-        id: 'updatable-block',
+      // Config changes require createVersion + update(activeVersionId)
+      const promptStore = await storage.getStore('promptBlocks');
+      await promptStore?.createVersion({
+        id: randomUUID(),
+        blockId: 'updatable-block',
+        versionNumber: 2,
+        name: 'Updatable Block',
         content: 'You are an expert in {{topic || "general knowledge"}}. Always cite sources.',
+        changedFields: ['content'],
       });
+      const latestVersion = await promptStore?.getLatestVersion('updatable-block');
+      await promptStore?.update({ id: 'updatable-block', activeVersionId: latestVersion!.id, status: 'published' });
+      editor.prompt.clearCache('updatable-block');
 
       // Second generate with the SAME agent instance — should reflect v2 content
       // because prompt blocks are resolved from storage at runtime
@@ -2129,14 +2163,23 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(retrieved!.name).toBe('Lifecycle Block');
       expect(retrieved!.content).toBe('Initial content');
 
-      // Update
-      const updated = await editor.prompt.update({
-        id: 'lifecycle-block',
-        content: 'Updated content',
+      // Update — config changes require createVersion + update(activeVersionId)
+      const promptStore = await storage.getStore('promptBlocks');
+      await promptStore?.createVersion({
+        id: randomUUID(),
+        blockId: 'lifecycle-block',
+        versionNumber: 2,
         name: 'Updated Block',
+        content: 'Updated content',
+        changedFields: ['name', 'content'],
       });
-      expect(updated.content).toBe('Updated content');
-      expect(updated.name).toBe('Updated Block');
+      const latestVersion = await promptStore?.getLatestVersion('lifecycle-block');
+      await promptStore?.update({ id: 'lifecycle-block', activeVersionId: latestVersion!.id, status: 'published' });
+      editor.prompt.clearCache('lifecycle-block');
+
+      const updated = await editor.prompt.getById('lifecycle-block');
+      expect(updated!.content).toBe('Updated content');
+      expect(updated!.name).toBe('Updated Block');
 
       // List
       const list = await editor.prompt.list();
