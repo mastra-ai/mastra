@@ -264,9 +264,11 @@ export class OtelExporter extends BaseExporter {
   private async setupProcessor() {
     if (this.processor || this.isSetup) return;
 
+    const serviceName = this.observabilityConfig?.serviceName || 'mastra-service';
+
     this.spanConverter = new SpanConverter({
       packageName: '@mastra/otel-exporter',
-      serviceName: this.observabilityConfig?.serviceName,
+      serviceName,
       config: this.config,
       format: 'GenAI_v1_38_0',
     });
@@ -285,7 +287,9 @@ export class OtelExporter extends BaseExporter {
       exportTimeoutMillis: this.config.timeout || 30000, // Export timeout
     });
 
-    this.debugLog(`BatchSpanProcessor ready (batch size: ${this.config.batchSize || 512}, delay: 5s)`);
+    this.debugLog(
+      `BatchSpanProcessor ready (service.name: "${serviceName}", batch size: ${this.config.batchSize || 512}, delay: 5s)`,
+    );
   }
 
   private async setup() {
