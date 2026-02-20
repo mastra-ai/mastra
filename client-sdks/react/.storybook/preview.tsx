@@ -1,5 +1,6 @@
 import React from 'react';
 import '../src/ui/index.css';
+import '@xyflow/react/dist/base.css';
 import type { Preview } from '@storybook/react-vite';
 
 const preview: Preview = {
