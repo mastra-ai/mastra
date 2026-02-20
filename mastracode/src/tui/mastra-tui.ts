@@ -20,7 +20,8 @@ import type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessEventListener,
-  TokenUsage, TaskItem 
+  TokenUsage,
+  TaskItem,
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
