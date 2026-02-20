@@ -20,7 +20,7 @@ import type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessEventListener,
-  TokenUsage,
+  TokenUsage, TaskItem 
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
@@ -59,10 +59,9 @@ import { ShellOutputComponent } from './components/shell-output.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TaskProgressComponent } from './components/task-progress.js';
 import { ThreadSelectorComponent } from './components/thread-selector.js';
 
-import { TaskProgressComponent } from './components/task-progress.js';
-import type { TaskItem } from '@mastra/core/harness';
 import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.js';
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';

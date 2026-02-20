@@ -1,6 +1,7 @@
 /**
  * Subagent registry — maps subagent IDs to their definitions.
  */
+import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
 import {
   createViewTool,
   createExecuteCommandTool,
@@ -10,7 +11,6 @@ import {
   createSubagentTool,
   stringReplaceLspTool,
 } from '../../tools/index.js';
-import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
 import { resolveModel } from '../model.js';
 import { auditTestsSubagent } from './audit-tests.js';
 import { executeSubagent } from './execute.js';

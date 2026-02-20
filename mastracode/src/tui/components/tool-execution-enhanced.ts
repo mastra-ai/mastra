@@ -6,12 +6,12 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { TaskItem } from '@mastra/core/harness';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 

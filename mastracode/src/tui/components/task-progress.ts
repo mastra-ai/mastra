@@ -5,8 +5,8 @@
  * Renders between status and editor.
  */
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
-import chalk from 'chalk';
 import type { TaskItem } from '@mastra/core/harness';
+import chalk from 'chalk';
 import { fg, bold } from '../theme.js';
 
 export class TaskProgressComponent extends Container {
