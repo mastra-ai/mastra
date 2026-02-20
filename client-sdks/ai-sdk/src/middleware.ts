@@ -253,43 +253,44 @@ interface ToolCallState {
   toolCallId: string;
   toolName?: string;
   args?: unknown;
-  argsText?: string;
+  argDeltas?: string[];
   result?: unknown;
   providerMetadata?: Record<string, unknown>;
 }
 
 class StreamOutputAccumulator {
-  private parts: MastraMessagePart[] = [];
+  /** Ordered sequence of part placeholders: either a text buffer index or a tool call ID */
+  private partOrder: ({ kind: 'text'; bufferIndex: number } | { kind: 'tool'; toolCallId: string })[] = [];
+  private textBuffers: string[][] = [];
   private toolStates = new Map<string, ToolCallState>();
-  private toolPartIndex = new Map<string, number>();
 
   addChunk(chunk: ChunkType): void {
     switch (chunk.type) {
       case 'text-delta':
         if (chunk.payload.text) {
-          this.appendText(chunk.payload.text);
+          this.appendTextDelta(chunk.payload.text);
         }
         return;
       case 'tool-call-input-streaming-start': {
         const state = this.ensureToolState(chunk.payload.toolCallId);
         state.toolName = state.toolName || chunk.payload.toolName;
         state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
-        if (state.argsText === undefined) {
-          state.argsText = '';
+        if (!state.argDeltas) {
+          state.argDeltas = [];
         }
-        this.upsertToolPart(state);
         return;
       }
       case 'tool-call-delta': {
         const state = this.ensureToolState(chunk.payload.toolCallId);
-        state.argsText = `${state.argsText || ''}${chunk.payload.argsTextDelta || ''}`;
-        this.upsertToolPart(state);
+        if (chunk.payload.argsTextDelta) {
+          if (!state.argDeltas) state.argDeltas = [];
+          state.argDeltas.push(chunk.payload.argsTextDelta);
+        }
         return;
       }
       case 'tool-call-input-streaming-end': {
         const state = this.ensureToolState(chunk.payload.toolCallId);
-        this.ensureToolArgs(state);
-        this.upsertToolPart(state);
+        this.finalizeToolArgs(state);
         return;
       }
       case 'tool-call': {
@@ -298,10 +299,9 @@ class StreamOutputAccumulator {
         if (chunk.payload.args !== undefined) {
           state.args = chunk.payload.args;
         } else {
-          this.ensureToolArgs(state);
+          this.finalizeToolArgs(state);
         }
         state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
-        this.upsertToolPart(state);
         return;
       }
       case 'tool-result': {
@@ -309,10 +309,9 @@ class StreamOutputAccumulator {
         state.toolName = state.toolName || chunk.payload.toolName;
         state.result = chunk.payload.result;
         if (state.args === undefined) {
-          this.ensureToolArgs(state);
+          this.finalizeToolArgs(state);
         }
         state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
-        this.upsertToolPart(state);
         return;
       }
       default:
@@ -321,18 +320,30 @@ class StreamOutputAccumulator {
   }
 
   buildResponseMessage(memory?: ProcessorMemoryContext): MastraDBMessage | null {
-    if (this.parts.length === 0) {
+    if (this.partOrder.length === 0) {
       return null;
     }
 
-    const textContent = this.parts
-      .filter((p): p is TextPart => p.type === 'text' && 'text' in p)
-      .map(p => p.text)
-      .join('');
+    const parts: MastraMessagePart[] = [];
+    const textSegments: string[] = [];
+
+    for (const entry of this.partOrder) {
+      if (entry.kind === 'text') {
+        const text = this.textBuffers[entry.bufferIndex]!.join('');
+        parts.push({ type: 'text', text });
+        textSegments.push(text);
+      } else {
+        const state = this.toolStates.get(entry.toolCallId)!;
+        this.finalizeToolArgs(state);
+        parts.push(this.buildToolPart(state));
+      }
+    }
+
+    const textContent = textSegments.join('');
 
     const content: MastraDBMessage['content'] = {
       format: 2,
-      parts: this.parts,
+      parts,
       ...(textContent ? { content: textContent } : {}),
     };
 
@@ -351,40 +362,31 @@ class StreamOutputAccumulator {
     if (!state) {
       state = { toolCallId };
       this.toolStates.set(toolCallId, state);
+      this.partOrder.push({ kind: 'tool', toolCallId });
     }
     return state;
   }
 
-  private ensureToolArgs(state: ToolCallState): void {
-    if (state.args !== undefined || !state.argsText) {
+  private finalizeToolArgs(state: ToolCallState): void {
+    if (state.args !== undefined || !state.argDeltas?.length) {
       return;
     }
-
     try {
-      state.args = JSON.parse(state.argsText);
+      state.args = JSON.parse(state.argDeltas.join(''));
     } catch {
       return;
     }
   }
 
-  private appendText(text: string): void {
-    const lastPart = this.parts[this.parts.length - 1];
-    if (lastPart && lastPart.type === 'text') {
-      (lastPart as TextPart).text = `${(lastPart as TextPart).text}${text}`;
+  private appendTextDelta(text: string): void {
+    const last = this.partOrder[this.partOrder.length - 1];
+    if (last?.kind === 'text') {
+      this.textBuffers[last.bufferIndex]!.push(text);
       return;
     }
-    this.parts.push({ type: 'text', text });
-  }
-
-  private upsertToolPart(state: ToolCallState): void {
-    const part = this.buildToolPart(state);
-    const index = this.toolPartIndex.get(state.toolCallId);
-    if (index === undefined) {
-      this.parts.push(part);
-      this.toolPartIndex.set(state.toolCallId, this.parts.length - 1);
-      return;
-    }
-    this.parts[index] = part;
+    const bufferIndex = this.textBuffers.length;
+    this.textBuffers.push([text]);
+    this.partOrder.push({ kind: 'text', bufferIndex });
   }
 
   private buildToolPart(state: ToolCallState): MastraMessagePart {
@@ -630,6 +632,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       const processorStates = new Map<string, { streamParts: ChunkType[]; customState: Record<string, unknown> }>();
       const runId = crypto.randomUUID();
       let streamAborted = false;
+      let sawFinish = false;
 
       const transformedStream = stream.pipeThrough(
         new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
@@ -688,8 +691,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               }
             }
 
-            if (mastraChunk && streamAccumulator) {
-              streamAccumulator.addChunk(mastraChunk);
+            if (mastraChunk) {
+              if (mastraChunk.type === 'finish') {
+                sawFinish = true;
+              }
+              if (streamAccumulator) {
+                streamAccumulator.addChunk(mastraChunk);
+              }
             }
 
             // Convert back to AI SDK format and enqueue if not filtered
@@ -701,7 +709,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             }
           },
           async flush(controller) {
-            if (!streamAccumulator || streamAborted) {
+            if (!streamAccumulator || streamAborted || !sawFinish) {
               return;
             }
 
