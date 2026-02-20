@@ -9,9 +9,8 @@ import {
   createWriteFileTool,
   createSubagentTool,
   stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
 } from '../../tools/index.js';
+import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
 import { resolveModel } from '../model.js';
 import { auditTestsSubagent } from './audit-tests.js';
 import { executeSubagent } from './execute.js';
@@ -63,8 +62,8 @@ export function getSubagentTools(projectPath: string) {
       write_file: writeFileTool,
       execute_command: executeCommandTool,
       // Task tracking (for execute)
-      todo_write: todoWriteTool,
-      todo_check: todoCheckTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     },
     resolveModel,
   });
@@ -85,3 +84,4 @@ export function getSubagentTools(projectPath: string) {
     toolReadOnly: subagentToolReadOnly,
   };
 }
+

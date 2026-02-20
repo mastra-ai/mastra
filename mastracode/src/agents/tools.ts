@@ -14,8 +14,6 @@ import {
   hasTavilyKey,
   stringReplaceLspTool,
   astSmartEditTool,
-  todoWriteTool,
-  todoCheckTool,
   requestSandboxAccessTool,
 } from '../tools';
 
@@ -44,8 +42,6 @@ export function createDynamicTools(mcpManager?: MCPManager) {
       search_content: grepTool,
       find_files: globTool,
       execute_command: executeCommandTool,
-      todo_write: todoWriteTool,
-      todo_check: todoCheckTool,
       request_sandbox_access: requestSandboxAccessTool,
     };
 
