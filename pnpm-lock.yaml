@@ -1156,7 +1156,7 @@ importers:
         version: 0.40.5
       '@mariozechner/pi-tui':
         specifier: latest
-        version: 0.53.0
+        version: 0.54.0
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -1174,7 +1174,7 @@ importers:
         version: 0.7.1
       ai:
         specifier: latest
-        version: 6.0.92(zod@4.3.6)
+        version: 6.0.94(zod@4.3.6)
       chalk:
         specifier: latest
         version: 5.6.2
@@ -2117,7 +2117,7 @@ importers:
     devDependencies:
       '@ai-sdk/gateway':
         specifier: ^3.0.0
-        version: 3.0.51(zod@3.25.76)
+        version: 3.0.52(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^3.0.0
         version: 3.0.8
@@ -2147,7 +2147,7 @@ importers:
         version: 4.0.12(vitest@4.0.16)
       ai:
         specifier: ^6.0.1
-        version: 6.0.92(zod@3.25.76)
+        version: 6.0.94(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.39.2(jiti@2.6.1)
@@ -2626,7 +2626,7 @@ importers:
         version: 0.4.6(zod@3.25.76)
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.3
-        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.92(zod@3.25.76))(zod@3.25.76)'
+        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.94(zod@3.25.76))(zod@3.25.76)'
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -3638,8 +3638,8 @@ importers:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       superjson:
-        specifier: ^2.2.2
-        version: 2.2.2
+        specifier: ^2.2.6
+        version: 2.2.6
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.18(tsx@4.21.0)(yaml@2.8.1))
@@ -3930,8 +3930,8 @@ importers:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
       superjson:
-        specifier: ^2.2.2
-        version: 2.2.2
+        specifier: ^2.2.6
+        version: 2.2.6
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.3(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -6169,8 +6169,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@3.0.51':
-    resolution: {integrity: sha512-VXYxgDv2U1GJj6xY3aVd9glEmotGmsQllmKDUEghoghlZhEX6F64JsBQx/TukmlJGM98iAYCmofIwGFddv8ZTA==}
+  '@ai-sdk/gateway@3.0.52':
+    resolution: {integrity: sha512-lYCXP8T3YnIDiz8DP7loAMT27wnblc3IAYzQ7igg89RCRyTUjk6ffbxHXXQ5Pmv8jrdLF0ZIJnH54Dsr1OCKHg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -10120,8 +10120,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mariozechner/pi-tui@0.53.0':
-    resolution: {integrity: sha512-ffma5Xj6DTN8FWA+6jM5tDiFicF/NnyNSwPH0vw2oqkXqlXt1zSSM9FymZIbSjDLW+A/f1zMvAHORhFIeQTBJQ==}
+  '@mariozechner/pi-tui@0.54.0':
+    resolution: {integrity: sha512-bvFlUohdxDvKcFeQM2xsd5twCGKWxVaYSlHCFljIW0KqMC4vU+/Ts4A1i9iDnm6Xe/MlueKvC0V09YeC8fLIHA==}
     engines: {node: '>=20.0.0'}
 
   '@mastra/mcp@1.0.0':
@@ -14417,8 +14417,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  ai@6.0.92:
-    resolution: {integrity: sha512-TeXJX2PBv2djoqZN5J5+pL5etJFwxEiv55i6iZF4/qthLx1SjWDk6i3SETd7r9XZfvOlDaOJBQZ6MIHkAaOnhw==}
+  ai@6.0.94:
+    resolution: {integrity: sha512-/F9wh262HbK05b/5vILh38JvPiheonT+kBj1L97712E7VPchqmcx7aJuZN3QSk5Pj6knxUJLm2FFpYJI1pHXUA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -15523,9 +15523,9 @@ packages:
     resolution: {integrity: sha512-TG2hpqe4ELx54QER/S3HQ9SRVnQnGBtKUz5bLQWtYAQ+o6GpgMs6sYUvaiJjVxb+UXwhRhAEP3m7LbsIZ77Hmw==}
     engines: {node: '>= 0.8'}
 
-  copy-anything@3.0.5:
-    resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
-    engines: {node: '>=12.13'}
+  copy-anything@4.0.5:
+    resolution: {integrity: sha512-7Vv6asjS4gMOuILabD3l739tsaxFQmC+a7pLZm02zyvs8p977bL3zEgq3yDk5rn9B0PbYgIv++jmHcuUab4RhA==}
+    engines: {node: '>=18'}
 
   copy-to@2.0.1:
     resolution: {integrity: sha512-3DdaFaU/Zf1AnpLiFDeNCD4TOWe3Zl2RZaTzUvWiIk5ERzcCodOE20Vqq4fzCbNoHURFHT4/us/Lfq+S2zyY4w==}
@@ -17805,9 +17805,9 @@ packages:
     resolution: {integrity: sha512-mfcwb6IzQyOKTs84CQMrOwW4gQcaTOAWJ0zzJCl2WSPDrWk/OzDaImWFH3djXhb24g4eudZfLRozAvPGw4d9hQ==}
     engines: {node: '>= 0.4'}
 
-  is-what@4.1.16:
-    resolution: {integrity: sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==}
-    engines: {node: '>=12.13'}
+  is-what@5.5.0:
+    resolution: {integrity: sha512-oG7cgbmg5kLYae2N5IVd3jm2s+vldjxJzK1pcu9LfpGuQ93MQSzo0okvRna+7y5ifrD+20FE8FvjusyGaz14fw==}
+    engines: {node: '>=18'}
 
   is-windows@1.0.2:
     resolution: {integrity: sha512-eXK1UInq2bPmjyX6e3VHIzMLobc4J94i4AWn+Hpq3OU5KkrRC96OAcR3PRJ/pGu6m8TRnBHP9dkXQVsT/COVIA==}
@@ -21517,8 +21517,8 @@ packages:
   suffix-thumb@5.0.2:
     resolution: {integrity: sha512-I5PWXAFKx3FYnI9a+dQMWNqTxoRt6vdBdb0O+BJ1sxXCWtSoQCusc13E58f+9p4MYx/qCnEMkD5jac6K2j3dgA==}
 
-  superjson@2.2.2:
-    resolution: {integrity: sha512-5JRxVqC8I8NuOUjzBbvVJAKNM8qoVuH0O77h4WInc/qC2q5IreqKxYwgkga3PfA22OayK2ikceb/B26dztPl+Q==}
+  superjson@2.2.6:
+    resolution: {integrity: sha512-H+ue8Zo4vJmV2nRjpx86P35lzwDT3nItnIsocgumgr0hHMQ+ZGq5vrERg9kJBo5AWGmxZDhzDo+WVIJqkB0cGA==}
     engines: {node: '>=16'}
 
   supports-color@10.2.2:
@@ -23043,14 +23043,14 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.51(zod@3.25.76)':
+  '@ai-sdk/gateway@3.0.52(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.15(zod@3.25.76)
       '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.51(zod@4.3.6)':
+  '@ai-sdk/gateway@3.0.52(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.15(zod@4.3.6)
@@ -28634,7 +28634,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mariozechner/pi-tui@0.53.0':
+  '@mariozechner/pi-tui@0.54.0':
     dependencies:
       '@types/mime-types': 2.1.4
       chalk: 5.6.2
@@ -29060,10 +29060,10 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.10(zod@3.25.76)
       zod: 3.25.76
 
-  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.92(zod@3.25.76))(zod@3.25.76)':
+  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.94(zod@3.25.76))(zod@3.25.76)':
     dependencies:
       '@openrouter/sdk': 0.1.27
-      ai: 6.0.92(zod@3.25.76)
+      ai: 6.0.94(zod@3.25.76)
       zod: 3.25.76
 
   '@openrouter/sdk@0.1.27':
@@ -34162,17 +34162,17 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
 
-  ai@6.0.92(zod@3.25.76):
+  ai@6.0.94(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 3.0.51(zod@3.25.76)
+      '@ai-sdk/gateway': 3.0.52(zod@3.25.76)
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.15(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
 
-  ai@6.0.92(zod@4.3.6):
+  ai@6.0.94(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 3.0.51(zod@4.3.6)
+      '@ai-sdk/gateway': 3.0.52(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.15(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
@@ -35322,9 +35322,9 @@ snapshots:
       depd: 2.0.0
       keygrip: 1.1.0
 
-  copy-anything@3.0.5:
+  copy-anything@4.0.5:
     dependencies:
-      is-what: 4.1.16
+      is-what: 5.5.0
 
   copy-to@2.0.1: {}
 
@@ -38167,7 +38167,7 @@ snapshots:
       call-bound: 1.0.4
       get-intrinsic: 1.3.0
 
-  is-what@4.1.16: {}
+  is-what@5.5.0: {}
 
   is-windows@1.0.2: {}
 
@@ -42796,9 +42796,9 @@ snapshots:
 
   suffix-thumb@5.0.2: {}
 
-  superjson@2.2.2:
+  superjson@2.2.6:
     dependencies:
-      copy-anything: 3.0.5
+      copy-anything: 4.0.5
 
   supports-color@10.2.2: {}
 

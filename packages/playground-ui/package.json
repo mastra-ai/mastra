@@ -125,7 +125,7 @@
     "semver": "^7.7.2",
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
-    "superjson": "^2.2.2",
+    "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
     "zod": "^4.1.12",
