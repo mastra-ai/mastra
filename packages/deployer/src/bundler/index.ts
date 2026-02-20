@@ -266,39 +266,6 @@ export abstract class Bundler extends MastraBundler {
     return inputs;
   }
 
-  private async writeMastraPackagesJson(projectRoot: string, bundleLocation: string): Promise<void> {
-    try {
-      const pkgJsonPath = join(projectRoot, 'package.json');
-      const pkgJson = await readJSON(pkgJsonPath);
-      const allDeps: Record<string, string> = {
-        ...(pkgJson.dependencies ?? {}),
-        ...(pkgJson.devDependencies ?? {}),
-      };
-
-      const mastraDeps = Object.entries(allDeps).filter(([name]) => name.startsWith('@mastra/') || name === 'mastra');
-
-      const packages = await Promise.all(
-        mastraDeps.map(async ([name, specifiedVersion]) => {
-          try {
-            const rootPath = await getPackageRootPath(name, projectRoot);
-            if (rootPath) {
-              const depPkg = await readJSON(join(rootPath, 'package.json'));
-              return { name, version: depPkg.version ?? specifiedVersion };
-            }
-          } catch {
-            // fall through
-          }
-          return { name, version: specifiedVersion };
-        }),
-      );
-
-      await writeFile(join(bundleLocation, 'mastra-packages.json'), JSON.stringify(packages), 'utf-8');
-      this.logger.debug('Wrote mastra-packages.json');
-    } catch (error) {
-      this.logger.debug('Failed to write mastra-packages.json', { error });
-    }
-  }
-
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -458,8 +425,6 @@ export abstract class Bundler extends MastraBundler {
 export const tools = [${toolsExports.join(', ')}]`,
       );
       this.logger.info('Bundling Mastra done');
-
-      await this.writeMastraPackagesJson(projectRoot, bundleLocation);
 
       this.logger.info('Copying public files');
       await this.copyPublic(dirname(mastraEntryFile), outputDirectory);

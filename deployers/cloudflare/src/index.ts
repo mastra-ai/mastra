@@ -140,16 +140,8 @@ export const sys = {
 
   private getEntry(): string {
     return `
-    import { fileURLToPath as __pkgFileURLToPath } from 'node:url';
-    import { dirname as __pkgDirname, join as __pkgJoin } from 'node:path';
     import '#polyfills';
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
-
-    // Set packages file path for CMS availability detection in built output
-    if (!process.env.MASTRA_PACKAGES_FILE) {
-      const __bundleDir = __pkgDirname(__pkgFileURLToPath(import.meta.url));
-      process.env.MASTRA_PACKAGES_FILE = __pkgJoin(__bundleDir, 'mastra-packages.json');
-    }
 
     export default {
       fetch: async (request, env, context) => {
