@@ -1,0 +1,179 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Agent } from '../agent';
+import { InMemoryStore } from '../storage/mock';
+import { Harness } from './harness';
+
+function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
+  const agent = new Agent({
+    name: 'test-agent',
+    instructions: 'You are a test agent.',
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+  });
+
+  return new Harness({
+    id: 'test-harness',
+    storage: new InMemoryStore(),
+    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    threadLock,
+  });
+}
+
+describe('Harness thread locking', () => {
+  let acquire: ReturnType<typeof vi.fn>;
+  let release: ReturnType<typeof vi.fn>;
+  let harness: ReturnType<typeof createHarness>;
+
+  beforeEach(async () => {
+    acquire = vi.fn();
+    release = vi.fn();
+    harness = createHarness({ acquire, release });
+    await harness.init();
+  });
+
+  describe('createThread', () => {
+    it('acquires lock on the new thread', async () => {
+      const thread = await harness.createThread();
+      expect(acquire).toHaveBeenCalledWith(thread.id);
+    });
+
+    it('releases lock on previous thread when creating a new one', async () => {
+      const first = await harness.createThread();
+      acquire.mockClear();
+      release.mockClear();
+
+      const second = await harness.createThread();
+      expect(release).toHaveBeenCalledWith(first.id);
+      expect(acquire).toHaveBeenCalledWith(second.id);
+    });
+
+    it('release is called before acquire on createThread', async () => {
+      await harness.createThread();
+      const callOrder: string[] = [];
+      release.mockImplementation(() => callOrder.push('release'));
+      acquire.mockImplementation(() => callOrder.push('acquire'));
+
+      await harness.createThread();
+      expect(callOrder).toEqual(['release', 'acquire']);
+    });
+  });
+
+  describe('switchThread', () => {
+    it('acquires lock on the target thread', async () => {
+      const thread = await harness.createThread('thread-a');
+      await harness.createThread('thread-b');
+      acquire.mockClear();
+      release.mockClear();
+
+      await harness.switchThread(thread.id);
+      expect(acquire).toHaveBeenCalledWith(thread.id);
+    });
+
+    it('releases lock on previous thread', async () => {
+      const first = await harness.createThread('first');
+      const second = await harness.createThread('second');
+      acquire.mockClear();
+      release.mockClear();
+
+      await harness.switchThread(first.id);
+      expect(release).toHaveBeenCalledWith(second.id);
+      expect(acquire).toHaveBeenCalledWith(first.id);
+    });
+
+    it('acquire is called before release on switchThread', async () => {
+      const threadA = await harness.createThread('first');
+      await harness.createThread('second');
+      const callOrder: string[] = [];
+      release.mockImplementation(() => callOrder.push('release'));
+      acquire.mockImplementation(() => callOrder.push('acquire'));
+
+      await harness.switchThread(threadA.id);
+      expect(callOrder).toEqual(['acquire', 'release']);
+    });
+
+    it('propagates errors from acquire (e.g., lock conflict)', async () => {
+      const threadA = await harness.createThread('first');
+      await harness.createThread('second');
+
+      acquire.mockImplementation(() => {
+        throw new Error('Thread is locked by another process');
+      });
+
+      await expect(harness.switchThread(threadA.id)).rejects.toThrow('Thread is locked by another process');
+    });
+  });
+
+  describe('selectOrCreateThread', () => {
+    it('acquires lock when selecting an existing thread', async () => {
+      // Pre-create a thread so selectOrCreateThread finds it
+      await harness.createThread('existing');
+      acquire.mockClear();
+      release.mockClear();
+
+      // Manually set the same storage so it sees the thread
+      // Instead, create a new harness with same store
+      const store = new InMemoryStore();
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const freshHarness = new Harness({
+        id: 'test-harness',
+        storage: store,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+        threadLock: { acquire, release },
+      });
+      await freshHarness.init();
+
+      // Create a thread via this harness so selectOrCreateThread can find it
+      const existing = await freshHarness.createThread('existing-thread');
+      acquire.mockClear();
+      release.mockClear();
+
+      // Create another fresh harness with the same storage
+      const freshHarness2 = new Harness({
+        id: 'test-harness',
+        storage: store,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+        threadLock: { acquire, release },
+      });
+      await freshHarness2.init();
+
+      const selected = await freshHarness2.selectOrCreateThread();
+      expect(selected.id).toBe(existing.id);
+      expect(acquire).toHaveBeenCalledWith(existing.id);
+    });
+
+    it('acquires lock when creating a new thread (no existing threads)', async () => {
+      const store = new InMemoryStore();
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const freshHarness = new Harness({
+        id: 'test-harness',
+        storage: store,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+        threadLock: { acquire, release },
+      });
+      await freshHarness.init();
+
+      acquire.mockClear();
+      const thread = await freshHarness.selectOrCreateThread();
+      expect(acquire).toHaveBeenCalledWith(thread.id);
+    });
+  });
+
+  describe('without threadLock config', () => {
+    it('works normally without locking', async () => {
+      const unlocked = createHarness(); // no threadLock
+      await unlocked.init();
+
+      const threadA = await unlocked.createThread('test');
+      await unlocked.createThread('test2');
+      await unlocked.switchThread(threadA.id);
+      // No errors thrown — locking is optional
+    });
+  });
+});

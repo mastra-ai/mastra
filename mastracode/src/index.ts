@@ -18,6 +18,7 @@ import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { MCPManager } from './mcp/index.js';
 import { getToolCategory } from './permissions.js';
+import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { stateSchema } from './schema.js';
@@ -233,6 +234,10 @@ export function createMastraCode(config?: MastraCodeConfig) {
       return undefined;
     },
     modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+    threadLock: {
+      acquire: acquireThreadLock,
+      release: releaseThreadLock,
+    },
   });
 
   // Sync hookManager session ID on thread changes

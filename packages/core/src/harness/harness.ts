@@ -190,6 +190,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
+    this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
 
@@ -536,6 +537,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     }
 
+    // Release lock on previous thread, acquire lock on new one
+    if (this.currentThreadId) {
+      this.config.threadLock?.release(this.currentThreadId);
+    }
+    this.config.threadLock?.acquire(thread.id);
+
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
@@ -571,7 +578,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
+    // Acquire lock on new thread before releasing old one
+    this.config.threadLock?.acquire(threadId);
+
     const previousThreadId = this.currentThreadId;
+    if (previousThreadId) {
+      this.config.threadLock?.release(previousThreadId);
+    }
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
