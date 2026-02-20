@@ -1222,6 +1222,24 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
 
+        case 'tool-call-input-streaming-start': {
+          const { toolCallId, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_start', toolCallId, toolName });
+          break;
+        }
+
+        case 'tool-call-delta': {
+          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+          break;
+        }
+
+        case 'tool-call-input-streaming-end': {
+          const { toolCallId } = chunk.payload;
+          this.emit({ type: 'tool_input_end', toolCallId });
+          break;
+        }
+
         case 'tool-call': {
           const toolCall = chunk.payload;
           currentMessage.content.push({
