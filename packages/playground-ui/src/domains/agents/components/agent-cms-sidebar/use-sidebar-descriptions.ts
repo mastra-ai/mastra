@@ -19,8 +19,7 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
 
     const toolCount =
       Object.keys(values.tools ?? {}).length +
-      Object.keys(values.integrationTools ?? {}).length +
-      (values.mcpClients ?? []).length;
+      Object.keys(values.integrationTools ?? {}).length;
     const tools = toolCount === 0 ? 'None selected' : pluralize(toolCount, 'tool');
 
     const agentCount = Object.keys(values.agents ?? {}).length;
