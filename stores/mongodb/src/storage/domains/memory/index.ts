@@ -1735,7 +1735,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // This prevents edge cases where a large chunk overshoots dramatically.
       // When forceMaxActivation is set (above blockAfter), skip the safeguard
       // and always prefer the over boundary to aggressively reduce context.
-      // Additionally, never bias over if it would leave fewer than 500 tokens
+      // Additionally, never bias over if it would leave fewer than 1000 tokens
       // remaining — at that level the agent may lose all meaningful context.
       const maxOvershoot = retentionFloor * 0.95;
       const overshoot = bestOverTokens - targetMessageTokens;

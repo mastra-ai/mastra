@@ -871,7 +871,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Safeguard: if the over boundary would eat into more than 95% of the
     // retention floor, fall back to the best under boundary instead.
     // This prevents edge cases where a large chunk overshoots dramatically.
-    // Additionally, never bias over if it would leave fewer than 500 tokens
+    // Additionally, never bias over if it would leave fewer than 1000 tokens
     // remaining — at that level the agent may lose all meaningful context.
     const maxOvershoot = retentionFloor * 0.95;
     const overshoot = bestOverTokens - targetMessageTokens;
