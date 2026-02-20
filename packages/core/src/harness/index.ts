@@ -1,5 +1,6 @@
 export { Harness } from './harness';
-export { askUserTool, parseSubagentMeta, submitPlanTool } from './tools';
+export { askUserTool, parseSubagentMeta, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+export type { TaskItem } from './tools';
 export type {
   AvailableModel,
   HarnessConfig,
