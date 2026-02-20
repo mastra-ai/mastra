@@ -44,17 +44,19 @@ export class LSPManager {
    */
   async getClient(filePath: string, workspaceRoot: string): Promise<LSPClient | null> {
     const servers = getServersForFile(filePath, workspaceRoot, this.config.disableServers);
-    if (servers.length === 0) return null;
+    // Filter to servers whose binary is actually available
+    const available = servers.filter(s => s.command(workspaceRoot) !== undefined);
+    if (available.length === 0) return null;
 
     // Prefer well-known language servers
     const serverDef =
-      servers.find(
+      available.find(
         s =>
           s.languageIds.includes('typescript') ||
           s.languageIds.includes('javascript') ||
           s.languageIds.includes('python') ||
           s.languageIds.includes('go'),
-      ) ?? servers[0]!;
+      ) ?? available[0]!;
 
     const key = `${serverDef.name}:${workspaceRoot}`;
 

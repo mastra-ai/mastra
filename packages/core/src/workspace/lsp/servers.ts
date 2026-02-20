@@ -6,6 +6,7 @@
  * The LSPClient uses a SandboxProcessManager to spawn from these command strings.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, dirname, parse } from 'node:path';
@@ -13,6 +14,17 @@ import { pathToFileURL } from 'node:url';
 
 import { getLanguageId } from './language';
 import type { LSPServerDef } from './types';
+
+/** Check if a binary exists on PATH. */
+function whichSync(binary: string): boolean {
+  try {
+    const cmd = process.platform === 'win32' ? 'where' : 'which';
+    execFileSync(cmd, [binary], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Walk up from `cwd` looking for one of the given marker files/dirs.
@@ -63,9 +75,8 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
         return `${localBin} --stdio`;
       } else if (existsSync(cwdBin)) {
         return `${cwdBin} --stdio`;
-      } else {
-        return 'npx typescript-language-server --stdio';
       }
+      return undefined;
     },
     initialization: (root: string) => {
       const requireFromRoot = createRequire(pathToFileURL(join(root, 'package.json')));
@@ -114,8 +125,8 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     root: (cwd: string) => findNearestRoot(cwd, ['pyproject.toml', 'setup.py', 'requirements.txt', '.git']),
     command: () => {
       const localPath = join(process.cwd(), 'node_modules', '.bin', 'pyright-langserver');
-      const binaryPath = existsSync(localPath) ? localPath : 'pyright-langserver';
-      return `${binaryPath} --stdio`;
+      if (existsSync(localPath)) return `${localPath} --stdio`;
+      return whichSync('pyright-langserver') ? 'pyright-langserver --stdio' : undefined;
     },
   },
 
@@ -125,7 +136,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     languageIds: ['go'],
     root: (cwd: string) => findNearestRoot(cwd, ['go.mod', '.git']),
     command: () => {
-      return 'gopls serve';
+      return whichSync('gopls') ? 'gopls serve' : undefined;
     },
   },
 
@@ -135,7 +146,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     languageIds: ['rust'],
     root: (cwd: string) => findNearestRoot(cwd, ['Cargo.toml', '.git']),
     command: () => {
-      return 'rust-analyzer --stdio';
+      return whichSync('rust-analyzer') ? 'rust-analyzer --stdio' : undefined;
     },
   },
 };
