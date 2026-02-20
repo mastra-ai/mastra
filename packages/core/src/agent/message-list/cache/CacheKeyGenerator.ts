@@ -17,7 +17,7 @@ import type { MastraMessagePart, UIMessageV4Part } from './types';
  * Cache key invariants:
  * - Same message content should always produce the same key
  * - Different content should produce different keys
- * - Provider metadata (e.g., OpenAI reasoning itemId) must be included for proper distinction
+ * - Provider metadata (e.g., reasoning itemId) must be included for proper distinction
  */
 export class CacheKeyGenerator {
   /**
@@ -53,34 +53,30 @@ export class CacheKeyGenerator {
         return prev;
       }, 0);
 
-      // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
-      // When the reasoning text is empty, the default cache key logic produces "reasoning0"
-      // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
-      // message-merging logic drops the latest reasoning item. The result is that subsequent
-      // OpenAI calls fail with:
+      // Providers send reasoning items (rs_...) inside providerMetadata.<provider>.itemId.
+      // The provider key varies by SDK: "openai" for standard OpenAI, "azure" for Azure
+      // OpenAI (via @ai-sdk/azure v3+), etc. When the reasoning text is empty, the default
+      // cache key logic produces "reasoning0" for *all* reasoning parts, making distinct
+      // rs_ entries appear identical and causing the message-merging logic to drop subsequent
+      // reasoning items. This breaks providers like Azure OpenAI that require each
+      // function_call to be preceded by its reasoning item.
       //
-      //   "Item 'fc_...' was provided without its required 'reasoning' item"
-      //
-      // To fix this, we incorporate the OpenAI itemId into the cache key so each rs_ entry
-      // is treated as distinct.
+      // To fix this, we look for an itemId under any provider key in providerMetadata.
       //
       // Note: We cast `part` to `any` here because the AI SDK's ReasoningUIPart V4 type does
-      // NOT declare `providerMetadata` (even though Mastra attaches it at runtime). This
-      // access is safe in JavaScript, but TypeScript cannot type it without augmentation,
-      // so we intentionally narrow to `any` only for this metadata lookup.
+      // NOT declare `providerMetadata` (even though Mastra attaches it at runtime).
 
       const partAny = part as any;
+      const metadata = partAny?.providerMetadata;
 
-      if (
-        partAny &&
-        Object.hasOwn(partAny, 'providerMetadata') &&
-        partAny.providerMetadata &&
-        Object.hasOwn(partAny.providerMetadata, 'openai') &&
-        partAny.providerMetadata.openai &&
-        Object.hasOwn(partAny.providerMetadata.openai, 'itemId')
-      ) {
-        const itemId = partAny.providerMetadata.openai.itemId;
-        cacheKey += `|${itemId}`;
+      if (metadata && typeof metadata === 'object') {
+        for (const providerKey of Object.keys(metadata)) {
+          const provider = metadata[providerKey];
+          if (provider && typeof provider === 'object' && 'itemId' in provider && provider.itemId) {
+            cacheKey += `|${provider.itemId}`;
+            break;
+          }
+        }
       }
     }
     if (part.type === 'file') {
