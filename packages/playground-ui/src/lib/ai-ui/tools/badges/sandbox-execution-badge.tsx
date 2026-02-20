@@ -166,9 +166,9 @@ export const SandboxExecutionBadge = ({
   try {
     const parsedArgs = typeof args === 'object' ? args : JSON.parse(args);
     if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
-      const cmd = parsedArgs.command || '';
-      const cmdArgs = parsedArgs.args?.join(' ') || '';
-      commandDisplay = `${cmd} ${cmdArgs}`.trim();
+      commandDisplay = parsedArgs.command || '';
+    } else if (toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT) {
+      commandDisplay = `PID ${parsedArgs.pid}${parsedArgs.wait ? ' (waiting)' : ''}`;
     }
   } catch {
     commandDisplay = toolName;
@@ -210,7 +210,12 @@ export const SandboxExecutionBadge = ({
   // Once the tool completes, show the final result — it's what the LLM saw.
   const outputContent = typeof result === 'string' ? result : streamingContent;
 
-  const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
+  const displayName =
+    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND
+      ? 'Execute Command'
+      : toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT
+        ? 'Get Process Output'
+        : toolName;
 
   // Get start time from first streaming chunk for live timer
   const firstChunkTime = sandboxChunks[0]?.data?.timestamp as number | undefined;

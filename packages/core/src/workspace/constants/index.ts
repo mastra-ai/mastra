@@ -27,7 +27,7 @@ export const WORKSPACE_TOOLS = {
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${WORKSPACE_TOOLS_PREFIX}_execute_command` as const,
-    PROCESS_OUTPUT: `${WORKSPACE_TOOLS_PREFIX}_process_output` as const,
+    GET_PROCESS_OUTPUT: `${WORKSPACE_TOOLS_PREFIX}_get_process_output` as const,
     KILL_PROCESS: `${WORKSPACE_TOOLS_PREFIX}_kill_process` as const,
   },
   SEARCH: {

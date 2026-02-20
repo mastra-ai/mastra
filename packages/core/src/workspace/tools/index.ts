@@ -20,7 +20,7 @@ export {
   executeCommandInputSchema,
   executeCommandWithBackgroundSchema,
 } from './execute-command';
-export { processOutputTool } from './process-output';
+export { getProcessOutputTool } from './get-process-output';
 export { killProcessTool } from './kill-process';
 export { grepTool } from './grep';
 
