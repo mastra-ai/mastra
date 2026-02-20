@@ -341,6 +341,9 @@ export type HarnessEvent =
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
+  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
+  | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
@@ -500,7 +503,28 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
-  | { type: 'image'; data: string; mimeType: string };
+  | { type: 'image'; data: string; mimeType: string }
+  | {
+      type: 'om_observation_start';
+      tokensToObserve: number;
+      operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_observation_end';
+      tokensObserved: number;
+      observationTokens: number;
+      durationMs: number;
+      operationType?: 'observation' | 'reflection';
+      observations?: string;
+      currentTask?: string;
+      suggestedResponse?: string;
+    }
+  | {
+      type: 'om_observation_failed';
+      error: string;
+      tokensAttempted?: number;
+      operationType?: 'observation' | 'reflection';
+    };
 
 // =============================================================================
 // Request Context

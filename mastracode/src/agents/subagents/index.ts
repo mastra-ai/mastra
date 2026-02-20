@@ -13,6 +13,7 @@ import {
   todoCheckTool,
 } from '../../tools/index.js';
 import { resolveModel } from '../model.js';
+import { auditTestsSubagent } from './audit-tests.js';
 import { executeSubagent } from './execute.js';
 import { exploreSubagent } from './explore.js';
 import { planSubagent } from './plan.js';
@@ -23,6 +24,7 @@ const subagentRegistry: Record<string, SubagentDefinition> = {
   explore: exploreSubagent,
   plan: planSubagent,
   execute: executeSubagent,
+  'audit-tests': auditTestsSubagent,
 };
 
 /**
