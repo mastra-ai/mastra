@@ -65,6 +65,44 @@ export function sanitizeV5UIMessages(
           return false;
         }
 
+        // Filter out empty reasoning parts that would cause provider errors.
+        //
+        // The Google provider (@ai-sdk/google, verified through v3.0.30) has a bug
+        // where it drops reasoning parts when text.length === 0, even if the part
+        // carries a thoughtSignature for prompt caching. When the reasoning part is
+        // the only content in an assistant message, this produces an empty content
+        // array that Gemini rejects with:
+        //   "Unable to submit request because it must include at least one parts field"
+        //
+        // Upstream bug location (@ai-sdk/google request builder):
+        //   case "reasoning": {
+        //     return part.text.length === 0 ? void 0 : { text, thought: true, thoughtSignature };
+        //   }
+        //
+        // We strip empty reasoning that has NO providerMetadata (carries no useful data)
+        // or has only Google metadata (thoughtSignature — which the upstream provider
+        // would discard anyway due to the bug above).
+        //
+        // We intentionally KEEP empty reasoning that has non-Google metadata:
+        // - Anthropic (signature/redactedData) for multi-turn thinking conversations
+        // - OpenAI (itemId) for item_reference linking
+        //
+        // TODO: Once the upstream Google provider is fixed to preserve reasoning
+        // parts with thoughtSignature even when text is empty, relax this filter to
+        // only strip reasoning that lacks BOTH text and providerMetadata.
+        // See: https://github.com/mastra-ai/mastra/issues/12980
+        if (p.type === 'reasoning' && !p.text?.trim()) {
+          const meta = 'providerMetadata' in p ? p.providerMetadata : undefined;
+          // Strip if no metadata at all, or if metadata only contains Google keys
+          // (which the upstream provider would discard anyway).
+          const isGoogleOnlyOrNoMeta =
+            !meta ||
+            (typeof meta === 'object' && Object.keys(meta).every(k => k === 'google'));
+          if (isGoogleOnlyOrNoMeta) {
+            return false;
+          }
+        }
+
         // Filter out empty text parts to handle legacy data from before this filtering was implemented
         // But preserve them if they are the only parts (legitimate placeholder messages)
         if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {

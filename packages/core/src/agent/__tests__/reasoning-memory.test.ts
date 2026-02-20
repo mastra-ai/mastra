@@ -884,3 +884,419 @@ describe('Reasoning + Memory Integration', () => {
     }
   });
 });
+
+/**
+ * Spy Tests: Compare LLM Response Output vs Next Request Input
+ *
+ * Following Tyler's debugging advice:
+ * "write an ai sdk model middleware where you write the response info to disk
+ *  so you can examine it, then also write any new request input to disk and compare"
+ *
+ * These tests use MockLanguageModelV2.doStreamCalls to spy on what the model
+ * receives on the second call, and compare it with what the first call's model
+ * returned. This reveals exactly where reasoning data is lost in the conversion
+ * pipeline: MastraDBMessage → UIMessage → ModelMessage → LanguageModelV2Prompt
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/12980
+ */
+describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', () => {
+  /**
+   * Gemini EMPTY reasoning with thoughtSignature (redacted thinking).
+   * Empty reasoning is NOT stored or sent, even when thoughtSignature is present.
+   * The upstream Google provider (@ai-sdk/google, through v3.0.30) drops reasoning
+   * when text.length === 0, discarding the thoughtSignature. Storing it would poison
+   * conversations because the provider produces empty content arrays that Gemini rejects.
+   */
+  it('should handle Gemini empty reasoning with thoughtSignature through round-trip', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-spy-2';
+
+    // Turn 1: Gemini-style model returns EMPTY reasoning (redacted) with thoughtSignature
+    const geminiModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-1', modelId: 'gemini-2.5-pro', timestamp: new Date(0) },
+          {
+            type: 'reasoning-start',
+            id: 'reasoning-1',
+            providerMetadata: {
+              google: { thoughtSignature: 'base64sig_redacted' },
+            },
+          },
+          // No reasoning-delta - empty reasoning (Gemini redacted it)
+          {
+            type: 'reasoning-end',
+            id: 'reasoning-1',
+            providerMetadata: {
+              google: { thoughtSignature: 'base64sig_redacted' },
+            },
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Here is my answer.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    // Turn 2: Spy model
+    const spyModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-2', modelId: 'spy', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Follow-up.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+
+    // --- Turn 1 ---
+    const agent1 = new Agent({
+      id: 'spy-gemini-empty',
+      name: 'Spy Gemini Empty',
+      instructions: 'You are a helpful assistant.',
+      model: geminiModel,
+      memory: mockMemory,
+    });
+
+    const resp1 = await agent1.stream('What is 2+2?', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    await resp1.consumeStream();
+
+    // Verify Turn 1 DB storage
+    const dbMessages = resp1.messageList.get.all.db();
+    const turn1Assistant = dbMessages.find(m => m.role === 'assistant');
+    expect(turn1Assistant).toBeDefined();
+
+    const turn1ReasoningDB = turn1Assistant!.content.parts.find(p => p.type === 'reasoning');
+    // Empty reasoning IS stored in the DB with its thoughtSignature metadata,
+    // preserving the data for when the upstream Google provider bug is fixed.
+    expect(turn1ReasoningDB).toBeDefined();
+    expect(turn1ReasoningDB!.providerMetadata?.google?.thoughtSignature).toBe('base64sig_redacted');
+
+    // Text part should still be stored
+    const turn1TextDB = turn1Assistant!.content.parts.find(p => p.type === 'text');
+    expect(turn1TextDB).toBeDefined();
+    expect(turn1TextDB!.text).toBe('Here is my answer.');
+
+    // --- Turn 2: Spy ---
+    const agent2 = new Agent({
+      id: 'spy-gemini-empty',
+      name: 'Spy Gemini Empty',
+      instructions: 'You are a helpful assistant.',
+      model: spyModel,
+      memory: mockMemory,
+    });
+
+    const resp2 = await agent2.stream('Tell me more', {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
+    });
+    await resp2.consumeStream();
+
+    // Capture Turn 2 input
+    const turn2Prompt = spyModel.doStreamCalls[0]!.prompt;
+    const turn2AssistantMsg = turn2Prompt.find((m: any) => m.role === 'assistant');
+    expect(turn2AssistantMsg).toBeDefined();
+
+    const turn2Content = turn2AssistantMsg!.content as any[];
+    const turn2Reasoning = turn2Content.find((p: any) => p.type === 'reasoning');
+    const turn2Text = turn2Content.find((p: any) => p.type === 'text');
+
+    // Empty reasoning with thoughtSignature is NOT sent to the LLM because the
+    // upstream Google provider would drop it anyway (text.length === 0 check).
+    // Stripping it here prevents the empty content array that causes the error.
+    expect(turn2Reasoning).toBeUndefined();
+
+    // Text should survive
+    expect(turn2Text).toBeDefined();
+    expect(turn2Text.text).toBe('Here is my answer.');
+  });
+
+  /**
+   * Test 3: Empty reasoning WITHOUT providerMetadata.
+   * This is the scenario where reasoning has no text AND no provider metadata.
+   * These empty reasoning parts are stored in the DB (preserving all data as-is)
+   * but filtered out by sanitizeV5UIMessages before being sent to the LLM,
+   * since they carry no useful data and can cause errors
+   * (e.g., Gemini: "must include at least one parts field").
+   */
+  it('should not send empty reasoning without providerMetadata to the LLM', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-spy-3';
+
+    // Turn 1: Model returns EMPTY reasoning with NO providerMetadata
+    const emptyReasoningModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-1', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'reasoning-start',
+            id: 'reasoning-1',
+            // No providerMetadata!
+          },
+          // No reasoning-delta - empty reasoning
+          {
+            type: 'reasoning-end',
+            id: 'reasoning-1',
+            // No providerMetadata!
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Some answer.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    // Turn 2: Spy model
+    const spyModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-2', modelId: 'spy', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Follow-up.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+
+    // --- Turn 1 ---
+    const agent1 = new Agent({
+      id: 'spy-empty-no-meta',
+      name: 'Spy Empty No Meta',
+      instructions: 'You are a helpful assistant.',
+      model: emptyReasoningModel,
+      memory: mockMemory,
+    });
+
+    const resp1 = await agent1.stream('What is 2+2?', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    await resp1.consumeStream();
+
+    // Verify Turn 1 DB storage - empty reasoning is stored as-is in the DB
+    const dbMessages = resp1.messageList.get.all.db();
+    const turn1Assistant = dbMessages.find(m => m.role === 'assistant');
+    expect(turn1Assistant).toBeDefined();
+
+    const turn1ReasoningDB = turn1Assistant!.content.parts.find(p => p.type === 'reasoning');
+    // Empty reasoning is stored in the DB (no filtering at storage layer)
+    expect(turn1ReasoningDB).toBeDefined();
+
+    // Text part should still be stored
+    const turn1TextDB = turn1Assistant!.content.parts.find(p => p.type === 'text');
+    expect(turn1TextDB).toBeDefined();
+    expect(turn1TextDB!.text).toBe('Some answer.');
+
+    // --- Turn 2: Spy ---
+    const agent2 = new Agent({
+      id: 'spy-empty-no-meta',
+      name: 'Spy Empty No Meta',
+      instructions: 'You are a helpful assistant.',
+      model: spyModel,
+      memory: mockMemory,
+    });
+
+    const resp2 = await agent2.stream('Tell me more', {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
+    });
+    await resp2.consumeStream();
+
+    // Capture Turn 2 input
+    const turn2Prompt = spyModel.doStreamCalls[0]!.prompt;
+    const turn2AssistantMsg = turn2Prompt.find((m: any) => m.role === 'assistant');
+    expect(turn2AssistantMsg).toBeDefined();
+
+    const turn2Content = turn2AssistantMsg!.content as any[];
+    const turn2Reasoning = turn2Content.find((p: any) => p.type === 'reasoning');
+
+    // Empty reasoning with no providerMetadata is not sent to the LLM
+    expect(turn2Reasoning).toBeUndefined();
+
+    // Text should still be present
+    const turn2Text = turn2Content.find((p: any) => p.type === 'text');
+    expect(turn2Text).toBeDefined();
+    expect(turn2Text.text).toBe('Some answer.');
+  });
+
+  /**
+   * Anthropic redacted thinking block through round-trip.
+   * Redacted thinking is opaque data the model sends when it doesn't want to
+   * reveal its reasoning. The redactedData must survive because Anthropic
+   * REQUIRES it to be sent back in multi-turn conversations.
+   *
+   * Unlike Google empty reasoning (which is stripped because the upstream provider
+   * drops it), Anthropic empty reasoning with metadata is preserved because the
+   * Anthropic provider correctly handles it and needs it for conversation continuity.
+   *
+   * Anthropic streaming for redacted thinking:
+   * - reasoning-start with providerMetadata.anthropic.redactedData
+   * - NO deltas (content is opaque)
+   * - reasoning-end (no providerMetadata)
+   */
+  it('should preserve Anthropic redacted thinking data through round-trip', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-spy-6';
+    const redactedData = 'base64-encoded-opaque-redacted-thinking-data';
+
+    // Turn 1: Anthropic-style redacted thinking
+    const anthropicModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-1', modelId: 'claude-opus-4-5', timestamp: new Date(0) },
+          // Redacted thinking: providerMetadata on reasoning-start
+          {
+            type: 'reasoning-start',
+            id: '0',
+            providerMetadata: {
+              anthropic: {
+                redactedData: redactedData,
+              },
+            },
+          },
+          // No deltas for redacted thinking
+          // reasoning-end has NO providerMetadata
+          {
+            type: 'reasoning-end',
+            id: '0',
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Here is my response.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    // Turn 2: Spy model
+    const spyModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-2', modelId: 'spy', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Follow-up.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+
+    // --- Turn 1: Anthropic redacted thinking model ---
+    const agent1 = new Agent({
+      id: 'spy-anthropic-redacted',
+      name: 'Spy Anthropic Redacted',
+      instructions: 'You are a helpful assistant.',
+      model: anthropicModel,
+      memory: mockMemory,
+    });
+
+    const resp1 = await agent1.stream('What is the meaning of life?', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    await resp1.consumeStream();
+
+    // Verify Turn 1 DB storage
+    const dbMessages = resp1.messageList.get.all.db();
+    const turn1Assistant = dbMessages.find(m => m.role === 'assistant');
+    expect(turn1Assistant).toBeDefined();
+
+    // Check all reasoning parts - there may be extras from redacted thinking handling
+    const turn1ReasoningParts = turn1Assistant!.content.parts.filter(p => p.type === 'reasoning');
+    // At least one reasoning part should have the redactedData
+    const turn1ReasoningWithData = turn1ReasoningParts.find(
+      p => p.providerMetadata?.anthropic?.redactedData === redactedData,
+    );
+    expect(turn1ReasoningWithData).toBeDefined();
+
+    const turn1TextDB = turn1Assistant!.content.parts.find(p => p.type === 'text');
+    expect(turn1TextDB).toBeDefined();
+    expect(turn1TextDB!.text).toBe('Here is my response.');
+
+    // --- Turn 2: Spy ---
+    const agent2 = new Agent({
+      id: 'spy-anthropic-redacted',
+      name: 'Spy Anthropic Redacted',
+      instructions: 'You are a helpful assistant.',
+      model: spyModel,
+      memory: mockMemory,
+    });
+
+    const resp2 = await agent2.stream('Tell me more', {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
+    });
+    await resp2.consumeStream();
+
+    // Capture Turn 2 input
+    const turn2Prompt = spyModel.doStreamCalls[0]!.prompt;
+    const turn2AssistantMsg = turn2Prompt.find((m: any) => m.role === 'assistant');
+    expect(turn2AssistantMsg).toBeDefined();
+
+    const turn2Content = turn2AssistantMsg!.content as any[];
+    const turn2ReasoningParts = turn2Content.filter((p: any) => p.type === 'reasoning');
+    const turn2Text = turn2Content.find((p: any) => p.type === 'text');
+
+    // === KEY COMPARISON ===
+
+    // At least one reasoning part must have redactedData surviving as providerOptions
+    const turn2ReasoningWithData = turn2ReasoningParts.find(
+      (p: any) => p.providerOptions?.anthropic?.redactedData === redactedData,
+    );
+    expect(turn2ReasoningWithData).toBeDefined();
+
+    // Text content must survive
+    expect(turn2Text).toBeDefined();
+    expect(turn2Text.text).toBe('Here is my response.');
+  });
+});

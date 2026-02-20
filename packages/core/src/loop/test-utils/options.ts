@@ -7269,16 +7269,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
-                          "text": "",
-                          "type": "reasoning",
-                        },
-                      ],
-                      "role": "assistant",
-                    },
-                    {
-                      "content": [
-                        {
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7286,18 +7276,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "role": "user",
                     },
                   ],
-                  "nonUser": [
-                    {
-                      "content": [
-                        {
-                          "providerOptions": undefined,
-                          "text": "",
-                          "type": "reasoning",
-                        },
-                      ],
-                      "role": "assistant",
-                    },
-                  ],
+                  "nonUser": [],
                   "user": [
                     {
                       "content": [
@@ -7335,18 +7314,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "response": {
                         "headers": undefined,
                         "id": "id-1",
-                        "messages": [
-                          {
-                            "content": [
-                              {
-                                "providerOptions": undefined,
-                                "text": "",
-                                "type": "reasoning",
-                              },
-                            ],
-                            "role": "assistant",
-                          },
-                        ],
+                        "messages": [],
                         "modelId": "mock-model-id",
                         "modelProvider": "mock-provider",
                         "modelVersion": "v2",
@@ -7389,16 +7357,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
-                          "text": "",
-                          "type": "reasoning",
-                        },
-                      ],
-                      "role": "assistant",
-                    },
-                    {
-                      "content": [
-                        {
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7406,18 +7364,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "role": "user",
                     },
                   ],
-                  "nonUser": [
-                    {
-                      "content": [
-                        {
-                          "providerOptions": undefined,
-                          "text": "",
-                          "type": "reasoning",
-                        },
-                      ],
-                      "role": "assistant",
-                    },
-                  ],
+                  "nonUser": [],
                   "user": [
                     {
                       "content": [
@@ -7455,18 +7402,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "response": {
                         "headers": undefined,
                         "id": "id-1",
-                        "messages": [
-                          {
-                            "content": [
-                              {
-                                "providerOptions": undefined,
-                                "text": "",
-                                "type": "reasoning",
-                              },
-                            ],
-                            "role": "assistant",
-                          },
-                        ],
+                        "messages": [],
                         "modelId": "mock-model-id",
                         "modelProvider": "mock-provider",
                         "modelVersion": "v2",
