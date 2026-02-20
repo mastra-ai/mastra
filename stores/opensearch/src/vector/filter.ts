@@ -103,8 +103,11 @@ export class OpenSearchFilterTranslator extends ElasticDSLFilterTranslator<OpenS
         processedRegex = processedRegex.substring(0, processedRegex.length - 1);
       }
 
+      // Escape existing wildcard metacharacters before adding leading/trailing *
+      const escapedPattern = this.escapeWildcardMetacharacters(processedRegex);
+
       // Create wildcard pattern
-      let wildcardPattern = processedRegex;
+      let wildcardPattern = escapedPattern;
       if (!hasStartAnchor) {
         wildcardPattern = '*' + wildcardPattern;
       }

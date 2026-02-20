@@ -78,18 +78,6 @@ export class ElasticSearchFilterTranslator extends ElasticDSLFilterTranslator<El
   }
 
   /**
-   * Escapes wildcard metacharacters (* and ?) for use in wildcard queries.
-   * Existing wildcard metacharacters in the pattern are escaped before
-   * adding leading/trailing * to prevent semantic changes.
-   * First escapes backslashes to avoid ambiguous encoding sequences.
-   */
-  private escapeWildcardMetacharacters(pattern: string): string {
-    // First escape backslashes to avoid ambiguous encoding sequences
-    // Then escape * and ? which are wildcard metacharacters
-    return pattern.replace(/\\/g, '\\\\').replace(/\*/g, '\\*').replace(/\?/g, '\\?');
-  }
-
-  /**
    * Translates regex patterns to ElasticSearch query syntax
    */
   protected translateRegexOperator(field: string, value: any): any {
