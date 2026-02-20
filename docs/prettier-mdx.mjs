@@ -176,7 +176,7 @@ export const printers = {
       let text = ast.stack[0].text
 
       text = String(
-        await processor().use(remarkFormatCodeBlocks, prettierOptions).use(remarkAddCalloutMarkers).process(text),
+        await processor().use(remarkFormatCodeBlocks, prettierOptions).process(text),
       )
 
       return text
