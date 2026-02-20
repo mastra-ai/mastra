@@ -20,20 +20,19 @@ import type {
   TaskItem,
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
-import { CustomEditor } from './components/custom-editor.js';
-import { getEditorTheme } from './theme.js';
-import { detectProject } from '../utils/project.js';
-import { defaultOMProgressState } from './components/om-progress.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
+import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
+import { CustomEditor } from './components/custom-editor.js';
 
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
+import { defaultOMProgressState } from './components/om-progress.js';
 import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
@@ -41,6 +40,7 @@ import type { SubagentExecutionComponent } from './components/subagent-execution
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
+import { getEditorTheme } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================

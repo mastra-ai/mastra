@@ -13,7 +13,6 @@ import {
 } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type {
-  Harness,
   HarnessEvent,
   HarnessMessage,
   HarnessMessageContent,
@@ -24,24 +23,17 @@ import type {
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
 import { parse as parsePartialJson } from 'partial-json';
-import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
-import type { HookManager } from '../hooks/index.js';
-import type { McpManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
-import type { ProjectInfo } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import { processSlashCommand } from '../utils/slash-command-processor.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
-import { createTUIState } from './state.js';
-import type { MastraTUIOptions, TUIState } from './state.js';
 import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
-import { CustomEditor } from './components/custom-editor.js';
 import { DiffOutputComponent } from './components/diff-output.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -51,7 +43,6 @@ import { GradientAnimator, applyGradientSweep } from './components/obi-loader.js
 import { OMMarkerComponent } from './components/om-marker.js';
 import type { OMMarkerData } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
-import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
 import { defaultOMProgressState, formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import { OMSettingsComponent } from './components/om-settings.js';
 import { PlanApprovalInlineComponent, PlanResultComponent } from './components/plan-approval-inline.js';
@@ -67,10 +58,11 @@ import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.j
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import type { ToolResult } from './components/tool-execution-enhanced.js';
-import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { sendNotification } from './notify.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
+import type { MastraTUIOptions, TUIState } from './state.js';
+import { createTUIState } from './state.js';
 import { getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
 
 // =============================================================================
