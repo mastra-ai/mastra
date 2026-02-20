@@ -1,0 +1,37 @@
+{
+  "name": "template-github-review-agent",
+  "version": "1.0.0",
+  "description": "AI-powered GitHub PR code review agent built with Mastra",
+  "scripts": {
+    "test": "tsc --noEmit",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "mastra",
+    "code-review",
+    "github",
+    "ai-agent"
+  ],
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.27.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "^1.4.0",
+    "@mastra/libsql": "^1.4.0",
+    "@mastra/loggers": "^1.0.1",
+    "@mastra/memory": "^1.3.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "mastra": "^1.3.1",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  }
+}

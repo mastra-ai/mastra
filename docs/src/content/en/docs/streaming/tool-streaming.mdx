@@ -159,6 +159,12 @@ export const weatherTool = createTool({
 
 For detailed documentation on all lifecycle hooks, see the [createTool() reference](/reference/tools/create-tool#tool-lifecycle-hooks).
 
+### Streaming tool input in UIs
+
+When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in — for example, showing a file path or command immediately rather than waiting for the complete tool call.
+
+Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
+
 ## Tool using an agent
 
 Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.

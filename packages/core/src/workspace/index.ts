@@ -25,7 +25,27 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools, resolveToolConfig, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
+export {
+  createWorkspaceTools,
+  resolveToolConfig,
+  type WorkspaceToolConfig,
+  type WorkspaceToolsConfig,
+  // Individual standalone tools
+  readFileTool,
+  writeFileTool,
+  editFileTool,
+  listFilesTool,
+  deleteFileTool,
+  fileStatTool,
+  mkdirTool,
+  searchTool,
+  indexContentTool,
+  executeCommandTool,
+  // Helpers
+  requireWorkspace,
+  requireFilesystem,
+  requireSandbox,
+} from './tools';
 
 // Lifecycle
 export * from './lifecycle';
