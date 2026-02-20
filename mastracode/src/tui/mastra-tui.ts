@@ -74,6 +74,13 @@ import type { NotificationMode, NotificationReason } from './notify.js';
 import { getEditorTheme, getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Tools that modify files, used for /diff tracking */
+const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -2041,7 +2048,6 @@ ${instructions}`,
     }
 
     // Track file-modifying tools for /diff command
-    const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
     if (FILE_TOOLS.includes(toolName)) {
       const toolArgs = args as Record<string, unknown>;
       const filePath = toolArgs?.path as string;
@@ -2120,8 +2126,8 @@ ${instructions}`,
     const buffer = this.toolInputBuffers.get(toolCallId);
     if (buffer === undefined) return;
 
-    const updatedText = buffer.text + argsTextDelta;
-    this.toolInputBuffers.set(toolCallId, { ...buffer, text: updatedText });
+    buffer.text += argsTextDelta;
+    const updatedText = buffer.text;
 
     try {
       const partialArgs = parsePartialJson(updatedText);
@@ -2165,7 +2171,7 @@ ${instructions}`,
         this.ui.requestRender();
       }
     } catch {
-      // Incomplete JSON that can't be parsed yet — wait for more deltas
+      // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
     }
   }
 
