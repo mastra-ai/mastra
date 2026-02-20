@@ -443,10 +443,10 @@ export class LocalSandbox extends MastraSandbox {
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,
-        // Shell mode for non-isolated commands (full shell string).
-        // Isolated commands use spawn(binary, args) since the wrapper
-        // handles shell invocation via sh -c internally.
-        shell: wrapped.args.length === 0,
+        // Non-isolated: use shell mode so the host shell interprets the command string.
+        // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
+        // sandbox, so we spawn the wrapper binary directly — no host shell needed.
+        shell: this._isolation === 'none',
       });
 
       const commandResult: CommandResult = {
