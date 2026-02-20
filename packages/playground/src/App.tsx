@@ -69,6 +69,7 @@ import CmsAgentScorersPage from './pages/cms/agents/scorers';
 import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
 import CmsAgentMemoryPage from './pages/cms/agents/memory';
 import CmsAgentVariablesPage from './pages/cms/agents/variables';
+import CmsAgentSkillsPage from './pages/cms/agents/skills';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
@@ -77,8 +78,8 @@ import DatasetPage from './pages/datasets/dataset';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import DatasetCompare from './pages/datasets/dataset/compare';
-import DatasetCompareItems from './pages/datasets/dataset/item/compare';
-import DatasetCompareVersions from './pages/datasets/dataset/item/versions';
+import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
+import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 
 const paths: LinkComponentProviderProps['paths'] = {
@@ -144,6 +145,7 @@ const agentCmsChildRoutes = [
   { path: 'agents', element: <CmsAgentAgentsPage /> },
   { path: 'scorers', element: <CmsAgentScorersPage /> },
   { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+  { path: 'skills', element: <CmsAgentSkillsPage /> },
   { path: 'memory', element: <CmsAgentMemoryPage /> },
   { path: 'variables', element: <CmsAgentVariablesPage /> },
 ];
@@ -236,10 +238,10 @@ const routes = [
             { path: '/datasets', element: <Datasets /> },
             { path: '/datasets/:datasetId', element: <DatasetPage /> },
             { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetCompareVersions /> },
+            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
             { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
             { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
-            { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
           ]
         : []),

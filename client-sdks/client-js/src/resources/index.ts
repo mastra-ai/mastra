@@ -13,4 +13,6 @@ export * from './stored-agent';
 export * from './stored-mcp-client';
 export * from './stored-scorer';
 export * from './tool-provider';
+export * from './processor-provider';
 export * from './workspace';
+export * from './stored-skill';

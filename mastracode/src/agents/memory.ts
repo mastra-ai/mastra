@@ -1,105 +1,89 @@
-import type { RequestContext } from "@mastra/core/request-context"
-import type { MastraCompositeStore } from "@mastra/core/storage"
-import { Memory } from "@mastra/memory"
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from "../constants"
-import type { HarnessRuntimeContext } from "../harness/types"
-import type { stateSchema } from "../schema"
-import { getOmScope } from "../utils/project"
+import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import { Memory } from '@mastra/memory';
+import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
+import type { stateSchema } from '../schema';
+import { getOmScope } from '../utils/project';
+import { resolveModel } from './model';
 
+let cachedMemory: Memory | null = null;
+let cachedMemoryKey: string | null = null;
 
-// Cache for Memory instances by threshold config
-let cachedMemory: Memory | null = null
-let cachedMemoryKey: string | null = null
-
-// =============================================================================
-// Create Memory with Observational Memory support
-// =============================================================================
-
-
-// Mutable OM state — updated by harness event listeners, read by OM config
-// functions. We use this instead of requestContext because Mastra's OM system
-// does NOT propagate requestContext to observer/reflector agent.generate() calls.
-export const omState = {
-    observerModelId: DEFAULT_OM_MODEL_ID,
-    reflectorModelId: DEFAULT_OM_MODEL_ID,
-    obsThreshold: DEFAULT_OBS_THRESHOLD,
-    refThreshold: DEFAULT_REF_THRESHOLD,
+/**
+ * Read harness state from requestContext.
+ * Used by both the memory factory and the OM model functions.
+ */
+function getHarnessState(requestContext: RequestContext) {
+  return (requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined)?.getState?.();
 }
 
 /**
- * Dynamic model function for Observer agent.
- * Reads from module-level omState (kept in sync by harness events).
+ * Observer model function — reads the current observer model ID from
+ * harness state via requestContext (now propagated by OM's agent.generate).
  */
-function getObserverModel() {
-    return resolveModel(omState.observerModelId)
+function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
+  const state = getHarnessState(requestContext);
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID);
 }
 
 /**
- * Dynamic model function for Reflector agent.
- * Reads from module-level omState (kept in sync by harness events).
+ * Reflector model function — reads the current reflector model ID from
+ * harness state via requestContext (now propagated by OM's agent.generate).
  */
-function getReflectorModel() {
-    return resolveModel(omState.reflectorModelId)
+function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
+  const state = getHarnessState(requestContext);
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID);
 }
-
 
 /**
  * Dynamic memory factory function.
- * Creates Memory with current threshold values from harness state.
- * Caches instance and reuses if config unchanged.
+ * Reads OM thresholds from harness state via requestContext.
+ * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore) {
-    return ({
-        requestContext,
-    }: {
-        requestContext: RequestContext
-    }) => {
-        const ctx = requestContext.get("harness") as
-            | HarnessRuntimeContext<typeof stateSchema>
-            | undefined
-        const state = ctx?.getState?.()
+  return ({ requestContext }: { requestContext: RequestContext }) => {
+    const state = getHarnessState(requestContext);
+    const omScope = getOmScope(state?.projectPath);
 
-        // Resolved OM scope (read once at startup, can be changed via config)
-        const omScope = getOmScope(state?.projectPath)
+    const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
+    const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
-        const obsThreshold = state?.observationThreshold ?? omState.obsThreshold
-        const refThreshold = state?.reflectionThreshold ?? omState.refThreshold
-
-        const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`
-        if (cachedMemory && cachedMemoryKey === cacheKey) {
-            return cachedMemory
-        }
-
-        cachedMemory = new Memory({
-            storage,
-            options: {
-                observationalMemory: {
-                    enabled: true,
-                    scope: omScope,
-                    observation: {
-                        bufferTokens: 1 / 10,
-                        bufferActivation: 4 / 5,
-                        model: getObserverModel,
-                        messageTokens: obsThreshold,
-                        blockAfter: 1,
-                        modelSettings: {
-                            maxOutputTokens: 60000,
-                        },
-                    },
-                    reflection: {
-                        bufferActivation: 1 / 2,
-                        blockAfter: 1.1,
-                        model: getReflectorModel,
-                        observationTokens: refThreshold,
-                        modelSettings: {
-                            maxOutputTokens: 60000,
-                        },
-                    },
-                },
-            },
-        })
-        cachedMemoryKey = cacheKey
-
-        return cachedMemory
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`;
+    if (cachedMemory && cachedMemoryKey === cacheKey) {
+      return cachedMemory;
     }
+
+    cachedMemory = new Memory({
+      storage,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          scope: omScope,
+          observation: {
+            bufferTokens: 1 / 10,
+            bufferActivation: 2000,
+            model: getObserverModel,
+            messageTokens: obsThreshold,
+            blockAfter: 1.2,
+            modelSettings: {
+              maxOutputTokens: 60000,
+            },
+          },
+          reflection: {
+            bufferActivation: 1 / 2,
+            blockAfter: 1.1,
+            model: getReflectorModel,
+            observationTokens: refThreshold,
+            modelSettings: {
+              maxOutputTokens: 60000,
+            },
+          },
+        },
+      },
+    });
+    cachedMemoryKey = cacheKey;
+
+    return cachedMemory;
+  };
 }

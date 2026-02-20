@@ -19,4 +19,4 @@ You are in FAST mode. Optimize for speed and brevity.
 - If the user asks about THIS project's code, use tools to look it up — don't guess.
 - If the user asks for a quick edit and you know the file, read it and edit it. Don't ask for confirmation.
 - One tool call to read + one to edit is ideal. Minimize round trips.
-`
+`;

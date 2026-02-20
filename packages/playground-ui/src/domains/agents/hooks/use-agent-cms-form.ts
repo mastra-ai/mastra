@@ -7,7 +7,7 @@ import type { CreateStoredAgentParams } from '@mastra/client-js';
 import { toast } from '@/lib/toast';
 
 import { useAgentEditForm } from '../components/agent-edit-page/use-agent-edit-form';
-import type { AgentFormValues } from '../components/agent-edit-page/utils/form-validation';
+import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 import { useStoredAgentMutations } from './use-stored-agents';
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues, type AgentDataSource } from '../utils/compute-agent-initial-values';
@@ -59,21 +59,32 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
     form.reset(initialValues);
 
-    const mcpClientRecord = options.dataSource.mcpClients as Record<string, unknown> | undefined;
+    const mcpClientRecord = options.dataSource.mcpClients as
+      | Record<string, { tools?: Record<string, { description?: string }> }>
+      | undefined;
     const ids = Object.keys(mcpClientRecord ?? {});
     if (ids.length === 0) return;
 
     Promise.all(ids.map(id => client.getStoredMCPClient(id).details()))
       .then(results => {
-        form.setValue(
-          'mcpClients',
-          results.map(r => ({
-            id: r.id,
-            name: r.name,
-            description: r.description,
-            servers: r.servers,
-          })),
-        );
+        const mcpClientValues = results.map(r => ({
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          servers: r.servers,
+          selectedTools: mcpClientRecord?.[r.id]?.tools ?? {},
+        }));
+        form.setValue('mcpClients', mcpClientValues, { shouldDirty: true });
+
+        // Sync MCP tools into form.tools
+        const currentTools = form.getValues('tools') ?? {};
+        const next = { ...currentTools };
+        for (const mcpClient of mcpClientValues) {
+          for (const [name, config] of Object.entries(mcpClient.selectedTools ?? {})) {
+            next[name] = { description: config.description };
+          }
+        }
+        form.setValue('tools', next, { shouldDirty: true });
       })
       .catch(() => {
         // Silently ignore — clients may have been deleted
@@ -93,21 +104,44 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         await Promise.all(mcpClientsToDelete.map(id => client.getStoredMCPClient(id).delete()));
       }
 
+      // Collect all MCP tool names
+      const mcpToolNames = new Set<string>();
+      for (const c of values.mcpClients ?? []) {
+        for (const name of Object.keys(c.selectedTools ?? {})) {
+          mcpToolNames.add(name);
+        }
+      }
+
+      // Registry tools = form.tools minus MCP tools
+      const registryTools: Record<string, EntityConfig> = {};
+      for (const [name, config] of Object.entries(values.tools ?? {})) {
+        if (!mcpToolNames.has(name)) {
+          registryTools[name] = config;
+        }
+      }
+
       // Create pending MCP clients in parallel and collect IDs
       const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
-      const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
+      const mcpClientsParam = Object.fromEntries(
+        mcpClientIds.map((id, index) => {
+          const selectedTools = values.mcpClients?.[index]?.selectedTools ?? {};
+          return [id, { tools: selectedTools }];
+        }),
+      );
 
       return {
         name: values.name,
         description: values.description || undefined,
         instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
-        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
+        tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
         scorers: mapScorersToApi(values.scorers),
+        skills: values.skills,
+        workspace: values.workspace,
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
     },
@@ -156,6 +190,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         memory: editMemory,
       });
 
+      // Reset form dirty state so publish can detect unsaved changes
+      form.reset(values);
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       toast.success('Draft saved');
     } catch (error) {
@@ -177,23 +213,19 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
     try {
       if (isEdit) {
-        const sharedParams = await buildSharedParams(values);
-        const editMemory = buildMemoryParams(values);
+        // Check if there's an unpublished draft version to activate
+        const [agentDetails, versionsResponse] = await Promise.all([
+          client.getStoredAgent(options.agentId).details(),
+          client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
+        ]);
 
-        // Save draft first
-        await updateStoredAgent.mutateAsync({
-          ...sharedParams,
-          memory: editMemory,
-        });
-
-        // Fetch latest version and activate it
-        const versionsResponse = await client
-          .getStoredAgent(options.agentId)
-          .listVersions({ sortDirection: 'DESC', perPage: 1 });
         const latestVersion = versionsResponse.versions[0];
-        if (latestVersion) {
-          await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+        if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
+          toast.error('No draft changes to publish. Save a draft first.');
+          return;
         }
+
+        await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
 
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
@@ -231,18 +263,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    form,
-    isEdit,
-    client,
-    createStoredAgent,
-    updateStoredAgent,
-    options,
-    agentId,
-    buildSharedParams,
-    buildMemoryParams,
-    queryClient,
-  ]);
+  }, [form, isEdit, client, createStoredAgent, options, agentId, buildSharedParams, queryClient]);
 
   const watched = useWatch({ control: form.control });
 
@@ -252,5 +273,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     return identityDone && instructionsDone;
   }, [watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
 
-  return { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, canPublish };
+  const isDirty = form.formState.isDirty;
+
+  return { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, canPublish, isDirty };
 }
