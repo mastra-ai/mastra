@@ -31,8 +31,6 @@ interface TrackedProcess {
  */
 class LocalProcessHandle extends ProcessHandle {
   readonly pid: number;
-  stdout = '';
-  stderr = '';
   exitCode: number | undefined;
 
   private proc: ChildProcess;
@@ -62,7 +60,7 @@ class LocalProcessHandle extends ProcessHandle {
       });
 
       proc.on('error', err => {
-        this.stderr += err.message;
+        this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
           success: false,
@@ -75,15 +73,11 @@ class LocalProcessHandle extends ProcessHandle {
     });
 
     proc.stdout?.on('data', (data: Buffer) => {
-      const str = data.toString();
-      this.stdout += str;
-      this.emitStdout(str);
+      this.emitStdout(data.toString());
     });
 
     proc.stderr?.on('data', (data: Buffer) => {
-      const str = data.toString();
-      this.stderr += str;
-      this.emitStderr(str);
+      this.emitStderr(data.toString());
     });
   }
 

@@ -23,6 +23,7 @@ import type { E2BSandbox } from './index';
  */
 class E2BProcessHandle extends ProcessHandle {
   readonly pid: number;
+  exitCode: number | undefined;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -36,36 +37,26 @@ class E2BProcessHandle extends ProcessHandle {
     this._startTime = startTime;
   }
 
-  get stdout(): string {
-    return this._e2bHandle.stdout;
-  }
-
-  get stderr(): string {
-    return this._e2bHandle.stderr;
-  }
-
-  get exitCode(): number | undefined {
-    return this._e2bHandle.exitCode;
-  }
-
   async wait(): Promise<CommandResult> {
     try {
       const result = await this._e2bHandle.wait();
+      this.exitCode = result.exitCode;
       return {
         success: result.exitCode === 0,
         exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
+        stdout: this.stdout,
+        stderr: this.stderr,
         executionTimeMs: Date.now() - this._startTime,
       };
     } catch (error) {
       // E2B throws CommandExitError for non-zero exit codes
-      const errorObj = error as { exitCode?: number; stdout?: string; stderr?: string };
+      const errorObj = error as { exitCode?: number };
+      this.exitCode = errorObj.exitCode ?? 1;
       return {
         success: false,
-        exitCode: errorObj.exitCode ?? 1,
-        stdout: errorObj.stdout ?? this._e2bHandle.stdout,
-        stderr: errorObj.stderr ?? this._e2bHandle.stderr,
+        exitCode: this.exitCode,
+        stdout: this.stdout,
+        stderr: this.stderr,
         executionTimeMs: Date.now() - this._startTime,
       };
     }
