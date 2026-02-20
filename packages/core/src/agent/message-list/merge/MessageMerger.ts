@@ -99,6 +99,13 @@ export class MessageMerger {
                 ...part.toolInvocation.args,
               },
             };
+            // Preserve providerMetadata from the result part (e.g. toModelOutput stored at mastra.modelOutput)
+            if (part.providerMetadata) {
+              existingCallPart.providerMetadata = {
+                ...existingCallPart.providerMetadata,
+                ...part.providerMetadata,
+              };
+            }
             if (!latestMessage.content.toolInvocations) {
               latestMessage.content.toolInvocations = [];
             }

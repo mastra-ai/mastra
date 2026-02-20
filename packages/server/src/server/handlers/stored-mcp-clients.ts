@@ -1,6 +1,7 @@
 import { HTTPException } from '../http-exception';
 import {
   storedMCPClientIdPathParams,
+  statusQuerySchema,
   listStoredMCPClientsQuerySchema,
   createStoredMCPClientBodySchema,
   updateStoredMCPClientBodySchema,
@@ -14,6 +15,8 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { handleAutoVersioning, MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 // ============================================================================
 // Route Definitions
@@ -32,7 +35,7 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all MCP client configurations stored in the database',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -49,6 +52,7 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        status,
         authorId,
         metadata,
       });
@@ -68,13 +72,14 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
   path: '/stored/mcp-clients/:storedMCPClientId',
   responseType: 'json',
   pathParamSchema: storedMCPClientIdPathParams,
+  queryParamSchema: statusQuerySchema,
   responseSchema: getStoredMCPClientResponseSchema,
   summary: 'Get stored MCP client by ID',
   description:
-    'Returns a specific MCP client from storage by its unique identifier (resolved with active version config)',
+    'Returns a specific MCP client from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, storedMCPClientId }) => {
+  handler: async ({ mastra, storedMCPClientId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -87,7 +92,7 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
       }
 
-      const mcpClient = await mcpClientStore.getByIdResolved(storedMCPClientId);
+      const mcpClient = await mcpClientStore.getByIdResolved(storedMCPClientId, { status });
 
       if (!mcpClient) {
         throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
@@ -153,7 +158,8 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       });
 
       // Return the resolved MCP client (thin record + version config)
-      const resolved = await mcpClientStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await mcpClientStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created MCP client' });
       }
@@ -209,8 +215,7 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       }
 
       // Update the MCP client with both metadata-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await mcpClientStore.update({
+      const updatedMCPClient = await mcpClientStore.update({
         id: storedMCPClientId,
         authorId,
         metadata,
@@ -219,8 +224,27 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
         servers,
       });
 
-      // Return the resolved MCP client with the updated config
-      const resolved = await mcpClientStore.getByIdResolved(storedMCPClientId);
+      // Build the snapshot config for auto-versioning comparison
+      const configFields = { name, description, servers };
+
+      // Filter out undefined values to get only the config fields that were provided
+      const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
+
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a new version if there are meaningful config changes.
+      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
+      await handleAutoVersioning(
+        mcpClientStore as unknown as VersionedStoreInterface,
+        storedMCPClientId,
+        'mcpClientId',
+        MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
+        existing,
+        updatedMCPClient,
+        providedConfigFields,
+      );
+
+      // Return the resolved MCP client with the latest (draft) version so the UI sees its edits
+      const resolved = await mcpClientStore.getByIdResolved(storedMCPClientId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated MCP client' });
       }

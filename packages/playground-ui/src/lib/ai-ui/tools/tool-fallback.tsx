@@ -17,11 +17,6 @@ export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
-  // Handle OM observation markers - they don't need WorkflowRunProvider
-  if (toolName === 'mastra-memory-om-observation') {
-    return <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />;
-  }
-
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
@@ -30,19 +25,21 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
-  // Handle OM observation markers first - render as ObservationMarkerBadge
-  if (toolName === 'mastra-memory-om-observation') {
-    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
-  }
-
+  // Hooks must be called unconditionally at the top (React Rules of Hooks, issue #12726)
   const { activateSkill } = useActivatedSkills();
 
-  // Detect skill activation tool calls
   useEffect(() => {
     if (toolName === 'skill-activate' && result?.success && args?.name) {
       activateSkill(args.name);
     }
   }, [toolName, result, args, activateSkill]);
+
+  useWorkflowStream(result);
+
+  // Handle OM observation markers - render as ObservationMarkerBadge
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
 
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
@@ -70,8 +67,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
 
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
-
-  useWorkflowStream(result);
 
   if (isAgent) {
     return (
@@ -130,9 +125,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
 
   if (isSandboxExecution) {
-    // During streaming, result might be an array of output chunks
-    // After completion, it's the final tool result object
-    const streamingOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
     return (
       <SandboxExecutionBadge
         toolName={toolName}
@@ -141,10 +133,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
-        toolOutput={streamingOutput}
       />
     );
   }

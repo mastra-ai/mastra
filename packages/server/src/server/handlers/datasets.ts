@@ -137,8 +137,8 @@ export const CREATE_DATASET_ROUTE = createRoute({
         name,
         description,
         metadata,
-        inputSchema: inputSchema ?? undefined,
-        groundTruthSchema: groundTruthSchema ?? undefined,
+        inputSchema,
+        groundTruthSchema,
       });
       const details = await ds.getDetails();
       return details as any;
@@ -201,8 +201,8 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         name,
         description,
         metadata,
-        inputSchema: inputSchema ?? undefined,
-        groundTruthSchema: groundTruthSchema ?? undefined,
+        inputSchema,
+        groundTruthSchema,
       });
       return result as any;
     } catch (error) {

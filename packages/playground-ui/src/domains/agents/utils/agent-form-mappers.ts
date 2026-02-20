@@ -1,8 +1,10 @@
 import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
+import type { StoredAgentSkillConfig, StoredWorkspaceRef, ConditionalField } from '@mastra/client-js';
 
 import type {
   EntityConfig,
   ScorerConfig,
+  SkillConfig,
   InstructionBlock,
   AgentFormValues,
 } from '../components/agent-edit-page/utils/form-validation';
@@ -94,6 +96,63 @@ export const normalizeIntegrationToolsToRecord = (
     }
   }
   return result;
+};
+
+// ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+
+/** Normalize API skills (ConditionalField<Record<string, StoredAgentSkillConfig>>) to form SkillConfig records. */
+export const normalizeSkillsFromApi = (
+  skills: ConditionalField<Record<string, StoredAgentSkillConfig>> | undefined,
+): Record<string, SkillConfig> => {
+  if (!skills) return {};
+
+  // Conditional variants array — merge all variant values
+  if (Array.isArray(skills)) {
+    const result: Record<string, SkillConfig> = {};
+    for (const variant of skills) {
+      for (const [key, value] of Object.entries(variant.value)) {
+        result[key] = {
+          description: value.description,
+          instructions: value.instructions,
+          pin: value.pin,
+          strategy: value.strategy,
+        };
+      }
+    }
+    return result;
+  }
+
+  // Static record
+  const result: Record<string, SkillConfig> = {};
+  for (const [key, value] of Object.entries(skills)) {
+    result[key] = {
+      description: value.description,
+      instructions: value.instructions,
+      pin: value.pin,
+      strategy: value.strategy,
+    };
+  }
+  return result;
+};
+
+// ---------------------------------------------------------------------------
+// Workspace
+// ---------------------------------------------------------------------------
+
+/** Normalize API workspace ref (ConditionalField<StoredWorkspaceRef>) to a static workspace ref. */
+export const normalizeWorkspaceFromApi = (
+  workspace: ConditionalField<StoredWorkspaceRef> | undefined,
+): StoredWorkspaceRef | undefined => {
+  if (!workspace) return undefined;
+
+  // Conditional variants array — take the first value
+  if (Array.isArray(workspace)) {
+    return workspace[0]?.value as StoredWorkspaceRef | undefined;
+  }
+
+  return workspace as StoredWorkspaceRef;
 };
 
 // ---------------------------------------------------------------------------

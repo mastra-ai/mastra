@@ -207,6 +207,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">
         <CodeMirror
+          className="border border-border1 rounded-md"
           value={extractPrompt(agent.instructions)}
           editable={false}
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
@@ -358,7 +359,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-icon6 border border-border1">Active</TooltipContent>
+                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (

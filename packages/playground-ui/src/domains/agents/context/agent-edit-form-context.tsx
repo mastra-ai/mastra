@@ -8,7 +8,9 @@ interface AgentEditFormContextValue {
   mode: 'create' | 'edit';
   agentId?: string;
   isSubmitting: boolean;
+  isSavingDraft?: boolean;
   handlePublish: () => Promise<void>;
+  handleSaveDraft?: () => Promise<void>;
   readOnly?: boolean;
 }
 
