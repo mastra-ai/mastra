@@ -3362,6 +3362,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
+      repairToolCall: options.repairToolCall,
       resumeContext,
       agentId: this.id,
       agentName: this.name,

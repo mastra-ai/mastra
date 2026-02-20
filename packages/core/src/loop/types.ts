@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type {
   CallSettings,
   IdGenerator,
+  ModelMessage,
   StopCondition as StopConditionV5,
   ToolChoice,
   ToolSet,
@@ -37,6 +38,27 @@ import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
+
+/**
+ * Attempts to repair a tool call that failed to parse or targeted an unknown tool.
+ * Return a repaired tool call to retry, or `null` to let the error flow to the model.
+ *
+ * Note: returning `null` for a `parseError` returns the error as a tool result
+ * (letting the model self-correct), while returning `null` for a tool-not-found
+ * error throws (since missing tools are a configuration issue, not an LLM issue).
+ */
+export type RepairToolCallFunction = (options: {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+  error: Error;
+  messages: ModelMessage[];
+  tools: ToolSet;
+}) => Promise<{
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+} | null>;
 
 export type StreamInternal = {
   now?: () => number;
@@ -141,6 +163,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
+  /** Hook to repair tool calls with malformed args or unknown tool names. */
+  repairToolCall?: RepairToolCallFunction;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {

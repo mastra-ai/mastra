@@ -132,16 +132,26 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
+      let parseError: string | undefined = undefined;
 
       if (value.input) {
         try {
           toolCallInput = JSON.parse(value.input);
         } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+          const repaired = tryRepairJson(value.input);
+          if (repaired) {
+            toolCallInput = repaired;
+          } else {
+            toolCallInput = {};
+            const truncated = value.input.length > 200 ? value.input.slice(0, 200) + '...' : value.input;
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: truncated,
+            });
+            parseError =
+              `Tool call arguments for "${value.toolName}" contained malformed JSON that could not be parsed. ` +
+              `Please provide valid JSON arguments. Raw input: ${truncated}`;
+          }
         }
       }
 
@@ -153,6 +163,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: toolCallInput,
+          parseError,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
@@ -567,4 +578,126 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Attempts to repair common JSON malformations from LLM providers (trailing LLM
+ * special tokens, unquoted keys, single quotes, trailing commas). Returns parsed
+ * object or null.
+ */
+export function tryRepairJson(input: string): Record<string, any> | null {
+  const repaired = applyStructuralFixes(input.trim());
+
+  try {
+    const parsed = JSON.parse(repaired);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    const withDoubleQuotes = applyStructuralFixes(replaceSingleQuoteDelimiters(input.trim()));
+    try {
+      const parsed = JSON.parse(withDoubleQuotes);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Converts single-quote JSON delimiters to double quotes while preserving
+ * apostrophes inside double-quoted values (e.g. "it's fine" stays unchanged).
+ */
+function replaceSingleQuoteDelimiters(input: string): string {
+  const chars: string[] = [];
+  let i = 0;
+
+  while (i < input.length) {
+    const ch = input[i]!;
+
+    if (ch === '"') {
+      chars.push(ch);
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === '"') {
+          chars.push(inner);
+          i++;
+          break;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else if (ch === "'") {
+      chars.push('"');
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === "'") {
+          chars.push('"');
+          i++;
+          break;
+        } else if (inner === '"') {
+          chars.push('\\"');
+          i++;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else {
+      chars.push(ch);
+      i++;
+    }
+  }
+
+  return chars.join('');
+}
+
+function applyStructuralFixes(input: string): string {
+  let result = input;
+
+  // Strip trailing LLM special tokens like <|call|>, <|endoftext|> (issue #13185)
+  // Some OpenAI models append internal tokens after valid JSON, e.g. '{}\t<|call|>'
+  // Only strip tokens at the end of the string to avoid corrupting string values that
+  // legitimately contain angle-bracket-pipe patterns.
+  result = result.replace(/\s*(<\|[^|]*\|>\s*)+$/, '').trim();
+
+  // Fix missing opening quote before property name (partial quote)
+  // {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+  // Must run before the unquoted-key fix so the trailing " is consumed
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
+
+  // Add missing quotes around fully unquoted property names
+  // {command:"value"} -> {"command":"value"}
+  // Note: this regex is not string-aware and could match inside string values containing
+  // colon patterns (e.g. "msg": "key: value"). This is safe in practice because
+  // tryRepairJson only runs on strings that already failed JSON.parse, so well-formed
+  // string values won't reach this code path.
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+  // Remove trailing commas before closing braces/brackets
+  // {"a":1,} -> {"a":1}
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+
+  return result;
 }

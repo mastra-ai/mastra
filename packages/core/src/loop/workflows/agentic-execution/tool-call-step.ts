@@ -38,6 +38,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   modelSpanTracker,
   _internal,
   logger,
+  repairToolCall,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -49,7 +50,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
 
-      const tool =
+      let tool =
         stepTools?.[inputData.toolName] ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
@@ -221,16 +222,64 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (!tool) {
+      if (inputData.parseError || !tool) {
         const availableToolNames = Object.keys(stepTools || {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
-        return {
-          error: new ToolNotFoundError(
-            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
-          ),
-          ...inputData,
-        };
+        const error = inputData.parseError
+          ? new Error(inputData.parseError)
+          : new ToolNotFoundError(
+              `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+            );
+
+        if (repairToolCall) {
+          try {
+            const repaired = await repairToolCall({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args: inputData.args,
+              error,
+              messages: messageList.get.input.aiV5.model(),
+              tools: (stepTools || {}) as ToolSet,
+            });
+
+            if (repaired) {
+              Object.assign(inputData, {
+                toolCallId: repaired.toolCallId,
+                toolName: repaired.toolName,
+                args: repaired.args,
+                parseError: undefined,
+              });
+              tool =
+                stepTools?.[repaired.toolName] ||
+                Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === repaired.toolName);
+
+              if (!tool) {
+                return {
+                  error: new ToolNotFoundError(`Tool "${repaired.toolName}" not found after repair.${availableToolsStr}`),
+                  ...inputData,
+                };
+              }
+            } else {
+              if (inputData.parseError) {
+                return { error, ...inputData };
+              }
+              throw error;
+            }
+          } catch (repairError) {
+            if (repairError === error) throw error;
+            logger?.error('Error in repairToolCall hook:', repairError);
+            if (inputData.parseError) {
+              return { error, ...inputData };
+            }
+            throw error;
+          }
+        } else {
+          if (inputData.parseError) {
+            return { error, ...inputData };
+          }
+          throw error;
+        }
       }
 
       if (tool && 'onInputAvailable' in tool) {
