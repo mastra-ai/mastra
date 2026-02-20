@@ -523,6 +523,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       metadata[`modeModelId_${this.currentModeId}`] = modelId;
     }
 
+    // Auto-tag with projectPath from state so threads are scoped to the working directory
+    const projectPath = (this.state as any).projectPath;
+    if (projectPath) {
+      metadata.projectPath = projectPath;
+    }
+
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
       await memoryStorage.saveThread({

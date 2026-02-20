@@ -591,10 +591,35 @@ export class MastraTUI {
   /**
    * Prompt user to continue existing thread or start new one.
    * This runs before the TUI is fully initialized.
-   * Threads are already scoped to the current project path by listThreads().
+   * Threads are scoped to the current resourceId by listThreads(),
+   * then further filtered by projectPath to avoid resuming threads
+   * from other worktrees of the same repo.
    */
   private async promptForThreadSelection(): Promise<void> {
-    const threads = await this.harness.listThreads();
+    const allThreads = await this.harness.listThreads();
+
+    // Filter to threads matching the current working directory.
+    // This prevents worktrees (which share the same resourceId) from
+    // resuming each other's threads.
+    const currentPath = this.projectInfo.rootPath;
+    // TEMPORARY: Threads created before auto-tagging don't have projectPath
+    // metadata. To avoid resuming another worktree's untagged threads, we
+    // compare against the directory's birthtime — if the thread predates the
+    // directory it can't belong here. Once all legacy threads have been
+    // retroactively tagged (see below), this check can be removed.
+    let dirCreatedAt: Date | undefined;
+    try {
+      const stat = fs.statSync(currentPath);
+      dirCreatedAt = stat.birthtime;
+    } catch {
+      // fall through – treat all untagged threads as candidates
+    }
+    const threads = allThreads.filter(t => {
+      const threadPath = t.metadata?.projectPath as string | undefined;
+      if (threadPath) return threadPath === currentPath;
+      if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
+      return true;
+    });
 
     if (threads.length === 0) {
       // No existing threads for this path - defer creation until first message
@@ -608,6 +633,11 @@ export class MastraTUI {
     // Auto-resume the most recent thread for this directory
     try {
       await this.harness.switchThread(mostRecent.id);
+      // Retroactively tag untagged legacy threads so the birthtime check
+      // above can eventually be removed.
+      if (!mostRecent.metadata?.projectPath) {
+        await this.harness.persistThreadSetting('projectPath', currentPath);
+      }
     } catch (error) {
       if (error instanceof ThreadLockError) {
         // Defer the lock conflict prompt until after the TUI is started
