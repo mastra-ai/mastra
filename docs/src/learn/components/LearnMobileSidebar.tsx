@@ -46,7 +46,7 @@ const LearnMobileSidebarContent: NavbarSecondaryMenuComponent<LearnMobileSidebar
   return (
     <div className="learn-sidebar px-2 py-3">
       <div className="mb-3 px-2">
-        <LearnProgressBar completed={watchedCount} total={publishedTotal} totalLessons={lessons.length} />
+        <LearnProgressBar completed={watchedCount} total={publishedTotal} />
       </div>
       <ul className="learn-sidebar menu__list">
         {modules.map(([moduleName, moduleLessons]) => (
