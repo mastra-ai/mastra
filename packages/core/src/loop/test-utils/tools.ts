@@ -1159,7 +1159,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         },
         messageList,
         stopWhen: ({ steps }: { steps: any[] }) => {
-          stopWhenSteps.push(steps.map(s => ({ ...s })));
+          stopWhenSteps.push([...steps]);
           return false;
         },
         ...defaultSettings(),
