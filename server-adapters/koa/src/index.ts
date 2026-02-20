@@ -631,8 +631,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // from route path/method unless explicitly set or route is public
       const authConfig = this.mastra.getServer()?.auth;
       if (authConfig) {
+        let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
         try {
-          const { hasPermission } = await import('@mastra/core/auth');
+          ({ hasPermission } = await import('@mastra/core/auth'));
+        } catch {
+          console.error(
+            '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+          );
+        }
+
+        if (hasPermission) {
           const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
@@ -644,10 +652,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             };
             return;
           }
-        } catch {
-          console.error(
-            '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-          );
         }
       }
 
@@ -743,8 +747,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
+          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
           try {
-            const { hasPermission } = await import('@mastra/core/auth');
+            ({ hasPermission } = await import('@mastra/core/auth'));
+          } catch {
+            console.error(
+              '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+            );
+          }
+
+          if (hasPermission) {
             const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
             if (permissionError) {
@@ -755,10 +767,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
               };
               return;
             }
-          } catch {
-            console.error(
-              '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
           }
         }
       }
