@@ -24,8 +24,8 @@ export interface SpawnProcessOptions extends CommandOptions {}
 export interface ProcessInfo {
   /** Process ID */
   pid: number;
-  /** The command that was executed */
-  command: string;
+  /** The command that was executed (if available) */
+  command?: string;
   /** Whether the process is still running */
   running: boolean;
   /** Exit code if the process has finished */

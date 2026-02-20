@@ -46,6 +46,9 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   protected readonly sandbox: TSandbox;
   protected readonly env: Record<string, string | undefined>;
 
+  /** Tracked process handles keyed by PID. Populated by spawn(), used by get()/kill(). */
+  protected readonly _tracked = new Map<number, ProcessHandle>();
+
   constructor({ sandbox, env = {} }: ProcessManagerOptions<TSandbox>) {
     this.sandbox = sandbox;
     this.env = env;
@@ -85,10 +88,9 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     throw new Error(`${this.constructor.name} must implement list()`);
   }
 
-  /** Get a handle to a background process by PID. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  /** Get a handle to a background process by PID. Subclasses can override for fallback behavior. */
   async get(pid: number): Promise<ProcessHandle | undefined> {
-    throw new Error(`${this.constructor.name} must implement get()`);
+    return this._tracked.get(pid);
   }
 
   /** Kill a background process by PID. Returns true if killed, false if not found. */
@@ -101,6 +103,8 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       // Without this, a subsequent get() could still report the process as running.
       await handle.wait().catch(() => {});
     }
+    // Release tracked handle to free accumulated output buffers.
+    this._tracked.delete(pid);
     return killed;
   }
 }

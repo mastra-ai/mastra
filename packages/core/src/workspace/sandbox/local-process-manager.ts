@@ -13,14 +13,6 @@ import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
 import type { CommandResult } from './types';
 
-/**
- * Tracked process entry — the handle plus metadata from the spawn() call.
- */
-interface TrackedProcess {
-  handle: ProcessHandle;
-  command: string;
-}
-
 // =============================================================================
 // Local Process Handle
 // =============================================================================
@@ -121,8 +113,6 @@ class LocalProcessHandle extends ProcessHandle {
  * Spawns processes via child_process.spawn and tracks them in-memory.
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
-  private readonly _tracked = new Map<number, TrackedProcess>();
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const env = {
@@ -134,20 +124,15 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     // detached: true creates a new process group so we can kill the entire tree
     const proc = childProcess.spawn(command, { cwd, env, shell: true, detached: true });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
-    this._tracked.set(handle.pid, { handle, command });
+    this._tracked.set(handle.pid, handle);
     return handle;
   }
 
   async list(): Promise<ProcessInfo[]> {
-    return Array.from(this._tracked.values()).map(({ handle, command }) => ({
+    return Array.from(this._tracked.values()).map(handle => ({
       pid: handle.pid,
-      command,
       running: handle.exitCode === undefined,
       exitCode: handle.exitCode,
     }));
-  }
-
-  async get(pid: number): Promise<ProcessHandle | undefined> {
-    return this._tracked.get(pid)?.handle;
   }
 }

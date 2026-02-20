@@ -276,7 +276,11 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
 
           const found = procs.find(p => p.pid === handle.pid);
           expect(found).toBeDefined();
-          expect(found!.command).toContain('sleep');
+          // command is optional — some providers (e.g. E2B) get it from the server,
+          // others may not track it
+          if (found!.command) {
+            expect(found!.command).toContain('sleep');
+          }
 
           await handle.kill();
           await handle.wait();
@@ -373,7 +377,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       );
 
       it(
-        'returns handle after process is killed',
+        'handle.kill() does not remove from tracking (only manager.kill() does)',
         async () => {
           const handle = await processes.spawn('sleep 60');
           const pid = handle.pid;
@@ -381,9 +385,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           await handle.kill();
           await handle.wait();
 
-          // Should still be retrievable after kill (important for stateless tool layer)
+          // Direct handle.kill() should NOT remove from tracking —
+          // only processes.kill() releases the handle.
           const retrieved = await processes.get(pid);
-          // Some providers (e.g. E2B) may not track killed processes
           if (retrieved) {
             expect(retrieved.pid).toBe(pid);
           }
@@ -443,9 +447,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       );
 
       it(
-        'get after manager kill shows process as exited',
+        'get after manager kill returns undefined (handle released)',
         async () => {
-          // Simulates tool flow: kill_process → get_process_output should show exited, not running
+          // Simulates tool flow: kill_process releases the handle from tracking
           const handle = await processes.spawn(
             `node -e "setInterval(()=>{},60000)"`,
           );
@@ -454,11 +458,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           const killed = await processes.kill(pid);
           expect(killed).toBe(true);
 
-          // get() should now show the process as exited (exitCode defined)
+          // Handle should be removed from tracking after kill
           const retrieved = await processes.get(pid);
-          if (retrieved) {
-            expect(retrieved.exitCode).toBeDefined();
-          }
+          expect(retrieved).toBeUndefined();
         },
         getContext().testTimeout,
       );

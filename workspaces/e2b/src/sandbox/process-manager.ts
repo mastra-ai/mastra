@@ -84,9 +84,6 @@ class E2BProcessHandle extends ProcessHandle {
  * Uses the E2B SDK's commands.run() with background: true.
  */
 export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
-  /** Local cache of spawned handles so get() returns the same object with accumulated output. */
-  private readonly _tracked = new Map<number, E2BProcessHandle>();
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const e2b = this.sandbox.instance;
 
@@ -131,12 +128,10 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
 
   /**
    * Get a handle to a process by PID.
-   * Returns the original handle (with accumulated stdout/stderr) if it was
-   * spawned by this manager. Falls back to commands.connect() for processes
-   * spawned externally or before reconnection.
+   * Checks base class tracking first, then falls back to commands.connect()
+   * for processes spawned externally or before reconnection.
    */
   async get(pid: number): Promise<ProcessHandle | undefined> {
-    // Return tracked handle first — it has accumulated stdout/stderr from spawn
     const tracked = this._tracked.get(pid);
     if (tracked) return tracked;
 
