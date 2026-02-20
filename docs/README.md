@@ -17,3 +17,11 @@ Here's a quick start to run the docs locally
   ```bash
   pnpm run dev
   ```
+
+## Optional: Linting
+
+In order to run `lint:vale` you need to globally install `mdx2vast`:
+
+```bash
+npm install -g mdx2vast
+```

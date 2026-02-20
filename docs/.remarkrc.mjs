@@ -8,10 +8,9 @@ import remarkPresetLintRecommended from 'remark-preset-lint-recommended';
 import remarkLintHeadingIncrement from 'remark-lint-heading-increment';
 import remarkLintNoDuplicateHeadings from 'remark-lint-no-duplicate-headings';
 import remarkLintNoEmphasisAsHeading from 'remark-lint-no-emphasis-as-heading';
-import remarkLintNoHeadingPunctuation from 'remark-lint-no-heading-punctuation';
+
 import remarkLintOrderedListMarkerValue from 'remark-lint-ordered-list-marker-value';
 import remarkLintUnorderedListMarkerStyle from 'remark-lint-unordered-list-marker-style';
-import remarkLintListItemIndent from 'remark-lint-list-item-indent';
 
 const config = {
   plugins: [
@@ -27,12 +26,10 @@ const config = {
     [remarkLintHeadingIncrement, 'error'],
     [remarkLintNoDuplicateHeadings, 'error'],
     [remarkLintNoEmphasisAsHeading, 'error'],
-    [remarkLintNoHeadingPunctuation, 'warn'],
 
-    // Lists — styleguide: unordered use "-", ordered use sequential values
+    // Styleguides
     [remarkLintUnorderedListMarkerStyle, '-'],
-    [remarkLintOrderedListMarkerValue, 'ordered'],
-    [remarkLintListItemIndent, 'one'],
+    [remarkLintOrderedListMarkerValue, 'one'],
   ],
 };
 

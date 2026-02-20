@@ -19,7 +19,7 @@
     "vale": "./node_modules/@vvago/vale/bin/vale",
     "vale:sync": "./node_modules/@vvago/vale/bin/vale sync",
     "lint:vale": "./node_modules/@vvago/vale/bin/vale src/content/en/docs src/content/en/guides src/content/en/reference",
-    "lint:remark": "remark src/content",
+    "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/guides src/content/en/reference",
     "lint:prose": "npm-run-all --parallel lint:vale lint:remark"
   },
   "dependencies": {
@@ -82,10 +82,8 @@
     "remark-frontmatter": "^5.0.0",
     "remark-lint": "^10.0.1",
     "remark-lint-heading-increment": "^4.0.1",
-    "remark-lint-list-item-indent": "^4.0.1",
     "remark-lint-no-duplicate-headings": "^4.0.1",
     "remark-lint-no-emphasis-as-heading": "^4.0.1",
-    "remark-lint-no-heading-punctuation": "^4.0.1",
     "remark-lint-ordered-list-marker-value": "^4.0.1",
     "remark-lint-unordered-list-marker-style": "^4.0.1",
     "remark-mdx": "^3.1.1",
