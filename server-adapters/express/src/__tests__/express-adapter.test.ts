@@ -907,6 +907,7 @@ describe('Express Server Adapter', () => {
               if (token === 'valid-token') return { id: 'user-1' };
               return null;
             },
+            authorizeUser: async () => true,
           },
         },
       });
