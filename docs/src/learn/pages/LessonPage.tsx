@@ -114,7 +114,7 @@ function MarkAsCompleteButton({
       >
         {watched && '✓'}
       </span>
-      {watched ? 'Completed' : 'Mark as complete'}
+      {watched ? 'Completed' : 'Mark lesson as complete'}
     </button>
   )
 }
