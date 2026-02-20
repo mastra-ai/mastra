@@ -105,12 +105,25 @@ function getType(value: unknown): string {
 }
 
 /**
- * Check if a path matches any of the ignore patterns
+ * Check if a path matches any of the ignore patterns.
+ *
+ * Supports simple dot-separated path patterns with `*` wildcards:
+ * - `*` matches any segment characters (not dots)
+ * - `usage.*` matches `usage.input_tokens`, `usage.output_tokens`, etc.
  */
-function pathMatches(path: string, patterns: string[]): boolean {
+function pathMatches(inputPath: string, patterns: string[]): boolean {
   return patterns.some(pattern => {
-    const regex = pattern.replace(/\./g, '\\.').replace(/\*/g, '[^.]*');
-    return new RegExp(`^${regex}$`).test(path);
+    // Reject excessively long patterns to mitigate ReDoS
+    if (pattern.length > 200) return false;
+
+    try {
+      // Escape regex-special chars (except *), then convert * to a safe character class
+      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^.]*');
+      return new RegExp(`^${escaped}$`).test(inputPath);
+    } catch {
+      // Invalid pattern — skip it
+      return false;
+    }
   });
 }
 
@@ -235,8 +248,17 @@ function compareSchemas(
   }
 
   // Compare array items
-  if (expected.type === 'array' && expected.items && actual.items) {
-    compareSchemas(expected.items, actual.items, `${currentPath}[]`, options, differences);
+  if (expected.type === 'array' && expected.items) {
+    if (actual.items) {
+      compareSchemas(expected.items, actual.items, `${currentPath}[]`, options, differences);
+    } else {
+      differences.push({
+        path: `${currentPath}[]`,
+        type: 'missing_field',
+        expected: expected.items.type,
+        message: `Array items schema is missing (expected item type: ${expected.items.type})`,
+      });
+    }
   }
 }
 

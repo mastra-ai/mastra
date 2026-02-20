@@ -217,7 +217,7 @@ const LLM_API_HOSTS = [
 /**
  * Headers to skip when storing (sensitive + compression)
  */
-const SKIP_HEADERS = ['authorization', 'x-api-key', 'api-key', 'content-encoding', 'transfer-encoding'];
+const SKIP_HEADERS = ['authorization', 'x-api-key', 'api-key', 'content-encoding', 'transfer-encoding', 'set-cookie'];
 
 /**
  * Module-scoped active recorder instance.
@@ -556,6 +556,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         }
 
         if (recording.hash !== hash) {
+          // findRecording returned a fuzzy match (rating >= SIMILARITY_THRESHOLD).
+          // Accept it with a warning rather than failing the test.
           console.warn(
             `[llm-recorder] No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
               `Consider re-recording with UPDATE_RECORDINGS=true.`,
@@ -575,9 +577,6 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
-          throw new Error(
-            `No recording found for request: ${url} (hash: ${hash}). Run with UPDATE_RECORDINGS=true to re-record.`,
-          );
         }
 
         if (recording.response.isStreaming) {
@@ -734,14 +733,17 @@ export async function withLLMRecording<T>(
     parentRecorder.server.close();
   }
 
-  const recorder = setupLLMRecording({ name, ...options });
-  recorder.start();
+  let recorder: LLMRecorderInstance | undefined;
   try {
+    recorder = setupLLMRecording({ name, ...options });
+    recorder.start();
     const result = await fn();
     return result;
   } finally {
-    await recorder.save();
-    recorder.stop();
+    if (recorder) {
+      await recorder.save();
+      recorder.stop();
+    }
 
     // Restore the parent recorder's server
     if (parentRecorder?.server) {

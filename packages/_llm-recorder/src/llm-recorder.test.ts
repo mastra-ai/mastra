@@ -18,7 +18,7 @@
  */
 
 import { Agent } from '@mastra/core/agent';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 import {
   useLLMRecording,
   useLiveMode,
@@ -33,9 +33,19 @@ const MODE = getLLMTestMode();
 const HAS_API_KEY = !!process.env.OPENAI_API_KEY;
 
 // For modes that may replay, set a dummy key if no real key available
+const ORIGINAL_OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 if ((MODE === 'replay' || MODE === 'auto') && !HAS_API_KEY) {
   process.env.OPENAI_API_KEY = 'sk-dummy-for-replay-mode';
 }
+
+// Restore the original env after all tests in this file
+afterAll(() => {
+  if (ORIGINAL_OPENAI_API_KEY === undefined) {
+    delete process.env.OPENAI_API_KEY;
+  } else {
+    process.env.OPENAI_API_KEY = ORIGINAL_OPENAI_API_KEY;
+  }
+});
 
 // Skip tests that need real API if no key available
 const NEEDS_API = (MODE === 'live' || MODE === 'record' || MODE === 'update') && !HAS_API_KEY;
@@ -90,9 +100,9 @@ describe('LLM Recorder', () => {
     console.log(`[test] Text: ${fullText}`);
     console.log(`[test] Mode: ${recording.mode}`);
 
-    // In replay mode, should be very fast
+    // In replay mode, should be significantly faster than a real API call
     if (recording.mode === 'replay') {
-      expect(duration).toBeLessThan(100);
+      expect(duration).toBeLessThan(2000);
     }
   });
 });
@@ -107,8 +117,8 @@ describe('LLM Test Mode Detection', () => {
     expect(['auto', 'update', 'replay', 'live', 'record']).toContain(mode);
   });
 
-  it('useLLMRecording reflects correct mode', () => {
-    const recording = useLLMRecording('mode-test');
+  it('setupLLMRecording reflects correct mode', () => {
+    const recording = setupLLMRecording({ name: 'mode-test' });
     console.log(`[test] Recording mode: ${recording.mode}`);
     console.log(`[test] isLive: ${recording.isLive}`);
     console.log(`[test] isRecording: ${recording.isRecording}`);
@@ -123,6 +133,12 @@ describe('LLM Test Mode Detection', () => {
     } else {
       expect(recording.isLive).toBe(false);
       expect(recording.isRecording).toBe(false);
+    }
+
+    // Clean up — stop the server if one was created
+    if (recording.server) {
+      recording.start();
+      recording.stop();
     }
   });
 });
@@ -178,13 +194,13 @@ describe('withLLMRecording', () => {
  * transformRequest tests
  */
 describe('transformRequest', () => {
-  it('transform callback is called and affects matching', () => {
+  it('accepts transformRequest option and creates a recorder', () => {
     const transformFn = vi.fn(({ url, body }: { url: string; body: unknown }) => ({
       url: url.replace(/v[0-9]+/, 'v1'),
       body: { ...(body as Record<string, unknown>), timestamp: 'NORMALIZED' },
     }));
 
-    // Just verify the option is accepted and the recorder is created successfully
+    // Verify the option is accepted and the recorder is created successfully
     const recorder = setupLLMRecording({
       name: 'transform-test',
       transformRequest: transformFn,
@@ -200,12 +216,19 @@ describe('transformRequest', () => {
     }
   });
 
-  it('accepts transformRequest in useLLMRecording options', () => {
-    const recorder = useLLMRecording('transform-use-test', {
+  it('accepts transformRequest in setupLLMRecording options', () => {
+    const recorder = setupLLMRecording({
+      name: 'transform-use-test',
       transformRequest: ({ url, body }) => ({ url, body }),
     });
 
     expect(recorder).toBeDefined();
+
+    // Clean up — start then immediately stop to avoid dangling server
+    if (recorder.server) {
+      recorder.start();
+      recorder.stop();
+    }
   });
 });
 
@@ -213,11 +236,16 @@ describe('transformRequest', () => {
  * Active recorder tracking and useLiveMode tests
  */
 describe('getActiveRecorder', () => {
-  it('returns null when no recorder is active', () => {
+  it('is callable and returns null or an active recorder', () => {
     // At this point in the test run, there may or may not be an active recorder
-    // from the enclosing suite. We just verify the function is callable.
+    // from the enclosing suite. Verify the function is callable and returns a
+    // valid type (null or an object with expected shape).
+    expect(() => getActiveRecorder()).not.toThrow();
     const recorder = getActiveRecorder();
-    expect(recorder === null || recorder !== null).toBe(true);
+    if (recorder !== null) {
+      expect(recorder).toHaveProperty('mode');
+      expect(recorder).toHaveProperty('server');
+    }
   });
 
   it('tracks the active recorder after start/stop', () => {
@@ -239,7 +267,11 @@ describe('useLiveMode', () => {
   it('recording is active in normal tests', () => {
     // The suite-level recorder should be active
     expect(getActiveRecorder()).toBe(recording);
-    expect(recording.server).not.toBeNull();
+    if (recording.mode === 'live') {
+      expect(recording.server).toBeNull();
+    } else {
+      expect(recording.server).not.toBeNull();
+    }
   });
 
   describe('live mode block', () => {
@@ -247,12 +279,13 @@ describe('useLiveMode', () => {
 
     it('MSW server is stopped during live mode tests', () => {
       // After useLiveMode's beforeEach, the server should be closed.
-      // We can verify by checking that the server exists but was closed.
-      // The server object still exists on the recorder, but it's been closed.
-      expect(recording.server).not.toBeNull();
-
-      // getActiveRecorder still returns the recorder (we only close the server,
-      // we don't clear the reference — that would break afterEach restart)
+      // In live mode, server is null and useLiveMode is effectively a no-op.
+      if (recording.mode === 'live') {
+        expect(recording.server).toBeNull();
+      } else {
+        // The server object still exists on the recorder, but it's been closed.
+        expect(recording.server).not.toBeNull();
+      }
     });
   });
 

@@ -135,7 +135,7 @@ export async function agentGenerate(
       transformedOptions.structuredOutput = { schema: output };
     }
 
-    return agent.generate(message as string, transformedOptions as any);
+    return agent.generate(message, transformedOptions as any);
   } else {
     return (agent as any).generateLegacy(message, options);
   }
@@ -165,11 +165,16 @@ export async function agentStream(
   model: MastraModelConfig,
 ): Promise<unknown> {
   if (isV5PlusModel(model)) {
-    const { threadId, resourceId, ...rest } = options;
+    const { threadId, resourceId, output, ...rest } = options;
     const transformedOptions: Record<string, unknown> = { ...rest };
 
     if (threadId) {
       transformedOptions.memory = { thread: threadId, resource: resourceId };
+    }
+
+    // Transform v4 `output` to v5+ `structuredOutput: { schema }`
+    if (output && !transformedOptions.structuredOutput) {
+      transformedOptions.structuredOutput = { schema: output };
     }
 
     return agent.stream(message, transformedOptions as any);

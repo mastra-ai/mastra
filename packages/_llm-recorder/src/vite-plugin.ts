@@ -108,14 +108,24 @@ export function defaultNameGenerator(filepath: string): string {
 function matchesPattern(filepath: string, patterns: string[]): boolean {
   const normalized = filepath.replace(/\\/g, '/');
   return patterns.some(pattern => {
-    const regex = pattern
-      .replace(/\./g, '\\.')
-      // Replace **/ with a globstar that matches zero or more path segments (including the /)
-      .replace(/\*\*\//g, '(?:.*/)?')
-      // Replace remaining ** (at end of pattern) with match-all
-      .replace(/\*\*/g, '.*')
-      .replace(/\*/g, '[^/]*');
-    return new RegExp(regex).test(normalized);
+    // Reject excessively long patterns to mitigate ReDoS
+    if (pattern.length > 500) return false;
+
+    try {
+      const regex = pattern
+        // Escape regex-special chars except * and /
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+        // Replace **/ with a globstar that matches zero or more path segments (including the /)
+        .replace(/\*\*\//g, '(?:.*/)?')
+        // Replace remaining ** (at end of pattern) with match-all
+        .replace(/\*\*/g, '.*')
+        // Replace single * with segment matcher (no path separators)
+        .replace(/\*/g, '[^/]*');
+      return new RegExp(`^${regex}$`).test(normalized);
+    } catch {
+      // Invalid pattern — skip it
+      return false;
+    }
   });
 }
 

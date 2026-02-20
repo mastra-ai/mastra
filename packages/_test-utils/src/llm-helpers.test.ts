@@ -7,6 +7,27 @@ import { getLLMTestMode, hasLLMRecording, listLLMRecordings, getLLMRecordingsDir
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getModelRecordingName, isV5PlusModel, setupDummyApiKeys, hasApiKey } from './llm-helpers';
 
+/**
+ * Restore process.env to a snapshot without replacing the native proxy object.
+ * Removes keys that weren't in the snapshot and resets existing keys.
+ */
+function restoreEnv(snapshot: Record<string, string | undefined>): void {
+  // Remove keys not in the snapshot
+  for (const key of Object.keys(process.env)) {
+    if (!(key in snapshot)) {
+      delete process.env[key];
+    }
+  }
+  // Restore keys from the snapshot
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 describe('getLLMTestMode', () => {
   const originalEnv = { ...process.env };
   const originalArgv = [...process.argv];
@@ -23,7 +44,7 @@ describe('getLLMTestMode', () => {
 
   afterEach(() => {
     // Restore original env and argv
-    process.env = { ...originalEnv };
+    restoreEnv(originalEnv);
     process.argv = [...originalArgv];
   });
 
@@ -179,7 +200,7 @@ describe('setupDummyApiKeys', () => {
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restoreEnv(originalEnv);
   });
 
   it('does nothing in live mode', () => {
@@ -235,7 +256,7 @@ describe('hasApiKey', () => {
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restoreEnv(originalEnv);
   });
 
   it('returns false when key is not set', () => {

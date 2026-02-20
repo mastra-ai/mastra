@@ -40,7 +40,6 @@
         "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
         "openai-version": "2020-10-01",
         "server": "cloudflare",
-        "set-cookie": "__cf_bm=wijfES2EYuUUKri6MONbV36c_X8GwUBBuFGsOE_fMFQ-1770767968.2135782-1.0.1.1-T7IlA3sI2WpRsnnt.tAOiGlyDJYJrNK4Eullz1djClPnoPt55FrlY8jnProf.K2Qm5EvngtoictvPY2iG_ZT72Tp__ZdoqQA0vJsocH60XZ3tz2iJ6RG6Q4mG3yZGJ.E; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 11 Feb 2026 00:29:28 GMT",
         "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
         "x-content-type-options": "nosniff",
         "x-ratelimit-limit-requests": "10000",
