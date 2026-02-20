@@ -241,23 +241,7 @@ describe('execute_command tool', () => {
         { command: 'node', args: ['server.js'], background: true },
         ctx,
       );
-      expect(result).toContain('PID: 42');
-      expect(result).toContain('node server.js');
-    });
-
-    it('includes command with args in background response', async () => {
-      const handle = createMockHandle({ pid: 100 });
-      const sandbox = createMockSandbox({
-        processes: {
-          spawn: vi.fn().mockResolvedValue(handle),
-        },
-      });
-      const ctx = createContext(sandbox);
-      const result = await executeCommandWithBackgroundTool.execute(
-        { command: 'npm', args: ['run', 'dev'], background: true },
-        ctx,
-      );
-      expect(result).toContain('Command: npm run dev');
+      expect(result).toBe('PID: 42');
     });
 
     it('runs foreground when background is not set', async () => {
