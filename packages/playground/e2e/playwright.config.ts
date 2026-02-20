@@ -5,6 +5,8 @@ const BASE_URL = `http://localhost:${PORT || '4111'}`;
 
 const webservers: PlaywrightTestConfig['webServer'] = [
   {
+    // UI tests use route interception for auth mocking - no server auth needed
+    // Server-side permission tests are in server-adapters/hono
     command: `pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
@@ -24,9 +26,9 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  retries: process.env.CI ? 2 : 1,
   workers: 1,
-  reporter: 'html',
+  reporter: process.env.CI ? 'list' : 'html',
 
   use: {
     baseURL: BASE_URL,

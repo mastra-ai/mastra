@@ -1,6 +1,6 @@
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
-import { MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider, AuthRequired } from '@mastra/playground-ui';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -12,7 +12,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <NavigationCommand />
             <div className="grid grid-cols-[auto_1fr] h-full">
               <AppSidebar />
-              <div className="bg-surface2 my-3 mr-3 rounded-lg border border-border1 overflow-y-auto">{children}</div>
+              <div className="bg-surface2 my-3 mr-3 rounded-lg border border-border1 overflow-y-auto">
+                <AuthRequired>{children}</AuthRequired>
+              </div>
             </div>
           </MainSidebarProvider>
         </TooltipProvider>

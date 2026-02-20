@@ -105,16 +105,17 @@ export const chefModelV2Agent = new Agent({
     lessComplexWorkflow,
     findUserWorkflow,
   },
-  scorers: ({ mastra }) => {
-    if (!mastra) {
-      throw new Error('Mastra not found');
-    }
-    const scorer1 = mastra.getScorerById('scorer1');
+  // scorers: ({ mastra }) => {
+  //   if (!mastra) {
+  //     throw new Error('Mastra not found');
+  //   }
 
-    return {
-      scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
-    };
-  },
+  //   const scorer1 = mastra.getScorerById('scorer1');
+
+  //   return {
+  //     scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
+  //   };
+  // },
   memory,
   inputProcessors: [moderationProcessor],
   defaultOptions: {
