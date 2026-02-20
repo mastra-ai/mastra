@@ -283,6 +283,26 @@ describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
     supportsStructuredOutputs: false,
   };
 
+  it('should handle z.null() property without throwing', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processZodType(schema)).not.toThrow();
+  });
+
+  it('should handle z.null() via processToAISDKSchema without throwing', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+  });
+
   it('should convert ZodAny to string with description', () => {
     const schema = z.object({
       name: z.string(),

@@ -619,6 +619,55 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
   });
 
+  describe('processZodType - Null Types (MCP server compat)', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle z.null() property without throwing', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      // This should NOT throw "does not support zod type: ZodNull"
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle z.null() property via processToAISDKSchema without throwing', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+    });
+
+    it('should handle optional z.null() property without throwing', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null().optional(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+    });
+
+    it('should handle z.null() with description', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null().describe('Always null'),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+    });
+  });
+
   describe('Snapshot Tests - Full JSON Schema Output', () => {
     it('should match snapshot for claude-3-5-sonnet with complete schema', () => {
       const modelInfo: ModelInformation = {
