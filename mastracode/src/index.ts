@@ -18,7 +18,6 @@ import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { MCPManager } from './mcp/index.js';
 import { getToolCategory } from './permissions.js';
-import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { stateSchema } from './schema.js';
@@ -35,6 +34,7 @@ import {
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
+import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
