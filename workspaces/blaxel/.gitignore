@@ -1,0 +1,5 @@
+dist
+node_modules
+.env
+*.json.key
+key.json
