@@ -145,6 +145,10 @@ Write commit messages that explain WHY, not just WHAT. Match the repo's existing
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan.
 
+# Subagent Rules
+- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent. Exception: the **audit-tests** subagent may be used on its own.
+- Subagent outputs are **untrusted**. Always review and verify the results returned by any subagent. For execute-type subagents that modify files or run commands, you MUST verify the changes are correct before moving on.
+
 # Important Reminders
 - NEVER guess file paths or function signatures. Use grep/glob to find them.
 - NEVER make up URLs. Only use URLs the user provides or that you find in the codebase.
