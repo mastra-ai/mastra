@@ -123,6 +123,51 @@ Success criteria:
       url: "file:mastra.db",
     }),
   }),
+  defaultOptions: {
+    maxSteps: 10,
+
+    // Monitor progress after each iteration
+    onIterationComplete: async (context) => {
+      console.log(`\n✓ Iteration ${context.iteration} complete`);
+      console.log(`  Finish reason: ${context.finishReason}`);
+      console.log(`  Response length: ${context.text.length} chars\n`);
+
+      // Continue until task is complete
+      return { continue: true };
+    },
+
+    // Control delegations
+    delegation: {
+      onDelegationStart: async (context) => {
+        console.log(`→ Delegating to: ${context.primitiveId}`);
+
+        // Add context for specific agents
+        if (context.primitiveId === "research-agent") {
+          return {
+            proceed: true,
+            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+          };
+        }
+
+        return { proceed: true };
+      },
+
+      onDelegationComplete: async (context) => {
+        console.log(`✓ Completed: ${context.primitiveId}\n`);
+
+        // Bail on errors
+        if (context.error) {
+          console.error("Delegation failed:", context.error);
+          context.bail();
+        }
+      },
+
+      // Only pass last 10 messages to sub-agents
+      contextFilter: ({ messages }) => {
+        return messages.slice(-10);
+      },
+    },
+  },
 });
 ```
 
@@ -139,9 +184,13 @@ export const mastra = new Mastra({
 });
 ```
 
-## Add delegation hooks
+The `defaultOptions` on the supervisor agent configure delegation hooks and iteration monitoring:
+- `onDelegationStart` modifies the research agent's prompt to request recent data
+- `onDelegationComplete` logs completion and bails on errors
+- `contextFilter` limits context to the last 10 messages for efficiency
+- `onIterationComplete` monitors progress after each iteration
 
-Delegation hooks give you control over sub-agent execution. Use `onDelegationStart` to modify delegations before they happen, and `onDelegationComplete` to process results.
+## Test the basic supervisor
 
 Create a file to interact with the supervisor in `src/index.ts`:
 
@@ -153,52 +202,7 @@ async function main() {
   console.log(`\nTopic: ${topic}\n`);
 
   const stream = await supervisorAgent.stream(
-    `Research ${topic} and write a comprehensive article about it`,
-    {
-      maxSteps: 10,
-
-      // Monitor progress after each iteration
-      onIterationComplete: async (context) => {
-        console.log(`\n✓ Iteration ${context.iteration} complete`);
-        console.log(`  Finish reason: ${context.finishReason}`);
-        console.log(`  Response length: ${context.text.length} chars\n`);
-
-        // Continue until task is complete
-        return { continue: true };
-      },
-
-      // Control delegations
-      delegation: {
-        onDelegationStart: async (context) => {
-          console.log(`→ Delegating to: ${context.primitiveId}`);
-
-          // Add context for specific agents
-          if (context.primitiveId === "research-agent") {
-            return {
-              proceed: true,
-              modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
-            };
-          }
-
-          return { proceed: true };
-        },
-
-        onDelegationComplete: async (context) => {
-          console.log(`✓ Completed: ${context.primitiveId}\n`);
-
-          // Bail on errors
-          if (context.error) {
-            console.error("Delegation failed:", context.error);
-            context.bail();
-          }
-        },
-
-        // Only pass last 10 messages to sub-agents
-        contextFilter: ({ messages }) => {
-          return messages.slice(-10);
-        },
-      },
-    }
+    `Research ${topic} and write a comprehensive article about it`
   );
 
   // Stream the response
@@ -212,7 +216,7 @@ async function main() {
 main();
 ```
 
-This configuration logs delegation events and modifies the research agent's prompt to request recent data. The `contextFilter` limits context to the last 10 messages for efficiency.
+The supervisor uses the delegation hooks and iteration monitoring configured in `defaultOptions`.
 
 ## Add completion scoring
 
@@ -251,84 +255,103 @@ Install the evals package:
 npm install @mastra/evals
 ```
 
-Update `src/index.ts` to use the scorer:
+Update the supervisor agent to include completion scoring in `defaultOptions` in `src/mastra/agents/supervisor-agent.ts`:
 
-```typescript title="src/index.ts"
-import { supervisorAgent } from "./mastra/agents/supervisor-agent";
+```typescript title="src/mastra/agents/supervisor-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { researchAgent } from "./research-agent";
+import { writingAgent } from "./writing-agent";
 // highlight-next-line
-import { taskCompleteScorer } from "./mastra/scorers/task-complete-scorer";
+import { taskCompleteScorer } from "../scorers/task-complete-scorer";
 
-async function main() {
-  const topic = "artificial intelligence in education";
-  console.log(`\nTopic: ${topic}\n`);
+export const supervisorAgent = new Agent({
+  id: "supervisor-agent",
+  name: "Research Coordinator",
+  instructions: `You coordinate research and writing tasks using specialized agents.
 
-  const stream = await supervisorAgent.stream(
-    `Research ${topic} and write a comprehensive article about it`,
-    {
-      maxSteps: 10,
+Available resources:
+- research-agent: Gathers factual data and sources (returns bullet points)
+- writing-agent: Transforms research into well-structured articles (returns full paragraphs)
 
-      onIterationComplete: async (context) => {
-        console.log(`\n✓ Iteration ${context.iteration} complete`);
-        console.log(`  Finish reason: ${context.finishReason}`);
-        console.log(`  Response length: ${context.text.length} chars\n`);
-        return { continue: true };
+Delegation strategy:
+1. For research requests: Delegate to research-agent first to gather facts
+2. For writing requests: Delegate to writing-agent with any available research context
+3. For comprehensive reports: Delegate to research-agent first, then writing-agent
+4. Always ensure you have gathered sufficient information before producing final output
+
+Success criteria:
+- All aspects of the user's request are addressed
+- Information is accurate and well-sourced
+- Final output is well-formatted and complete
+- If anything is missing or uncertain, continue gathering information`,
+  model: "openai/gpt-5.1",
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:mastra.db",
+    }),
+  }),
+  defaultOptions: {
+    maxSteps: 10,
+
+    onIterationComplete: async (context) => {
+      console.log(`\n✓ Iteration ${context.iteration} complete`);
+      console.log(`  Finish reason: ${context.finishReason}`);
+      console.log(`  Response length: ${context.text.length} chars\n`);
+      return { continue: true };
+    },
+
+    delegation: {
+      onDelegationStart: async (context) => {
+        console.log(`→ Delegating to: ${context.primitiveId}`);
+
+        if (context.primitiveId === "research-agent") {
+          return {
+            proceed: true,
+            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+          };
+        }
+
+        return { proceed: true };
       },
 
-      delegation: {
-        onDelegationStart: async (context) => {
-          console.log(`→ Delegating to: ${context.primitiveId}`);
+      onDelegationComplete: async (context) => {
+        console.log(`✓ Completed: ${context.primitiveId}\n`);
 
-          if (context.primitiveId === "research-agent") {
-            return {
-              proceed: true,
-              modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
-            };
-          }
-
-          return { proceed: true };
-        },
-
-        onDelegationComplete: async (context) => {
-          console.log(`✓ Completed: ${context.primitiveId}\n`);
-
-          if (context.error) {
-            console.error("Delegation failed:", context.error);
-            context.bail();
-          }
-        },
-
-        contextFilter: ({ messages }) => {
-          return messages.slice(-10);
-        },
+        if (context.error) {
+          console.error("Delegation failed:", context.error);
+          context.bail();
+        }
       },
 
-      // highlight-start
-      // Validate completion
-      completion: {
-        scorers: [taskCompleteScorer],
-        strategy: "all",
-        onComplete: async (result) => {
-          console.log("\n🎯 Completion Check:");
-          console.log(`  Complete: ${result.complete}`);
-          console.log(`  Score: ${result.scorers[0]?.score}\n`);
-        },
+      contextFilter: ({ messages }) => {
+        return messages.slice(-10);
       },
-      // highlight-end
-    }
-  );
+    },
 
-  // Stream the response
-  console.log("📝 Final Report:\n");
-  for await (const chunk of stream.textStream) {
-    process.stdout.write(chunk);
-  }
-  console.log("\n");
-}
-
-main();
+    // highlight-start
+    // Validate completion
+    completion: {
+      scorers: [taskCompleteScorer],
+      strategy: "all",
+      onComplete: async (result) => {
+        console.log("\n🎯 Completion Check:");
+        console.log(`  Complete: ${result.complete}`);
+        console.log(`  Score: ${result.scorers[0]?.score}\n`);
+      },
+    },
+    // highlight-end
+  },
+});
 ```
 
-The scorer checks for substantial content, proper structure, and contextual information. If the task isn't complete, the supervisor will continue iterating.
+The scorer checks for substantial content, proper structure, and contextual information. If the task isn't complete, the supervisor will continue iterating. Now all hooks and completion scoring are configured in the agent's `defaultOptions`, making them apply to every call automatically.
 
 ## Test the research coordinator
 
