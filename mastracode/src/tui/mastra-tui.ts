@@ -604,7 +604,9 @@ export class MastraTUI {
     const currentPath = this.projectInfo.rootPath;
     const threads = allThreads.filter(t => {
       const threadPath = t.metadata?.projectPath as string | undefined;
-      return threadPath === currentPath;
+      // Include threads that match this path, or legacy threads with no tag
+      // (only exclude threads explicitly tagged with a different path)
+      return !threadPath || threadPath === currentPath;
     });
 
     if (threads.length === 0) {
