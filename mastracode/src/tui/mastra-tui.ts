@@ -21,12 +21,15 @@ import type {
   HarnessMessageContent,
   HarnessEventListener,
   TokenUsage,
+  TaskItem,
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
+import { parse as parsePartialJson } from 'partial-json';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
+import type { McpManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -58,10 +61,9 @@ import { ShellOutputComponent } from './components/shell-output.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TaskProgressComponent } from './components/task-progress.js';
 import { ThreadSelectorComponent } from './components/thread-selector.js';
 
-import { TodoProgressComponent } from './components/todo-progress.js';
-import type { TodoItem } from './components/todo-progress.js';
 import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.js';
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
@@ -71,6 +73,13 @@ import { UserMessageComponent } from './components/user-message.js';
 import { sendNotification } from './notify.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
 import { getEditorTheme, getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Tools that modify files, used for /diff tracking */
+const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
 
 // =============================================================================
 // Types
@@ -85,6 +94,9 @@ export interface MastraTUIOptions {
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
+
+  /** MCP manager for server status and reload */
+  mcpManager?: McpManager;
 
   /**
    * @deprecated Workspace is now obtained from the Harness.
@@ -118,6 +130,7 @@ export class MastraTUI {
   private options: MastraTUIOptions;
   private hookManager?: HookManager;
   private authStorage?: AuthStorage;
+  private mcpManager?: McpManager;
 
   // TUI components
   private ui: TUI;
@@ -133,6 +146,8 @@ export class MastraTUI {
   private streamingComponent?: AssistantMessageComponent;
   private streamingMessage?: HarnessMessage;
   private pendingTools = new Map<string, IToolExecutionComponent>();
+  private toolInputBuffers = new Map<string, { text: string; toolName: string }>(); // Buffer partial JSON args text per toolCallId for streaming input
+  private taskWriteInsertIndex = -1; // Position hint for task_write inline rendering when streaming
   private seenToolCallIds = new Set<string>(); // Track all tool IDs seen during current stream (prevents duplicates)
   private subagentToolCallIds = new Set<string>(); // Track subagent tool call IDs to skip in trailing content logic
   private allToolComponents: IToolExecutionComponent[] = []; // Track all tools for expand/collapse
@@ -169,8 +184,8 @@ export class MastraTUI {
   // Buffering state — drives statusline label animation
   private bufferingMessages = false;
   private bufferingObservations = false;
-  private todoProgress?: TodoProgressComponent;
-  private previousTodos: TodoItem[] = []; // Track previous state for diff
+  private taskProgress?: TaskProgressComponent;
+  private previousTasks: TaskItem[] = []; // Track previous state for diff
 
   // Autocomplete
   private autocompleteProvider?: CombinedAutocompleteProvider;
@@ -193,6 +208,9 @@ export class MastraTUI {
   // Follow-up messages sent via Ctrl+F while streaming
   // These must stay anchored at the bottom of the chat stream
   private followUpComponents: UserMessageComponent[] = [];
+  // Slash commands queued via Ctrl+F while the agent is running.
+  // Drained in handleAgentEnd after all harness-level follow-ups complete.
+  private pendingSlashCommands: string[] = [];
 
   // Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog
   private pendingApprovalDismiss: (() => void) | null = null;
@@ -218,6 +236,7 @@ export class MastraTUI {
     this.options = options;
     this.hookManager = options.hookManager;
     this.authStorage = options.authStorage;
+    this.mcpManager = options.mcpManager;
     this.workspace = options.workspace;
 
     // Detect project info for status line
@@ -363,20 +382,28 @@ export class MastraTUI {
       if (!text) return;
       if (!this.harness.isRunning()) return; // Only relevant while streaming
 
-      // Clear editor and add user message to chat
+      // Clear editor
       this.editor.setText('');
-      this.addUserMessage({
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
       this.ui.requestRender();
 
-      // Queue the follow-up
-      this.harness.followUp(text).catch(error => {
-        this.showError(error instanceof Error ? error.message : 'Follow-up failed');
-      });
+      if (text.startsWith('/')) {
+        // Queue slash command for processing after the agent completes
+        this.pendingSlashCommands.push(text);
+        this.showInfo(`Slash command queued: ${text}`);
+      } else {
+        // Queue as a regular follow-up message
+        this.addUserMessage({
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+          createdAt: new Date(),
+        });
+        this.ui.requestRender();
+
+        this.harness.followUp(text).catch(error => {
+          this.showError(error instanceof Error ? error.message : 'Follow-up failed');
+        });
+      }
     });
   }
 
@@ -457,6 +484,7 @@ export class MastraTUI {
           // Agent is streaming → steer (abort + resend)
           // Clear follow-up tracking since steer replaces the current response
           this.followUpComponents = [];
+          this.pendingSlashCommands = [];
           this.harness.steer(userInput).catch(error => {
             this.showError(error instanceof Error ? error.message : 'Steer failed');
           });
@@ -550,8 +578,8 @@ export class MastraTUI {
     this.updateTerminalTitle();
     // Render existing messages
     await this.renderExistingMessages();
-    // Render existing todos if any
-    await this.renderExistingTodos();
+    // Render existing tasks if any
+    await this.renderExistingTasks();
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.pendingLockConflict) {
@@ -561,30 +589,55 @@ export class MastraTUI {
   }
 
   /**
-   * Render existing todos from the harness state on startup
+   * Render existing tasks from the harness state on startup
    */
-  private async renderExistingTodos(): Promise<void> {
+  private async renderExistingTasks(): Promise<void> {
     try {
       // Access the harness state using the public method
-      const state = this.harness.getState() as { todos?: TodoItem[] };
-      const todos = state.todos || [];
+      const state = this.harness.getState() as { tasks?: TaskItem[] };
+      const tasks = state.tasks || [];
 
-      if (todos.length > 0 && this.todoProgress) {
-        // Update the existing todo progress component
-        this.todoProgress.updateTodos(todos);
+      if (tasks.length > 0 && this.taskProgress) {
+        // Update the existing task progress component
+        this.taskProgress.updateTasks(tasks);
         this.ui.requestRender();
       }
     } catch {
-      // Silently ignore todo rendering errors
+      // Silently ignore task rendering errors
     }
   }
   /**
    * Prompt user to continue existing thread or start new one.
    * This runs before the TUI is fully initialized.
-   * Threads are already scoped to the current project path by listThreads().
+   * Threads are scoped to the current resourceId by listThreads(),
+   * then further filtered by projectPath to avoid resuming threads
+   * from other worktrees of the same repo.
    */
   private async promptForThreadSelection(): Promise<void> {
-    const threads = await this.harness.listThreads();
+    const allThreads = await this.harness.listThreads();
+
+    // Filter to threads matching the current working directory.
+    // This prevents worktrees (which share the same resourceId) from
+    // resuming each other's threads.
+    const currentPath = this.projectInfo.rootPath;
+    // TEMPORARY: Threads created before auto-tagging don't have projectPath
+    // metadata. To avoid resuming another worktree's untagged threads, we
+    // compare against the directory's birthtime — if the thread predates the
+    // directory it can't belong here. Once all legacy threads have been
+    // retroactively tagged (see below), this check can be removed.
+    let dirCreatedAt: Date | undefined;
+    try {
+      const stat = fs.statSync(currentPath);
+      dirCreatedAt = stat.birthtime;
+    } catch {
+      // fall through – treat all untagged threads as candidates
+    }
+    const threads = allThreads.filter(t => {
+      const threadPath = t.metadata?.projectPath as string | undefined;
+      if (threadPath) return threadPath === currentPath;
+      if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
+      return true;
+    });
 
     if (threads.length === 0) {
       // No existing threads for this path - defer creation until first message
@@ -598,6 +651,11 @@ export class MastraTUI {
     // Auto-resume the most recent thread for this directory
     try {
       await this.harness.switchThread(mostRecent.id);
+      // Retroactively tag untagged legacy threads so the birthtime check
+      // above can eventually be removed.
+      if (!mostRecent.metadata?.projectPath) {
+        await this.harness.persistThreadSetting('projectPath', currentPath);
+      }
     } catch (error) {
       if (error instanceof ThreadLockError) {
         // Defer the lock conflict prompt until after the TUI is started
@@ -658,9 +716,9 @@ ${instructions}`,
 
     // Add main containers
     this.ui.addChild(this.chatContainer);
-    // Todo progress (between chat and editor, visible only when todos exist)
-    this.todoProgress = new TodoProgressComponent();
-    this.ui.addChild(this.todoProgress);
+    // Task progress (between chat and editor, visible only when tasks exist)
+    this.taskProgress = new TaskProgressComponent();
+    this.ui.addChild(this.taskProgress);
     this.ui.addChild(this.editorContainer);
     this.editorContainer.addChild(this.editor);
 
@@ -1183,6 +1241,18 @@ ${instructions}`,
         this.handleShellOutput(event.toolCallId, event.output, event.stream);
         break;
 
+      case 'tool_input_start':
+        this.handleToolInputStart(event.toolCallId, event.toolName);
+        break;
+
+      case 'tool_input_delta':
+        this.handleToolInputDelta(event.toolCallId, event.argsTextDelta);
+        break;
+
+      case 'tool_input_end':
+        this.handleToolInputEnd(event.toolCallId);
+        break;
+
       case 'tool_end':
         this.handleToolEnd(event.toolCallId, event.result, event.isError);
         break;
@@ -1213,12 +1283,12 @@ ${instructions}`,
         this.syncOMThresholdsFromHarness();
         this.tokenUsage = this.harness.getTokenUsage();
         this.updateStatusLine();
-        // Restore todos from thread state
+        // Restore tasks from thread state
         const threadState = this.harness.getState() as {
-          todos?: TodoItem[];
+          tasks?: TaskItem[];
         };
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos(threadState.todos ?? []);
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks(threadState.tasks ?? []);
           this.ui.requestRender();
         }
         break;
@@ -1230,6 +1300,12 @@ ${instructions}`,
         if (typeof tState?.escapeAsCancel === 'boolean') {
           this.editor.escapeEnabled = tState.escapeAsCancel;
         }
+        // Clear stale tasks from the previous thread
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks([]);
+        }
+        this.previousTasks = [];
+        this.taskWriteInsertIndex = -1;
         this.updateStatusLine();
         break;
       }
@@ -1343,9 +1419,11 @@ ${instructions}`,
         this.ui.requestRender();
         break;
 
-      case 'follow_up_queued':
-        this.showInfo(`Follow-up queued (${event.count} pending)`);
+      case 'follow_up_queued': {
+        const totalPending = (event.count as number) + this.pendingSlashCommands.length;
+        this.showInfo(`Follow-up queued (${totalPending} pending)`);
         break;
+      }
 
       case 'workspace_ready':
         // Workspace initialized successfully - silent unless verbose
@@ -1383,35 +1461,40 @@ ${instructions}`,
         this.handleSubagentEnd(event.toolCallId, event.isError, event.durationMs, event.result);
         break;
 
-      case 'todo_updated': {
-        const todos = event.todos as TodoItem[];
-        if (this.todoProgress) {
-          this.todoProgress.updateTodos(todos ?? []);
+      case 'task_updated': {
+        const tasks = event.tasks as TaskItem[];
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks(tasks ?? []);
 
-          // Find the most recent todo_write tool component and get its position
+          // Find the most recent task_write tool component and get its position
           let insertIndex = -1;
           for (let i = this.allToolComponents.length - 1; i >= 0; i--) {
             const comp = this.allToolComponents[i];
-            if ((comp as any).toolName === 'todo_write') {
+            if ((comp as any).toolName === 'task_write') {
               insertIndex = this.chatContainer.children.indexOf(comp as any);
               this.chatContainer.removeChild(comp as any);
               this.allToolComponents.splice(i, 1);
               break;
             }
           }
+          // Fall back to the position recorded during streaming (when no inline component was created)
+          if (insertIndex === -1 && this.taskWriteInsertIndex >= 0) {
+            insertIndex = this.taskWriteInsertIndex;
+            this.taskWriteInsertIndex = -1;
+          }
 
-          // Check if all todos are completed
-          const allCompleted = todos && todos.length > 0 && todos.every(t => t.status === 'completed');
+          // Check if all tasks are completed
+          const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
           if (allCompleted) {
             // Show collapsed completed list (pinned/live)
-            this.renderCompletedTodosInline(todos, insertIndex, true);
-          } else if (this.previousTodos.length > 0 && (!todos || todos.length === 0)) {
+            this.renderCompletedTasksInline(tasks, insertIndex, true);
+          } else if (this.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
             // Tasks were cleared
-            this.renderClearedTodosInline(this.previousTodos, insertIndex);
+            this.renderClearedTasksInline(this.previousTasks, insertIndex);
           }
 
           // Track for next diff
-          this.previousTodos = todos ? [...todos] : [];
+          this.previousTasks = tasks ? [...tasks] : [];
 
           this.ui.requestRender();
         }
@@ -1697,9 +1780,20 @@ ${instructions}`,
     }
     this.followUpComponents = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
     this.notify('agent_done');
+
+    // Drain queued slash commands once all harness-level follow-ups are done.
+    // Each slash command that triggers sendMessage will start a new agent
+    // operation, and handleAgentEnd will fire again to drain the next one.
+    if (this.pendingSlashCommands.length > 0 && this.harness.getFollowUpCount() === 0) {
+      const nextCommand = this.pendingSlashCommands.shift()!;
+      this.handleSlashCommand(nextCommand).catch(error => {
+        this.showError(error instanceof Error ? error.message : 'Queued slash command failed');
+      });
+    }
   }
 
   private handleAgentAborted(): void {
@@ -1724,7 +1818,9 @@ ${instructions}`,
     this.userInitiatedAbort = false;
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after interruption
     this.ui.requestRender();
   }
@@ -1742,7 +1838,9 @@ ${instructions}`,
     }
 
     this.followUpComponents = [];
+    this.pendingSlashCommands = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after errors
   }
 
@@ -1898,6 +1996,7 @@ ${instructions}`,
           });
         }
         this.pendingTools.clear();
+        this.toolInputBuffers.clear();
       }
 
       this.streamingComponent = undefined;
@@ -1970,7 +2069,13 @@ ${instructions}`,
   }
 
   private handleToolStart(toolCallId: string, toolName: string, args: unknown): void {
-    if (!this.seenToolCallIds.has(toolCallId)) {
+    // Component may already exist if created early by handleToolInputStart
+    const existingComponent = this.pendingTools.get(toolCallId);
+
+    if (existingComponent) {
+      // Component was created during input streaming — update with final args
+      existingComponent.updateArgs(args);
+    } else if (!this.seenToolCallIds.has(toolCallId)) {
       this.seenToolCallIds.add(toolCallId);
 
       // Skip creating the regular tool component for subagent calls
@@ -1991,7 +2096,16 @@ ${instructions}`,
       this.pendingTools.set(toolCallId, component);
       this.allToolComponents.push(component);
 
-      // Track ask_user tool components for inline question placement
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+
+      this.ui.requestRender();
+    }
+
+    // Track ask_user tool components for inline question placement
+    const component = this.pendingTools.get(toolCallId);
+    if (component) {
       if (toolName === 'ask_user') {
         this.lastAskUserComponent = component;
       }
@@ -1999,22 +2113,15 @@ ${instructions}`,
       if (toolName === 'submit_plan') {
         this.lastSubmitPlanComponent = component;
       }
+    }
 
-      // Track file-modifying tools for /diff command
-      const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-      if (FILE_TOOLS.includes(toolName)) {
-        const toolArgs = args as Record<string, unknown>;
-        const filePath = toolArgs?.path as string;
-        if (filePath) {
-          this.pendingFileTools.set(toolCallId, { toolName, filePath });
-        }
+    // Track file-modifying tools for /diff command
+    if (FILE_TOOLS.includes(toolName)) {
+      const toolArgs = args as Record<string, unknown>;
+      const filePath = toolArgs?.path as string;
+      if (filePath) {
+        this.pendingFileTools.set(toolCallId, { toolName, filePath });
       }
-
-      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-      this.addChildBeforeFollowUps(this.streamingComponent);
-
-      this.ui.requestRender();
     }
   }
 
@@ -2039,6 +2146,115 @@ ${instructions}`,
       component.appendStreamingOutput(output);
       this.ui.requestRender();
     }
+  }
+
+  /**
+   * Handle the start of streaming tool call input arguments.
+   * Creates the tool component early so partial args can render as they arrive.
+   */
+  private handleToolInputStart(toolCallId: string, toolName: string): void {
+    this.toolInputBuffers.set(toolCallId, { text: '', toolName });
+
+    // Mark as seen so handleMessageUpdate doesn't create a duplicate component
+    if (!this.seenToolCallIds.has(toolCallId)) {
+      this.seenToolCallIds.add(toolCallId);
+    }
+
+    // Create the component early so deltas can update it
+    // Skip for subagent (handled by SubagentExecutionComponent) and task_write (streams to pinned TaskProgressComponent)
+    if (toolName === 'task_write') {
+      // Record position so task_updated can place inline completed/cleared display here
+      this.taskWriteInsertIndex = this.chatContainer.children.length;
+
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      // (even though task_write doesn't render a tool component inline, we still need
+      // to split the streaming component so getTrailingContentParts doesn't overwrite it)
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+      this.ui.requestRender();
+    } else if (toolName !== 'subagent') {
+      this.addChildBeforeFollowUps(new Text('', 0, 0));
+      const component = new ToolExecutionComponentEnhanced(
+        toolName,
+        {},
+        { showImages: false, collapsedByDefault: !this.toolOutputExpanded },
+        this.ui,
+      );
+      component.setExpanded(this.toolOutputExpanded);
+      this.addChildBeforeFollowUps(component);
+      this.pendingTools.set(toolCallId, component);
+      this.allToolComponents.push(component);
+
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+
+      this.ui.requestRender();
+    }
+  }
+
+  /**
+   * Handle an incremental delta of tool call input arguments.
+   * Buffers the partial JSON text and attempts to parse it, updating the component's args.
+   */
+  private handleToolInputDelta(toolCallId: string, argsTextDelta: string): void {
+    const buffer = this.toolInputBuffers.get(toolCallId);
+    if (buffer === undefined) return;
+
+    buffer.text += argsTextDelta;
+    const updatedText = buffer.text;
+
+    try {
+      const partialArgs = parsePartialJson(updatedText);
+      if (partialArgs && typeof partialArgs === 'object') {
+        // Update inline tool component if it exists
+        const component = this.pendingTools.get(toolCallId);
+        if (component) {
+          component.updateArgs(partialArgs);
+        }
+
+        // For task_write, stream partial tasks into the pinned TaskProgressComponent.
+        // The last array item is actively being written so its content is unstable.
+        // If all existing pinned items are already completed, the list is stable and
+        // we can stream in new items immediately (including the last one).
+        // Otherwise, exclude the last item to avoid jumpy partial-content matches.
+        if (buffer.toolName === 'task_write' && this.taskProgress) {
+          const tasks = (partialArgs as { tasks?: TaskItem[] }).tasks;
+          if (tasks && tasks.length > 0) {
+            const existing = this.taskProgress.getTasks();
+            const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
+            if (allExistingDone) {
+              // Old list is done — start fresh, stream new items immediately
+              this.taskProgress.updateTasks(tasks as TaskItem[]);
+            } else if (tasks.length > 1) {
+              // Merge only completed items (exclude the last still-streaming one)
+              const merged = [...existing];
+              for (const task of tasks.slice(0, -1)) {
+                if (!task.content) continue;
+                const idx = merged.findIndex(t => t.content === task.content);
+                if (idx >= 0) {
+                  merged[idx] = task;
+                } else {
+                  merged.push(task);
+                }
+              }
+              this.taskProgress.updateTasks(merged);
+            }
+          }
+        }
+
+        this.ui.requestRender();
+      }
+    } catch {
+      // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
+    }
+  }
+
+  /**
+   * Clean up the input buffer when tool input streaming ends.
+   */
+  private handleToolInputEnd(toolCallId: string): void {
+    this.toolInputBuffers.delete(toolCallId);
   }
 
   /**
@@ -2359,27 +2575,27 @@ ${instructions}`,
   }
 
   /**
-   * Render a completed todo list inline in the chat history.
-   * This mirrors the pinned TodoProgressComponent format but shows
+   * Render a completed task list inline in the chat history.
+   * This mirrors the pinned TaskProgressComponent format but shows
    * all items as completed, since the pinned component hides itself
    * when everything is done.
-   * @param todos The completed todo items
+   * @param tasks The completed task items
    * @param insertIndex Optional index to insert at (replaces tool component position)
    */
-  private renderCompletedTodosInline(todos: TodoItem[], insertIndex = -1, collapsed = false): void {
-    const headerText = bold(fg('accent', 'Tasks')) + fg('dim', ` [${todos.length}/${todos.length} completed]`);
+  private renderCompletedTasksInline(tasks: TaskItem[], insertIndex = -1, collapsed = false): void {
+    const headerText = bold(fg('accent', 'Tasks')) + fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
     const container = new Container();
     container.addChild(new Spacer(1));
     container.addChild(new Text(headerText, 0, 0));
     const MAX_VISIBLE = 4;
-    const shouldCollapse = collapsed && todos.length > MAX_VISIBLE + 1;
-    const visible = shouldCollapse ? todos.slice(0, MAX_VISIBLE) : todos;
-    const remaining = shouldCollapse ? todos.length - MAX_VISIBLE : 0;
+    const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
+    const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
+    const remaining = shouldCollapse ? tasks.length - MAX_VISIBLE : 0;
 
-    for (const todo of visible) {
+    for (const task of visible) {
       const icon = chalk.hex(mastra.green)('✓');
-      const text = chalk.hex(mastra.green)(todo.content);
+      const text = chalk.hex(mastra.green)(task.content);
       container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
     }
     if (remaining > 0) {
@@ -2393,7 +2609,7 @@ ${instructions}`,
     }
 
     if (insertIndex >= 0) {
-      // Insert at the position where the todo_write tool was
+      // Insert at the position where the task_write tool was
       this.chatContainer.children.splice(insertIndex, 0, container);
       this.chatContainer.invalidate();
     } else {
@@ -2406,15 +2622,15 @@ ${instructions}`,
    * Render inline display when tasks are cleared.
    * Shows what was cleared with strikethrough.
    */
-  private renderClearedTodosInline(clearedTodos: TodoItem[], insertIndex = -1): void {
+  private renderClearedTasksInline(clearedTasks: TaskItem[], insertIndex = -1): void {
     const container = new Container();
     container.addChild(new Spacer(1));
-    const count = clearedTodos.length;
+    const count = clearedTasks.length;
     const label = count === 1 ? 'Task' : 'Tasks';
     container.addChild(new Text(fg('accent', `${label} cleared`), 0, 0));
-    for (const todo of clearedTodos) {
-      const icon = todo.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-      const text = chalk.dim.strikethrough(todo.content);
+    for (const task of clearedTasks) {
+      const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
+      const text = chalk.dim.strikethrough(task.content);
       container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
     }
     if (insertIndex >= 0) {
@@ -2554,6 +2770,7 @@ ${instructions}`,
           this.chatContainer.clear();
           this.allToolComponents = [];
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           await this.renderExistingMessages();
           this.updateStatusLine();
 
@@ -3209,11 +3426,11 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.harness.setState({ observerModelId: modelId } as any);
+            await this.harness.switchObserverModel(modelId);
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.harness.setState({ reflectorModelId: modelId } as any);
+            await this.harness.switchReflectorModel(modelId);
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
@@ -3530,9 +3747,15 @@ ${instructions}`,
         this.pendingNewThread = true;
         this.chatContainer.clear();
         this.pendingTools.clear();
+        this.toolInputBuffers.clear();
         this.allToolComponents = [];
         this.modifiedFiles.clear();
         this.pendingFileTools.clear();
+        if (this.taskProgress) {
+          this.taskProgress.updateTasks([]);
+        }
+        this.previousTasks = [];
+        this.taskWriteInsertIndex = -1;
         this.resetStatusLineState();
         this.ui.requestRender();
         this.showInfo('Ready for new conversation');
@@ -3700,6 +3923,7 @@ ${modeList}`);
           this.pendingNewThread = true;
           this.chatContainer.clear();
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           this.allToolComponents = [];
           this.resetStatusLineState();
           this.ui.requestRender();
@@ -3710,6 +3934,7 @@ ${modeList}`);
           this.pendingNewThread = true;
           this.chatContainer.clear();
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           this.allToolComponents = [];
           this.resetStatusLineState();
           this.ui.requestRender();
@@ -3843,7 +4068,7 @@ Keyboard shortcuts:
       }
 
       case 'mcp': {
-        const mm = this.harness.getMcpManager?.();
+        const mm = this.mcpManager;
         if (!mm) {
           this.showInfo('MCP system not initialized.');
           return true;
@@ -4086,6 +4311,7 @@ Keyboard shortcuts:
   private async renderExistingMessages(): Promise<void> {
     this.chatContainer.clear();
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     this.allToolComponents = [];
 
     const messages = await this.harness.getMessages({ limit: 40 });
@@ -4185,24 +4411,24 @@ Keyboard shortcuts:
               );
             }
 
-            // If this was todo_write with all completed or cleared, show inline instead of tool component
+            // If this was task_write with all completed or cleared, show inline instead of tool component
             let replacedWithInline = false;
-            if (content.name === 'todo_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-              const args = content.args as { todos?: TodoItem[] } | undefined;
-              const todos = args?.todos;
-              if (todos && todos.length > 0 && todos.every(t => t.status === 'completed')) {
-                this.renderCompletedTodosInline(todos);
+            if (content.name === 'task_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+              const args = content.args as { tasks?: TaskItem[] } | undefined;
+              const tasks = args?.tasks;
+              if (tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed')) {
+                this.renderCompletedTasksInline(tasks);
                 replacedWithInline = true;
-              } else if (!todos || todos.length === 0) {
-                // Tasks were cleared - show with previous todos if we have them
-                if (this.previousTodos.length > 0) {
-                  this.renderClearedTodosInline(this.previousTodos);
-                  this.previousTodos = [];
+              } else if (!tasks || tasks.length === 0) {
+                // Tasks were cleared - show with previous tasks if we have them
+                if (this.previousTasks.length > 0) {
+                  this.renderClearedTasksInline(this.previousTasks);
+                  this.previousTasks = [];
                   replacedWithInline = true;
                 }
               } else {
                 // Track for detecting clears
-                this.previousTodos = [...todos];
+                this.previousTasks = [...tasks];
               }
             }
 
@@ -4300,6 +4526,11 @@ Keyboard shortcuts:
           this.chatContainer.addChild(textComponent);
         }
       }
+    }
+
+    // Restore pinned task list from the last active task_write in history
+    if (this.previousTasks.length > 0 && this.taskProgress) {
+      this.taskProgress.updateTasks(this.previousTasks);
     }
 
     this.ui.requestRender();
