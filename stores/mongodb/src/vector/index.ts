@@ -5,6 +5,7 @@ import type {
   QueryResult,
   IndexStats,
   CreateIndexParams,
+  CreateMetadataIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
   DescribeIndexParams,
@@ -872,5 +873,76 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Everything else is assumed to be in metadata
     // This includes thread_id, resource_id, message_id, and any custom fields
     return true;
+  }
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * For MongoDB, this creates an index on `metadata.<field>` to optimize
+   * queries that filter by that metadata field.
+   *
+   * This method is idempotent - calling it multiple times with the same
+   * parameters will not create duplicate indexes.
+   *
+   * @param params - Parameters including indexName (collection) and field to index
+   *
+   * @example
+   * ```ts
+   * // Create an index on thread_id for faster filtering
+   * await mongoVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field } = params;
+
+    // Validate field name
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'CREATE_METADATA_INDEX', 'INVALID_FIELD'),
+        text: `Invalid metadata field name: "${field}". Field names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName, field },
+      });
+    }
+
+    try {
+      const collection = await this.getCollection(indexName);
+      const metadataIndexName = `idx_metadata_${field}`;
+      const fieldPath = `${this.metadataFieldName}.${field}`;
+
+      // Check if index already exists
+      const existingIndexes = await collection.listIndexes().toArray();
+      const indexExists = existingIndexes.some(idx => idx.name === metadataIndexName);
+
+      if (indexExists) {
+        this.logger?.debug(`Metadata index "${metadataIndexName}" already exists on collection "${indexName}"`);
+        return;
+      }
+
+      // Create the index
+      await collection.createIndex({ [fieldPath]: 1 }, { name: metadataIndexName, background: true });
+
+      this.logger?.info(`Created metadata index "${metadataIndexName}" on field "${fieldPath}"`, {
+        indexName,
+        field,
+        metadataIndexName,
+      });
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'CREATE_METADATA_INDEX', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, field },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    }
   }
 }

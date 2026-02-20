@@ -7,6 +7,7 @@ import type {
   QueryResult,
   QueryVectorParams,
   CreateIndexParams,
+  CreateMetadataIndexParams,
   UpsertVectorParams,
   DescribeIndexParams,
   DeleteIndexParams,
@@ -1489,6 +1490,110 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     } finally {
       client?.release();
+    }
+  }
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * For PostgreSQL, this creates a functional B-tree index on the JSONB
+   * metadata field extraction expression (e.g., `metadata->>'field_name'`).
+   *
+   * This method is idempotent - calling it multiple times with the same
+   * parameters will not create duplicate indexes.
+   *
+   * @param params - Parameters including indexName (table) and field to index
+   *
+   * @example
+   * ```ts
+   * // Create an index on thread_id for faster filtering
+   * await pgVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field, type = 'string' } = params;
+    const { tableName } = this.getTableName(indexName);
+
+    // Validate field name to prevent SQL injection
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+      throw new MastraError({
+        id: createVectorErrorId('PG', 'CREATE_METADATA_INDEX', 'INVALID_FIELD'),
+        text: `Invalid metadata field name: "${field}". Field names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName, field },
+      });
+    }
+
+    const schemaName = this.schema || 'public';
+    const metadataIndexName = `idx_${indexName}_metadata_${field}`;
+
+    const client = await this.pool.connect();
+    try {
+      // Check if index already exists
+      const indexExists = await client.query(`SELECT 1 FROM pg_indexes WHERE indexname = $1 AND schemaname = $2`, [
+        metadataIndexName,
+        schemaName,
+      ]);
+
+      if (indexExists.rows.length > 0) {
+        this.logger?.debug(`Metadata index "${metadataIndexName}" already exists, skipping creation`);
+        return;
+      }
+
+      // Create functional index on the JSONB field extraction
+      // Using ->> operator to extract text value from JSONB
+      const createIndexSQL = `
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS "${metadataIndexName}"
+        ON ${tableName} ((metadata->>'${field}'))
+      `;
+
+      await client.query(createIndexSQL);
+
+      this.logger?.info(`Created metadata index "${metadataIndexName}" on field "${field}"`, {
+        indexName,
+        field,
+        type,
+        metadataIndexName,
+      });
+    } catch (error: any) {
+      // If CONCURRENTLY fails (e.g., inside transaction), try without it
+      if (error.message?.includes('CONCURRENTLY')) {
+        try {
+          const createIndexSQL = `
+            CREATE INDEX IF NOT EXISTS "${metadataIndexName}"
+            ON ${tableName} ((metadata->>'${field}'))
+          `;
+          await client.query(createIndexSQL);
+
+          this.logger?.info(`Created metadata index "${metadataIndexName}" on field "${field}" (non-concurrent)`, {
+            indexName,
+            field,
+            type,
+            metadataIndexName,
+          });
+          return;
+        } catch (retryError) {
+          error = retryError;
+        }
+      }
+
+      const mastraError = new MastraError(
+        {
+          id: createVectorErrorId('PG', 'CREATE_METADATA_INDEX', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, field, metadataIndexName },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    } finally {
+      client.release();
     }
   }
 }

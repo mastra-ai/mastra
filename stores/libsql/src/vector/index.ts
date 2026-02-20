@@ -16,6 +16,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
   DeleteVectorsParams,
+  CreateMetadataIndexParams,
 } from '@mastra/core/vector';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
@@ -731,5 +732,68 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
       args: [],
     });
+  }
+
+  /**
+   * Creates an index on a metadata field for faster filtering.
+   *
+   * LibSQL stores metadata as JSON in a TEXT column. This method creates an index
+   * on a specific field extracted from the JSON to improve query performance when
+   * filtering by that field.
+   *
+   * @param params - The parameters for creating the metadata index
+   * @param params.indexName - The name of the vector index (table) containing the metadata
+   * @param params.field - The metadata field to index (e.g., 'thread_id', 'user_id')
+   * @param params.type - Optional type hint (not used in LibSQL, all JSON values are text)
+   *
+   * @example
+   * ```ts
+   * await libsqlVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field } = params;
+
+    // Validate field name to prevent SQL injection
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+      throw new MastraError({
+        id: createVectorErrorId('LIBSQL', 'CREATE_METADATA_INDEX', 'INVALID_FIELD'),
+        text: `Invalid metadata field name: "${field}". Field names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, field },
+      });
+    }
+
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const metadataIndexName = `${indexName}_metadata_${field}_idx`;
+
+    try {
+      // LibSQL/SQLite uses json_extract for JSON field access
+      // The index is created on the extracted text value
+      await this.turso.execute({
+        sql: `CREATE INDEX IF NOT EXISTS "${metadataIndexName}" ON ${parsedIndexName} (json_extract(metadata, '$.${field}'))`,
+        args: [],
+      });
+
+      this.logger?.info(`Created metadata index "${metadataIndexName}" for field "${field}" on table "${indexName}"`, {
+        indexName,
+        field,
+        metadataIndexName,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LIBSQL', 'CREATE_METADATA_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, field },
+        },
+        error,
+      );
+    }
   }
 }
