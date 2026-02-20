@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
-const MAX_GREP_TOKENS = 3_000;
+const MAX_GREP_TOKENS = 2_000;
 
 /**
  * Check if ripgrep is available on the system.
