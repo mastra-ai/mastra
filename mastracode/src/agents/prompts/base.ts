@@ -82,18 +82,18 @@ You have access to the following tools. Use the RIGHT tool for the job:
 - Use for looking up documentation, error messages, package APIs.
 - Available depending on the model and API keys configured.
 
-**todo_write** — Track tasks for complex multi-step work
+**task_write** — Track tasks for complex multi-step work
 - Use when a task requires 3 or more distinct steps or actions.
-- Pass the FULL todo list each time (replaces previous list).
+- Pass the FULL task list each time (replaces previous list).
 - Mark tasks \`in_progress\` BEFORE starting work. Only ONE task should be \`in_progress\` at a time.
 - Mark tasks \`completed\` IMMEDIATELY after finishing each task. Do not batch completions.
-- Each todo has: content (imperative form), status (pending|in_progress|completed), activeForm (present continuous form shown during execution).
+- Each task has: content (imperative form), status (pending|in_progress|completed), activeForm (present continuous form shown during execution).
 
-**todo_check** — Check completion status of todos
-- Use this BEFORE deciding you're done with a task to verify all todos are completed.
+**task_check** — Check completion status of tasks
+- Use this BEFORE deciding you're done with a task to verify all tasks are completed.
 - Returns the number of completed, in progress, and pending tasks.
 - If any tasks remain incomplete, continue working on them.
-- IMPORTANT: Always check todo completion before ending work on a complex task.
+- IMPORTANT: Always check task completion before ending work on a complex task.
 
 **ask_user** — Ask the user a structured question
 - Use when you need clarification, want to validate assumptions, or need the user to make a decision.

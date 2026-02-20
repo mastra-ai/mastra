@@ -5,7 +5,7 @@ import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createTool } from '../tools/tool';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessRequestContext, HarnessSubagent, TaskItem } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
@@ -391,3 +391,138 @@ export function parseSubagentMeta(content: string): {
 
   return { text, modelId, durationMs, toolCalls };
 }
+
+// =============================================================================
+// Task Tools
+// =============================================================================
+
+const taskItemSchema = z.object({
+  content: z.string().min(1).describe("Task description in imperative form (e.g., 'Fix authentication bug')"),
+  status: z.enum(['pending', 'in_progress', 'completed']).describe('Current task status'),
+  activeForm: z
+    .string()
+    .min(1)
+    .describe("Present continuous form shown during execution (e.g., 'Fixing authentication bug')"),
+});
+
+/**
+ * Built-in harness tool: create and manage a structured task list.
+ * Full-replacement semantics — each call replaces the entire task list.
+ */
+export const taskWriteTool = createTool({
+  id: 'task_write',
+  description: `Create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
+
+Usage:
+- Pass the FULL task list each time (replaces previous list)
+- Each task has: content (imperative), status (pending|in_progress|completed), activeForm (present continuous)
+- Mark tasks in_progress BEFORE starting work (only ONE at a time)
+- Mark tasks completed IMMEDIATELY after finishing
+- Use this for multi-step tasks requiring 3+ distinct actions
+
+States:
+- pending: Not yet started
+- in_progress: Currently working on (limit to ONE)
+- completed: Finished successfully`,
+  inputSchema: z.object({
+    tasks: z.array(taskItemSchema).describe('The complete updated task list'),
+  }),
+  execute: async ({ tasks }, context) => {
+    try {
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+
+      if (harnessCtx) {
+        await harnessCtx.setState({ tasks });
+
+        harnessCtx.emitEvent?.({
+          type: 'task_updated',
+          tasks: tasks as TaskItem[],
+        });
+      }
+
+      const completed = tasks.filter((t: { status: string }) => t.status === 'completed').length;
+      const inProgress = tasks.find((t: { status: string }) => t.status === 'in_progress') as
+        | { activeForm: string }
+        | undefined;
+      const total = tasks.length;
+
+      let summary = `Tasks updated: [${completed}/${total} completed]`;
+      if (inProgress) {
+        summary += `\nCurrently: ${inProgress.activeForm}`;
+      }
+
+      return { content: summary, isError: false };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      return { content: `Failed to update tasks: ${msg}`, isError: true };
+    }
+  },
+});
+
+/**
+ * Built-in harness tool: check the completion status of the current task list.
+ */
+export const taskCheckTool = createTool({
+  id: 'task_check',
+  description: `Check the completion status of your current task list. Use this before deciding to end work on a task to ensure all tasks are completed.
+
+Returns:
+- Total number of tasks
+- Number of completed, in progress, and pending tasks
+- List of incomplete tasks (if any)
+- Boolean indicating if all tasks are done`,
+  inputSchema: z.object({}),
+  execute: async ({}, context) => {
+    try {
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+
+      if (!harnessCtx) {
+        return { content: 'Unable to access task list (no harness context)', isError: true };
+      }
+
+      const state = harnessCtx.getState ? harnessCtx.getState() : harnessCtx.state;
+      const tasks = ((state as Record<string, unknown>).tasks as TaskItem[] | undefined) || [];
+
+      if (tasks.length === 0) {
+        return {
+          content: 'No tasks found. Consider using task_write to create a task list for complex work.',
+          isError: false,
+        };
+      }
+
+      const completed = tasks.filter(t => t.status === 'completed');
+      const inProgress = tasks.filter(t => t.status === 'in_progress');
+      const pending = tasks.filter(t => t.status === 'pending');
+      const incomplete = [...inProgress, ...pending];
+      const allDone = incomplete.length === 0;
+
+      let response = `Task Status: [${completed.length}/${tasks.length} completed]\n`;
+      response += `- Completed: ${completed.length}\n`;
+      response += `- In Progress: ${inProgress.length}\n`;
+      response += `- Pending: ${pending.length}\n`;
+      response += `\nAll tasks completed: ${allDone ? 'YES' : 'NO'}`;
+
+      if (!allDone) {
+        response += '\n\nIncomplete tasks:';
+        if (inProgress.length > 0) {
+          response += '\n\nIn Progress:';
+          inProgress.forEach(t => {
+            response += `\n- ${t.content}`;
+          });
+        }
+        if (pending.length > 0) {
+          response += '\n\nPending:';
+          pending.forEach(t => {
+            response += `\n- ${t.content}`;
+          });
+        }
+        response += '\n\nContinue working on these tasks before ending.';
+      }
+
+      return { content: response, isError: false };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      return { content: `Failed to check tasks: ${msg}`, isError: true };
+    }
+  },
+});

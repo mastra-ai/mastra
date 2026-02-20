@@ -28,8 +28,6 @@ import {
   createExecuteCommandTool,
   createWriteFileTool,
   stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -167,8 +165,6 @@ export function createMastraCode(config?: MastraCodeConfig) {
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
-        todo_write: todoWriteTool,
-        todo_check: todoCheckTool,
       },
     },
   ];

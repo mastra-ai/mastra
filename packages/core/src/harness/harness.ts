@@ -8,7 +8,7 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { askUserTool, createSubagentTool, submitPlanTool } from './tools';
+import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -25,6 +25,7 @@ import type {
   ModelAuthStatus,
   PermissionPolicy,
   PermissionRules,
+  TaskItem,
   ToolCategory,
 } from './types';
 
@@ -216,6 +217,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   getState(): Readonly<z.infer<TState>> {
     return { ...this.state };
+  }
+
+  /**
+   * Get the current task list from state.
+   * Returns an empty array if no tasks have been set.
+   */
+  getTasks(): TaskItem[] {
+    return ((this.state as Record<string, unknown>).tasks as TaskItem[] | undefined) || [];
   }
 
   /**
@@ -1339,8 +1348,160 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
 
-        default:
+        default: {
+          // Intercept data-om-status custom parts to emit live OM status updates
+          if (chunk.type === 'data-om-status') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data?.windows) {
+              const w = data.windows as Record<string, Record<string, Record<string, unknown>>>;
+              this.emit({
+                type: 'om_status',
+                windows: {
+                  active: {
+                    messages: {
+                      tokens: (w.active?.messages?.tokens as number) ?? 0,
+                      threshold: (w.active?.messages?.threshold as number) ?? 0,
+                    },
+                    observations: {
+                      tokens: (w.active?.observations?.tokens as number) ?? 0,
+                      threshold: (w.active?.observations?.threshold as number) ?? 0,
+                    },
+                  },
+                  buffered: {
+                    observations: {
+                      status: ((w.buffered?.observations as any)?.status as 'idle' | 'running' | 'complete') ?? 'idle',
+                      chunks: ((w.buffered?.observations as any)?.chunks as number) ?? 0,
+                      messageTokens: ((w.buffered?.observations as any)?.messageTokens as number) ?? 0,
+                      projectedMessageRemoval:
+                        ((w.buffered?.observations as any)?.projectedMessageRemoval as number) ?? 0,
+                      observationTokens: ((w.buffered?.observations as any)?.observationTokens as number) ?? 0,
+                    },
+                    reflection: {
+                      status: ((w.buffered?.reflection as any)?.status as 'idle' | 'running' | 'complete') ?? 'idle',
+                      inputObservationTokens: ((w.buffered?.reflection as any)?.inputObservationTokens as number) ?? 0,
+                      observationTokens: ((w.buffered?.reflection as any)?.observationTokens as number) ?? 0,
+                    },
+                  },
+                },
+                recordId: (data.recordId as string) ?? '',
+                threadId: (data.threadId as string) ?? this.currentThreadId ?? '',
+                stepNumber: (data.stepNumber as number) ?? 0,
+                generationCount: (data.generationCount as number) ?? 0,
+              });
+            }
+          } else if (chunk.type === 'data-om-observation-start') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              const opType = (data.operationType as string) ?? 'observation';
+              if (opType === 'reflection') {
+                this.emit({
+                  type: 'om_reflection_start',
+                  cycleId: (data.cycleId as string) ?? '',
+                  tokensToReflect: (data.tokensToObserve as number) ?? 0,
+                });
+              } else {
+                this.emit({
+                  type: 'om_observation_start',
+                  cycleId: (data.cycleId as string) ?? '',
+                  operationType: 'observation',
+                  tokensToObserve: (data.tokensToObserve as number) ?? 0,
+                });
+              }
+            }
+          } else if (chunk.type === 'data-om-observation-end') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              const opType = (data.operationType as string) ?? 'observation';
+              if (opType === 'reflection') {
+                this.emit({
+                  type: 'om_reflection_end',
+                  cycleId: (data.cycleId as string) ?? '',
+                  durationMs: (data.durationMs as number) ?? 0,
+                  compressedTokens: (data.observationTokens as number) ?? 0,
+                  observations: data.observations as string | undefined,
+                });
+              } else {
+                this.emit({
+                  type: 'om_observation_end',
+                  cycleId: (data.cycleId as string) ?? '',
+                  durationMs: (data.durationMs as number) ?? 0,
+                  tokensObserved: (data.tokensObserved as number) ?? 0,
+                  observationTokens: (data.observationTokens as number) ?? 0,
+                  observations: data.observations as string | undefined,
+                  currentTask: data.currentTask as string | undefined,
+                  suggestedResponse: data.suggestedResponse as string | undefined,
+                });
+              }
+            }
+          } else if (chunk.type === 'data-om-observation-failed') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              const opType = (data.operationType as string) ?? 'observation';
+              if (opType === 'reflection') {
+                this.emit({
+                  type: 'om_reflection_failed',
+                  cycleId: (data.cycleId as string) ?? '',
+                  error: (data.error as string) ?? 'unknown error',
+                  durationMs: (data.durationMs as number) ?? 0,
+                });
+              } else {
+                this.emit({
+                  type: 'om_observation_failed',
+                  cycleId: (data.cycleId as string) ?? '',
+                  error: (data.error as string) ?? 'unknown error',
+                  durationMs: (data.durationMs as number) ?? 0,
+                });
+              }
+            }
+          } else if (chunk.type === 'data-om-buffering-start') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              this.emit({
+                type: 'om_buffering_start',
+                cycleId: (data.cycleId as string) ?? '',
+                operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+                tokensToBuffer: (data.tokensToBuffer as number) ?? 0,
+              });
+            }
+          } else if (chunk.type === 'data-om-buffering-end') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              this.emit({
+                type: 'om_buffering_end',
+                cycleId: (data.cycleId as string) ?? '',
+                operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+                tokensBuffered: (data.tokensBuffered as number) ?? 0,
+                bufferedTokens: (data.bufferedTokens as number) ?? 0,
+                observations: data.observations as string | undefined,
+              });
+            }
+          } else if (chunk.type === 'data-om-buffering-failed') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              this.emit({
+                type: 'om_buffering_failed',
+                cycleId: (data.cycleId as string) ?? '',
+                operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+                error: (data.error as string) ?? 'unknown error',
+              });
+            }
+          } else if (chunk.type === 'data-om-activation') {
+            const data = (chunk as any).data as Record<string, unknown> | undefined;
+            if (data) {
+              this.emit({
+                type: 'om_activation',
+                cycleId: (data.cycleId as string) ?? '',
+                operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+                chunksActivated: (data.chunksActivated as number) ?? 0,
+                tokensActivated: (data.tokensActivated as number) ?? 0,
+                observationTokens: (data.observationTokens as number) ?? 0,
+                messagesActivated: (data.messagesActivated as number) ?? 0,
+                generationCount: (data.generationCount as number) ?? 0,
+              });
+            }
+          }
           break;
+        }
       }
     }
 
@@ -1569,6 +1730,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)

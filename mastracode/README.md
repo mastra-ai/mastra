@@ -13,25 +13,19 @@ A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi
 
 ## Installation
 
-Clone the repository and install its dependencies.
+Mastra Code is available on npm. Run it directly with `npx`:
 
 ```bash
-# Clone the repository
-git clone https://github.com/mastra-ai/mastra.git
-cd mastracode
-
-# Install dependencies
-pnpm install
+npx mastracode
 ```
 
-To use Mastra Code, we recommend creating an alias in your shell configuration to launch it from any directory. You have to specify the absolute path to `main.ts` and then run it with `tsx`.
+Or install it globally:
 
 ```bash
-# Add this to your .bashrc, .zshrc, etc.
-alias mastracode="pnpm dlx tsx /absolute/path/mastracode/src/main.ts"
+npm install -g mastracode
 ```
 
-Lastly, start the TUI and execute the `/login` command to authenticate with your AI providers.
+Then start the TUI and execute the `/login` command to authenticate with your AI providers.
 
 ## Usage
 
@@ -121,14 +115,17 @@ OAuth credentials are stored alongside the database in `auth.json`.
 ## Development
 
 ```bash
-# Run in development mode (with watch)
-pnpm dev
+# Run locally during development
+pnpm cli
 
 # Type check
-pnpm typecheck
+pnpm check
 
 # Build
-pnpm build
+pnpm build:lib
+
+# Run tests
+pnpm test
 ```
 
 ## Roadmap

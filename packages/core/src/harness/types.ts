@@ -30,6 +30,23 @@ export interface HeartbeatHandler {
 }
 
 // =============================================================================
+// Tasks
+// =============================================================================
+
+/**
+ * A single task item in the harness task list.
+ * Tasks help agents track progress on multi-step work.
+ */
+export interface TaskItem {
+  /** Task description in imperative form (e.g., "Fix authentication bug") */
+  content: string;
+  /** Current task status */
+  status: 'pending' | 'in_progress' | 'completed';
+  /** Present continuous form shown during execution (e.g., "Fixing authentication bug") */
+  activeForm: string;
+}
+
+// =============================================================================
 // Harness Configuration
 // =============================================================================
 
@@ -471,7 +488,8 @@ export type HarnessEvent =
       isError: boolean;
       durationMs: number;
     }
-  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string };
+  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
+  | { type: 'task_updated'; tasks: TaskItem[] };
 
 /**
  * Listener function for harness events.

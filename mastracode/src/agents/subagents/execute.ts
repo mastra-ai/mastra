@@ -26,10 +26,10 @@ export const executeSubagent: SubagentDefinition = {
 
 ## Workflow
 . Understand the task and explore relevant code
-. For complex tasks (3+ steps): use todo_write to track progress
+. For complex tasks (3+ steps): use task_write to track progress
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
-. If you created todos: ALWAYS call todo_check before finishing
+. If you created tasks: ALWAYS call task_check before finishing
 
 ## Efficiency
 Your output returns to the parent agent. Be concise:
@@ -54,7 +54,7 @@ End with a structured summary:
     // Execution tool
     'execute_command',
     // Task tracking
-    'todo_write',
-    'todo_check',
+    'task_write',
+    'task_check',
   ],
 };

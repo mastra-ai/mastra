@@ -244,9 +244,9 @@ function summarizeArgs(args: unknown): string {
   const obj = args as Record<string, unknown>;
   const parts: string[] = [];
 
-  // Special handling for todo_write tool
-  if (obj.todos && Array.isArray(obj.todos)) {
-    const todos = obj.todos as Array<{
+  // Special handling for task_write tool
+  if (obj.tasks && Array.isArray(obj.tasks)) {
+    const todos = obj.tasks as Array<{
       content?: string;
       status?: string;
       activeForm?: string;

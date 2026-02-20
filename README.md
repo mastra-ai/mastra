@@ -50,6 +50,14 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 
 Visit our [official documentation](https://mastra.ai/docs).
 
+## MastraCode
+
+[MastraCode](./mastracode) is Mastra's terminal-based coding agent. It runs locally and is available on npm:
+
+```shell
+npx mastracode
+```
+
 ## Build with AI
 
 Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
