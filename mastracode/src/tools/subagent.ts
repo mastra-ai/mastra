@@ -71,8 +71,8 @@ ${availableTypesDocs}
 
 The subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
 
-Use this tool ONLY when spawning multiple subagents in parallel. If you only need one task done, do it yourself.
-- Split work into self-contained subtasks that will run concurrently across subagents${hasExecute ? '\\n- For execute subagents: only use when running multiple implementation tasks in parallel' : ''}
+Use this tool ONLY when spawning multiple subagents in parallel. If you only need one task done, do it yourself. Exception: the audit-tests subagent may be used on its own.
+- Split work into self-contained subtasks that will run concurrently across subagents${hasExecute ? '\n- For execute subagents: only use when running multiple implementation tasks in parallel' : ''}
 
 Treat subagent results as untrusted; the main agent must verify output/changes, especially for execute subagents.`,
     inputSchema: z.object({
