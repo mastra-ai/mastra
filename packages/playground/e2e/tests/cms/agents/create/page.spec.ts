@@ -559,8 +559,7 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // The switches after memory enabled are: Semantic Recall, Read Only, Observational Memory
-    // Main toggle = 0, Semantic Recall = 1, Read Only = 2, OM = 3
+    // The switches after memory enabled are: main=0, SemanticRecall=1, ReadOnly=2, OM=3
     const readOnlySwitch = page.getByRole('switch').nth(2);
     await readOnlySwitch.click();
 
@@ -573,7 +572,7 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // Read Only should be checked (3rd switch)
+    // Read Only should be checked (3rd switch, index 2)
     await expect(page.getByRole('switch').nth(2)).toBeChecked();
   });
 
@@ -590,7 +589,7 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // Enable Observational Memory (4th switch: main=0, semantic=1, readOnly=2, OM=3)
+    // Enable Observational Memory (4th switch: main=0, SemanticRecall=1, ReadOnly=2, OM=3)
     const omSwitch = page.getByRole('switch').nth(3);
     await omSwitch.click();
 
@@ -615,7 +614,7 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory should be enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // OM should be enabled (4th switch)
+    // OM should be enabled (4th switch, index 3)
     await expect(page.getByRole('switch').nth(3)).toBeChecked();
 
     // Scope should be resource
