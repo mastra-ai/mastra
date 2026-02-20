@@ -15,12 +15,14 @@ import type { SpawnProcessOptions } from './types';
 /**
  * Handle to a spawned background process.
  *
- * Subclasses implement the platform-specific primitives (kill, sendStdin, wait).
- * The base class handles stdout/stderr accumulation, callback dispatch via
- * `emitStdout`/`emitStderr`, and provides lazy `reader`/`writer` stream getters.
+ * Subclasses implement the platform-specific primitives (kill, sendStdin,
+ * wait). The base class handles stdout/stderr accumulation, callback
+ * dispatch via `emitStdout`/`emitStderr`, lazy `reader`/`writer` stream
+ * getters, and optional streaming callbacks on `wait()`.
  *
  * **For consumers:**
  * - `handle.stdout` — poll accumulated output
+ * - `handle.wait()` — wait for exit, optionally with streaming callbacks
  * - `handle.reader` / `handle.writer` — Node.js stream interop (LSP, JSON-RPC, pipes)
  * - `onStdout`/`onStderr` callbacks in {@link SpawnProcessOptions} — stream at spawn time
  *
@@ -40,6 +42,12 @@ import type { SpawnProcessOptions } from './types';
  *   onStdout: (data) => console.log(data),
  * });
  *
+ * // Stream model — callbacks during wait
+ * const result = await handle.wait({
+ *   onStdout: (data) => process.stdout.write(data),
+ *   onStderr: (data) => process.stderr.write(data),
+ * });
+ *
  * // Stream model — pipe to LSP, JSON-RPC, etc.
  * const handle = await sandbox.processes.spawn('typescript-language-server --stdio');
  * const connection = createMessageConnection(
@@ -55,23 +63,54 @@ export abstract class ProcessHandle {
   abstract readonly exitCode: number | undefined;
   /** The command that was spawned (set by the process manager) */
   command?: string;
-  /** Wait for the process to finish and return the result */
-  abstract wait(): Promise<CommandResult>;
   /** Kill the running process (SIGKILL). Returns true if killed, false if not found. */
   abstract kill(): Promise<boolean>;
   /** Send data to the process's stdin */
   abstract sendStdin(data: string): Promise<void>;
 
+  /**
+   * Wait for the process to finish and return the result.
+   *
+   * Optionally pass `onStdout`/`onStderr` callbacks to stream output chunks
+   * while waiting. The callbacks are automatically removed when `wait()`
+   * resolves, so there's no cleanup needed by the caller.
+   *
+   * Subclasses implement `wait()` with platform-specific logic — the base
+   * constructor wraps it to handle the optional streaming callbacks.
+   */
+  async wait(_options?: {
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+  }): Promise<CommandResult> {
+    throw new Error(`${this.constructor.name} must implement wait()`);
+  }
+
   private _stdout = '';
   private _stderr = '';
-  private _onStdout?: (data: string) => void;
-  private _onStderr?: (data: string) => void;
+  private _stdoutListeners = new Set<(data: string) => void>();
+  private _stderrListeners = new Set<(data: string) => void>();
   private _reader?: Readable;
   private _writer?: Writable;
 
   constructor(options?: Pick<SpawnProcessOptions, 'onStdout' | 'onStderr'>) {
-    this._onStdout = options?.onStdout;
-    this._onStderr = options?.onStderr;
+    // Spawn-time callbacks are permanent listeners
+    if (options?.onStdout) this._stdoutListeners.add(options.onStdout);
+    if (options?.onStderr) this._stderrListeners.add(options.onStderr);
+
+    // Capture subclass wait() (via prototype chain) before shadowing
+    // with a wrapper that handles optional streaming callbacks.
+    const implWait = this.wait.bind(this);
+
+    this.wait = async (waitOptions?: { onStdout?: (data: string) => void; onStderr?: (data: string) => void }) => {
+      if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
+      if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
+      try {
+        return await implWait();
+      } finally {
+        if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
+        if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
+      }
+    };
   }
 
   /** Accumulated stdout so far */
@@ -90,7 +129,7 @@ export abstract class ProcessHandle {
    */
   emitStdout(data: string): void {
     this._stdout += data;
-    this._onStdout?.(data);
+    for (const listener of this._stdoutListeners) listener(data);
     this._reader?.push(data);
   }
 
@@ -100,7 +139,7 @@ export abstract class ProcessHandle {
    */
   emitStderr(data: string): void {
     this._stderr += data;
-    this._onStderr?.(data);
+    for (const listener of this._stderrListeners) listener(data);
   }
 
   /** Readable stream of stdout (for use with StreamMessageReader, pipes, etc.) */
