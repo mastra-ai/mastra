@@ -473,11 +473,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
       // Apply user-provided transform before hashing
       let hash: string;
+      let transformedBody = body;
       if (options.transformRequest) {
         const transformed = options.transformRequest({ url, body });
-        hash = hashRequest(transformed.url, transformed.body);
+        transformedBody = transformed.body;
+        hash = hashRequest(transformed.url, transformedBody);
       } else {
-        hash = hashRequest(url, body);
+        hash = hashRequest(url, transformedBody);
       }
 
       if (isRecordMode) {
@@ -556,7 +558,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             `[llm-recorder] No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
               `Consider re-recording with UPDATE_RECORDINGS=true.`,
           );
-          const changes = diffJson(recording.request.body!, body ?? {});
+          const transformedReqBody = options.transformRequest
+            ? options.transformRequest({ url, body: recording.request.body }).body
+            : recording.request.body;
+          const changes = diffJson(transformedReqBody!, transformedBody ?? {});
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';

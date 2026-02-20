@@ -5,10 +5,11 @@ import { getWorkingMemoryTests } from './shared/working-memory';
 import { getWorkingMemoryAdditiveTests } from './shared/working-memory-additive';
 
 // v4
-// describe('V4', () => {
-//   getWorkingMemoryTests(openai('gpt-4o'));
-//   getWorkingMemoryAdditiveTests(openai('gpt-4o'));
-// });
+describe('V4', () => {
+  getWorkingMemoryTests(openai('gpt-4o'));
+  getWorkingMemoryAdditiveTests(openai('gpt-4o'));
+});
+
 // v5
 describe('V5', () => {
   getWorkingMemoryTests('openai/gpt-4o');
@@ -16,7 +17,7 @@ describe('V5', () => {
 });
 
 // v6
-// describe('V6', () => {
-//   getWorkingMemoryTests(openaiV6('gpt-4o'));
-//   getWorkingMemoryAdditiveTests(openaiV6('gpt-4o'));
-// });
+describe('V6', () => {
+  getWorkingMemoryTests(openaiV6('gpt-4o'));
+  getWorkingMemoryAdditiveTests(openaiV6('gpt-4o'));
+});

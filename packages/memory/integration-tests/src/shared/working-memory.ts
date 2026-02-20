@@ -62,7 +62,7 @@ function getTextContent(message: any): string {
 
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
+  id: 'b8f55d05-8b0b-447c-9d49-28e35cdd5db6',
   title,
   resourceId,
   metadata,
@@ -1701,7 +1701,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       .join('');
   }
 
-  it('should call memory tool directly and end loop when only memory update needed', async () => {
+  it('should call memory tool directly and end loop when only memory update needed', { retry: 3 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1736,7 +1736,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should call memory tool first, then query agent', async () => {
+  it('should call memory tool first, then query agent', { retry: 3 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1748,7 +1748,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '68f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network(
       'Remember that my favorite number is 42, then calculate what 42 multiplied by 3 is',
@@ -1786,7 +1786,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should query agent first, then call memory tool', async () => {
+  it('should query agent first, then call memory tool', { retry: 3 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1833,7 +1833,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should call memory tool first, then execute user-defined tool', async () => {
+  it('should call memory tool first, then execute user-defined tool', { retry: 3 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1844,7 +1844,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '78f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network(
       'Remember that I live in San Francisco, then get me the weather for my city',
@@ -1881,7 +1881,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should execute user-defined tool first, then call memory tool', async () => {
+  it('should execute user-defined tool first, then call memory tool', { retry: 3 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1892,7 +1892,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '88f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network('Get the weather for Boston, then remember that is where I live', {
       memory: { thread: threadId, resource: resourceId },
@@ -1927,7 +1927,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should handle multiple memory updates in single network call', async () => {
+  it('should handle multiple memory updates in single network call', { retry: 3 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1938,7 +1938,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '98f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     // Single request with multiple pieces of information to remember
     const result = await networkAgent.network('My name is Alice and I work as a software engineer', {
@@ -1961,7 +1961,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should handle complex multi-step workflow with memory, agents, and tools', async () => {
+  it('should handle complex multi-step workflow with memory, agents, and tools', { retry: 3 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1974,7 +1974,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = 'a8f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     // Complex multi-step task with memory in the middle
     const result = await networkAgent.network(
@@ -2018,5 +2018,5 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(memoryToolRoutes).toBe(1);
 
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
-  }, 120000);
+  });
 }

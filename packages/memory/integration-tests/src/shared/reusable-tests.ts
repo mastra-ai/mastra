@@ -113,7 +113,14 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
     const indexes = await memory.vector?.listIndexes();
     if (indexes) {
-      await Promise.all(indexes.map(index => memory.vector?.deleteIndex({ indexName: index })));
+      await Promise.all(
+        indexes.map(index =>
+          memory.vector?.deleteVectors({
+            indexName: index,
+            filter: { thread_id: { $in: allThreads.map(thread => thread.id) } },
+          }),
+        ),
+      );
     }
   };
 

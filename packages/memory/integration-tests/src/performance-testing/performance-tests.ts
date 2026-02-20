@@ -41,6 +41,9 @@ export function getPerformanceTests(memoryFactory: () => Memory) {
   });
 
   afterAll(async () => {
+    // Final cleanup
+    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
+    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
     // @ts-expect-error- could have wrong types
     await Promise.allSettled([memory.storage?.close?.(), memory.vector?.disconnect?.()]);
   });
@@ -49,12 +52,6 @@ export function getPerformanceTests(memoryFactory: () => Memory) {
     // Reset message counter
     messageCounter = 0;
     // Clean up before each test
-    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
-  });
-
-  afterAll(async () => {
-    // Final cleanup
     const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
