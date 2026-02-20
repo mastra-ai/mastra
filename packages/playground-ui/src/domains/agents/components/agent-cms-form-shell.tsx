@@ -19,6 +19,7 @@ export interface AgentCmsFormShellProps {
   banner?: ReactNode;
   children: ReactNode;
   versionId?: string;
+  rightPanel?: ReactNode;
 }
 
 export function AgentCmsFormShell({
@@ -35,6 +36,7 @@ export function AgentCmsFormShell({
   banner,
   children,
   versionId,
+  rightPanel,
 }: AgentCmsFormShellProps) {
   return (
     <AgentEditFormProvider
@@ -47,7 +49,7 @@ export function AgentCmsFormShell({
       handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
     >
-      <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId}>
+      <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId} rightPanel={rightPanel}>
         {banner}
         {children}
       </AgentsCmsLayout>

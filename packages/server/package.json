@@ -103,7 +103,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "superjson": "^2.2.2",
+    "superjson": "^2.2.6",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

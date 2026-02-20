@@ -18,6 +18,7 @@ import {
   StoredAgent,
   StoredMCPClient,
   StoredScorer,
+  StoredSkill,
   ToolProvider,
   ProcessorProvider,
   Workspace,
@@ -67,6 +68,10 @@ import type {
   ListStoredMCPClientsResponse,
   CreateStoredMCPClientParams,
   StoredMCPClientResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  StoredSkillResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
@@ -1010,6 +1015,64 @@ export class MastraClient extends BaseResource {
    */
   public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
     return new StoredMCPClient(this.options, storedMCPClientId);
+  }
+
+  // ============================================================================
+  // Stored Skills
+  // ============================================================================
+
+  /**
+   * Lists all stored skills with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored skills
+   */
+  public listStoredSkills(params?: ListStoredSkillsParams): Promise<ListStoredSkillsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/skills${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored skill
+   * @param params - Skill configuration
+   * @returns Promise containing the created stored skill
+   */
+  public createStoredSkill(params: CreateStoredSkillParams): Promise<StoredSkillResponse> {
+    return this.request('/stored/skills', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored skill instance by ID for further operations (details, update, delete)
+   * @param storedSkillId - ID of the stored skill
+   * @returns StoredSkill instance
+   */
+  public getStoredSkill(storedSkillId: string): StoredSkill {
+    return new StoredSkill(this.options, storedSkillId);
   }
 
   // ============================================================================

@@ -17,6 +17,14 @@ import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
 
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
 export const weatherInfo = createTool({
   id: 'weather-info',
   description: 'Fetches the current weather information for a given city',
@@ -72,6 +80,7 @@ export const moderationProcessor = new ModerationProcessor({
 });
 
 export const chefModelV2Agent = new Agent({
+  workspace,
   id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
