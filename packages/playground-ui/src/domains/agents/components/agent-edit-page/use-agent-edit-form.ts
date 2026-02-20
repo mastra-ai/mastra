@@ -62,6 +62,7 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       instructionBlocks: initialValues?.instructionBlocks ?? [createInstructionBlock()],
       mcpClients: initialValues?.mcpClients ?? [],
       mcpClientsToDelete: [],
+      skills: initialValues?.skills ?? {},
     },
   });
 
