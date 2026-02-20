@@ -24,6 +24,7 @@ import type {
 } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
+import { parse as parsePartialJson } from 'partial-json';
 import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
@@ -71,6 +72,13 @@ import { UserMessageComponent } from './components/user-message.js';
 import { sendNotification } from './notify.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
 import { getEditorTheme, getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Tools that modify files, used for /diff tracking */
+const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
 
 // =============================================================================
 // Types
@@ -133,6 +141,8 @@ export class MastraTUI {
   private streamingComponent?: AssistantMessageComponent;
   private streamingMessage?: HarnessMessage;
   private pendingTools = new Map<string, IToolExecutionComponent>();
+  private toolInputBuffers = new Map<string, { text: string; toolName: string }>(); // Buffer partial JSON args text per toolCallId for streaming input
+  private todoWriteInsertIndex = -1; // Position hint for todo_write inline rendering when streaming
   private seenToolCallIds = new Set<string>(); // Track all tool IDs seen during current stream (prevents duplicates)
   private subagentToolCallIds = new Set<string>(); // Track subagent tool call IDs to skip in trailing content logic
   private allToolComponents: IToolExecutionComponent[] = []; // Track all tools for expand/collapse
@@ -1183,6 +1193,18 @@ ${instructions}`,
         this.handleShellOutput(event.toolCallId, event.output, event.stream);
         break;
 
+      case 'tool_input_start':
+        this.handleToolInputStart(event.toolCallId, event.toolName);
+        break;
+
+      case 'tool_input_delta':
+        this.handleToolInputDelta(event.toolCallId, event.argsTextDelta);
+        break;
+
+      case 'tool_input_end':
+        this.handleToolInputEnd(event.toolCallId);
+        break;
+
       case 'tool_end':
         this.handleToolEnd(event.toolCallId, event.result, event.isError);
         break;
@@ -1230,6 +1252,12 @@ ${instructions}`,
         if (typeof tState?.escapeAsCancel === 'boolean') {
           this.editor.escapeEnabled = tState.escapeAsCancel;
         }
+        // Clear stale todos from the previous thread
+        if (this.todoProgress) {
+          this.todoProgress.updateTodos([]);
+        }
+        this.previousTodos = [];
+        this.todoWriteInsertIndex = -1;
         this.updateStatusLine();
         break;
       }
@@ -1398,6 +1426,11 @@ ${instructions}`,
               this.allToolComponents.splice(i, 1);
               break;
             }
+          }
+          // Fall back to the position recorded during streaming (when no inline component was created)
+          if (insertIndex === -1 && this.todoWriteInsertIndex >= 0) {
+            insertIndex = this.todoWriteInsertIndex;
+            this.todoWriteInsertIndex = -1;
           }
 
           // Check if all todos are completed
@@ -1697,6 +1730,7 @@ ${instructions}`,
     }
     this.followUpComponents = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
     this.notify('agent_done');
@@ -1725,6 +1759,7 @@ ${instructions}`,
 
     this.followUpComponents = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after interruption
     this.ui.requestRender();
   }
@@ -1743,6 +1778,7 @@ ${instructions}`,
 
     this.followUpComponents = [];
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after errors
   }
 
@@ -1898,6 +1934,7 @@ ${instructions}`,
           });
         }
         this.pendingTools.clear();
+        this.toolInputBuffers.clear();
       }
 
       this.streamingComponent = undefined;
@@ -1970,7 +2007,13 @@ ${instructions}`,
   }
 
   private handleToolStart(toolCallId: string, toolName: string, args: unknown): void {
-    if (!this.seenToolCallIds.has(toolCallId)) {
+    // Component may already exist if created early by handleToolInputStart
+    const existingComponent = this.pendingTools.get(toolCallId);
+
+    if (existingComponent) {
+      // Component was created during input streaming — update with final args
+      existingComponent.updateArgs(args);
+    } else if (!this.seenToolCallIds.has(toolCallId)) {
       this.seenToolCallIds.add(toolCallId);
 
       // Skip creating the regular tool component for subagent calls
@@ -1991,7 +2034,16 @@ ${instructions}`,
       this.pendingTools.set(toolCallId, component);
       this.allToolComponents.push(component);
 
-      // Track ask_user tool components for inline question placement
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+
+      this.ui.requestRender();
+    }
+
+    // Track ask_user tool components for inline question placement
+    const component = this.pendingTools.get(toolCallId);
+    if (component) {
       if (toolName === 'ask_user') {
         this.lastAskUserComponent = component;
       }
@@ -1999,22 +2051,15 @@ ${instructions}`,
       if (toolName === 'submit_plan') {
         this.lastSubmitPlanComponent = component;
       }
+    }
 
-      // Track file-modifying tools for /diff command
-      const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-      if (FILE_TOOLS.includes(toolName)) {
-        const toolArgs = args as Record<string, unknown>;
-        const filePath = toolArgs?.path as string;
-        if (filePath) {
-          this.pendingFileTools.set(toolCallId, { toolName, filePath });
-        }
+    // Track file-modifying tools for /diff command
+    if (FILE_TOOLS.includes(toolName)) {
+      const toolArgs = args as Record<string, unknown>;
+      const filePath = toolArgs?.path as string;
+      if (filePath) {
+        this.pendingFileTools.set(toolCallId, { toolName, filePath });
       }
-
-      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-      this.addChildBeforeFollowUps(this.streamingComponent);
-
-      this.ui.requestRender();
     }
   }
 
@@ -2039,6 +2084,108 @@ ${instructions}`,
       component.appendStreamingOutput(output);
       this.ui.requestRender();
     }
+  }
+
+  /**
+   * Handle the start of streaming tool call input arguments.
+   * Creates the tool component early so partial args can render as they arrive.
+   */
+  private handleToolInputStart(toolCallId: string, toolName: string): void {
+    this.toolInputBuffers.set(toolCallId, { text: '', toolName });
+
+    // Mark as seen so handleMessageUpdate doesn't create a duplicate component
+    if (!this.seenToolCallIds.has(toolCallId)) {
+      this.seenToolCallIds.add(toolCallId);
+    }
+
+    // Create the component early so deltas can update it
+    // Skip for subagent (handled by SubagentExecutionComponent) and todo_write (streams to pinned TodoProgressComponent)
+    if (toolName === 'todo_write') {
+      // Record position so todo_updated can place inline completed/cleared display here
+      this.todoWriteInsertIndex = this.chatContainer.children.length;
+    } else if (toolName !== 'subagent') {
+      this.addChildBeforeFollowUps(new Text('', 0, 0));
+      const component = new ToolExecutionComponentEnhanced(
+        toolName,
+        {},
+        { showImages: false, collapsedByDefault: !this.toolOutputExpanded },
+        this.ui,
+      );
+      component.setExpanded(this.toolOutputExpanded);
+      this.addChildBeforeFollowUps(component);
+      this.pendingTools.set(toolCallId, component);
+      this.allToolComponents.push(component);
+
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+
+      this.ui.requestRender();
+    }
+  }
+
+  /**
+   * Handle an incremental delta of tool call input arguments.
+   * Buffers the partial JSON text and attempts to parse it, updating the component's args.
+   */
+  private handleToolInputDelta(toolCallId: string, argsTextDelta: string): void {
+    const buffer = this.toolInputBuffers.get(toolCallId);
+    if (buffer === undefined) return;
+
+    buffer.text += argsTextDelta;
+    const updatedText = buffer.text;
+
+    try {
+      const partialArgs = parsePartialJson(updatedText);
+      if (partialArgs && typeof partialArgs === 'object') {
+        // Update inline tool component if it exists
+        const component = this.pendingTools.get(toolCallId);
+        if (component) {
+          component.updateArgs(partialArgs);
+        }
+
+        // For todo_write, stream partial todos into the pinned TodoProgressComponent.
+        // The last array item is actively being written so its content is unstable.
+        // If all existing pinned items are already completed, the list is stable and
+        // we can stream in new items immediately (including the last one).
+        // Otherwise, exclude the last item to avoid jumpy partial-content matches.
+        if (buffer.toolName === 'todo_write' && this.todoProgress) {
+          const todos = (partialArgs as { todos?: TodoItem[] }).todos;
+          if (todos && todos.length > 0) {
+            const existing = this.todoProgress.getTodos();
+            const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
+            if (allExistingDone) {
+              // Old list is done — start fresh, stream new items immediately
+              this.todoProgress.updateTodos(todos as TodoItem[]);
+            } else if (todos.length > 1) {
+              // Merge only completed items (exclude the last still-streaming one)
+              const merged = [...existing];
+              for (const todo of todos.slice(0, -1)) {
+                if (!todo.content) continue;
+                const idx = merged.findIndex(t => t.content === todo.content);
+                if (idx >= 0) {
+                  merged[idx] = todo;
+                } else {
+                  merged.push(todo);
+                }
+              }
+              this.todoProgress.updateTodos(merged);
+            }
+          }
+        }
+
+        this.ui.requestRender();
+      }
+    } catch {
+      // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
+    }
+  }
+
+  /**
+   * Clean up the input buffer when tool input streaming ends.
+   */
+  private handleToolInputEnd(toolCallId: string): void {
+    this.toolInputBuffers.delete(toolCallId);
   }
 
   /**
@@ -2554,6 +2701,7 @@ ${instructions}`,
           this.chatContainer.clear();
           this.allToolComponents = [];
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           await this.renderExistingMessages();
           this.updateStatusLine();
 
@@ -3530,9 +3678,15 @@ ${instructions}`,
         this.pendingNewThread = true;
         this.chatContainer.clear();
         this.pendingTools.clear();
+        this.toolInputBuffers.clear();
         this.allToolComponents = [];
         this.modifiedFiles.clear();
         this.pendingFileTools.clear();
+        if (this.todoProgress) {
+          this.todoProgress.updateTodos([]);
+        }
+        this.previousTodos = [];
+        this.todoWriteInsertIndex = -1;
         this.resetStatusLineState();
         this.ui.requestRender();
         this.showInfo('Ready for new conversation');
@@ -3700,6 +3854,7 @@ ${modeList}`);
           this.pendingNewThread = true;
           this.chatContainer.clear();
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           this.allToolComponents = [];
           this.resetStatusLineState();
           this.ui.requestRender();
@@ -3710,6 +3865,7 @@ ${modeList}`);
           this.pendingNewThread = true;
           this.chatContainer.clear();
           this.pendingTools.clear();
+          this.toolInputBuffers.clear();
           this.allToolComponents = [];
           this.resetStatusLineState();
           this.ui.requestRender();
@@ -4086,6 +4242,7 @@ Keyboard shortcuts:
   private async renderExistingMessages(): Promise<void> {
     this.chatContainer.clear();
     this.pendingTools.clear();
+    this.toolInputBuffers.clear();
     this.allToolComponents = [];
 
     const messages = await this.harness.getMessages({ limit: 40 });
@@ -4300,6 +4457,11 @@ Keyboard shortcuts:
           this.chatContainer.addChild(textComponent);
         }
       }
+    }
+
+    // Restore pinned todo list from the last active todo_write in history
+    if (this.previousTodos.length > 0 && this.todoProgress) {
+      this.todoProgress.updateTodos(this.previousTodos);
     }
 
     this.ui.requestRender();
