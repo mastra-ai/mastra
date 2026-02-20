@@ -317,47 +317,45 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           if (processed) await rest.options?.onChunk?.(processed);
         }
 
-        const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-
         // Exclude provider-executed tools from the tool-result message. These tools (e.g.
         // Anthropic web_search) are executed server-side — sending a client-fabricated result
         // would conflict with the provider's deferred execution.
         const clientExecutedToolCalls = inputData.filter(toolCall => !toolCall.providerExecuted);
 
-        const toolResultMessage: MastraDBMessage = {
-          id: toolResultMessageId || '',
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: await Promise.all(
-              clientExecutedToolCalls.map(async toolCall => {
-                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
-                return {
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'result' as const,
-                    toolCallId: toolCall.toolCallId,
-                    toolName: toolCall.toolName,
-                    args: toolCall.args,
-                    result: toolCall.result,
-                  },
-                  ...(providerMetadata ? { providerMetadata } : {}),
-                };
-              }),
-            ),
-          },
-          createdAt: new Date(),
-        };
-
         if (clientExecutedToolCalls.length > 0) {
+          const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+          const toolResultMessage: MastraDBMessage = {
+            id: toolResultMessageId || '',
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: await Promise.all(
+                clientExecutedToolCalls.map(async toolCall => {
+                  const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                  return {
+                    type: 'tool-invocation' as const,
+                    toolInvocation: {
+                      state: 'result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.result,
+                    },
+                    ...(providerMetadata ? { providerMetadata } : {}),
+                  };
+                }),
+              ),
+            },
+            createdAt: new Date(),
+          };
           rest.messageList.add(toolResultMessage, 'response');
         }
 
         // Persist provider-executed tool results (e.g. Anthropic web_search) so
         // MessageMerger updates their invocations from state:"call" to state:"result".
         // Without this, they stay at "call" in the DB and cause HTTP 400 on resume.
-        if (inputData.some(toolCall => toolCall.providerExecuted)) {
-          const providerExecutedToolCalls = inputData.filter(toolCall => toolCall.providerExecuted);
+        const providerExecutedToolCalls = inputData.filter(toolCall => toolCall.providerExecuted);
+        if (providerExecutedToolCalls.length > 0) {
           const providerResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
           const providerResultMessage: MastraDBMessage = {
             id: providerResultMessageId || '',
