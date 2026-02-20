@@ -101,11 +101,11 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * @example
    * ```typescript
-   * const handle = await sandbox.processes.spawn('node', ['server.js']);
+   * const handle = await sandbox.processes.spawn('node server.js');
    * console.log(handle.pid);
    *
    * const procs = await sandbox.processes.list();
-   * const proc = sandbox.processes.get(handle.pid);
+   * const proc = await sandbox.processes.get(handle.pid);
    * await proc?.sendStdin('hello\n');
    * await proc?.kill();
    * ```

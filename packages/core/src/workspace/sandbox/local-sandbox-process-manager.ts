@@ -139,8 +139,6 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       command,
       running: handle.exitCode === undefined,
       exitCode: handle.exitCode,
-      stdout: handle.stdout,
-      stderr: handle.stderr,
     }));
   }
 

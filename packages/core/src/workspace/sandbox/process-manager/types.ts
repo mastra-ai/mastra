@@ -36,8 +36,4 @@ export interface ProcessInfo {
   running: boolean;
   /** Exit code if the process has finished */
   exitCode?: number;
-  /** Accumulated stdout */
-  stdout: string;
-  /** Accumulated stderr */
-  stderr: string;
 }

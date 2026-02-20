@@ -138,8 +138,6 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       pid: proc.pid,
       command: [proc.cmd, ...proc.args].join(' '),
       running: true, // E2B only lists running processes
-      stdout: '',
-      stderr: '',
     }));
   }
 
