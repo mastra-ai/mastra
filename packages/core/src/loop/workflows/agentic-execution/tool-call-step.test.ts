@@ -274,6 +274,39 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
+  it('should return a fallback result for provider-executed tools without output', async () => {
+    // Arrange: provider-executed tool with no output (the bug scenario from #13125)
+    const inputData = {
+      ...makeInputData(),
+      toolName: 'web_search_20250305',
+      providerExecuted: true,
+    };
+
+    // Act: Execute the tool call step
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    // Assert: Should return a non-undefined result to prevent bail in llm-mapping-step
+    expect(result.result).toEqual({ providerExecuted: true, toolName: 'web_search_20250305' });
+    expectNoToolExecution();
+  });
+
+  it('should pass through output for provider-executed tools when output is present', async () => {
+    // Arrange: provider-executed tool with output
+    const inputData = {
+      ...makeInputData(),
+      toolName: 'web_search_20250305',
+      providerExecuted: true,
+      output: { searchResults: ['result1'] },
+    };
+
+    // Act
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    // Assert: Should use the actual output, not the fallback
+    expect(result.result).toEqual({ searchResults: ['result1'] });
+    expectNoToolExecution();
+  });
+
   it('executes the tool and returns result when approval is granted', async () => {
     // Arrange: Set up input data and mock tool execution result
     const inputData = makeInputData();
