@@ -121,6 +121,30 @@ export default function LessonPage() {
       <Head>
         <meta property="og:title" content={seoTitle} />
         <meta property="og:description" content={seoDescription} />
+        {lesson.youtubeId && (
+          <>
+            <meta property="og:type" content="video.other" />
+            <meta property="og:video" content={`https://www.youtube.com/embed/${lesson.youtubeId}`} />
+            <meta property="og:image" content={`https://img.youtube.com/vi/${lesson.youtubeId}/maxresdefault.jpg`} />
+            <script type="application/ld+json">
+              {JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'VideoObject',
+                name: lesson.title,
+                description: seoDescription,
+                thumbnailUrl: `https://img.youtube.com/vi/${lesson.youtubeId}/maxresdefault.jpg`,
+                embedUrl: `https://www.youtube.com/embed/${lesson.youtubeId}`,
+                contentUrl: `https://www.youtube.com/watch?v=${lesson.youtubeId}`,
+                duration: `PT${lesson.durationMin}M`,
+                publisher: {
+                  '@type': 'Organization',
+                  name: 'Mastra',
+                  url: 'https://mastra.ai',
+                },
+              })}
+            </script>
+          </>
+        )}
       </Head>
 
       {lesson.status === 'published' ? (
