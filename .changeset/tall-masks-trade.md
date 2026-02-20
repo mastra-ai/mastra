@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Export `MastraMessagePart` type from agent types for use by downstream packages.
+Added `MastraMessagePart` to the public type exports of `@mastra/core/agent`, allowing it to be imported directly in downstream packages.
