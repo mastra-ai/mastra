@@ -800,11 +800,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const fullPath = argsObj?.path ? String(argsObj.path) : '';
     const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '/';
     const pattern = argsObj?.pattern ? String(argsObj.pattern) : '';
+    const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
 
     if (!this.result || this.isPartial) {
       const status = this.getStatusIndicator();
       const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
-      const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
       const header = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${status}`;
       this.contentBox.addChild(new Text(header, 0, 0));
       return;
@@ -818,7 +818,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       this.collapsible = new CollapsibleComponent(
         {
-          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${listStatus}`,
+          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${listStatus}`,
           summary: `${fileCount} items`,
           expanded: this.expanded,
           collapsedLines: 15,
