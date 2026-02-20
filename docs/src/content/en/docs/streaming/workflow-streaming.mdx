@@ -16,7 +16,7 @@ Streams can be written to in two main ways:
 
 By combining writable workflow streams with agent streaming, you gain fine-grained control over how intermediate results flow through your system and into the user experience.
 
-### Using the `writer` argument
+## Using the `writer` argument
 
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
@@ -52,7 +52,7 @@ export const testStep = createStep({
 });
 ```
 
-### Inspecting workflow stream payloads
+## Inspecting workflow stream payloads
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or step-specific data.
 
@@ -83,7 +83,7 @@ if (result!.status === 'suspended') {
 }
 ```
 
-### Resuming an interrupted workflow stream
+## Resuming an interrupted workflow stream
 
 If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 

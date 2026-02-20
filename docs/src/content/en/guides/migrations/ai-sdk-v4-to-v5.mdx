@@ -14,11 +14,11 @@ This guide covers only the Mastra-specific aspects of the migration.
 - **Data compatibility**: New data stored in v5 format will no longer work if you downgrade from v5 to v4
 - **Backup recommendation**: Keep DB backups from before you upgrade to v5
 
-### Memory and Storage
+## Memory and Storage
 
 Mastra automatically handles AI SDK v4 data using its internal `MessageList` class, which manages format conversion—including v4 to v5. No database migrations are required; your existing messages are translated on the fly and continue working after you upgrade.
 
-### Message Format Conversion
+## Message Format Conversion
 
 For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages()` utility:
 
@@ -37,11 +37,11 @@ const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core')
 
 This utility is helpful when you want to fetch messages directly from your storage DB and convert them for use in AI SDK.
 
-### Type Inference for Tools
+## Type Inference for Tools
 
 When using tools with TypeScript in AI SDK v5, Mastra provides type inference helpers to ensure type safety for your tool inputs and outputs.
 
-#### `InferUITool`
+### `InferUITool`
 
 The `InferUITool` type helper infers the input and output types of a single Mastra tool:
 
@@ -76,7 +76,7 @@ type WeatherUITool = InferUITool<typeof weatherTool>
 // }
 ```
 
-#### `InferUITools`
+### `InferUITools`
 
 The `InferUITools` type helper infers the input and output types of multiple tools:
 

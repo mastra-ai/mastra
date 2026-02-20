@@ -42,7 +42,7 @@ Only if you have existing spans data from Mastra versions prior to v1 and encoun
 The storage initialization may fail when trying to add the unique constraint, or you may see errors like "duplicate key value violates unique constraint".
 :::
 
-**Option 1: Use the CLI (Recommended)**
+#### Option 1: Use the CLI (Recommended)
 
 Run the migration command which automatically deduplicates spans and adds the constraint:
 
@@ -52,7 +52,7 @@ npx mastra migrate
 
 The CLI bundles your project, connects to your configured storage, and runs the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
 
-**Option 2: Manual SQL (PostgreSQL)**
+#### Option 2: Manual SQL (PostgreSQL)
 
 If you prefer to run the migration manually:
 
@@ -67,7 +67,7 @@ WHERE a.ctid < b.ctid
 ALTER TABLE mastra_spans ADD CONSTRAINT mastra_spans_trace_span_unique UNIQUE ("traceId", "spanId");
 ```
 
-**Option 3: Manual migration (Other databases)**
+#### Option 3: Manual migration (Other databases)
 
 For ClickHouse, LibSQL, MongoDB, or MSSQL, use the programmatic API:
 

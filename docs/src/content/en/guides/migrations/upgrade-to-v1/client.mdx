@@ -76,7 +76,7 @@ To migrate, move `threadId` and `resourceId` into the `memory` option:
   });
 ```
 
-**Using `@mastra/react` `useChat` hook:**
+#### Using `@mastra/react` `useChat` hook
 
 The `useChat` hook internally passes the memory option when you provide a `threadId`. No changes are needed in your component code if you're using the hook's built-in memory handling. However, if you were manually passing options to `sendMessage`, update them accordingly:
 

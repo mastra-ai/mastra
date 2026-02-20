@@ -9,7 +9,7 @@ packages:
 
 The Memory API provides methods to manage conversation threads and message history in Mastra.
 
-### Get All Threads
+## Get All Threads
 
 Retrieve all memory threads for a specific resource:
 
@@ -22,7 +22,7 @@ const threads = await mastraClient.getMemoryThreads({
 
 When `agentId` is omitted and storage is configured on the server, threads will be retrieved using storage directly. This is useful when multiple agents share the same threads (e.g., in workflows with multiple agent steps).
 
-### Create a New Thread
+## Create a New Thread
 
 Create a new memory thread:
 
@@ -35,7 +35,7 @@ const thread = await mastraClient.createMemoryThread({
 })
 ```
 
-### Working with a Specific Thread
+## Working with a Specific Thread
 
 Get an instance of a specific memory thread:
 

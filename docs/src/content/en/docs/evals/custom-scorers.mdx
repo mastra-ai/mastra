@@ -8,7 +8,7 @@ packages:
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
-### The Four-Step Pipeline
+## The Four-Step Pipeline
 
 All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
@@ -19,7 +19,7 @@ All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
 Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
 
-### Functions vs Prompt Objects
+## Functions vs Prompt Objects
 
 **Functions** use JavaScript for deterministic logic. They're ideal for:
 
@@ -39,7 +39,7 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
-### Initializing a Scorer
+## Initializing a Scorer
 
 Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
@@ -65,7 +65,7 @@ The judge configuration is only needed if you plan to use prompt objects in any 
 
 If all steps are function-based, the judge is never called and there is no judge output. To see LLM output, define at least one step as a prompt object and read the corresponding step result (for example, `results.analyzeStepResult`).
 
-#### Minimal judge example (prompt object)
+### Minimal judge example (prompt object)
 
 This example uses a prompt object in `analyze`, so the judge runs and its structured output is available as `results.analyzeStepResult`.
 
@@ -106,7 +106,7 @@ console.log(result.score) // 1
 console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedia"] }
 ```
 
-#### Agent Type for Agent Evaluation
+### Agent Type for Agent Evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. This allows you to use the same scorer for an agent and also use it to score traces:
 
@@ -119,9 +119,9 @@ const myScorer = createScorer({
 })
 ```
 
-### Step-by-Step Breakdown
+## Step-by-Step Breakdown
 
-#### preprocess Step (Optional)
+### preprocess Step (Optional)
 
 Prepares input/output data when you need to extract specific elements, filter content, or transform complex data structures.
 
@@ -163,7 +163,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-#### analyze Step (Optional)
+### analyze Step (Optional)
 
 Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
@@ -213,7 +213,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** Results are available to subsequent steps as `results.analyzeStepResult`
 
-#### generateScore Step (Required)
+### generateScore Step (Required)
 
 Converts analysis results into a numerical score. This is the only required step in the pipeline.
 
@@ -236,7 +236,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
-#### generateReason Step (Optional)
+### generateReason Step (Optional)
 
 Generates human-readable explanations for the score, useful for debugging, transparency, or user feedback.
 

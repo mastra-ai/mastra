@@ -29,7 +29,7 @@ const config = {
     // Styleguides
     [remarkLintUnorderedListMarkerStyle, '-'],
     [remarkLintOrderedListMarkerValue, 'one'],
-    [remarkLintNoUndefinedReferences, false]
+    [remarkLintNoUndefinedReferences, false],
   ],
 }
 
