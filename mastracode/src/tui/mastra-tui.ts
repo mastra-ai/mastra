@@ -2103,6 +2103,13 @@ ${instructions}`,
     if (toolName === 'todo_write') {
       // Record position so todo_updated can place inline completed/cleared display here
       this.todoWriteInsertIndex = this.chatContainer.children.length;
+
+      // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
+      // (even though todo_write doesn't render a tool component inline, we still need
+      // to split the streaming component so getTrailingContentParts doesn't overwrite it)
+      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.streamingComponent);
+      this.ui.requestRender();
     } else if (toolName !== 'subagent') {
       this.addChildBeforeFollowUps(new Text('', 0, 0));
       const component = new ToolExecutionComponentEnhanced(
