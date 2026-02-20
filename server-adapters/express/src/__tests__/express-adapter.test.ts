@@ -785,4 +785,198 @@ describe('Express Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
   });
+
+  describe('Prefix-scoped middleware', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should NOT apply auth middleware to routes outside the prefix', async () => {
+      const mastra = new Mastra({
+        server: {
+          auth: {
+            authenticateToken: async (token: string) => {
+              if (token === 'valid-token') return { id: 'user-1' };
+              return null;
+            },
+          },
+        },
+      });
+
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api/mastra',
+      });
+
+      await adapter.init();
+
+      app.get('/health', (_req, res) => {
+        res.json({ status: 'ok' });
+      });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/health`);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ status: 'ok' });
+    });
+
+    it('should NOT apply context middleware to routes outside the prefix', async () => {
+      const mastra = new Mastra({});
+
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api/mastra',
+      });
+
+      await adapter.init();
+
+      let hasMastraLocals = false;
+      app.get('/my-route', (_req, res) => {
+        hasMastraLocals = !!res.locals.mastra;
+        res.json({ hasMastraLocals });
+      });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/my-route`);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.hasMastraLocals).toBe(false);
+      expect(hasMastraLocals).toBe(false);
+    });
+
+    it('should still apply context middleware to routes inside the prefix', async () => {
+      const mastra = new Mastra({});
+
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/mastra/agents`, {
+        method: 'GET',
+      });
+      expect(response.status).toBe(200);
+    });
+
+    it('should reject unauthenticated requests to routes inside the prefix', async () => {
+      const mastra = new Mastra({
+        server: {
+          auth: {
+            authenticateToken: async (token: string) => {
+              if (token === 'valid-token') return { id: 'user-1' };
+              return null;
+            },
+            authorizeUser: async () => true,
+          },
+        },
+      });
+
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      // No token → 401
+      const noAuth = await fetch(`http://localhost:${port}/api/mastra/agents`);
+      expect(noAuth.status).toBe(401);
+
+      // Valid token → 200
+      const withAuth = await fetch(`http://localhost:${port}/api/mastra/agents`, {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      expect(withAuth.status).toBe(200);
+    });
+
+    it('should not intercept user routes when custom API routes are registered', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Custom Mastra route' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api/mastra',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      app.get('/user-route', (_req, res) => {
+        res.json({ status: 'ok' });
+      });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/user-route`);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ status: 'ok' });
+    });
+  });
 });

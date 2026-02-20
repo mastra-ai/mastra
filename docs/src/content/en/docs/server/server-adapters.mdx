@@ -205,8 +205,8 @@ See the [Koa Adapter](/reference/server/koa-adapter) documentation for full conf
 
 Calling `init()` runs three steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
 
-1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to every request. This makes Mastra available to all subsequent middleware and route handlers.
-2. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured.
+1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to incoming requests. When a `prefix` is configured, this middleware only applies to routes under that prefix.
+2. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured. Like context middleware, this is scoped to the configured `prefix`.
 3. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
 
 ### Manual initialization
@@ -262,7 +262,16 @@ const server = new MastraServer({
 });
 ```
 
-With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes you add directly to the app are not affected by this prefix.
+With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Mastra's context and auth middleware are also scoped to this prefix, so routes you add directly to the app are not affected.
+
+```typescript
+// Mastra handles /api/v2/* (with auth + context middleware)
+const server = new MastraServer({ app, mastra, prefix: '/api/v2' });
+await server.init();
+
+// Your own routes — no Mastra middleware runs here
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+```
 
 ## OpenAPI spec
 
