@@ -24,6 +24,14 @@ import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
 
+/** Shell-quote an argument for safe interpolation into a shell command string. */
+function shellQuote(arg: string): string {
+  // If the arg only contains safe characters, no quoting needed
+  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
+  // Wrap in single quotes, escaping embedded single quotes
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   /** Timeout in ms - handled manually for custom exit code 124 */
   timeout?: number;
@@ -399,12 +407,12 @@ export class LocalSandbox extends MastraSandbox {
   /**
    * Wrap a command with the configured isolation backend.
    */
-  private wrapCommandForIsolation(command: string, args: string[]): { command: string; args: string[] } {
+  private wrapCommandForIsolation(command: string): { command: string; args: string[] } {
     if (this._isolation === 'none') {
-      return { command, args };
+      return { command, args: [] };
     }
 
-    return wrapCommand(command, args, {
+    return wrapCommand(command, {
       backend: this._isolation,
       workspacePath: this.workingDirectory,
       seatbeltProfile: this._seatbeltProfile,
@@ -424,8 +432,9 @@ export class LocalSandbox extends MastraSandbox {
 
     const startTime = Date.now();
 
-    // Wrap command with isolation backend if configured
-    const wrapped = this.wrapCommandForIsolation(command, args);
+    // Combine command + args into a single shell string, then wrap with isolation
+    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+    const wrapped = this.wrapCommandForIsolation(fullCommand);
 
     try {
       const result = await execWithStreaming(wrapped.command, wrapped.args, {
@@ -434,6 +443,10 @@ export class LocalSandbox extends MastraSandbox {
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,
+        // Shell mode for non-isolated commands (full shell string).
+        // Isolated commands use spawn(binary, args) since the wrapper
+        // handles shell invocation via sh -c internally.
+        shell: wrapped.args.length === 0,
       });
 
       const commandResult: CommandResult = {

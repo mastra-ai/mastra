@@ -53,6 +53,8 @@ export abstract class ProcessHandle {
   abstract readonly pid: number;
   /** Exit code, undefined while the process is still running */
   abstract readonly exitCode: number | undefined;
+  /** The command that was spawned (set by the process manager) */
+  command?: string;
   /** Wait for the process to finish and return the result */
   abstract wait(): Promise<CommandResult>;
   /** Kill the running process (SIGKILL). Returns true if killed, false if not found. */
