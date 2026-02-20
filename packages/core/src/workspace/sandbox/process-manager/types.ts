@@ -4,20 +4,14 @@
  * Type definitions for background process management.
  */
 
+import type { CommandOptions } from '../types';
+
 // =============================================================================
 // Spawn Options
 // =============================================================================
 
-export interface SpawnProcessOptions {
-  /** Environment variables */
-  env?: NodeJS.ProcessEnv;
-  /** Working directory */
-  cwd?: string;
-  /** Callback for stdout data as it arrives */
-  onStdout?: (data: string) => void;
-  /** Callback for stderr data as it arrives */
-  onStderr?: (data: string) => void;
-}
+/** Options for spawning a background process. */
+export interface SpawnProcessOptions extends CommandOptions {}
 
 // =============================================================================
 // Process Info

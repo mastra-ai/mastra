@@ -84,18 +84,11 @@ class E2BProcessHandle extends ProcessHandle {
  * Uses the E2B SDK's commands.run() with background: true.
  */
 export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
-  private readonly _env: Record<string, string>;
-
-  constructor(sandbox: E2BSandbox, env: Record<string, string> = {}) {
-    super(sandbox);
-    this._env = env;
-  }
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const e2b = this.sandbox.instance;
 
     // Merge default env with per-spawn env
-    const mergedEnv = { ...this._env, ...options.env };
+    const mergedEnv = { ...this.env, ...options.env };
     const envs = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );

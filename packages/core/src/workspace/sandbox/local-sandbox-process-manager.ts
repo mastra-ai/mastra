@@ -118,6 +118,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const env = {
       PATH: process.env.PATH,
+      ...this.env,
       ...options.env,
     };
 

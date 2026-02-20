@@ -175,7 +175,7 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
-    this.processes = new E2BProcessManager(this, this.env);
+    this.processes = new E2BProcessManager({ sandbox: this, env: this.env });
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -787,35 +787,34 @@ export class E2BSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // Kill all background processes
-    const procs = await this.processes.list();
-    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
-
-    // Unmount all filesystems
-    // Collect keys first since unmount() mutates the map
-    for (const mountPath of [...this.mounts.entries.keys()]) {
-      try {
-        await this.unmount(mountPath);
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
-
     if (this._sandbox) {
+      // Kill all background processes
+      const procs = await this.processes.list();
+      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+
+      // Unmount all filesystems
+      // Collect keys first since unmount() mutates the map
+      for (const mountPath of [...this.mounts.entries.keys()]) {
+        try {
+          await this.unmount(mountPath);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+
       try {
         await this._sandbox.kill();
       } catch {
         // Ignore errors during destroy
       }
+
+      this._sandbox = null;
     }
 
-    this._sandbox = null;
     this.mounts.clear();
   }
 
-  /**
-   * Check if the sandbox is ready for operations.
-   */
+  /** @deprecated Use `status === 'running'` instead. */
   async isReady(): Promise<boolean> {
     return this.status === 'running' && this._sandbox !== null;
   }

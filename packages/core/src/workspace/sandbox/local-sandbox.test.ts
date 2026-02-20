@@ -762,10 +762,10 @@ describe('LocalSandbox', () => {
  */
 createSandboxTestSuite({
   suiteName: 'LocalSandbox Conformance',
-  createSandbox: async () => {
+  createSandbox: async options => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-conformance-'));
     const realDir = await fs.realpath(dir);
-    return new LocalSandbox({ workingDirectory: realDir });
+    return new LocalSandbox({ workingDirectory: realDir, env: { PATH: process.env.PATH!, ...options?.env } });
   },
   capabilities: {
     supportsMounting: false,

@@ -233,7 +233,7 @@ export class LocalSandbox extends MastraSandbox {
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
     this._isolation = requestedIsolation;
-    this.processes = new LocalProcessManager(this);
+    this.processes = new LocalProcessManager({ sandbox: this, env: this.env });
   }
 
   private generateId(): string {
@@ -356,6 +356,7 @@ export class LocalSandbox extends MastraSandbox {
     }
   }
 
+  /** @deprecated Use `status === 'running'` instead. */
   async isReady(): Promise<boolean> {
     return this.status === 'running';
   }

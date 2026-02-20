@@ -37,11 +37,18 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
  * await proc?.kill();
  * ```
  */
+export interface ProcessManagerOptions<TSandbox extends MastraSandbox = MastraSandbox> {
+  sandbox: TSandbox;
+  env?: Record<string, string | undefined>;
+}
+
 export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = MastraSandbox> {
   protected readonly sandbox: TSandbox;
+  protected readonly env: Record<string, string | undefined>;
 
-  constructor(sandbox: TSandbox) {
+  constructor({ sandbox, env = {} }: ProcessManagerOptions<TSandbox>) {
     this.sandbox = sandbox;
+    this.env = env;
 
     // Capture subclass overrides (via prototype chain) before shadowing
     // with wrapped versions that add ensureRunning().

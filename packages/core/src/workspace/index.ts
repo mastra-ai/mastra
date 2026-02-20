@@ -72,6 +72,7 @@ export { MountManager } from './sandbox';
 export type {
   WorkspaceSandbox,
   ExecutionResult,
+  CommandOptions,
   CommandResult,
   ExecuteCommandOptions,
   SandboxInfo,

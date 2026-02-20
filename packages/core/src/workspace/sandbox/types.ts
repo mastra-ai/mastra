@@ -62,11 +62,15 @@ export interface CommandResult extends ExecutionResult {
 }
 
 // =============================================================================
-// Execution Options
+// Command Options
 // =============================================================================
 
-export interface ExecuteCommandOptions {
-  /** Timeout in milliseconds */
+/**
+ * Shared options for running commands in a sandbox.
+ * Base type for both executeCommand and spawn.
+ */
+export interface CommandOptions {
+  /** Timeout in milliseconds. Kills the process if exceeded. */
   timeout?: number;
   /** Environment variables */
   env?: NodeJS.ProcessEnv;
@@ -77,6 +81,9 @@ export interface ExecuteCommandOptions {
   /** Callback for stderr chunks (enables streaming) */
   onStderr?: (data: string) => void;
 }
+
+/** Options for executeCommand. */
+export interface ExecuteCommandOptions extends CommandOptions {}
 
 // =============================================================================
 // Sandbox Info

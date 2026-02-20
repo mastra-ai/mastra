@@ -4,28 +4,34 @@
  * reader/writer streams, concurrent processes, idempotency
  */
 
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { describe, it, expect } from 'vitest';
+import type { MastraSandbox, SandboxProcessManager } from '@mastra/core/workspace';
+import { describe, it, expect, beforeAll } from 'vitest';
 
-import type { SandboxCapabilities } from '../types';
+import type { CreateSandboxOptions, SandboxCapabilities } from '../types';
 
 interface TestContext {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   capabilities: Required<SandboxCapabilities>;
   testTimeout: number;
   fastOnly: boolean;
+  createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
 }
 
 export function createProcessManagementTests(getContext: () => TestContext): void {
   describe('Process Management', () => {
+    let processes: SandboxProcessManager;
+
+    beforeAll(() => {
+      const { sandbox } = getContext();
+      expect(sandbox.processes, 'sandbox.processes must be defined when processManagement tests are enabled').toBeDefined();
+      processes = sandbox.processes!;
+    });
+
     describe('spawn', () => {
       it(
         'spawns a process and returns a handle with pid',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo hello');
+          const handle = await processes.spawn('echo hello');
           expect(handle.pid).toBeGreaterThan(0);
           await handle.wait();
         },
@@ -35,10 +41,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'accumulates stdout',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo hello');
+          const handle = await processes.spawn('echo hello');
           const result = await handle.wait();
 
           expect(result.success).toBe(true);
@@ -51,10 +54,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'accumulates stderr',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo "error msg" >&2');
+          const handle = await processes.spawn('echo "error msg" >&2');
           const result = await handle.wait();
 
           expect(result.stderr).toContain('error msg');
@@ -65,10 +65,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'captures non-zero exit code',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('exit 42');
+          const handle = await processes.spawn('exit 42');
           const result = await handle.wait();
 
           expect(result.success).toBe(false);
@@ -80,11 +77,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'respects env option',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!sandbox.processes) return;
+          const { capabilities } = getContext();
           if (!capabilities.supportsEnvVars) return;
 
-          const handle = await sandbox.processes.spawn('echo $MY_VAR', {
+          const handle = await processes.spawn('echo $MY_VAR', {
             env: { MY_VAR: 'test_value' },
           });
           const result = await handle.wait();
@@ -99,11 +95,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'calls onStdout callback as data arrives',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
           const chunks: string[] = [];
-          const handle = await sandbox.processes.spawn('echo hello', {
+          const handle = await processes.spawn('echo hello', {
             onStdout: data => chunks.push(data),
           });
           await handle.wait();
@@ -116,11 +109,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'calls onStderr callback as data arrives',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
           const chunks: string[] = [];
-          const handle = await sandbox.processes.spawn('echo "err" >&2', {
+          const handle = await processes.spawn('echo "err" >&2', {
             onStderr: data => chunks.push(data),
           });
           await handle.wait();
@@ -135,10 +125,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'stdout accumulates on the handle',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo hello');
+          const handle = await processes.spawn('echo hello');
           await handle.wait();
 
           expect(handle.stdout.trim()).toBe('hello');
@@ -149,10 +136,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'stderr accumulates on the handle',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo "err" >&2');
+          const handle = await processes.spawn('echo "err" >&2');
           await handle.wait();
 
           expect(handle.stderr).toContain('err');
@@ -163,10 +147,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'exitCode is undefined while running, set after exit',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 0.05');
+          const handle = await processes.spawn('sleep 0.05');
           expect(handle.exitCode).toBeUndefined();
 
           await handle.wait();
@@ -180,10 +161,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'wait() is idempotent — returns same result on repeated calls',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo idempotent');
+          const handle = await processes.spawn('echo idempotent');
           const result1 = await handle.wait();
           const result2 = await handle.wait();
 
@@ -199,10 +177,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'kills a running process',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
+          const handle = await processes.spawn('sleep 60');
           expect(handle.exitCode).toBeUndefined();
 
           const killed = await handle.kill();
@@ -217,10 +192,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns false when killing an already-exited process',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo done');
+          const handle = await processes.spawn('echo done');
           await handle.wait();
 
           const killed = await handle.kill();
@@ -234,11 +206,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'sends data to stdin',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
           // Use head -1 to read one line then exit cleanly
-          const handle = await sandbox.processes.spawn('head -1');
+          const handle = await processes.spawn('head -1');
           await handle.sendStdin('hello from stdin\n');
           const result = await handle.wait();
 
@@ -250,10 +219,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'throws when sending to an exited process',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo done');
+          const handle = await processes.spawn('echo done');
           await handle.wait();
 
           await expect(handle.sendStdin('data')).rejects.toThrow();
@@ -266,11 +232,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'lists spawned processes',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
-          const procs = await sandbox.processes.list();
+          const handle = await processes.spawn('sleep 60');
+          const procs = await processes.list();
 
           expect(procs.length).toBeGreaterThanOrEqual(1);
 
@@ -287,13 +250,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'shows exited processes as not running',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('echo done');
+          const handle = await processes.spawn('echo done');
           await handle.wait();
 
-          const procs = await sandbox.processes.list();
+          const procs = await processes.list();
           const found = procs.find(p => p.pid === handle.pid);
 
           // Some providers only list running processes (e.g. E2B)
@@ -308,11 +268,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'includes command string in process info',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
-          const procs = await sandbox.processes.list();
+          const handle = await processes.spawn('sleep 60');
+          const procs = await processes.list();
 
           const found = procs.find(p => p.pid === handle.pid);
           expect(found).toBeDefined();
@@ -329,11 +286,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns handle by pid',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
-          const retrieved = await sandbox.processes.get(handle.pid);
+          const handle = await processes.spawn('sleep 60');
+          const retrieved = await processes.get(handle.pid);
 
           expect(retrieved).toBeDefined();
           expect(retrieved!.pid).toBe(handle.pid);
@@ -347,10 +301,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns undefined for unknown pid',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const retrieved = await sandbox.processes.get(99999);
+          const retrieved = await processes.get(99999);
           expect(retrieved).toBeUndefined();
         },
         getContext().testTimeout,
@@ -359,17 +310,14 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns handle after process is killed',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
+          const handle = await processes.spawn('sleep 60');
           const pid = handle.pid;
 
           await handle.kill();
           await handle.wait();
 
           // Should still be retrievable after kill (important for stateless tool layer)
-          const retrieved = await sandbox.processes.get(pid);
+          const retrieved = await processes.get(pid);
           // Some providers (e.g. E2B) may not track killed processes
           if (retrieved) {
             expect(retrieved.pid).toBe(pid);
@@ -383,12 +331,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'tracks multiple spawned processes independently',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const h1 = await sandbox.processes.spawn('echo first');
-          const h2 = await sandbox.processes.spawn('echo second');
-          const h3 = await sandbox.processes.spawn('sleep 60');
+          const h1 = await processes.spawn('echo first');
+          const h2 = await processes.spawn('echo second');
+          const h3 = await processes.spawn('sleep 60');
 
           // All have unique PIDs
           expect(new Set([h1.pid, h2.pid, h3.pid]).size).toBe(3);
@@ -413,11 +358,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'kills a process by pid via the manager',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const handle = await sandbox.processes.spawn('sleep 60');
-          const killed = await sandbox.processes.kill(handle.pid);
+          const handle = await processes.spawn('sleep 60');
+          const killed = await processes.kill(handle.pid);
           expect(killed).toBe(true);
 
           const result = await handle.wait();
@@ -429,11 +371,58 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns false for unknown pid',
         async () => {
-          const { sandbox } = getContext();
-          if (!sandbox.processes) return;
-
-          const killed = await sandbox.processes.kill(99999);
+          const killed = await processes.kill(99999);
           expect(killed).toBe(false);
+        },
+        getContext().testTimeout,
+      );
+    });
+
+    describe('sandbox-level env', () => {
+      it(
+        'spawned process inherits sandbox env',
+        async () => {
+          const { capabilities, createSandbox } = getContext();
+          if (!capabilities.supportsEnvVars) return;
+
+          const envSandbox = await createSandbox({ env: { SANDBOX_VAR: 'from-sandbox' } });
+          await envSandbox._start();
+
+          try {
+            expect(envSandbox.processes).toBeDefined();
+            const handle = await envSandbox.processes!.spawn('printenv SANDBOX_VAR');
+            const result = await handle.wait();
+
+            expect(result.success).toBe(true);
+            expect(result.stdout.trim()).toBe('from-sandbox');
+          } finally {
+            await envSandbox._destroy();
+          }
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'per-spawn env overrides sandbox env',
+        async () => {
+          const { capabilities, createSandbox } = getContext();
+          if (!capabilities.supportsEnvVars) return;
+
+          const envSandbox = await createSandbox({ env: { SANDBOX_VAR: 'original', EXTRA: 'kept' } });
+          await envSandbox._start();
+
+          try {
+            expect(envSandbox.processes).toBeDefined();
+            const handle = await envSandbox.processes!.spawn('sh -c \'echo $SANDBOX_VAR $EXTRA $SPAWN_VAR\'', {
+              env: { SANDBOX_VAR: 'overridden', SPAWN_VAR: 'added' },
+            });
+            const result = await handle.wait();
+
+            expect(result.success).toBe(true);
+            expect(result.stdout.trim()).toBe('overridden kept added');
+          } finally {
+            await envSandbox._destroy();
+          }
         },
         getContext().testTimeout,
       );
@@ -443,11 +432,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'reader stream receives stdout data',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!sandbox.processes) return;
+          const { capabilities } = getContext();
           if (!capabilities.supportsStreaming) return;
 
-          const handle = await sandbox.processes.spawn('echo stream-test');
+          const handle = await processes.spawn('echo stream-test');
 
           const chunks: string[] = [];
           handle.reader.on('data', (chunk: Buffer) => {
@@ -466,11 +454,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'reader stream ends when process exits',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!sandbox.processes) return;
+          const { capabilities } = getContext();
           if (!capabilities.supportsStreaming) return;
 
-          const handle = await sandbox.processes.spawn('echo done');
+          const handle = await processes.spawn('echo done');
 
           // Must consume the stream (flowing mode) for 'end' to fire
           handle.reader.resume();
@@ -488,11 +475,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'writer stream sends data to stdin',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!sandbox.processes) return;
+          const { capabilities } = getContext();
           if (!capabilities.supportsStreaming) return;
 
-          const handle = await sandbox.processes.spawn('head -1');
+          const handle = await processes.spawn('head -1');
 
           await new Promise<void>((resolve, reject) => {
             handle.writer.write('writer-test\n', err => (err ? reject(err) : resolve()));
