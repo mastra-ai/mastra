@@ -54,7 +54,7 @@ export abstract class ElasticDSLFilterTranslator<Filter = VectorFilter> extends 
     // If we have a single logical operator
     if (logicalOperators.length === 1 && fieldConditions.length === 0) {
       const [operator, value] = logicalOperators[0] as [QueryOperator, any];
-      if (!Array.isArray(value) && typeof value !== 'object') {
+      if (!Array.isArray(value) && (value === null || typeof value !== 'object')) {
         throw new Error(`Invalid logical operator structure: ${operator} must have an array or object value`);
       }
       return this.translateLogicalOperator(operator, value);
