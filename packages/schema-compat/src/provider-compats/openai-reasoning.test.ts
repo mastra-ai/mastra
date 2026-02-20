@@ -311,24 +311,33 @@ describe('OpenAIReasoningSchemaCompatLayer - ZodNull Handling (MCP server compat
     expect(invalidResult.success).toBe(false);
   });
 
-  it('should handle optional z.null() property without throwing', () => {
+  it('should handle optional z.null() and transform null to undefined', () => {
     const schema = z.object({
       name: z.string(),
       result: z.null().optional(),
     });
 
     const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
-    expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+    const aiSchema = layer.processToAISDKSchema(schema);
+    expect(aiSchema).toHaveProperty('validate');
+
+    const validResult = aiSchema.validate!({ name: 'x', result: null });
+    expect(validResult.success).toBe(true);
+    if (validResult.success) {
+      expect(validResult.value).toEqual({ name: 'x', result: undefined });
+    }
   });
 
-  it('should handle z.null() with description', () => {
+  it('should handle z.null() with description and preserve it', () => {
     const schema = z.object({
       name: z.string(),
       result: z.null().describe('Always null'),
     });
 
     const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
-    expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+    const aiSchema = layer.processToAISDKSchema(schema);
+    const resultProp = (aiSchema.jsonSchema as any).properties?.result;
+    expect(resultProp?.description).toBe('Always null');
   });
 });
 
