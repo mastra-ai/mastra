@@ -866,6 +866,24 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.config.resolveModel(modelId);
   }
 
+  /**
+   * Switch the Observer model.
+   */
+  async switchObserverModel(modelId: string): Promise<void> {
+    void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>);
+    await this.persistThreadSetting('observerModelId', modelId);
+    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
+  }
+
+  /**
+   * Switch the Reflector model.
+   */
+  async switchReflectorModel(modelId: string): Promise<void> {
+    void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>);
+    await this.persistThreadSetting('reflectorModelId', modelId);
+    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
+  }
+
   // ===========================================================================
   // Subagent Model Management
   // ===========================================================================
