@@ -44,6 +44,8 @@ reviews:
         - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
         - For larger, more substantial changes, also answer the "Why" behind the changes
         - Each changeset file contains a YAML frontmatter at the top. It will be one or more package names followed by a colon and the type of change (patch, minor, major). Do not modify this frontmatter. Check that the description inside the changeset file only applies to the packages listed in the frontmatter. Do not allow descriptions that mention changes to packages not listed in the frontmatter. In these cases, the user must create a separate changeset file for those packages.
+        - Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.
+        - If the changes span multiple packages and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist.
 
         In case of a guideline violation ALWAYS mark your comment as `potential_issue`.
   abort_on_close: true
