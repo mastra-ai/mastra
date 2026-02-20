@@ -90,7 +90,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return z
         .any()
         .refine(v => v === null, { message: 'must be null' })
-        .describe(value.description || 'must be null');
+        .describe(value.description ?? 'must be null');
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isArr(z)(value)) {

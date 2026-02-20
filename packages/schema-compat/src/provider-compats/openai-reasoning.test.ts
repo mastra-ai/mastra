@@ -276,7 +276,7 @@ describe('OpenAIReasoningSchemaCompatLayer - Passthrough Setting', () => {
   });
 });
 
-describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
+describe('OpenAIReasoningSchemaCompatLayer - ZodNull Handling (MCP server compat)', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',
     modelId: 'o1',
@@ -293,15 +293,51 @@ describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
     expect(() => layer.processZodType(schema)).not.toThrow();
   });
 
-  it('should handle z.null() via processToAISDKSchema without throwing', () => {
+  it('should handle z.null() via processToAISDKSchema and validate null', () => {
     const schema = z.object({
       name: z.string(),
       result: z.null(),
     });
 
     const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    const aiSchema = layer.processToAISDKSchema(schema);
+    expect(aiSchema).toHaveProperty('jsonSchema');
+    expect(aiSchema).toHaveProperty('validate');
+
+    const validResult = aiSchema.validate!({ name: 'test', result: null });
+    expect(validResult.success).toBe(true);
+
+    const invalidResult = aiSchema.validate!({ name: 'test', result: 'not null' });
+    expect(invalidResult.success).toBe(false);
+  });
+
+  it('should handle optional z.null() property without throwing', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null().optional(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
     expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
   });
+
+  it('should handle z.null() with description', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null().describe('Always null'),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+  });
+});
+
+describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'o1',
+    supportsStructuredOutputs: false,
+  };
 
   it('should convert ZodAny to string with description', () => {
     const schema = z.object({

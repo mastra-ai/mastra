@@ -2,8 +2,6 @@
 '@mastra/schema-compat': patch
 ---
 
-fix(schema-compat): handle ZodNull type in Anthropic and OpenAI Reasoning providers
+Handle null types in MCP tool schemas for Anthropic and OpenAI Reasoning providers
 
-MCP servers using `{ "type": "null" }` in their tool JSON Schemas caused a crash (`does not support zod type: ZodNull`) because the Anthropic and OpenAI Reasoning compatibility layers didn't handle `ZodNull`, falling through to the unsupported type handler which throws unconditionally.
-
-Added `ZodNull` coercion (to `z.any().refine(v => v === null)`) in both providers, matching the existing pattern already used by the Google provider.
+MCP servers that use `{ "type": "null" }` in their tool schemas no longer crash on startup. Previously, null types in tool schemas caused a fatal error when used with Claude or OpenAI reasoning models. The null type is now coerced to a compatible representation so these tools load and work correctly.
