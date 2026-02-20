@@ -7,7 +7,6 @@ import type { StreamCompletionContext, CompletionRunResult } from '../../network
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
-import { isControllerOpen } from '../stream';
 
 export function createCompletionCheckStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: OuterLLMRun<Tools, OUTPUT>,
@@ -142,24 +141,22 @@ export function createCompletionCheckStep<Tools extends ToolSet = ToolSet, OUTPU
         'response',
       );
 
-      // Emit completion-check event if controller is available
-      if (controller && isControllerOpen(controller)) {
-        controller.enqueue({
-          type: 'completion-check',
-          runId: runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            iteration: currentIteration,
-            passed: completionResult.complete,
-            results: completionResult.scorers,
-            duration: completionResult.totalDuration,
-            timedOut: completionResult.timedOut,
-            reason: completionResult.completionReason,
-            maxIterationReached: !!maxIterationReached,
-            suppressFeedback: !!completion.suppressFeedback,
-          },
-        } as ChunkType<OUTPUT>);
-      }
+      // Emit completion-check event
+      controller.enqueue({
+        type: 'completion-check',
+        runId: runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          iteration: currentIteration,
+          passed: completionResult.complete,
+          results: completionResult.scorers,
+          duration: completionResult.totalDuration,
+          timedOut: completionResult.timedOut,
+          reason: completionResult.completionReason,
+          maxIterationReached: !!maxIterationReached,
+          suppressFeedback: !!completion.suppressFeedback,
+        },
+      } as ChunkType<OUTPUT>);
 
       return { ...inputData, completionCheckFailed: !completionResult.complete };
     },
