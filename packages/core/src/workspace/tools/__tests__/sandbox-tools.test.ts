@@ -555,6 +555,25 @@ describe('output-helpers', () => {
       const input = 'a\nb\nc\nd\ne';
       expect(applyTail(input, -2)).toBe('d\ne');
     });
+
+    it('does not count trailing newline as an extra line', () => {
+      // "a\nb\nc\n" should be treated as 3 lines, not 4
+      const input = 'a\nb\nc\nd\ne\n';
+      const result = applyTail(input, 2);
+      expect(result).toBe('d\ne\n');
+    });
+
+    it('preserves trailing newline after truncation', () => {
+      const input = 'line1\nline2\nline3\n';
+      const result = applyTail(input, 1);
+      expect(result).toBe('line3\n');
+    });
+
+    it('works correctly without trailing newline', () => {
+      const input = 'line1\nline2\nline3';
+      const result = applyTail(input, 1);
+      expect(result).toBe('line3');
+    });
   });
 
   describe('applyCharLimit', () => {
