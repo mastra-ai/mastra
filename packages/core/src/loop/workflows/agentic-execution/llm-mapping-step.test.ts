@@ -691,7 +691,10 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
     const providerMessage = addCalls.find(([msg]: [any]) =>
       msg.content?.parts?.some(
-        (p: any) => p.providerExecuted && p.toolInvocation?.toolName === 'web_search_20250305' && p.toolInvocation?.state === 'result',
+        (p: any) =>
+          p.providerExecuted &&
+          p.toolInvocation?.toolName === 'web_search_20250305' &&
+          p.toolInvocation?.state === 'result',
       ),
     );
     expect(providerMessage).toBeDefined();

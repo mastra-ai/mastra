@@ -9,13 +9,10 @@ import {
   Container,
   Spacer,
   Text,
-  TUI,
-  ProcessTerminal,
   visibleWidth,
 } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type {
-  Harness,
   HarnessEvent,
   HarnessMessage,
   HarnessMessageContent,
@@ -26,15 +23,10 @@ import type {
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
 import { parse as parsePartialJson } from 'partial-json';
-import type { AuthStorage } from '../auth/storage.js';
 import { getOAuthProviders } from '../auth/storage.js';
-import type { HookManager } from '../hooks/index.js';
-import type { McpManager } from '../mcp/manager.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
-import { detectProject } from '../utils/project.js';
-import type { ProjectInfo } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import { processSlashCommand } from '../utils/slash-command-processor.js';
@@ -42,7 +34,6 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
-import { CustomEditor } from './components/custom-editor.js';
 import { DiffOutputComponent } from './components/diff-output.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -52,7 +43,6 @@ import { GradientAnimator, applyGradientSweep } from './components/obi-loader.js
 import { OMMarkerComponent } from './components/om-marker.js';
 import type { OMMarkerData } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
-import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
 import { defaultOMProgressState, formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import { OMSettingsComponent } from './components/om-settings.js';
 import { PlanApprovalInlineComponent, PlanResultComponent } from './components/plan-approval-inline.js';
@@ -68,11 +58,12 @@ import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.j
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import type { ToolResult } from './components/tool-execution-enhanced.js';
-import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { sendNotification } from './notify.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
-import { getEditorTheme, getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
+import type { MastraTUIOptions, TUIState } from './state.js';
+import { createTUIState } from './state.js';
+import { getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
 
 // =============================================================================
 // Constants
@@ -85,186 +76,31 @@ const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
 // Types
 // =============================================================================
 
-export interface MastraTUIOptions {
-  /** The harness instance to control */
-  harness: Harness<any>;
-
-  /** Hook manager for session lifecycle hooks */
-  hookManager?: HookManager;
-
-  /** Auth storage for OAuth login/logout */
-  authStorage?: AuthStorage;
-
-  /** MCP manager for server status and reload */
-  mcpManager?: McpManager;
-
-  /**
-   * @deprecated Workspace is now obtained from the Harness.
-   * Configure workspace via HarnessConfig.workspace instead.
-   * Kept as fallback for backward compatibility.
-   */
-  workspace?: Workspace;
-
-  /** Initial message to send on startup */
-  initialMessage?: string;
-
-  /** Whether to show verbose startup info */
-  verbose?: boolean;
-
-  /** App name for header */
-  appName?: string;
-
-  /** App version for header */
-  version?: string;
-
-  /** Use inline questions instead of dialog overlays */
-  inlineQuestions?: boolean;
-}
+export type { MastraTUIOptions } from './state.js';
 
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
 
 export class MastraTUI {
-  private harness: Harness<any>;
-  private options: MastraTUIOptions;
-  private hookManager?: HookManager;
-  private authStorage?: AuthStorage;
-  private mcpManager?: McpManager;
+  private state: TUIState;
 
-  // TUI components
-  private ui: TUI;
-  private chatContainer: Container;
-  private editorContainer: Container;
-  private editor: CustomEditor;
-  private footer: Container;
-
-  // State tracking
-  private isInitialized = false;
-  private gradientAnimator?: GradientAnimator;
-  private isAgentActive = false;
-  private streamingComponent?: AssistantMessageComponent;
-  private streamingMessage?: HarnessMessage;
-  private pendingTools = new Map<string, IToolExecutionComponent>();
-  private toolInputBuffers = new Map<string, { text: string; toolName: string }>(); // Buffer partial JSON args text per toolCallId for streaming input
-  private taskWriteInsertIndex = -1; // Position hint for task_write inline rendering when streaming
-  private seenToolCallIds = new Set<string>(); // Track all tool IDs seen during current stream (prevents duplicates)
-  private subagentToolCallIds = new Set<string>(); // Track subagent tool call IDs to skip in trailing content logic
-  private allToolComponents: IToolExecutionComponent[] = []; // Track all tools for expand/collapse
-  private allSlashCommandComponents: SlashCommandComponent[] = []; // Track slash command boxes for expand/collapse
-  private pendingSubagents = new Map<string, SubagentExecutionComponent>(); // Track active subagent tasks
-  private toolOutputExpanded = false;
-  private hideThinkingBlock = true;
-  private pendingNewThread = false; // True when we want a new thread but haven't created it yet
-  private pendingLockConflict: {
-    threadTitle: string;
-    ownerPid: number;
-  } | null = null;
-  private lastAskUserComponent?: IToolExecutionComponent; // Track the most recent ask_user tool for inline question placement
-  private lastClearedText = ''; // Saved editor text for Ctrl+Z undo
-
-  // Status line state
-  private projectInfo: ProjectInfo;
-  private tokenUsage: TokenUsage = {
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-  };
-  private statusLine?: Text;
-  private memoryStatusLine?: Text;
-  private modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string } = {
-    hasAuth: true,
-  };
-  // Observational Memory state
-  private omProgress: OMProgressState = defaultOMProgressState();
-  private omProgressComponent?: OMProgressComponent;
-  private activeOMMarker?: OMMarkerComponent;
-  private activeBufferingMarker?: OMMarkerComponent;
-  private activeActivationMarker?: OMMarkerComponent;
-  // Buffering state — drives statusline label animation
-  private bufferingMessages = false;
-  private bufferingObservations = false;
-  private taskProgress?: TaskProgressComponent;
-  private previousTasks: TaskItem[] = []; // Track previous state for diff
-
-  // Autocomplete
-  private autocompleteProvider?: CombinedAutocompleteProvider;
-
-  // Custom slash commands
-  private customSlashCommands: SlashCommandMetadata[] = [];
-
-  // Pending images from clipboard paste
-  private pendingImages: Array<{ data: string; mimeType: string }> = [];
-
-  // Workspace (for skills)
-  private workspace?: Workspace;
-
-  // Active inline question component
-  private activeInlineQuestion?: AskQuestionInlineComponent;
-
-  // Active inline plan approval component
-  private activeInlinePlanApproval?: PlanApprovalInlineComponent;
-  private lastSubmitPlanComponent?: IToolExecutionComponent;
-  // Follow-up messages sent via Ctrl+F while streaming
-  // These must stay anchored at the bottom of the chat stream
-  private followUpComponents: UserMessageComponent[] = [];
-  // Slash commands queued via Ctrl+F while the agent is running.
-  // Drained in handleAgentEnd after all harness-level follow-ups complete.
-  private pendingSlashCommands: string[] = [];
-
-  // Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog
-  private pendingApprovalDismiss: (() => void) | null = null;
-
-  // Ctrl+C double-tap tracking
-  private lastCtrlCTime = 0;
   private static readonly DOUBLE_CTRL_C_MS = 500;
-  // Track user-initiated aborts (Ctrl+C/Esc) vs system aborts (mode switch, etc.)
-  private userInitiatedAbort = false;
-
-  // Track files modified during this session (for /diff command)
-  private modifiedFiles = new Map<string, { operations: string[]; firstModified: Date }>();
-  // Map toolCallId -> { toolName, filePath } for pending tool calls that modify files
-  private pendingFileTools = new Map<string, { toolName: string; filePath: string }>();
-
-  // Event handling
-  private unsubscribe?: () => void;
-
-  private terminal: ProcessTerminal;
 
   constructor(options: MastraTUIOptions) {
-    this.harness = options.harness;
-    this.options = options;
-    this.hookManager = options.hookManager;
-    this.authStorage = options.authStorage;
-    this.mcpManager = options.mcpManager;
-    this.workspace = options.workspace;
-
-    // Detect project info for status line
-    this.projectInfo = detectProject(process.cwd());
-
-    // Create terminal and TUI instance
-    this.terminal = new ProcessTerminal();
-    this.ui = new TUI(this.terminal);
-
-    // Create containers
-    this.chatContainer = new Container();
-    this.editorContainer = new Container();
-    this.footer = new Container();
-
-    // Create editor with custom keybindings
-    this.editor = new CustomEditor(this.ui, getEditorTheme());
+    this.state = createTUIState(options);
 
     // Override editor input handling to check for active inline components
-    const originalHandleInput = this.editor.handleInput.bind(this.editor);
-    this.editor.handleInput = (data: string) => {
+    const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
+    this.state.editor.handleInput = (data: string) => {
       // If there's an active plan approval, route input to it
-      if (this.activeInlinePlanApproval) {
-        this.activeInlinePlanApproval.handleInput(data);
+      if (this.state.activeInlinePlanApproval) {
+        this.state.activeInlinePlanApproval.handleInput(data);
         return;
       }
       // If there's an active inline question, route input to it
-      if (this.activeInlineQuestion) {
-        this.activeInlineQuestion.handleInput(data);
+      if (this.state.activeInlineQuestion) {
+        this.state.activeInlineQuestion.handleInput(data);
         return;
       }
       // Otherwise, handle normally
@@ -272,10 +108,10 @@ export class MastraTUI {
     };
 
     // Wire clipboard image paste
-    this.editor.onImagePaste = image => {
-      this.pendingImages.push(image);
-      this.editor.insertTextAtCursor?.('[image] ');
-      this.ui.requestRender();
+    this.state.editor.onImagePaste = image => {
+      this.state.pendingImages.push(image);
+      this.state.editor.insertTextAtCursor?.('[image] ');
+      this.state.ui.requestRender();
     };
 
     this.setupKeyboardShortcuts();
@@ -286,109 +122,109 @@ export class MastraTUI {
    */
   private setupKeyboardShortcuts(): void {
     // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
-    this.editor.onAction('clear', () => {
+    this.state.editor.onAction('clear', () => {
       const now = Date.now();
-      if (now - this.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
+      if (now - this.state.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
         // Double Ctrl+C → exit
         this.stop();
         process.exit(0);
       }
-      this.lastCtrlCTime = now;
+      this.state.lastCtrlCTime = now;
 
-      if (this.pendingApprovalDismiss) {
+      if (this.state.pendingApprovalDismiss) {
         // Dismiss active approval dialog and abort
-        this.pendingApprovalDismiss();
-        this.activeInlinePlanApproval = undefined;
-        this.activeInlineQuestion = undefined;
-        this.userInitiatedAbort = true;
-        this.harness.abort();
-      } else if (this.harness.isRunning()) {
+        this.state.pendingApprovalDismiss();
+        this.state.activeInlinePlanApproval = undefined;
+        this.state.activeInlineQuestion = undefined;
+        this.state.userInitiatedAbort = true;
+        this.state.harness.abort();
+      } else if (this.state.harness.isRunning()) {
         // Clean up active inline components on abort
-        this.activeInlinePlanApproval = undefined;
-        this.activeInlineQuestion = undefined;
-        this.userInitiatedAbort = true;
-        this.harness.abort();
+        this.state.activeInlinePlanApproval = undefined;
+        this.state.activeInlineQuestion = undefined;
+        this.state.userInitiatedAbort = true;
+        this.state.harness.abort();
       } else {
-        const current = this.editor.getText();
+        const current = this.state.editor.getText();
         if (current.length > 0) {
-          this.lastClearedText = current;
+          this.state.lastClearedText = current;
         }
-        this.editor.setText('');
-        this.ui.requestRender();
+        this.state.editor.setText('');
+        this.state.ui.requestRender();
       }
     });
 
     // Ctrl+Z - undo last clear (restore editor text)
-    this.editor.onAction('undo', () => {
-      if (this.lastClearedText && this.editor.getText().length === 0) {
-        this.editor.setText(this.lastClearedText);
-        this.lastClearedText = '';
-        this.ui.requestRender();
+    this.state.editor.onAction('undo', () => {
+      if (this.state.lastClearedText && this.state.editor.getText().length === 0) {
+        this.state.editor.setText(this.state.lastClearedText);
+        this.state.lastClearedText = '';
+        this.state.ui.requestRender();
       }
     });
 
     // Ctrl+D - exit when editor is empty
-    this.editor.onCtrlD = () => {
+    this.state.editor.onCtrlD = () => {
       this.stop();
       process.exit(0);
     };
 
     // Ctrl+T - toggle thinking blocks visibility
-    this.editor.onAction('toggleThinking', () => {
-      this.hideThinkingBlock = !this.hideThinkingBlock;
-      this.ui.requestRender();
+    this.state.editor.onAction('toggleThinking', () => {
+      this.state.hideThinkingBlock = !this.state.hideThinkingBlock;
+      this.state.ui.requestRender();
     });
     // Ctrl+E - expand/collapse tool outputs
-    this.editor.onAction('expandTools', () => {
-      this.toolOutputExpanded = !this.toolOutputExpanded;
-      for (const tool of this.allToolComponents) {
-        tool.setExpanded(this.toolOutputExpanded);
+    this.state.editor.onAction('expandTools', () => {
+      this.state.toolOutputExpanded = !this.state.toolOutputExpanded;
+      for (const tool of this.state.allToolComponents) {
+        tool.setExpanded(this.state.toolOutputExpanded);
       }
-      for (const sc of this.allSlashCommandComponents) {
-        sc.setExpanded(this.toolOutputExpanded);
+      for (const sc of this.state.allSlashCommandComponents) {
+        sc.setExpanded(this.state.toolOutputExpanded);
       }
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     });
 
     // Shift+Tab - cycle harness modes
-    this.editor.onAction('cycleMode', async () => {
+    this.state.editor.onAction('cycleMode', async () => {
       // Block mode switching while plan approval is active
-      if (this.activeInlinePlanApproval) {
+      if (this.state.activeInlinePlanApproval) {
         this.showInfo('Resolve the plan approval first');
         return;
       }
 
-      const modes = this.harness.getModes();
+      const modes = this.state.harness.getModes();
       if (modes.length <= 1) return;
-      const currentId = this.harness.getCurrentModeId();
+      const currentId = this.state.harness.getCurrentModeId();
       const currentIndex = modes.findIndex(m => m.id === currentId);
       const nextIndex = (currentIndex + 1) % modes.length;
       const nextMode = modes[nextIndex]!;
-      await this.harness.switchMode(nextMode.id);
+      await this.state.harness.switchMode(nextMode.id);
       // The mode_changed event handler will show the info message
       this.updateStatusLine();
     });
     // Ctrl+Y - toggle YOLO mode
-    this.editor.onAction('toggleYolo', () => {
-      const current = (this.harness.getState() as any).yolo === true;
-      this.harness.setState({ yolo: !current } as any);
+    this.state.editor.onAction('toggleYolo', () => {
+      const current = (this.state.harness.getState() as any).yolo === true;
+      this.state.harness.setState({ yolo: !current } as any);
       this.updateStatusLine();
       this.showInfo(current ? 'YOLO mode off' : 'YOLO mode on');
     });
 
     // Ctrl+F - queue follow-up message while streaming
-    this.editor.onAction('followUp', () => {
-      const text = this.editor.getText().trim();
+    this.state.editor.onAction('followUp', () => {
+      const text = this.state.editor.getText().trim();
       if (!text) return;
-      if (!this.harness.isRunning()) return; // Only relevant while streaming
+      if (!this.state.harness.isRunning()) return; // Only relevant while streaming
 
       // Clear editor
-      this.editor.setText('');
-      this.ui.requestRender();
+      this.state.editor.setText('');
+      this.state.ui.requestRender();
 
       if (text.startsWith('/')) {
         // Queue slash command for processing after the agent completes
-        this.pendingSlashCommands.push(text);
+        this.state.pendingSlashCommands.push(text);
         this.showInfo(`Slash command queued: ${text}`);
       } else {
         // Queue as a regular follow-up message
@@ -398,9 +234,9 @@ export class MastraTUI {
           content: [{ type: 'text', text }],
           createdAt: new Date(),
         });
-        this.ui.requestRender();
+        this.state.ui.requestRender();
 
-        this.harness.followUp(text).catch(error => {
+        this.state.harness.followUp(text).catch(error => {
           this.showError(error instanceof Error ? error.message : 'Follow-up failed');
         });
       }
@@ -418,14 +254,14 @@ export class MastraTUI {
     await this.init();
 
     // Run SessionStart hooks (fire and forget)
-    const hookMgr = this.hookManager;
+    const hookMgr = this.state.hookManager;
     if (hookMgr) {
       hookMgr.runSessionStart().catch(() => {});
     }
 
     // Process initial message if provided
-    if (this.options.initialMessage) {
-      this.fireMessage(this.options.initialMessage);
+    if (this.state.options.initialMessage) {
+      this.fireMessage(this.state.options.initialMessage);
     }
 
     // Main interactive loop — never blocks on streaming,
@@ -448,21 +284,21 @@ export class MastraTUI {
         }
 
         // Create thread lazily on first message (may load last-used model)
-        if (this.pendingNewThread) {
-          await this.harness.createThread();
-          this.pendingNewThread = false;
+        if (this.state.pendingNewThread) {
+          await this.state.harness.createThread();
+          this.state.pendingNewThread = false;
           this.updateStatusLine();
         }
 
         // Check if a model is selected
-        if (!this.harness.hasModelSelected()) {
+        if (!this.state.harness.hasModelSelected()) {
           this.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
 
         // Collect any pending images from clipboard paste
-        const images = this.pendingImages.length > 0 ? [...this.pendingImages] : undefined;
-        this.pendingImages = [];
+        const images = this.state.pendingImages.length > 0 ? [...this.state.pendingImages] : undefined;
+        this.state.pendingImages = [];
 
         // Add user message to chat immediately
         this.addUserMessage({
@@ -478,14 +314,14 @@ export class MastraTUI {
           ],
           createdAt: new Date(),
         });
-        this.ui.requestRender();
+        this.state.ui.requestRender();
 
-        if (this.harness.isRunning()) {
+        if (this.state.harness.isRunning()) {
           // Agent is streaming → steer (abort + resend)
           // Clear follow-up tracking since steer replaces the current response
-          this.followUpComponents = [];
-          this.pendingSlashCommands = [];
-          this.harness.steer(userInput).catch(error => {
+          this.state.followUpComponents = [];
+          this.state.pendingSlashCommands = [];
+          this.state.harness.steer(userInput).catch(error => {
             this.showError(error instanceof Error ? error.message : 'Steer failed');
           });
         } else {
@@ -503,7 +339,7 @@ export class MastraTUI {
    * Errors are handled via harness events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    this.harness.sendMessage(content, images ? { images } : undefined).catch(error => {
+    this.state.harness.sendMessage(content, images ? { images } : undefined).catch(error => {
       this.showError(error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -513,15 +349,15 @@ export class MastraTUI {
    */
   stop(): void {
     // Run SessionEnd hooks (best-effort, don't await)
-    const hookMgr = this.hookManager;
+    const hookMgr = this.state.hookManager;
     if (hookMgr) {
       hookMgr.runSessionEnd().catch(() => {});
     }
 
-    if (this.unsubscribe) {
-      this.unsubscribe();
+    if (this.state.unsubscribe) {
+      this.state.unsubscribe();
     }
-    this.ui.stop();
+    this.state.ui.stop();
   }
 
   // ===========================================================================
@@ -529,16 +365,16 @@ export class MastraTUI {
   // ===========================================================================
 
   private async init(): Promise<void> {
-    if (this.isInitialized) return;
+    if (this.state.isInitialized) return;
 
     // Initialize harness (but don't select thread yet)
-    await this.harness.init();
+    await this.state.harness.init();
 
     // Check for existing threads and prompt for resume
     await this.promptForThreadSelection();
 
     // Load initial token usage from harness (persisted from previous session)
-    this.tokenUsage = this.harness.getTokenUsage();
+    this.state.tokenUsage = this.state.harness.getTokenUsage();
 
     // Load custom slash commands
     await this.loadCustomSlashCommands();
@@ -558,21 +394,21 @@ export class MastraTUI {
     // Subscribe to harness events
     this.subscribeToHarness();
     // Restore escape-as-cancel setting from persisted state
-    const escState = this.harness.getState() as any;
+    const escState = this.state.harness.getState() as any;
     if (escState?.escapeAsCancel === false) {
-      this.editor.escapeEnabled = false;
+      this.state.editor.escapeEnabled = false;
     }
 
     // Load OM progress now that we're subscribed (the event during
     // thread selection fired before we were listening)
-    await this.harness.loadOMProgress();
+    await this.state.harness.loadOMProgress();
 
     // Sync OM thresholds from thread metadata (may differ from OM defaults)
     this.syncOMThresholdsFromHarness();
 
     // Start the UI
-    this.ui.start();
-    this.isInitialized = true;
+    this.state.ui.start();
+    this.state.isInitialized = true;
 
     // Set terminal title
     this.updateTerminalTitle();
@@ -582,9 +418,9 @@ export class MastraTUI {
     await this.renderExistingTasks();
 
     // Show deferred thread lock prompt (must happen after TUI is started)
-    if (this.pendingLockConflict) {
-      this.showThreadLockPrompt(this.pendingLockConflict.threadTitle, this.pendingLockConflict.ownerPid);
-      this.pendingLockConflict = null;
+    if (this.state.pendingLockConflict) {
+      this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
+      this.state.pendingLockConflict = null;
     }
   }
 
@@ -594,13 +430,13 @@ export class MastraTUI {
   private async renderExistingTasks(): Promise<void> {
     try {
       // Access the harness state using the public method
-      const state = this.harness.getState() as { tasks?: TaskItem[] };
+      const state = this.state.harness.getState() as { tasks?: TaskItem[] };
       const tasks = state.tasks || [];
 
-      if (tasks.length > 0 && this.taskProgress) {
+      if (tasks.length > 0 && this.state.taskProgress) {
         // Update the existing task progress component
-        this.taskProgress.updateTasks(tasks);
-        this.ui.requestRender();
+        this.state.taskProgress.updateTasks(tasks);
+        this.state.ui.requestRender();
       }
     } catch {
       // Silently ignore task rendering errors
@@ -614,12 +450,12 @@ export class MastraTUI {
    * from other worktrees of the same repo.
    */
   private async promptForThreadSelection(): Promise<void> {
-    const allThreads = await this.harness.listThreads();
+    const allThreads = await this.state.harness.listThreads();
 
     // Filter to threads matching the current working directory.
     // This prevents worktrees (which share the same resourceId) from
     // resuming each other's threads.
-    const currentPath = this.projectInfo.rootPath;
+    const currentPath = this.state.projectInfo.rootPath;
     // TEMPORARY: Threads created before auto-tagging don't have projectPath
     // metadata. To avoid resuming another worktree's untagged threads, we
     // compare against the directory's birthtime — if the thread predates the
@@ -641,7 +477,7 @@ export class MastraTUI {
 
     if (threads.length === 0) {
       // No existing threads for this path - defer creation until first message
-      this.pendingNewThread = true;
+      this.state.pendingNewThread = true;
       return;
     }
 
@@ -650,17 +486,17 @@ export class MastraTUI {
     const mostRecent = sortedThreads[0]!;
     // Auto-resume the most recent thread for this directory
     try {
-      await this.harness.switchThread(mostRecent.id);
+      await this.state.harness.switchThread(mostRecent.id);
       // Retroactively tag untagged legacy threads so the birthtime check
       // above can eventually be removed.
       if (!mostRecent.metadata?.projectPath) {
-        await this.harness.persistThreadSetting('projectPath', currentPath);
+        await this.state.harness.persistThreadSetting('projectPath', currentPath);
       }
     } catch (error) {
       if (error instanceof ThreadLockError) {
         // Defer the lock conflict prompt until after the TUI is started
-        this.pendingNewThread = true;
-        this.pendingLockConflict = {
+        this.state.pendingNewThread = true;
+        this.state.pendingLockConflict = {
           threadTitle: mostRecent.title || mostRecent.id,
           ownerPid: error.ownerPid,
         };
@@ -690,8 +526,8 @@ export class MastraTUI {
 
   private buildLayout(): void {
     // Add header
-    const appName = this.options.appName || 'Mastra Code';
-    const version = this.options.version || '0.1.0';
+    const appName = this.state.options.appName || 'Mastra Code';
+    const version = this.state.options.version || '0.1.0';
 
     const logo = fg('accent', '◆') + ' ' + bold(fg('accent', appName)) + fg('dim', ` v${version}`);
 
@@ -700,11 +536,11 @@ export class MastraTUI {
     const instructions = [
       `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
       `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
-      `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${this.harness.getModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
+      `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${this.state.harness.getModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
     ].join('\n');
 
-    this.ui.addChild(new Spacer(1));
-    this.ui.addChild(
+    this.state.ui.addChild(new Spacer(1));
+    this.state.ui.addChild(
       new Text(
         `${logo}
 ${instructions}`,
@@ -712,27 +548,27 @@ ${instructions}`,
         0,
       ),
     );
-    this.ui.addChild(new Spacer(1));
+    this.state.ui.addChild(new Spacer(1));
 
     // Add main containers
-    this.ui.addChild(this.chatContainer);
+    this.state.ui.addChild(this.state.chatContainer);
     // Task progress (between chat and editor, visible only when tasks exist)
-    this.taskProgress = new TaskProgressComponent();
-    this.ui.addChild(this.taskProgress);
-    this.ui.addChild(this.editorContainer);
-    this.editorContainer.addChild(this.editor);
+    this.state.taskProgress = new TaskProgressComponent();
+    this.state.ui.addChild(this.state.taskProgress);
+    this.state.ui.addChild(this.state.editorContainer);
+    this.state.editorContainer.addChild(this.state.editor);
 
     // Add footer with two-line status
-    this.statusLine = new Text('', 0, 0);
-    this.memoryStatusLine = new Text('', 0, 0);
-    this.footer.addChild(this.statusLine);
-    this.footer.addChild(this.memoryStatusLine);
-    this.ui.addChild(this.footer);
+    this.state.statusLine = new Text('', 0, 0);
+    this.state.memoryStatusLine = new Text('', 0, 0);
+    this.state.footer.addChild(this.state.statusLine);
+    this.state.footer.addChild(this.state.memoryStatusLine);
+    this.state.ui.addChild(this.state.footer);
     this.updateStatusLine();
     this.refreshModelAuthStatus();
 
     // Set focus to editor
-    this.ui.setFocus(this.editor);
+    this.state.ui.setFocus(this.state.editor);
   }
 
   /**
@@ -741,12 +577,12 @@ ${instructions}`,
    * Line 2:        ~/path/to/project (branch)
    */
   private updateStatusLine(): void {
-    if (!this.statusLine) return;
+    if (!this.state.statusLine) return;
     const termWidth = (process.stdout.columns || 80) - 1; // buffer to prevent jitter
     const SEP = '  '; // double-space separator between parts
 
     // --- Determine if we're showing observer/reflector instead of main mode ---
-    const omStatus = this.omProgress.status;
+    const omStatus = this.state.omProgress.status;
     const isObserving = omStatus === 'observing';
     const isReflecting = omStatus === 'reflecting';
     const showOMMode = isObserving || isReflecting;
@@ -758,8 +594,8 @@ ${instructions}`,
     // --- Mode badge ---
     let modeBadge = '';
     let modeBadgeWidth = 0;
-    const modes = this.harness.getModes();
-    const currentMode = modes.length > 1 ? this.harness.getCurrentMode() : undefined;
+    const modes = this.state.harness.getModes();
+    const currentMode = modes.length > 1 ? this.state.harness.getCurrentMode() : undefined;
     // Use OM color when observing/reflecting, otherwise mode color
     const mainModeColor = currentMode?.color;
     const modeColor = showOMMode ? (isObserving ? OBSERVER_COLOR : REFLECTOR_COLOR) : mainModeColor;
@@ -779,10 +615,10 @@ ${instructions}`,
       ];
       // Pulse the badge bg brightness opposite to the gradient sweep
       let badgeBrightness = 0.9;
-      if (this.gradientAnimator?.isRunning()) {
-        const fade = this.gradientAnimator.getFadeProgress();
+      if (this.state.gradientAnimator?.isRunning()) {
+        const fade = this.state.gradientAnimator.getFadeProgress();
         if (fade < 1) {
-          const offset = this.gradientAnimator.getOffset() % 1;
+          const offset = this.state.gradientAnimator.getOffset() % 1;
           // Inverted phase (+ PI), range 0.65-0.95
           const animBrightness = 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(offset * Math.PI * 2 + Math.PI));
           // Interpolate toward idle (0.9) as fade progresses
@@ -809,7 +645,7 @@ ${instructions}`,
         parseInt(mainModeColor.slice(5, 7), 16),
       ];
       const dim = 0.35;
-      this.editor.borderColor = (text: string) =>
+      this.state.editor.borderColor = (text: string) =>
         chalk.rgb(Math.floor(br * dim), Math.floor(bg * dim), Math.floor(bb * dim))(text);
     }
 
@@ -817,41 +653,41 @@ ${instructions}`,
     // Show OM model when observing/reflecting, otherwise main model
     const fullModelId = showOMMode
       ? isObserving
-        ? this.harness.getObserverModelId()
-        : this.harness.getReflectorModelId()
-      : this.harness.getFullModelId();
+        ? this.state.harness.getObserverModelId()
+        : this.state.harness.getReflectorModelId()
+      : this.state.harness.getFullModelId();
     // e.g. "anthropic/claude-sonnet-4-20250514" → "claude-sonnet-4-20250514"
     const shortModelId = fullModelId.includes('/') ? fullModelId.slice(fullModelId.indexOf('/') + 1) : fullModelId;
     // e.g. "claude-opus-4-6" → "opus 4.6", "claude-sonnet-4-20250514" → "sonnet-4-20250514"
     const tinyModelId = shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
     const homedir = process.env.HOME || process.env.USERPROFILE || '';
-    let displayPath = this.projectInfo.rootPath;
+    let displayPath = this.state.projectInfo.rootPath;
     if (homedir && displayPath.startsWith(homedir)) {
       displayPath = '~' + displayPath.slice(homedir.length);
     }
-    if (this.projectInfo.gitBranch) {
-      displayPath = `${displayPath} (${this.projectInfo.gitBranch})`;
+    if (this.state.projectInfo.gitBranch) {
+      displayPath = `${displayPath} (${this.state.projectInfo.gitBranch})`;
     }
 
     // --- Helper to style the model ID ---
-    const isYolo = (this.harness.getState() as any).yolo === true;
+    const isYolo = (this.state.harness.getState() as any).yolo === true;
     const styleModelId = (id: string): string => {
-      if (!this.modelAuthStatus.hasAuth) {
-        const envVar = this.modelAuthStatus.apiKeyEnvVar;
+      if (!this.state.modelAuthStatus.hasAuth) {
+        const envVar = this.state.modelAuthStatus.apiKeyEnvVar;
         return fg('dim', id) + fg('error', ' ✗') + fg('muted', envVar ? ` (${envVar})` : ' (no key)');
       }
       // Tinted near-black background from mode color
       const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
       const padded = ` ${id} `;
 
-      if (this.gradientAnimator?.isRunning() && modeColor) {
-        const fade = this.gradientAnimator.getFadeProgress();
+      if (this.state.gradientAnimator?.isRunning() && modeColor) {
+        const fade = this.state.gradientAnimator.getFadeProgress();
         if (fade < 1) {
           // During active or fade-out: interpolate gradient toward idle color
           const text = applyGradientSweep(
             padded,
-            this.gradientAnimator.getOffset(),
+            this.state.gradientAnimator.getOffset(),
             modeColor,
             fade, // pass fade progress to flatten the gradient
           );
@@ -886,10 +722,10 @@ ${instructions}`,
         parseInt(modeColor.slice(5, 7), 16),
       ];
       let sBadgeBrightness = 0.9;
-      if (this.gradientAnimator?.isRunning()) {
-        const fade = this.gradientAnimator.getFadeProgress();
+      if (this.state.gradientAnimator?.isRunning()) {
+        const fade = this.state.gradientAnimator.getFadeProgress();
         if (fade < 1) {
-          const offset = this.gradientAnimator.getOffset() % 1;
+          const offset = this.state.gradientAnimator.getOffset() % 1;
           const animBrightness = 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(offset * Math.PI * 2 + Math.PI));
           sBadgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
         }
@@ -932,27 +768,27 @@ ${instructions}`,
       const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
       // Memory info — animate label text when buffering is active
       const msgLabelStyler =
-        this.bufferingMessages && this.gradientAnimator?.isRunning()
+        this.state.bufferingMessages && this.state.gradientAnimator?.isRunning()
           ? (label: string) =>
               applyGradientSweep(
                 label,
-                this.gradientAnimator!.getOffset(),
+                this.state.gradientAnimator!.getOffset(),
                 OBSERVER_COLOR,
-                this.gradientAnimator!.getFadeProgress(),
+                this.state.gradientAnimator!.getFadeProgress(),
               )
           : undefined;
       const obsLabelStyler =
-        this.bufferingObservations && this.gradientAnimator?.isRunning()
+        this.state.bufferingObservations && this.state.gradientAnimator?.isRunning()
           ? (label: string) =>
               applyGradientSweep(
                 label,
-                this.gradientAnimator!.getOffset(),
+                this.state.gradientAnimator!.getOffset(),
                 REFLECTOR_COLOR,
-                this.gradientAnimator!.getFadeProgress(),
+                this.state.gradientAnimator!.getFadeProgress(),
               )
           : undefined;
-      const obs = formatObservationStatus(this.omProgress, opts.memCompact, msgLabelStyler);
-      const ref = formatReflectionStatus(this.omProgress, opts.memCompact, obsLabelStyler);
+      const obs = formatObservationStatus(this.state.omProgress, opts.memCompact, msgLabelStyler);
+      const ref = formatReflectionStatus(this.state.omProgress, opts.memCompact, obsLabelStyler);
       if (obs) {
         parts.push({ plain: obs, styled: obs });
       }
@@ -1041,7 +877,7 @@ ${instructions}`,
         badge: 'short',
       });
 
-    this.statusLine.setText(
+    this.state.statusLine.setText(
       result?.styled ??
         shortModeBadge +
           styleModelId(tinyModelId) +
@@ -1049,15 +885,15 @@ ${instructions}`,
     );
 
     // Line 2: hidden — dir only shows on line 1 when it fits
-    if (this.memoryStatusLine) {
-      this.memoryStatusLine.setText('');
+    if (this.state.memoryStatusLine) {
+      this.state.memoryStatusLine.setText('');
     }
 
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   private async refreshModelAuthStatus(): Promise<void> {
-    this.modelAuthStatus = await this.harness.getCurrentModelAuthStatus();
+    this.state.modelAuthStatus = await this.state.harness.getCurrentModelAuthStatus();
     this.updateStatusLine();
   }
 
@@ -1107,13 +943,13 @@ ${instructions}`,
     ];
 
     // Only show /mode if there's more than one mode
-    const modes = this.harness.getModes();
+    const modes = this.state.harness.getModes();
     if (modes.length > 1) {
       slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
     }
 
     // Add custom slash commands to the list
-    for (const customCmd of this.customSlashCommands) {
+    for (const customCmd of this.state.customSlashCommands) {
       // Prefix with extra / to distinguish from built-in commands (//command-name)
       slashCommands.push({
         name: `/${customCmd.name}`,
@@ -1121,8 +957,8 @@ ${instructions}`,
       });
     }
 
-    this.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd());
-    this.editor.setAutocompleteProvider(this.autocompleteProvider);
+    this.state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd());
+    this.state.editor.setAutocompleteProvider(this.state.autocompleteProvider);
   }
   /**
    * Load custom slash commands from all sources:
@@ -1148,9 +984,9 @@ ${instructions}`,
         commandMap.set(cmd.name, cmd);
       }
 
-      this.customSlashCommands = Array.from(commandMap.values());
+      this.state.customSlashCommands = Array.from(commandMap.values());
     } catch {
-      this.customSlashCommands = [];
+      this.state.customSlashCommands = [];
     }
   }
 
@@ -1158,20 +994,20 @@ ${instructions}`,
     // Handle Ctrl+C via process signal (backup for when editor doesn't capture it)
     process.on('SIGINT', () => {
       const now = Date.now();
-      if (now - this.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
+      if (now - this.state.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
         this.stop();
         process.exit(0);
       }
-      this.lastCtrlCTime = now;
-      if (this.pendingApprovalDismiss) {
-        this.pendingApprovalDismiss();
+      this.state.lastCtrlCTime = now;
+      if (this.state.pendingApprovalDismiss) {
+        this.state.pendingApprovalDismiss();
       }
-      this.userInitiatedAbort = true;
-      this.harness.abort();
+      this.state.userInitiatedAbort = true;
+      this.state.harness.abort();
     });
 
     // Use onDebug callback for Shift+Ctrl+D
-    this.ui.onDebug = () => {
+    this.state.ui.onDebug = () => {
       // Toggle debug mode or show debug info
       // Currently unused - could add debug panel in future
     };
@@ -1185,13 +1021,13 @@ ${instructions}`,
     const listener: HarnessEventListener = async event => {
       await this.handleEvent(event);
     };
-    this.unsubscribe = this.harness.subscribe(listener);
+    this.state.unsubscribe = this.state.harness.subscribe(listener);
   }
 
   private updateTerminalTitle(): void {
-    const appName = this.options.appName || 'Mastra Code';
+    const appName = this.state.options.appName || 'Mastra Code';
     const cwd = process.cwd().split('/').pop() || '';
-    this.ui.terminal.setTitle(`${appName} - ${cwd}`);
+    this.state.ui.terminal.setTitle(`${appName} - ${cwd}`);
   }
 
   // ===========================================================================
@@ -1279,33 +1115,33 @@ ${instructions}`,
         this.showInfo(`Switched to thread: ${event.threadId}`);
         this.resetStatusLineState();
         await this.renderExistingMessages();
-        await this.harness.loadOMProgress();
+        await this.state.harness.loadOMProgress();
         this.syncOMThresholdsFromHarness();
-        this.tokenUsage = this.harness.getTokenUsage();
+        this.state.tokenUsage = this.state.harness.getTokenUsage();
         this.updateStatusLine();
         // Restore tasks from thread state
-        const threadState = this.harness.getState() as {
+        const threadState = this.state.harness.getState() as {
           tasks?: TaskItem[];
         };
-        if (this.taskProgress) {
-          this.taskProgress.updateTasks(threadState.tasks ?? []);
-          this.ui.requestRender();
+        if (this.state.taskProgress) {
+          this.state.taskProgress.updateTasks(threadState.tasks ?? []);
+          this.state.ui.requestRender();
         }
         break;
       }
       case 'thread_created': {
         this.showInfo(`Created thread: ${event.thread.id}`);
         // Sync inherited resource-level settings
-        const tState = this.harness.getState() as any;
+        const tState = this.state.harness.getState() as any;
         if (typeof tState?.escapeAsCancel === 'boolean') {
-          this.editor.escapeEnabled = tState.escapeAsCancel;
+          this.state.editor.escapeEnabled = tState.escapeAsCancel;
         }
         // Clear stale tasks from the previous thread
-        if (this.taskProgress) {
-          this.taskProgress.updateTasks([]);
+        if (this.state.taskProgress) {
+          this.state.taskProgress.updateTasks([]);
         }
-        this.previousTasks = [];
-        this.taskWriteInsertIndex = -1;
+        this.state.previousTasks = [];
+        this.state.taskWriteInsertIndex = -1;
         this.updateStatusLine();
         break;
       }
@@ -1349,28 +1185,28 @@ ${instructions}`,
       // Buffering lifecycle
       case 'om_buffering_start':
         if (event.operationType === 'observation') {
-          this.bufferingMessages = true;
+          this.state.bufferingMessages = true;
         } else {
-          this.bufferingObservations = true;
+          this.state.bufferingObservations = true;
         }
-        this.activeActivationMarker = undefined;
-        this.activeBufferingMarker = new OMMarkerComponent({
+        this.state.activeActivationMarker = undefined;
+        this.state.activeBufferingMarker = new OMMarkerComponent({
           type: 'om_buffering_start',
           operationType: event.operationType,
           tokensToBuffer: event.tokensToBuffer,
         });
-        this.addOMMarkerToChat(this.activeBufferingMarker);
+        this.addOMMarkerToChat(this.state.activeBufferingMarker);
         this.updateStatusLine();
-        this.ui.requestRender();
+        this.state.ui.requestRender();
         break;
       case 'om_buffering_end':
         if (event.operationType === 'observation') {
-          this.bufferingMessages = false;
+          this.state.bufferingMessages = false;
         } else {
-          this.bufferingObservations = false;
+          this.state.bufferingObservations = false;
         }
-        if (this.activeBufferingMarker) {
-          this.activeBufferingMarker.update({
+        if (this.state.activeBufferingMarker) {
+          this.state.activeBufferingMarker.update({
             type: 'om_buffering_end',
             operationType: event.operationType,
             tokensBuffered: event.tokensBuffered,
@@ -1378,33 +1214,33 @@ ${instructions}`,
             observations: event.observations,
           });
         }
-        this.activeBufferingMarker = undefined;
+        this.state.activeBufferingMarker = undefined;
         this.updateStatusLine();
-        this.ui.requestRender();
+        this.state.ui.requestRender();
         break;
 
       case 'om_buffering_failed':
         if (event.operationType === 'observation') {
-          this.bufferingMessages = false;
+          this.state.bufferingMessages = false;
         } else {
-          this.bufferingObservations = false;
+          this.state.bufferingObservations = false;
         }
-        if (this.activeBufferingMarker) {
-          this.activeBufferingMarker.update({
+        if (this.state.activeBufferingMarker) {
+          this.state.activeBufferingMarker.update({
             type: 'om_buffering_failed',
             operationType: event.operationType,
             error: event.error,
           });
         }
-        this.activeBufferingMarker = undefined;
+        this.state.activeBufferingMarker = undefined;
         this.updateStatusLine();
-        this.ui.requestRender();
+        this.state.ui.requestRender();
         break;
       case 'om_activation':
         if (event.operationType === 'observation') {
-          this.bufferingMessages = false;
+          this.state.bufferingMessages = false;
         } else {
-          this.bufferingObservations = false;
+          this.state.bufferingObservations = false;
         }
         const activationData: OMMarkerData = {
           type: 'om_activation',
@@ -1412,15 +1248,15 @@ ${instructions}`,
           tokensActivated: event.tokensActivated,
           observationTokens: event.observationTokens,
         };
-        this.activeActivationMarker = new OMMarkerComponent(activationData);
-        this.addOMMarkerToChat(this.activeActivationMarker);
-        this.activeBufferingMarker = undefined;
+        this.state.activeActivationMarker = new OMMarkerComponent(activationData);
+        this.addOMMarkerToChat(this.state.activeActivationMarker);
+        this.state.activeBufferingMarker = undefined;
         this.updateStatusLine();
-        this.ui.requestRender();
+        this.state.ui.requestRender();
         break;
 
       case 'follow_up_queued': {
-        const totalPending = (event.count as number) + this.pendingSlashCommands.length;
+        const totalPending = (event.count as number) + this.state.pendingSlashCommands.length;
         this.showInfo(`Follow-up queued (${totalPending} pending)`);
         break;
       }
@@ -1463,24 +1299,24 @@ ${instructions}`,
 
       case 'task_updated': {
         const tasks = event.tasks as TaskItem[];
-        if (this.taskProgress) {
-          this.taskProgress.updateTasks(tasks ?? []);
+        if (this.state.taskProgress) {
+          this.state.taskProgress.updateTasks(tasks ?? []);
 
           // Find the most recent task_write tool component and get its position
           let insertIndex = -1;
-          for (let i = this.allToolComponents.length - 1; i >= 0; i--) {
-            const comp = this.allToolComponents[i];
+          for (let i = this.state.allToolComponents.length - 1; i >= 0; i--) {
+            const comp = this.state.allToolComponents[i];
             if ((comp as any).toolName === 'task_write') {
-              insertIndex = this.chatContainer.children.indexOf(comp as any);
-              this.chatContainer.removeChild(comp as any);
-              this.allToolComponents.splice(i, 1);
+              insertIndex = this.state.chatContainer.children.indexOf(comp as any);
+              this.state.chatContainer.removeChild(comp as any);
+              this.state.allToolComponents.splice(i, 1);
               break;
             }
           }
           // Fall back to the position recorded during streaming (when no inline component was created)
-          if (insertIndex === -1 && this.taskWriteInsertIndex >= 0) {
-            insertIndex = this.taskWriteInsertIndex;
-            this.taskWriteInsertIndex = -1;
+          if (insertIndex === -1 && this.state.taskWriteInsertIndex >= 0) {
+            insertIndex = this.state.taskWriteInsertIndex;
+            this.state.taskWriteInsertIndex = -1;
           }
 
           // Check if all tasks are completed
@@ -1488,15 +1324,15 @@ ${instructions}`,
           if (allCompleted) {
             // Show collapsed completed list (pinned/live)
             this.renderCompletedTasksInline(tasks, insertIndex, true);
-          } else if (this.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+          } else if (this.state.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
             // Tasks were cleared
-            this.renderClearedTasksInline(this.previousTasks, insertIndex);
+            this.renderClearedTasksInline(this.state.previousTasks, insertIndex);
           }
 
           // Track for next diff
-          this.previousTasks = tasks ? [...tasks] : [];
+          this.state.previousTasks = tasks ? [...tasks] : [];
 
-          this.ui.requestRender();
+          this.state.ui.requestRender();
         }
         break;
       }
@@ -1521,9 +1357,9 @@ ${instructions}`,
 
   private handleUsageUpdate(usage: TokenUsage): void {
     // Accumulate token usage
-    this.tokenUsage.promptTokens += usage.promptTokens;
-    this.tokenUsage.completionTokens += usage.completionTokens;
-    this.tokenUsage.totalTokens += usage.totalTokens;
+    this.state.tokenUsage.promptTokens += usage.promptTokens;
+    this.state.tokenUsage.completionTokens += usage.completionTokens;
+    this.state.tokenUsage.totalTokens += usage.totalTokens;
     this.updateStatusLine();
   }
 
@@ -1536,26 +1372,26 @@ ${instructions}`,
    * Called after thread load to pick up per-thread threshold overrides.
    */
   private syncOMThresholdsFromHarness(): void {
-    const obsThreshold = this.harness.getObservationThreshold();
-    const refThreshold = this.harness.getReflectionThreshold();
-    this.omProgress.threshold = obsThreshold;
-    this.omProgress.thresholdPercent = obsThreshold > 0 ? (this.omProgress.pendingTokens / obsThreshold) * 100 : 0;
-    this.omProgress.reflectionThreshold = refThreshold;
-    this.omProgress.reflectionThresholdPercent =
-      refThreshold > 0 ? (this.omProgress.observationTokens / refThreshold) * 100 : 0;
+    const obsThreshold = this.state.harness.getObservationThreshold();
+    const refThreshold = this.state.harness.getReflectionThreshold();
+    this.state.omProgress.threshold = obsThreshold;
+    this.state.omProgress.thresholdPercent = obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
+    this.state.omProgress.reflectionThreshold = refThreshold;
+    this.state.omProgress.reflectionThresholdPercent =
+      refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
     this.updateStatusLine();
   }
   private resetStatusLineState(): void {
-    const prev = this.omProgress;
-    this.omProgress = {
+    const prev = this.state.omProgress;
+    this.state.omProgress = {
       ...defaultOMProgressState(),
       // Preserve thresholds across resets
       threshold: prev.threshold,
       reflectionThreshold: prev.reflectionThreshold,
     };
-    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-    this.bufferingMessages = false;
-    this.bufferingObservations = false;
+    this.state.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.state.bufferingMessages = false;
+    this.state.bufferingObservations = false;
     this.updateStatusLine();
   }
 
@@ -1569,70 +1405,70 @@ ${instructions}`,
    * streams in.  Falls back to a normal append when nothing is streaming.
    */
   private addOMMarkerToChat(marker: OMMarkerComponent): void {
-    if (this.streamingComponent) {
-      const idx = this.chatContainer.children.indexOf(this.streamingComponent);
+    if (this.state.streamingComponent) {
+      const idx = this.state.chatContainer.children.indexOf(this.state.streamingComponent);
       if (idx >= 0) {
-        this.chatContainer.children.splice(idx, 0, marker);
-        this.chatContainer.invalidate();
+        this.state.chatContainer.children.splice(idx, 0, marker);
+        this.state.chatContainer.invalidate();
         return;
       }
     }
-    this.chatContainer.addChild(marker);
+    this.state.chatContainer.addChild(marker);
   }
 
   private addOMOutputToChat(output: OMOutputComponent): void {
-    if (this.streamingComponent) {
-      const idx = this.chatContainer.children.indexOf(this.streamingComponent);
+    if (this.state.streamingComponent) {
+      const idx = this.state.chatContainer.children.indexOf(this.state.streamingComponent);
       if (idx >= 0) {
-        this.chatContainer.children.splice(idx, 0, output);
-        this.chatContainer.invalidate();
+        this.state.chatContainer.children.splice(idx, 0, output);
+        this.state.chatContainer.invalidate();
         return;
       }
     }
-    this.chatContainer.addChild(output);
+    this.state.chatContainer.addChild(output);
   }
   private handleOMStatus(event: Extract<HarnessEvent, { type: 'om_status' }>): void {
     const { windows, generationCount, stepNumber } = event;
     const { active, buffered } = windows;
 
     // Update active window state
-    this.omProgress.pendingTokens = active.messages.tokens;
-    this.omProgress.threshold = active.messages.threshold;
-    this.omProgress.thresholdPercent =
+    this.state.omProgress.pendingTokens = active.messages.tokens;
+    this.state.omProgress.threshold = active.messages.threshold;
+    this.state.omProgress.thresholdPercent =
       active.messages.threshold > 0 ? (active.messages.tokens / active.messages.threshold) * 100 : 0;
-    this.omProgress.observationTokens = active.observations.tokens;
-    this.omProgress.reflectionThreshold = active.observations.threshold;
-    this.omProgress.reflectionThresholdPercent =
+    this.state.omProgress.observationTokens = active.observations.tokens;
+    this.state.omProgress.reflectionThreshold = active.observations.threshold;
+    this.state.omProgress.reflectionThresholdPercent =
       active.observations.threshold > 0 ? (active.observations.tokens / active.observations.threshold) * 100 : 0;
 
     // Update buffered state
-    this.omProgress.buffered = {
+    this.state.omProgress.buffered = {
       observations: { ...buffered.observations },
       reflection: { ...buffered.reflection },
     };
-    this.omProgress.generationCount = generationCount;
-    this.omProgress.stepNumber = stepNumber;
+    this.state.omProgress.generationCount = generationCount;
+    this.state.omProgress.stepNumber = stepNumber;
 
     // Drive buffering animation from status fields
-    this.bufferingMessages = buffered.observations.status === 'running';
-    this.bufferingObservations = buffered.reflection.status === 'running';
+    this.state.bufferingMessages = buffered.observations.status === 'running';
+    this.state.bufferingObservations = buffered.reflection.status === 'running';
 
     this.updateStatusLine();
   }
 
   private handleOMObservationStart(cycleId: string, tokensToObserve: number): void {
-    this.omProgress.status = 'observing';
-    this.omProgress.cycleId = cycleId;
-    this.omProgress.startTime = Date.now();
+    this.state.omProgress.status = 'observing';
+    this.state.omProgress.cycleId = cycleId;
+    this.state.omProgress.startTime = Date.now();
     // Show in-progress marker in chat
-    this.activeOMMarker = new OMMarkerComponent({
+    this.state.activeOMMarker = new OMMarkerComponent({
       type: 'om_observation_start',
       tokensToObserve,
       operationType: 'observation',
     });
-    this.addOMMarkerToChat(this.activeOMMarker);
+    this.addOMMarkerToChat(this.state.activeOMMarker);
     this.updateStatusLine();
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
   private handleOMObservationEnd(
     _cycleId: string,
@@ -1643,21 +1479,21 @@ ${instructions}`,
     currentTask?: string,
     suggestedResponse?: string,
   ): void {
-    this.omProgress.status = 'idle';
-    this.omProgress.cycleId = undefined;
-    this.omProgress.startTime = undefined;
-    this.omProgress.observationTokens = observationTokens;
+    this.state.omProgress.status = 'idle';
+    this.state.omProgress.cycleId = undefined;
+    this.state.omProgress.startTime = undefined;
+    this.state.omProgress.observationTokens = observationTokens;
     // Messages have been observed — reset pending tokens
-    this.omProgress.pendingTokens = 0;
-    this.omProgress.thresholdPercent = 0;
+    this.state.omProgress.pendingTokens = 0;
+    this.state.omProgress.thresholdPercent = 0;
     // Remove in-progress marker — the output box replaces it
-    if (this.activeOMMarker) {
-      const idx = this.chatContainer.children.indexOf(this.activeOMMarker);
+    if (this.state.activeOMMarker) {
+      const idx = this.state.chatContainer.children.indexOf(this.state.activeOMMarker);
       if (idx >= 0) {
-        this.chatContainer.children.splice(idx, 1);
-        this.chatContainer.invalidate();
+        this.state.chatContainer.children.splice(idx, 1);
+        this.state.chatContainer.invalidate();
       }
-      this.activeOMMarker = undefined;
+      this.state.activeOMMarker = undefined;
     }
     // Show observation output in a bordered box (includes marker info in footer)
     const outputComponent = new OMOutputComponent({
@@ -1671,26 +1507,26 @@ ${instructions}`,
     });
     this.addOMOutputToChat(outputComponent);
     this.updateStatusLine();
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   private handleOMReflectionStart(cycleId: string, tokensToReflect: number): void {
-    this.omProgress.status = 'reflecting';
-    this.omProgress.cycleId = cycleId;
-    this.omProgress.startTime = Date.now();
+    this.state.omProgress.status = 'reflecting';
+    this.state.omProgress.cycleId = cycleId;
+    this.state.omProgress.startTime = Date.now();
     // Update observation tokens to show the total being reflected
-    this.omProgress.observationTokens = tokensToReflect;
-    this.omProgress.reflectionThresholdPercent =
-      this.omProgress.reflectionThreshold > 0 ? (tokensToReflect / this.omProgress.reflectionThreshold) * 100 : 0;
+    this.state.omProgress.observationTokens = tokensToReflect;
+    this.state.omProgress.reflectionThresholdPercent =
+      this.state.omProgress.reflectionThreshold > 0 ? (tokensToReflect / this.state.omProgress.reflectionThreshold) * 100 : 0;
     // Show in-progress marker in chat
-    this.activeOMMarker = new OMMarkerComponent({
+    this.state.activeOMMarker = new OMMarkerComponent({
       type: 'om_observation_start',
       tokensToObserve: tokensToReflect,
       operationType: 'reflection',
     });
-    this.addOMMarkerToChat(this.activeOMMarker);
+    this.addOMMarkerToChat(this.state.activeOMMarker);
     this.updateStatusLine();
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
   private handleOMReflectionEnd(
     _cycleId: string,
@@ -1699,22 +1535,22 @@ ${instructions}`,
     observations?: string,
   ): void {
     // Capture the pre-compression observation tokens for the marker display
-    const preCompressionTokens = this.omProgress.observationTokens;
-    this.omProgress.status = 'idle';
-    this.omProgress.cycleId = undefined;
-    this.omProgress.startTime = undefined;
+    const preCompressionTokens = this.state.omProgress.observationTokens;
+    this.state.omProgress.status = 'idle';
+    this.state.omProgress.cycleId = undefined;
+    this.state.omProgress.startTime = undefined;
     // Observations were compressed — update token count
-    this.omProgress.observationTokens = compressedTokens;
-    this.omProgress.reflectionThresholdPercent =
-      this.omProgress.reflectionThreshold > 0 ? (compressedTokens / this.omProgress.reflectionThreshold) * 100 : 0;
+    this.state.omProgress.observationTokens = compressedTokens;
+    this.state.omProgress.reflectionThresholdPercent =
+      this.state.omProgress.reflectionThreshold > 0 ? (compressedTokens / this.state.omProgress.reflectionThreshold) * 100 : 0;
     // Remove in-progress marker — the output box replaces it
-    if (this.activeOMMarker) {
-      const idx = this.chatContainer.children.indexOf(this.activeOMMarker);
+    if (this.state.activeOMMarker) {
+      const idx = this.state.chatContainer.children.indexOf(this.state.activeOMMarker);
       if (idx >= 0) {
-        this.chatContainer.children.splice(idx, 1);
-        this.chatContainer.invalidate();
+        this.state.chatContainer.children.splice(idx, 1);
+        this.state.chatContainer.invalidate();
       }
-      this.activeOMMarker = undefined;
+      this.state.activeOMMarker = undefined;
     }
     // Show reflection output in a bordered box (includes marker info in footer)
     const outputComponent = new OMOutputComponent({
@@ -1727,28 +1563,28 @@ ${instructions}`,
     this.addOMOutputToChat(outputComponent);
     // Revert spinner to "Working..."
     this.updateLoaderText('Working...');
-    this.ui.requestRender();
+    this.state.ui.requestRender();
     this.updateStatusLine();
   }
 
   private handleOMFailed(_cycleId: string, error: string, operation: 'observation' | 'reflection'): void {
-    this.omProgress.status = 'idle';
-    this.omProgress.cycleId = undefined;
-    this.omProgress.startTime = undefined;
+    this.state.omProgress.status = 'idle';
+    this.state.omProgress.cycleId = undefined;
+    this.state.omProgress.startTime = undefined;
     // Update existing marker in-place, or create new one
     const failData: OMMarkerData = {
       type: 'om_observation_failed',
       error,
       operationType: operation,
     };
-    if (this.activeOMMarker) {
-      this.activeOMMarker.update(failData);
-      this.activeOMMarker = undefined;
+    if (this.state.activeOMMarker) {
+      this.state.activeOMMarker.update(failData);
+      this.state.activeOMMarker = undefined;
     } else {
       this.addOMMarkerToChat(new OMMarkerComponent(failData));
     }
     this.updateStatusLine();
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   /** Update the loading animation text (e.g., "Working..." → "Observing...") */
@@ -1758,29 +1594,29 @@ ${instructions}`,
   }
 
   private handleAgentStart(): void {
-    this.isAgentActive = true;
-    if (!this.gradientAnimator) {
-      this.gradientAnimator = new GradientAnimator(() => {
+    this.state.isAgentActive = true;
+    if (!this.state.gradientAnimator) {
+      this.state.gradientAnimator = new GradientAnimator(() => {
         this.updateStatusLine();
       });
     }
-    this.gradientAnimator.start();
+    this.state.gradientAnimator.start();
     this.updateStatusLine();
   }
   private handleAgentEnd(): void {
-    this.isAgentActive = false;
-    if (this.gradientAnimator) {
-      this.gradientAnimator.fadeOut();
+    this.state.isAgentActive = false;
+    if (this.state.gradientAnimator) {
+      this.state.gradientAnimator.fadeOut();
     }
     this.updateStatusLine();
 
-    if (this.streamingComponent) {
-      this.streamingComponent = undefined;
-      this.streamingMessage = undefined;
+    if (this.state.streamingComponent) {
+      this.state.streamingComponent = undefined;
+      this.state.streamingMessage = undefined;
     }
-    this.followUpComponents = [];
-    this.pendingTools.clear();
-    this.toolInputBuffers.clear();
+    this.state.followUpComponents = [];
+    this.state.pendingTools.clear();
+    this.state.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
     this.notify('agent_done');
@@ -1788,8 +1624,8 @@ ${instructions}`,
     // Drain queued slash commands once all harness-level follow-ups are done.
     // Each slash command that triggers sendMessage will start a new agent
     // operation, and handleAgentEnd will fire again to drain the next one.
-    if (this.pendingSlashCommands.length > 0 && this.harness.getFollowUpCount() === 0) {
-      const nextCommand = this.pendingSlashCommands.shift()!;
+    if (this.state.pendingSlashCommands.length > 0 && this.state.harness.getFollowUpCount() === 0) {
+      const nextCommand = this.state.pendingSlashCommands.shift()!;
       this.handleSlashCommand(nextCommand).catch(error => {
         this.showError(error instanceof Error ? error.message : 'Queued slash command failed');
       });
@@ -1797,50 +1633,50 @@ ${instructions}`,
   }
 
   private handleAgentAborted(): void {
-    this.isAgentActive = false;
-    if (this.gradientAnimator) {
-      this.gradientAnimator.fadeOut();
+    this.state.isAgentActive = false;
+    if (this.state.gradientAnimator) {
+      this.state.gradientAnimator.fadeOut();
     }
     this.updateStatusLine();
 
     // Update streaming message to show it was interrupted
-    if (this.streamingComponent && this.streamingMessage) {
-      this.streamingMessage.stopReason = 'aborted';
-      this.streamingMessage.errorMessage = 'Interrupted';
-      this.streamingComponent.updateContent(this.streamingMessage);
-      this.streamingComponent = undefined;
-      this.streamingMessage = undefined;
-    } else if (this.userInitiatedAbort) {
+    if (this.state.streamingComponent && this.state.streamingMessage) {
+      this.state.streamingMessage.stopReason = 'aborted';
+      this.state.streamingMessage.errorMessage = 'Interrupted';
+      this.state.streamingComponent.updateContent(this.state.streamingMessage);
+      this.state.streamingComponent = undefined;
+      this.state.streamingMessage = undefined;
+    } else if (this.state.userInitiatedAbort) {
       // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), 1, 0));
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), 1, 0));
     }
-    this.userInitiatedAbort = false;
+    this.state.userInitiatedAbort = false;
 
-    this.followUpComponents = [];
-    this.pendingSlashCommands = [];
-    this.pendingTools.clear();
-    this.toolInputBuffers.clear();
+    this.state.followUpComponents = [];
+    this.state.pendingSlashCommands = [];
+    this.state.pendingTools.clear();
+    this.state.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after interruption
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   private handleAgentError(): void {
-    this.isAgentActive = false;
-    if (this.gradientAnimator) {
-      this.gradientAnimator.fadeOut();
+    this.state.isAgentActive = false;
+    if (this.state.gradientAnimator) {
+      this.state.gradientAnimator.fadeOut();
     }
     this.updateStatusLine();
 
-    if (this.streamingComponent) {
-      this.streamingComponent = undefined;
-      this.streamingMessage = undefined;
+    if (this.state.streamingComponent) {
+      this.state.streamingComponent = undefined;
+      this.state.streamingMessage = undefined;
     }
 
-    this.followUpComponents = [];
-    this.pendingSlashCommands = [];
-    this.pendingTools.clear();
-    this.toolInputBuffers.clear();
+    this.state.followUpComponents = [];
+    this.state.pendingSlashCommands = [];
+    this.state.pendingTools.clear();
+    this.state.toolInputBuffers.clear();
     // Keep allToolComponents so Ctrl+E continues to work after errors
   }
 
@@ -1849,26 +1685,26 @@ ${instructions}`,
       this.addUserMessage(message);
     } else if (message.role === 'assistant') {
       // Clear tool component references when starting a new assistant message
-      this.lastAskUserComponent = undefined;
-      this.lastSubmitPlanComponent = undefined;
-      if (!this.streamingComponent) {
-        this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-        this.addChildBeforeFollowUps(this.streamingComponent);
-        this.streamingMessage = message;
+      this.state.lastAskUserComponent = undefined;
+      this.state.lastSubmitPlanComponent = undefined;
+      if (!this.state.streamingComponent) {
+        this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+        this.addChildBeforeFollowUps(this.state.streamingComponent);
+        this.state.streamingMessage = message;
         const trailingParts = this.getTrailingContentParts(message);
-        this.streamingComponent.updateContent({
+        this.state.streamingComponent.updateContent({
           ...message,
           content: trailingParts,
         });
       }
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
   private handleMessageUpdate(message: HarnessMessage): void {
-    if (!this.streamingComponent || message.role !== 'assistant') return;
+    if (!this.state.streamingComponent || message.role !== 'assistant') return;
 
-    this.streamingMessage = message;
+    this.state.streamingMessage = message;
     // Check for new tool calls
     for (const content of message.content) {
       if (content.type === 'tool_call') {
@@ -1877,47 +1713,47 @@ ${instructions}`,
         // SubagentExecutionComponent handles the visual rendering.
         // Check subagentToolCallIds separately since handleToolStart
         // may have already added the ID to seenToolCallIds.
-        if (content.name === 'subagent' && !this.subagentToolCallIds.has(content.id)) {
-          this.seenToolCallIds.add(content.id);
-          this.subagentToolCallIds.add(content.id);
+        if (content.name === 'subagent' && !this.state.subagentToolCallIds.has(content.id)) {
+          this.state.seenToolCallIds.add(content.id);
+          this.state.subagentToolCallIds.add(content.id);
           // Freeze current component with pre-subagent content
           const preContent = this.getContentBeforeToolCall(message, content.id);
-          this.streamingComponent.updateContent({
+          this.state.streamingComponent.updateContent({
             ...message,
             content: preContent,
           });
-          this.streamingComponent = new AssistantMessageComponent(
+          this.state.streamingComponent = new AssistantMessageComponent(
             undefined,
-            this.hideThinkingBlock,
+            this.state.hideThinkingBlock,
             getMarkdownTheme(),
           );
-          this.addChildBeforeFollowUps(this.streamingComponent);
+          this.addChildBeforeFollowUps(this.state.streamingComponent);
           continue;
         }
 
-        if (!this.seenToolCallIds.has(content.id)) {
-          this.seenToolCallIds.add(content.id);
+        if (!this.state.seenToolCallIds.has(content.id)) {
+          this.state.seenToolCallIds.add(content.id);
 
           this.addChildBeforeFollowUps(new Text('', 0, 0));
           const component = new ToolExecutionComponentEnhanced(
             content.name,
             content.args,
-            { showImages: false, collapsedByDefault: !this.toolOutputExpanded },
-            this.ui,
+            { showImages: false, collapsedByDefault: !this.state.toolOutputExpanded },
+            this.state.ui,
           );
-          component.setExpanded(this.toolOutputExpanded);
+          component.setExpanded(this.state.toolOutputExpanded);
           this.addChildBeforeFollowUps(component);
-          this.pendingTools.set(content.id, component);
-          this.allToolComponents.push(component);
+          this.state.pendingTools.set(content.id, component);
+          this.state.allToolComponents.push(component);
 
-          this.streamingComponent = new AssistantMessageComponent(
+          this.state.streamingComponent = new AssistantMessageComponent(
             undefined,
-            this.hideThinkingBlock,
+            this.state.hideThinkingBlock,
             getMarkdownTheme(),
           );
-          this.addChildBeforeFollowUps(this.streamingComponent);
+          this.addChildBeforeFollowUps(this.state.streamingComponent);
         } else {
-          const component = this.pendingTools.get(content.id);
+          const component = this.state.pendingTools.get(content.id);
           if (component) {
             component.updateArgs(content.args);
           }
@@ -1926,12 +1762,12 @@ ${instructions}`,
     }
 
     const trailingParts = this.getTrailingContentParts(message);
-    this.streamingComponent.updateContent({
+    this.state.streamingComponent.updateContent({
       ...message,
       content: trailingParts,
     });
 
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   /**
@@ -1965,8 +1801,8 @@ ${instructions}`,
     for (let i = idx - 1; i >= 0; i--) {
       const c = message.content[i]!;
       if (
-        (c.type === 'tool_call' && 'id' in c && this.seenToolCallIds.has(c.id)) ||
-        (c.type === 'tool_result' && 'id' in c && this.seenToolCallIds.has(c.id))
+        (c.type === 'tool_call' && 'id' in c && this.state.seenToolCallIds.has(c.id)) ||
+        (c.type === 'tool_result' && 'id' in c && this.state.seenToolCallIds.has(c.id))
       ) {
         startIdx = i + 1;
         break;
@@ -1979,48 +1815,48 @@ ${instructions}`,
   private handleMessageEnd(message: HarnessMessage): void {
     if (message.role === 'user') return;
 
-    if (this.streamingComponent && message.role === 'assistant') {
-      this.streamingMessage = message;
+    if (this.state.streamingComponent && message.role === 'assistant') {
+      this.state.streamingMessage = message;
       const trailingParts = this.getTrailingContentParts(message);
-      this.streamingComponent.updateContent({
+      this.state.streamingComponent.updateContent({
         ...message,
         content: trailingParts,
       });
 
       if (message.stopReason === 'aborted' || message.stopReason === 'error') {
         const errorMessage = message.errorMessage || 'Operation aborted';
-        for (const [, component] of this.pendingTools) {
+        for (const [, component] of this.state.pendingTools) {
           component.updateResult({
             content: [{ type: 'text', text: errorMessage }],
             isError: true,
           });
         }
-        this.pendingTools.clear();
-        this.toolInputBuffers.clear();
+        this.state.pendingTools.clear();
+        this.state.toolInputBuffers.clear();
       }
 
-      this.streamingComponent = undefined;
-      this.streamingMessage = undefined;
-      this.seenToolCallIds.clear();
-      this.subagentToolCallIds.clear();
+      this.state.streamingComponent = undefined;
+      this.state.streamingMessage = undefined;
+      this.state.seenToolCallIds.clear();
+      this.state.subagentToolCallIds.clear();
     }
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
   /**
    * Insert a child into the chat container before any follow-up user messages.
    * If no follow-ups are pending, appends to end.
    */
   private addChildBeforeFollowUps(child: Component): void {
-    if (this.followUpComponents.length > 0) {
-      const firstFollowUp = this.followUpComponents[0];
-      const idx = this.chatContainer.children.indexOf(firstFollowUp as any);
+    if (this.state.followUpComponents.length > 0) {
+      const firstFollowUp = this.state.followUpComponents[0];
+      const idx = this.state.chatContainer.children.indexOf(firstFollowUp as any);
       if (idx >= 0) {
-        (this.chatContainer.children as unknown[]).splice(idx, 0, child);
-        this.chatContainer.invalidate();
+        (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
+        this.state.chatContainer.invalidate();
         return;
       }
     }
-    this.chatContainer.addChild(child);
+    this.state.chatContainer.addChild(child);
   }
   private handleToolApprovalRequired(toolCallId: string, toolName: string, args: unknown): void {
     // Compute category label for the dialog
@@ -2036,47 +1872,47 @@ ${instructions}`,
       args,
       categoryLabel,
       onAction: (action: ApprovalAction) => {
-        this.ui.hideOverlay();
-        this.pendingApprovalDismiss = null;
+        this.state.ui.hideOverlay();
+        this.state.pendingApprovalDismiss = null;
         if (action.type === 'approve') {
-          this.harness.resolveToolApprovalDecision('approve');
+          this.state.harness.resolveToolApprovalDecision('approve');
         } else if (action.type === 'always_allow_category') {
-          this.harness.resolveToolApprovalDecision('always_allow_category');
+          this.state.harness.resolveToolApprovalDecision('always_allow_category');
         } else if (action.type === 'yolo') {
-          this.harness.setState({ yolo: true } as any);
-          this.harness.resolveToolApprovalDecision('approve');
+          this.state.harness.setState({ yolo: true } as any);
+          this.state.harness.resolveToolApprovalDecision('approve');
           this.updateStatusLine();
         } else {
-          this.harness.resolveToolApprovalDecision('decline');
+          this.state.harness.resolveToolApprovalDecision('decline');
         }
       },
     });
 
     // Set up Ctrl+C dismiss to decline
-    this.pendingApprovalDismiss = () => {
-      this.ui.hideOverlay();
-      this.pendingApprovalDismiss = null;
-      this.harness.resolveToolApprovalDecision('decline');
+    this.state.pendingApprovalDismiss = () => {
+      this.state.ui.hideOverlay();
+      this.state.pendingApprovalDismiss = null;
+      this.state.harness.resolveToolApprovalDecision('decline');
     };
 
     // Show the dialog as an overlay
-    this.ui.showOverlay(dialog, {
+    this.state.ui.showOverlay(dialog, {
       width: '70%',
       anchor: 'center',
     });
     dialog.focused = true;
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   private handleToolStart(toolCallId: string, toolName: string, args: unknown): void {
     // Component may already exist if created early by handleToolInputStart
-    const existingComponent = this.pendingTools.get(toolCallId);
+    const existingComponent = this.state.pendingTools.get(toolCallId);
 
     if (existingComponent) {
       // Component was created during input streaming — update with final args
       existingComponent.updateArgs(args);
-    } else if (!this.seenToolCallIds.has(toolCallId)) {
-      this.seenToolCallIds.add(toolCallId);
+    } else if (!this.state.seenToolCallIds.has(toolCallId)) {
+      this.state.seenToolCallIds.add(toolCallId);
 
       // Skip creating the regular tool component for subagent calls
       // The SubagentExecutionComponent will handle all the rendering
@@ -2088,30 +1924,30 @@ ${instructions}`,
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         args,
-        { showImages: false, collapsedByDefault: !this.toolOutputExpanded },
-        this.ui,
+        { showImages: false, collapsedByDefault: !this.state.toolOutputExpanded },
+        this.state.ui,
       );
-      component.setExpanded(this.toolOutputExpanded);
+      component.setExpanded(this.state.toolOutputExpanded);
       this.addChildBeforeFollowUps(component);
-      this.pendingTools.set(toolCallId, component);
-      this.allToolComponents.push(component);
+      this.state.pendingTools.set(toolCallId, component);
+      this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-      this.addChildBeforeFollowUps(this.streamingComponent);
+      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.state.streamingComponent);
 
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
 
     // Track ask_user tool components for inline question placement
-    const component = this.pendingTools.get(toolCallId);
+    const component = this.state.pendingTools.get(toolCallId);
     if (component) {
       if (toolName === 'ask_user') {
-        this.lastAskUserComponent = component;
+        this.state.lastAskUserComponent = component;
       }
       // Track submit_plan tool components for inline plan approval placement
       if (toolName === 'submit_plan') {
-        this.lastSubmitPlanComponent = component;
+        this.state.lastSubmitPlanComponent = component;
       }
     }
 
@@ -2120,20 +1956,20 @@ ${instructions}`,
       const toolArgs = args as Record<string, unknown>;
       const filePath = toolArgs?.path as string;
       if (filePath) {
-        this.pendingFileTools.set(toolCallId, { toolName, filePath });
+        this.state.pendingFileTools.set(toolCallId, { toolName, filePath });
       }
     }
   }
 
   private handleToolUpdate(toolCallId: string, partialResult: unknown): void {
-    const component = this.pendingTools.get(toolCallId);
+    const component = this.state.pendingTools.get(toolCallId);
     if (component) {
       const result: ToolResult = {
         content: [{ type: 'text', text: this.formatToolResult(partialResult) }],
         isError: false,
       };
       component.updateResult(result, true);
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
@@ -2141,10 +1977,10 @@ ${instructions}`,
    * Handle streaming shell output from execute_command tool.
    */
   private handleShellOutput(toolCallId: string, output: string, _stream: 'stdout' | 'stderr'): void {
-    const component = this.pendingTools.get(toolCallId);
+    const component = this.state.pendingTools.get(toolCallId);
     if (component?.appendStreamingOutput) {
       component.appendStreamingOutput(output);
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
@@ -2153,43 +1989,43 @@ ${instructions}`,
    * Creates the tool component early so partial args can render as they arrive.
    */
   private handleToolInputStart(toolCallId: string, toolName: string): void {
-    this.toolInputBuffers.set(toolCallId, { text: '', toolName });
+    this.state.toolInputBuffers.set(toolCallId, { text: '', toolName });
 
     // Mark as seen so handleMessageUpdate doesn't create a duplicate component
-    if (!this.seenToolCallIds.has(toolCallId)) {
-      this.seenToolCallIds.add(toolCallId);
+    if (!this.state.seenToolCallIds.has(toolCallId)) {
+      this.state.seenToolCallIds.add(toolCallId);
     }
 
     // Create the component early so deltas can update it
     // Skip for subagent (handled by SubagentExecutionComponent) and task_write (streams to pinned TaskProgressComponent)
     if (toolName === 'task_write') {
       // Record position so task_updated can place inline completed/cleared display here
-      this.taskWriteInsertIndex = this.chatContainer.children.length;
+      this.state.taskWriteInsertIndex = this.state.chatContainer.children.length;
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
       // (even though task_write doesn't render a tool component inline, we still need
       // to split the streaming component so getTrailingContentParts doesn't overwrite it)
-      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-      this.addChildBeforeFollowUps(this.streamingComponent);
-      this.ui.requestRender();
+      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.state.streamingComponent);
+      this.state.ui.requestRender();
     } else if (toolName !== 'subagent') {
       this.addChildBeforeFollowUps(new Text('', 0, 0));
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         {},
-        { showImages: false, collapsedByDefault: !this.toolOutputExpanded },
-        this.ui,
+        { showImages: false, collapsedByDefault: !this.state.toolOutputExpanded },
+        this.state.ui,
       );
-      component.setExpanded(this.toolOutputExpanded);
+      component.setExpanded(this.state.toolOutputExpanded);
       this.addChildBeforeFollowUps(component);
-      this.pendingTools.set(toolCallId, component);
-      this.allToolComponents.push(component);
+      this.state.pendingTools.set(toolCallId, component);
+      this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.streamingComponent = new AssistantMessageComponent(undefined, this.hideThinkingBlock, getMarkdownTheme());
-      this.addChildBeforeFollowUps(this.streamingComponent);
+      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.addChildBeforeFollowUps(this.state.streamingComponent);
 
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
@@ -2198,7 +2034,7 @@ ${instructions}`,
    * Buffers the partial JSON text and attempts to parse it, updating the component's args.
    */
   private handleToolInputDelta(toolCallId: string, argsTextDelta: string): void {
-    const buffer = this.toolInputBuffers.get(toolCallId);
+    const buffer = this.state.toolInputBuffers.get(toolCallId);
     if (buffer === undefined) return;
 
     buffer.text += argsTextDelta;
@@ -2208,7 +2044,7 @@ ${instructions}`,
       const partialArgs = parsePartialJson(updatedText);
       if (partialArgs && typeof partialArgs === 'object') {
         // Update inline tool component if it exists
-        const component = this.pendingTools.get(toolCallId);
+        const component = this.state.pendingTools.get(toolCallId);
         if (component) {
           component.updateArgs(partialArgs);
         }
@@ -2218,14 +2054,14 @@ ${instructions}`,
         // If all existing pinned items are already completed, the list is stable and
         // we can stream in new items immediately (including the last one).
         // Otherwise, exclude the last item to avoid jumpy partial-content matches.
-        if (buffer.toolName === 'task_write' && this.taskProgress) {
+        if (buffer.toolName === 'task_write' && this.state.taskProgress) {
           const tasks = (partialArgs as { tasks?: TaskItem[] }).tasks;
           if (tasks && tasks.length > 0) {
-            const existing = this.taskProgress.getTasks();
+            const existing = this.state.taskProgress.getTasks();
             const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
             if (allExistingDone) {
               // Old list is done — start fresh, stream new items immediately
-              this.taskProgress.updateTasks(tasks as TaskItem[]);
+              this.state.taskProgress.updateTasks(tasks as TaskItem[]);
             } else if (tasks.length > 1) {
               // Merge only completed items (exclude the last still-streaming one)
               const merged = [...existing];
@@ -2238,12 +2074,12 @@ ${instructions}`,
                   merged.push(task);
                 }
               }
-              this.taskProgress.updateTasks(merged);
+              this.state.taskProgress.updateTasks(merged);
             }
           }
         }
 
-        this.ui.requestRender();
+        this.state.ui.requestRender();
       }
     } catch {
       // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
@@ -2254,7 +2090,7 @@ ${instructions}`,
    * Clean up the input buffer when tool input streaming ends.
    */
   private handleToolInputEnd(toolCallId: string): void {
-    this.toolInputBuffers.delete(toolCallId);
+    this.state.toolInputBuffers.delete(toolCallId);
   }
 
   /**
@@ -2267,72 +2103,72 @@ ${instructions}`,
     options?: Array<{ label: string; description?: string }>,
   ): Promise<void> {
     return new Promise(resolve => {
-      if (this.options.inlineQuestions) {
+      if (this.state.options.inlineQuestions) {
         // Inline mode: Add question component to chat
         const questionComponent = new AskQuestionInlineComponent(
           {
             question,
             options,
             onSubmit: answer => {
-              this.activeInlineQuestion = undefined;
-              this.harness.respondToQuestion(questionId, answer);
+              this.state.activeInlineQuestion = undefined;
+              this.state.harness.respondToQuestion(questionId, answer);
               resolve();
             },
             onCancel: () => {
-              this.activeInlineQuestion = undefined;
-              this.harness.respondToQuestion(questionId, '(skipped)');
+              this.state.activeInlineQuestion = undefined;
+              this.state.harness.respondToQuestion(questionId, '(skipped)');
               resolve();
             },
           },
-          this.ui,
+          this.state.ui,
         );
 
         // Store as active question
-        this.activeInlineQuestion = questionComponent;
+        this.state.activeInlineQuestion = questionComponent;
 
         // Insert the question right after the ask_user tool component
-        if (this.lastAskUserComponent) {
+        if (this.state.lastAskUserComponent) {
           // Find the position of the ask_user component
-          const children = [...this.chatContainer.children];
+          const children = [...this.state.chatContainer.children];
           // Since lastAskUserComponent extends Container, it should be in children
-          const askUserIndex = children.indexOf(this.lastAskUserComponent as any);
+          const askUserIndex = children.indexOf(this.state.lastAskUserComponent as any);
 
           if (askUserIndex >= 0) {
             // Debug: Log the positioning
 
             // Clear and rebuild with question in the right place
-            this.chatContainer.clear();
+            this.state.chatContainer.clear();
             // Add all children up to and including the ask_user tool
             for (let i = 0; i <= askUserIndex; i++) {
-              this.chatContainer.addChild(children[i]!);
+              this.state.chatContainer.addChild(children[i]!);
             }
 
             // Add the question component with spacing
-            this.chatContainer.addChild(new Spacer(1));
-            this.chatContainer.addChild(questionComponent);
-            this.chatContainer.addChild(new Spacer(1));
+            this.state.chatContainer.addChild(new Spacer(1));
+            this.state.chatContainer.addChild(questionComponent);
+            this.state.chatContainer.addChild(new Spacer(1));
 
             // Add remaining children
             for (let i = askUserIndex + 1; i < children.length; i++) {
-              this.chatContainer.addChild(children[i]!);
+              this.state.chatContainer.addChild(children[i]!);
             }
           } else {
             // Fallback: add at the end
-            this.chatContainer.addChild(new Spacer(1));
-            this.chatContainer.addChild(questionComponent);
-            this.chatContainer.addChild(new Spacer(1));
+            this.state.chatContainer.addChild(new Spacer(1));
+            this.state.chatContainer.addChild(questionComponent);
+            this.state.chatContainer.addChild(new Spacer(1));
           }
         } else {
           // Fallback: add at the end if no ask_user component tracked
-          this.chatContainer.addChild(new Spacer(1));
-          this.chatContainer.addChild(questionComponent);
-          this.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(questionComponent);
+          this.state.chatContainer.addChild(new Spacer(1));
         }
 
-        this.ui.requestRender();
+        this.state.ui.requestRender();
 
         // Ensure the chat scrolls to show the question
-        this.chatContainer.invalidate();
+        this.state.chatContainer.invalidate();
 
         // Focus the question component
         questionComponent.focused = true;
@@ -2342,17 +2178,17 @@ ${instructions}`,
           question,
           options,
           onSubmit: answer => {
-            this.ui.hideOverlay();
-            this.harness.respondToQuestion(questionId, answer);
+            this.state.ui.hideOverlay();
+            this.state.harness.respondToQuestion(questionId, answer);
             resolve();
           },
           onCancel: () => {
-            this.ui.hideOverlay();
-            this.harness.respondToQuestion(questionId, '(skipped)');
+            this.state.ui.hideOverlay();
+            this.state.harness.respondToQuestion(questionId, '(skipped)');
             resolve();
           },
         });
-        this.ui.showOverlay(dialog, { width: '70%', anchor: 'center' });
+        this.state.ui.showOverlay(dialog, { width: '70%', anchor: 'center' });
         dialog.focused = true;
       }
 
@@ -2374,13 +2210,13 @@ ${instructions}`,
             { label: 'No', description: 'Deny access' },
           ],
           onSubmit: answer => {
-            this.activeInlineQuestion = undefined;
-            this.harness.respondToQuestion(questionId, answer);
+            this.state.activeInlineQuestion = undefined;
+            this.state.harness.respondToQuestion(questionId, answer);
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
-            this.harness.respondToQuestion(questionId, 'No');
+            this.state.activeInlineQuestion = undefined;
+            this.state.harness.respondToQuestion(questionId, 'No');
             resolve();
           },
           formatResult: answer => {
@@ -2389,18 +2225,18 @@ ${instructions}`,
           },
           isNegativeAnswer: answer => !answer.toLowerCase().startsWith('y'),
         },
-        this.ui,
+        this.state.ui,
       );
 
       // Store as active question so input routing works
-      this.activeInlineQuestion = questionComponent;
+      this.state.activeInlineQuestion = questionComponent;
 
       // Add to chat
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
 
       this.notify('sandbox_access', `Sandbox access requested: ${requestedPath}`);
     });
@@ -2418,9 +2254,9 @@ ${instructions}`,
           title,
           plan,
           onApprove: async () => {
-            this.activeInlinePlanApproval = undefined;
+            this.state.activeInlinePlanApproval = undefined;
             // Store the approved plan in harness state
-            await this.harness.setState({
+            await this.state.harness.setState({
               activePlan: {
                 title,
                 plan,
@@ -2428,7 +2264,7 @@ ${instructions}`,
               },
             });
             // Wait for plan approval to complete (switches mode, aborts stream)
-            await this.harness.respondToPlanApproval(planId, {
+            await this.state.harness.respondToPlanApproval(planId, {
               action: 'approved',
             });
             this.updateStatusLine();
@@ -2450,47 +2286,47 @@ ${instructions}`,
             resolve();
           },
           onReject: async (feedback?: string) => {
-            this.activeInlinePlanApproval = undefined;
-            this.harness.respondToPlanApproval(planId, {
+            this.state.activeInlinePlanApproval = undefined;
+            this.state.harness.respondToPlanApproval(planId, {
               action: 'rejected',
               feedback,
             });
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
       // Store as active plan approval
-      this.activeInlinePlanApproval = approvalComponent;
+      this.state.activeInlinePlanApproval = approvalComponent;
 
       // Insert after the submit_plan tool component (same pattern as ask_user)
-      if (this.lastSubmitPlanComponent) {
-        const children = [...this.chatContainer.children];
-        const submitPlanIndex = children.indexOf(this.lastSubmitPlanComponent as any);
+      if (this.state.lastSubmitPlanComponent) {
+        const children = [...this.state.chatContainer.children];
+        const submitPlanIndex = children.indexOf(this.state.lastSubmitPlanComponent as any);
         if (submitPlanIndex >= 0) {
-          this.chatContainer.clear();
+          this.state.chatContainer.clear();
           for (let i = 0; i <= submitPlanIndex; i++) {
-            this.chatContainer.addChild(children[i]!);
+            this.state.chatContainer.addChild(children[i]!);
           }
-          this.chatContainer.addChild(new Spacer(1));
-          this.chatContainer.addChild(approvalComponent);
-          this.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(approvalComponent);
+          this.state.chatContainer.addChild(new Spacer(1));
           for (let i = submitPlanIndex + 1; i < children.length; i++) {
-            this.chatContainer.addChild(children[i]!);
+            this.state.chatContainer.addChild(children[i]!);
           }
         } else {
-          this.chatContainer.addChild(new Spacer(1));
-          this.chatContainer.addChild(approvalComponent);
-          this.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(new Spacer(1));
+          this.state.chatContainer.addChild(approvalComponent);
+          this.state.chatContainer.addChild(new Spacer(1));
         }
       } else {
-        this.chatContainer.addChild(new Spacer(1));
-        this.chatContainer.addChild(approvalComponent);
-        this.chatContainer.addChild(new Spacer(1));
+        this.state.chatContainer.addChild(new Spacer(1));
+        this.state.chatContainer.addChild(approvalComponent);
+        this.state.chatContainer.addChild(new Spacer(1));
       }
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
       approvalComponent.focused = true;
 
       this.notify('plan_approval', `Plan "${title}" requires approval`);
@@ -2498,7 +2334,7 @@ ${instructions}`,
   }
   private handleToolEnd(toolCallId: string, result: unknown, isError: boolean): void {
     // If this is a subagent tool, store the result in the SubagentExecutionComponent
-    const subagentComponent = this.pendingSubagents.get(toolCallId);
+    const subagentComponent = this.state.pendingSubagents.get(toolCallId);
     if (subagentComponent) {
       // The final result is available here
       const resultText = this.formatToolResult(result);
@@ -2508,21 +2344,21 @@ ${instructions}`,
     }
 
     // Track successful file modifications for /diff command
-    const pendingFile = this.pendingFileTools.get(toolCallId);
+    const pendingFile = this.state.pendingFileTools.get(toolCallId);
     if (pendingFile && !isError) {
-      const existing = this.modifiedFiles.get(pendingFile.filePath);
+      const existing = this.state.modifiedFiles.get(pendingFile.filePath);
       if (existing) {
         existing.operations.push(pendingFile.toolName);
       } else {
-        this.modifiedFiles.set(pendingFile.filePath, {
+        this.state.modifiedFiles.set(pendingFile.filePath, {
           operations: [pendingFile.toolName],
           firstModified: new Date(),
         });
       }
     }
-    this.pendingFileTools.delete(toolCallId);
+    this.state.pendingFileTools.delete(toolCallId);
 
-    const component = this.pendingTools.get(toolCallId);
+    const component = this.state.pendingTools.get(toolCallId);
     if (component) {
       const toolResult: ToolResult = {
         content: [{ type: 'text', text: this.formatToolResult(result) }],
@@ -2530,8 +2366,8 @@ ${instructions}`,
       };
       component.updateResult(toolResult, false);
 
-      this.pendingTools.delete(toolCallId);
-      this.ui.requestRender();
+      this.state.pendingTools.delete(toolCallId);
+      this.state.ui.requestRender();
     }
   }
 
@@ -2610,11 +2446,11 @@ ${instructions}`,
 
     if (insertIndex >= 0) {
       // Insert at the position where the task_write tool was
-      this.chatContainer.children.splice(insertIndex, 0, container);
-      this.chatContainer.invalidate();
+      this.state.chatContainer.children.splice(insertIndex, 0, container);
+      this.state.chatContainer.invalidate();
     } else {
       // Fallback: append at end
-      this.chatContainer.addChild(container);
+      this.state.chatContainer.addChild(container);
     }
   }
 
@@ -2634,10 +2470,10 @@ ${instructions}`,
       container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
     }
     if (insertIndex >= 0) {
-      this.chatContainer.children.splice(insertIndex, 0, container);
-      this.chatContainer.invalidate();
+      this.state.chatContainer.children.splice(insertIndex, 0, container);
+      this.state.chatContainer.invalidate();
     } else {
-      this.chatContainer.addChild(container);
+      this.state.chatContainer.addChild(container);
     }
   }
   // ===========================================================================
@@ -2646,32 +2482,32 @@ ${instructions}`,
 
   private handleSubagentStart(toolCallId: string, agentType: string, task: string, modelId?: string): void {
     // Create a dedicated rendering component for this subagent run
-    const component = new SubagentExecutionComponent(agentType, task, this.ui, modelId);
-    this.pendingSubagents.set(toolCallId, component);
-    this.allToolComponents.push(component as any);
+    const component = new SubagentExecutionComponent(agentType, task, this.state.ui, modelId);
+    this.state.pendingSubagents.set(toolCallId, component);
+    this.state.allToolComponents.push(component as any);
 
     // Insert before the current streamingComponent so subagent box
     // appears between pre-subagent text and post-subagent text
-    if (this.streamingComponent) {
-      const idx = this.chatContainer.children.indexOf(this.streamingComponent as any);
+    if (this.state.streamingComponent) {
+      const idx = this.state.chatContainer.children.indexOf(this.state.streamingComponent as any);
       if (idx >= 0) {
-        (this.chatContainer.children as unknown[]).splice(idx, 0, component);
-        this.chatContainer.invalidate();
+        (this.state.chatContainer.children as unknown[]).splice(idx, 0, component);
+        this.state.chatContainer.invalidate();
       } else {
-        this.chatContainer.addChild(component);
+        this.state.chatContainer.addChild(component);
       }
     } else {
-      this.chatContainer.addChild(component);
+      this.state.chatContainer.addChild(component);
     }
 
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   private handleSubagentToolStart(toolCallId: string, subToolName: string, subToolArgs: unknown): void {
-    const component = this.pendingSubagents.get(toolCallId);
+    const component = this.state.pendingSubagents.get(toolCallId);
     if (component) {
       component.addToolStart(subToolName, subToolArgs);
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
@@ -2681,19 +2517,19 @@ ${instructions}`,
     subToolResult: unknown,
     isError: boolean,
   ): void {
-    const component = this.pendingSubagents.get(toolCallId);
+    const component = this.state.pendingSubagents.get(toolCallId);
     if (component) {
       component.addToolEnd(subToolName, subToolResult, isError);
-      this.ui.requestRender();
+      this.state.ui.requestRender();
     }
   }
 
   private handleSubagentEnd(toolCallId: string, isError: boolean, durationMs: number, result?: string): void {
-    const component = this.pendingSubagents.get(toolCallId);
+    const component = this.state.pendingSubagents.get(toolCallId);
     if (component) {
       component.finish(isError, durationMs, result);
-      this.pendingSubagents.delete(toolCallId);
-      this.ui.requestRender();
+      this.state.pendingSubagents.delete(toolCallId);
+      this.state.ui.requestRender();
     }
   }
 
@@ -2703,12 +2539,12 @@ ${instructions}`,
 
   private getUserInput(): Promise<string> {
     return new Promise(resolve => {
-      this.editor.onSubmit = (text: string) => {
+      this.state.editor.onSubmit = (text: string) => {
         // Add to history for arrow up/down navigation (skip empty)
         if (text.trim()) {
-          this.editor.addToHistory(text);
+          this.state.editor.addToHistory(text);
         }
-        this.editor.setText('');
+        this.state.editor.setText('');
         resolve(text);
       };
     });
@@ -2719,9 +2555,9 @@ ${instructions}`,
   // ===========================================================================
 
   private async showThreadSelector(): Promise<void> {
-    const threads = await this.harness.listThreads({ allResources: true });
-    const currentId = this.pendingNewThread ? null : this.harness.getCurrentThreadId();
-    const currentResourceId = this.harness.getResourceId();
+    const threads = await this.state.harness.listThreads({ allResources: true });
+    const currentId = this.state.pendingNewThread ? null : this.state.harness.getCurrentThreadId();
+    const currentResourceId = this.state.harness.getResourceId();
 
     if (threads.length === 0) {
       this.showInfo('No threads yet. Send a message to create one.');
@@ -2730,12 +2566,12 @@ ${instructions}`,
 
     return new Promise(resolve => {
       const selector = new ThreadSelectorComponent({
-        tui: this.ui,
+        tui: this.state.ui,
         threads,
         currentThreadId: currentId,
         currentResourceId,
         getMessagePreview: async (threadId: string) => {
-          const firstUserMessage = await this.harness.getFirstUserMessageForThread(threadId);
+          const firstUserMessage = await this.state.harness.getFirstUserMessageForThread(threadId);
           if (firstUserMessage) {
             const text = this.extractTextContent(firstUserMessage);
             return this.truncatePreview(text);
@@ -2743,7 +2579,7 @@ ${instructions}`,
           return null;
         },
         onSelect: async thread => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
 
           if (thread.id === currentId) {
             resolve();
@@ -2752,10 +2588,10 @@ ${instructions}`,
 
           // If thread is from a different resource, switch resource first
           if (thread.resourceId !== currentResourceId) {
-            this.harness.setResourceId(thread.resourceId);
+            this.state.harness.setResourceId(thread.resourceId);
           }
           try {
-            await this.harness.switchThread(thread.id);
+            await this.state.harness.switchThread(thread.id);
           } catch (error) {
             if (error instanceof ThreadLockError) {
               this.showThreadLockPrompt(thread.title || thread.id, error.ownerPid);
@@ -2764,13 +2600,13 @@ ${instructions}`,
             }
             throw error;
           }
-          this.pendingNewThread = false;
+          this.state.pendingNewThread = false;
 
           // Clear chat and render existing messages
-          this.chatContainer.clear();
-          this.allToolComponents = [];
-          this.pendingTools.clear();
-          this.toolInputBuffers.clear();
+          this.state.chatContainer.clear();
+          this.state.allToolComponents = [];
+          this.state.pendingTools.clear();
+          this.state.toolInputBuffers.clear();
           await this.renderExistingMessages();
           this.updateStatusLine();
 
@@ -2778,12 +2614,12 @@ ${instructions}`,
           resolve();
         },
         onCancel: () => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
           resolve();
         },
       });
 
-      this.ui.showOverlay(selector, {
+      this.state.ui.showOverlay(selector, {
         width: '80%',
         maxHeight: '60%',
         anchor: 'center',
@@ -2797,8 +2633,8 @@ ${instructions}`,
   // ===========================================================================
 
   private async tagThreadWithDir(): Promise<void> {
-    const threadId = this.harness.getCurrentThreadId();
-    if (!threadId && this.pendingNewThread) {
+    const threadId = this.state.harness.getCurrentThreadId();
+    if (!threadId && this.state.pendingNewThread) {
       this.showInfo('No active thread yet — send a message first.');
       return;
     }
@@ -2807,7 +2643,7 @@ ${instructions}`,
       return;
     }
 
-    const projectPath = (this.harness.getState() as any)?.projectPath as string | undefined;
+    const projectPath = (this.state.harness.getState() as any)?.projectPath as string | undefined;
     if (!projectPath) {
       this.showInfo('Could not detect current project path.');
       return;
@@ -2822,26 +2658,26 @@ ${instructions}`,
           options: [{ label: 'Yes' }, { label: 'No' }],
           formatResult: answer => (answer === 'Yes' ? `Tagged thread with: ${dirName}` : `Thread not tagged`),
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             if (answer.toLowerCase().startsWith('y')) {
-              await this.harness.persistThreadSetting('projectPath', projectPath);
+              await this.state.harness.persistThreadSetting('projectPath', projectPath);
             }
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
   /**
@@ -2858,7 +2694,7 @@ ${instructions}`,
         ],
         formatResult: answer => (answer === 'Yes' ? 'Thread created' : 'Exiting.'),
         onSubmit: async answer => {
-          this.activeInlineQuestion = undefined;
+          this.state.activeInlineQuestion = undefined;
           if (answer.toLowerCase().startsWith('y')) {
             // pendingNewThread is already true — thread will be
             // created lazily on first message
@@ -2867,18 +2703,18 @@ ${instructions}`,
           }
         },
         onCancel: () => {
-          this.activeInlineQuestion = undefined;
+          this.state.activeInlineQuestion = undefined;
           process.exit(0);
         },
       },
-      this.ui,
+      this.state.ui,
     );
 
-    this.activeInlineQuestion = questionComponent;
-    this.chatContainer.addChild(questionComponent);
-    this.chatContainer.addChild(new Spacer(1));
-    this.ui.requestRender();
-    this.chatContainer.invalidate();
+    this.state.activeInlineQuestion = questionComponent;
+    this.state.chatContainer.addChild(questionComponent);
+    this.state.chatContainer.addChild(new Spacer(1));
+    this.state.ui.requestRender();
+    this.state.chatContainer.invalidate();
   }
 
   // ===========================================================================
@@ -2886,7 +2722,7 @@ ${instructions}`,
   // ===========================================================================
 
   private async handleSandboxCommand(args: string[]): Promise<void> {
-    const state = this.harness.getState() as {
+    const state = this.state.harness.getState() as {
       sandboxAllowedPaths?: string[];
     };
     const currentPaths = state.sandboxAllowedPaths ?? [];
@@ -2933,7 +2769,7 @@ ${instructions}`,
             return answer;
           },
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             if (answer === 'Add path') {
               resolve();
               await this.showSandboxAddPrompt();
@@ -2949,19 +2785,19 @@ ${instructions}`,
             }
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -2975,29 +2811,29 @@ ${instructions}`,
             return `Added: ${resolved}`;
           },
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             await this.sandboxAddPath(answer);
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
   private async sandboxAddPath(rawPath: string): Promise<void> {
-    const state = this.harness.getState() as {
+    const state = this.state.harness.getState() as {
       sandboxAllowedPaths?: string[];
     };
     const currentPaths = state.sandboxAllowedPaths ?? [];
@@ -3014,8 +2850,8 @@ ${instructions}`,
       return;
     }
     const updated = [...currentPaths, resolved];
-    this.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.harness.persistThreadSetting('sandboxAllowedPaths', updated);
+    this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
+    await this.state.harness.persistThreadSetting('sandboxAllowedPaths', updated);
     this.showInfo(`Added to sandbox: ${resolved}`);
   }
 
@@ -3027,8 +2863,8 @@ ${instructions}`,
       return;
     }
     const updated = currentPaths.filter(p => p !== match);
-    this.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.harness.persistThreadSetting('sandboxAllowedPaths', updated);
+    this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
+    await this.state.harness.persistThreadSetting('sandboxAllowedPaths', updated);
     this.showInfo(`Removed from sandbox: ${match}`);
   }
 
@@ -3040,7 +2876,7 @@ ${instructions}`,
    * Get the workspace, preferring harness-owned workspace over the direct option.
    */
   private getResolvedWorkspace(): Workspace | undefined {
-    return this.harness.getWorkspace() ?? this.workspace;
+    return this.state.harness.getWorkspace() ?? this.state.workspace;
   }
 
   private async showSkillsList(): Promise<void> {
@@ -3096,8 +2932,8 @@ ${instructions}`,
    * Flow: Mode → Scope → Model
    */
   private async showModelScopeSelector(): Promise<void> {
-    const modes = this.harness.getModes();
-    const currentMode = this.harness.getCurrentMode();
+    const modes = this.state.harness.getModes();
+    const currentMode = this.state.harness.getCurrentMode();
 
     // Sort modes with active mode first
     const sortedModes = [...modes].sort((a, b) => {
@@ -3122,7 +2958,7 @@ ${instructions}`,
             return `Mode: ${mode?.modeName ?? answer}`;
           },
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             const selected = modeOptions.find(m => m.label === answer);
             if (selected?.modeId && selected?.modeName) {
               await this.showModelScopeThenList(selected.modeId, selected.modeName);
@@ -3130,19 +2966,19 @@ ${instructions}`,
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -3173,7 +3009,7 @@ ${instructions}`,
           })),
           formatResult: answer => `${modeName} · ${answer}`,
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             const selected = scopes.find(s => s.label === answer);
             if (selected) {
               await this.showModelListForScope(selected.scope, modeId, modeName);
@@ -3181,19 +3017,19 @@ ${instructions}`,
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -3201,36 +3037,36 @@ ${instructions}`,
    * Show the model list for a specific mode and scope.
    */
   private async showModelListForScope(scope: 'global' | 'thread', modeId: string, modeName: string): Promise<void> {
-    const availableModels = await this.harness.getAvailableModels();
+    const availableModels = await this.state.harness.getAvailableModels();
 
     if (availableModels.length === 0) {
       this.showInfo('No models available. Check your Mastra configuration.');
       return;
     }
 
-    const currentModelId = this.harness.getCurrentModelId();
+    const currentModelId = this.state.harness.getCurrentModelId();
     const scopeLabel = scope === 'global' ? `${modeName} · Global` : `${modeName} · Thread`;
 
     return new Promise(resolve => {
       const selector = new ModelSelectorComponent({
-        tui: this.ui,
+        tui: this.state.ui,
         models: availableModels,
         currentModelId,
         title: `Select model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
-          this.ui.hideOverlay();
-          await this.harness.switchModel(model.id, scope, modeId);
+          this.state.ui.hideOverlay();
+          await this.state.harness.switchModel(model.id, scope, modeId);
           this.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
           this.updateStatusLine();
           resolve();
         },
         onCancel: () => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
           resolve();
         },
       });
 
-      this.ui.showOverlay(selector, {
+      this.state.ui.showOverlay(selector, {
         width: '80%',
         maxHeight: '60%',
         anchor: 'center',
@@ -3272,7 +3108,7 @@ ${instructions}`,
           })),
           formatResult: answer => `Subagent: ${answer}`,
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             const selected = agentTypes.find(t => t.label === answer);
             if (selected) {
               await this.showSubagentScopeThenList(selected.id, selected.label);
@@ -3280,19 +3116,19 @@ ${instructions}`,
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -3323,7 +3159,7 @@ ${instructions}`,
           })),
           formatResult: answer => `${agentTypeLabel} · ${answer}`,
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             const selected = scopes.find(s => s.label === answer);
             if (selected) {
               await this.showSubagentModelListForScope(selected.scope, agentType, agentTypeLabel);
@@ -3331,19 +3167,19 @@ ${instructions}`,
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -3355,7 +3191,7 @@ ${instructions}`,
     agentType: string,
     agentTypeLabel: string,
   ): Promise<void> {
-    const availableModels = await this.harness.getAvailableModels();
+    const availableModels = await this.state.harness.getAvailableModels();
 
     if (availableModels.length === 0) {
       this.showInfo('No models available. Check your Mastra configuration.');
@@ -3363,21 +3199,21 @@ ${instructions}`,
     }
 
     // Get current subagent model if set
-    const currentSubagentModel = await this.harness.getSubagentModelId(agentType);
+    const currentSubagentModel = await this.state.harness.getSubagentModelId(agentType);
     const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
     return new Promise(resolve => {
       const selector = new ModelSelectorComponent({
-        tui: this.ui,
+        tui: this.state.ui,
         models: availableModels,
         currentModelId: currentSubagentModel ?? undefined,
         title: `Select subagent model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
-          this.ui.hideOverlay();
-          await this.harness.setSubagentModelId(model.id, agentType);
+          this.state.ui.hideOverlay();
+          await this.state.harness.setSubagentModelId(model.id, agentType);
           if (scope === 'global') {
-            if (this.authStorage) {
-              this.authStorage.setSubagentModelId(model.id, agentType);
+            if (this.state.authStorage) {
+              this.state.authStorage.setSubagentModelId(model.id, agentType);
               this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
             } else {
               this.showError('Cannot persist global preference: auth storage not configured');
@@ -3388,12 +3224,12 @@ ${instructions}`,
           resolve();
         },
         onCancel: () => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
           resolve();
         },
       });
 
-      this.ui.showOverlay(selector, {
+      this.state.ui.showOverlay(selector, {
         width: '80%',
         maxHeight: '60%',
         anchor: 'center',
@@ -3408,17 +3244,17 @@ ${instructions}`,
 
   private async showOMSettings(): Promise<void> {
     // Get available models for the model submenus
-    const availableModels = await this.harness.getAvailableModels();
+    const availableModels = await this.state.harness.getAvailableModels();
     const modelOptions = availableModels.map(m => ({
       id: m.id,
       label: m.id,
     }));
 
     const config = {
-      observerModelId: this.harness.getObserverModelId(),
-      reflectorModelId: this.harness.getReflectorModelId(),
-      observationThreshold: this.harness.getObservationThreshold(),
-      reflectionThreshold: this.harness.getReflectionThreshold(),
+      observerModelId: this.state.harness.getObserverModelId(),
+      reflectorModelId: this.state.harness.getReflectorModelId(),
+      observationThreshold: this.state.harness.getObservationThreshold(),
+      reflectionThreshold: this.state.harness.getReflectionThreshold(),
     };
 
     return new Promise<void>(resolve => {
@@ -3426,37 +3262,37 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.harness.switchObserverModel(modelId);
+            await this.state.harness.switchObserverModel(modelId);
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.harness.switchReflectorModel(modelId);
+            await this.state.harness.switchReflectorModel(modelId);
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
-            this.harness.setState({ observationThreshold: value } as any);
-            this.omProgress.threshold = value;
-            this.omProgress.thresholdPercent = value > 0 ? (this.omProgress.pendingTokens / value) * 100 : 0;
+            this.state.harness.setState({ observationThreshold: value } as any);
+            this.state.omProgress.threshold = value;
+            this.state.omProgress.thresholdPercent = value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onReflectionThresholdChange: value => {
-            this.harness.setState({ reflectionThreshold: value } as any);
-            this.omProgress.reflectionThreshold = value;
-            this.omProgress.reflectionThresholdPercent =
-              value > 0 ? (this.omProgress.observationTokens / value) * 100 : 0;
+            this.state.harness.setState({ reflectionThreshold: value } as any);
+            this.state.omProgress.reflectionThreshold = value;
+            this.state.omProgress.reflectionThresholdPercent =
+              value > 0 ? (this.state.omProgress.observationTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onClose: () => {
-            this.ui.hideOverlay();
+            this.state.ui.hideOverlay();
             this.updateStatusLine();
             resolve();
           },
         },
         modelOptions,
-        this.ui,
+        this.state.ui,
       );
 
-      this.ui.showOverlay(settings, {
+      this.state.ui.showOverlay(settings, {
         width: '80%',
         maxHeight: '70%',
         anchor: 'center',
@@ -3469,9 +3305,9 @@ ${instructions}`,
   // ===========================================================================
   private async showPermissions(): Promise<void> {
     const { TOOL_CATEGORIES, getToolsForCategory } = await import('../permissions.js');
-    const rules = this.harness.getPermissionRules();
-    const grants = this.harness.getSessionGrants();
-    const isYolo = (this.harness.getState() as any).yolo === true;
+    const rules = this.state.harness.getPermissionRules();
+    const grants = this.state.harness.getSessionGrants();
+    const isYolo = (this.state.harness.getState() as any).yolo === true;
 
     const lines: string[] = [];
     lines.push('Tool Approval Permissions');
@@ -3521,40 +3357,40 @@ ${instructions}`,
   }
 
   private async showSettings(): Promise<void> {
-    const state = this.harness.getState() as any;
+    const state = this.state.harness.getState() as any;
     const config = {
       notifications: (state?.notifications ?? 'off') as NotificationMode,
       yolo: state?.yolo === true,
       thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
-      escapeAsCancel: this.editor.escapeEnabled,
+      escapeAsCancel: this.state.editor.escapeEnabled,
     };
 
     return new Promise<void>(resolve => {
       const settings = new SettingsComponent(config, {
         onNotificationsChange: async mode => {
-          await this.harness.setState({ notifications: mode });
+          await this.state.harness.setState({ notifications: mode });
           this.showInfo(`Notifications: ${mode}`);
         },
         onYoloChange: enabled => {
-          this.harness.setState({ yolo: enabled } as any);
+          this.state.harness.setState({ yolo: enabled } as any);
           this.updateStatusLine();
         },
         onThinkingLevelChange: async level => {
-          await this.harness.setState({ thinkingLevel: level } as any);
+          await this.state.harness.setState({ thinkingLevel: level } as any);
           this.updateStatusLine();
         },
         onEscapeAsCancelChange: async enabled => {
-          this.editor.escapeEnabled = enabled;
-          await this.harness.setState({ escapeAsCancel: enabled });
-          await this.harness.persistThreadSetting('escapeAsCancel', enabled);
+          this.state.editor.escapeEnabled = enabled;
+          await this.state.harness.setState({ escapeAsCancel: enabled });
+          await this.state.harness.persistThreadSetting('escapeAsCancel', enabled);
         },
         onClose: () => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
           resolve();
         },
       });
 
-      this.ui.showOverlay(settings, {
+      this.state.ui.showOverlay(settings, {
         width: '60%',
         maxHeight: '50%',
         anchor: 'center',
@@ -3568,7 +3404,7 @@ ${instructions}`,
 
   private async showLoginSelector(mode: 'login' | 'logout'): Promise<void> {
     const allProviders = getOAuthProviders();
-    const loggedInIds = allProviders.filter(p => this.authStorage?.isLoggedIn(p.id)).map(p => p.id);
+    const loggedInIds = allProviders.filter(p => this.state.authStorage?.isLoggedIn(p.id)).map(p => p.id);
 
     if (mode === 'logout') {
       if (loggedInIds.length === 0) {
@@ -3596,14 +3432,14 @@ ${instructions}`,
           })),
           formatResult: answer => (mode === 'login' ? `Logging in to ${answer}…` : `Logged out from ${answer}`),
           onSubmit: async answer => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             const provider = providers.find(p => p.name === answer);
             if (provider) {
               if (mode === 'login') {
                 await this.performLogin(provider.id);
               } else {
-                if (this.authStorage) {
-                  this.authStorage.logout(provider.id);
+                if (this.state.authStorage) {
+                  this.state.authStorage.logout(provider.id);
                   this.showInfo(`Logged out from ${provider.name}`);
                 } else {
                   this.showError('Auth storage not configured');
@@ -3613,19 +3449,19 @@ ${instructions}`,
             resolve();
           },
           onCancel: () => {
-            this.activeInlineQuestion = undefined;
+            this.state.activeInlineQuestion = undefined;
             resolve();
           },
         },
-        this.ui,
+        this.state.ui,
       );
 
-      this.activeInlineQuestion = questionComponent;
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(questionComponent);
-      this.chatContainer.addChild(new Spacer(1));
-      this.ui.requestRender();
-      this.chatContainer.invalidate();
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
     });
   }
 
@@ -3633,14 +3469,14 @@ ${instructions}`,
     const provider = getOAuthProviders().find(p => p.id === providerId);
     const providerName = provider?.name || providerId;
 
-    if (!this.authStorage) {
+    if (!this.state.authStorage) {
       this.showError('Auth storage not configured');
       return;
     }
 
     return new Promise(resolve => {
-      const dialog = new LoginDialogComponent(this.ui, providerId, (success, message) => {
-        this.ui.hideOverlay();
+      const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
+        this.state.ui.hideOverlay();
         if (success) {
           this.showInfo(`Successfully logged in to ${providerName}`);
         } else if (message) {
@@ -3650,14 +3486,14 @@ ${instructions}`,
       });
 
       // Show as overlay - same size as model selector
-      this.ui.showOverlay(dialog, {
+      this.state.ui.showOverlay(dialog, {
         width: '80%',
         maxHeight: '60%',
         anchor: 'center',
       });
       dialog.focused = true;
 
-      this.authStorage
+      this.state.authStorage
         .login(providerId, {
           onAuth: (info: { url: string; instructions?: string }) => {
             dialog.showAuth(info.url, info.instructions);
@@ -3671,12 +3507,12 @@ ${instructions}`,
           signal: dialog.signal,
         })
         .then(async () => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
 
           // Auto-switch to the provider's default model
-          const defaultModel = this.authStorage?.getDefaultModelForProvider(providerId as any);
+          const defaultModel = this.state.authStorage?.getDefaultModelForProvider(providerId as any);
           if (defaultModel) {
-            await this.harness.switchModel(defaultModel);
+            await this.state.harness.switchModel(defaultModel);
             this.updateStatusLine();
             this.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
@@ -3686,7 +3522,7 @@ ${instructions}`,
           resolve();
         })
         .catch((error: Error) => {
-          this.ui.hideOverlay();
+          this.state.ui.hideOverlay();
           if (error.message !== 'Login cancelled') {
             this.showError(`Failed to login: ${error.message}`);
           }
@@ -3705,16 +3541,16 @@ ${instructions}`,
 
     // Get OM token usage if available
     let omTokensText = '';
-    if (this.omProgress.observationTokens > 0) {
+    if (this.state.omProgress.observationTokens > 0) {
       omTokensText = `
-  Memory:     ${formatNumber(this.omProgress.observationTokens)} tokens`;
+  Memory:     ${formatNumber(this.state.omProgress.observationTokens)} tokens`;
     }
 
     this.showInfo(`Token Usage (Current Thread):
-  Input:      ${formatNumber(this.tokenUsage.promptTokens)} tokens
-  Output:     ${formatNumber(this.tokenUsage.completionTokens)} tokens${omTokensText}
+  Input:      ${formatNumber(this.state.tokenUsage.promptTokens)} tokens
+  Output:     ${formatNumber(this.state.tokenUsage.completionTokens)} tokens${omTokensText}
   ─────────────────────────────────────────
-  Total:      ${formatNumber(this.tokenUsage.totalTokens)} tokens
+  Total:      ${formatNumber(this.state.tokenUsage.totalTokens)} tokens
   
   Note: For cost estimates, check your provider's pricing page.`);
   }
@@ -3731,7 +3567,7 @@ ${instructions}`,
     const withoutSlashes = trimmedInput.replace(/^\/+/, '');
     if (trimmedInput.startsWith('/')) {
       const [cmdName, ...cmdArgs] = withoutSlashes.split(' ');
-      const customCommand = this.customSlashCommands.find(cmd => cmd.name === cmdName);
+      const customCommand = this.state.customSlashCommands.find(cmd => cmd.name === cmdName);
       if (customCommand) {
         await this.handleCustomSlashCommand(customCommand, cmdArgs);
         return true;
@@ -3744,20 +3580,20 @@ ${instructions}`,
     switch (command) {
       case 'new': {
         // Defer thread creation until first message
-        this.pendingNewThread = true;
-        this.chatContainer.clear();
-        this.pendingTools.clear();
-        this.toolInputBuffers.clear();
-        this.allToolComponents = [];
-        this.modifiedFiles.clear();
-        this.pendingFileTools.clear();
-        if (this.taskProgress) {
-          this.taskProgress.updateTasks([]);
+        this.state.pendingNewThread = true;
+        this.state.chatContainer.clear();
+        this.state.pendingTools.clear();
+        this.state.toolInputBuffers.clear();
+        this.state.allToolComponents = [];
+        this.state.modifiedFiles.clear();
+        this.state.pendingFileTools.clear();
+        if (this.state.taskProgress) {
+          this.state.taskProgress.updateTasks([]);
         }
-        this.previousTasks = [];
-        this.taskWriteInsertIndex = -1;
+        this.state.previousTasks = [];
+        this.state.taskWriteInsertIndex = -1;
         this.resetStatusLineState();
-        this.ui.requestRender();
+        this.state.ui.requestRender();
         this.showInfo('Ready for new conversation');
         return true;
       }
@@ -3783,15 +3619,15 @@ ${instructions}`,
       }
 
       case 'mode': {
-        const modes = this.harness.getModes();
+        const modes = this.state.harness.getModes();
         if (modes.length <= 1) {
           this.showInfo('Only one mode available');
           return true;
         }
         if (args[0]) {
-          await this.harness.switchMode(args[0]);
+          await this.state.harness.switchMode(args[0]);
         } else {
-          const currentMode = this.harness.getCurrentMode();
+          const currentMode = this.state.harness.getCurrentMode();
           const modeList = modes
             .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.id}${m.name ? ` - ${m.name}` : ''}`)
             .join('\n');
@@ -3816,7 +3652,7 @@ ${modeList}`);
         return true;
       }
       case 'think': {
-        const currentLevel = ((this.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
+        const currentLevel = ((this.state.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
         const levels = [
           { label: 'Off', id: 'off' },
           { label: 'Minimal', id: 'minimal' },
@@ -3827,7 +3663,7 @@ ${modeList}`);
         const currentIdx = levels.findIndex(l => l.id === currentLevel);
         const nextIdx = (currentIdx + 1) % levels.length;
         const next = levels[nextIdx]!;
-        await this.harness.setState({ thinkingLevel: next.id } as any);
+        await this.state.harness.setState({ thinkingLevel: next.id } as any);
         this.showInfo(`Thinking: ${next.label}`);
         this.updateStatusLine();
         return true;
@@ -3846,7 +3682,7 @@ ${modeList}`);
             this.showInfo(`Invalid policy: ${policy}. Must be one of: ${validPolicies.join(', ')}`);
             return true;
           }
-          this.harness.setPermissionCategory(category, policy);
+          this.state.harness.setPermissionCategory(category, policy);
           this.showInfo(`Set ${category} policy to: ${policy}`);
           return true;
         }
@@ -3854,8 +3690,8 @@ ${modeList}`);
         return true;
       }
       case 'yolo': {
-        const current = (this.harness.getState() as any).yolo === true;
-        this.harness.setState({ yolo: !current } as any);
+        const current = (this.state.harness.getState() as any).yolo === true;
+        this.state.harness.setState({ yolo: !current } as any);
         this.showInfo(!current ? 'YOLO mode ON — tools auto-approved' : 'YOLO mode OFF — tools require approval');
         this.updateStatusLine();
         return true;
@@ -3890,22 +3726,22 @@ ${modeList}`);
           this.showInfo('Usage: /name <title>');
           return true;
         }
-        if (!this.harness.getCurrentThreadId()) {
+        if (!this.state.harness.getCurrentThreadId()) {
           this.showInfo('No active thread. Send a message first.');
           return true;
         }
-        await this.harness.renameThread(title);
+        await this.state.harness.renameThread(title);
         this.showInfo(`Thread renamed to: ${title}`);
         return true;
       }
       case 'resource': {
         const sub = args[0]?.trim();
-        const current = this.harness.getResourceId();
-        const defaultId = this.harness.getDefaultResourceId();
+        const current = this.state.harness.getResourceId();
+        const defaultId = this.state.harness.getDefaultResourceId();
 
         if (!sub) {
           // Show current resource ID and list known ones
-          const knownIds = await this.harness.getKnownResourceIds();
+          const knownIds = await this.state.harness.getKnownResourceIds();
           const isOverridden = current !== defaultId;
           const lines = [
             `Current: ${current}${isOverridden ? ` (auto-detected: ${defaultId})` : ''}`,
@@ -3919,25 +3755,25 @@ ${modeList}`);
           ];
           this.showInfo(lines.join('\n'));
         } else if (sub === 'reset') {
-          this.harness.setResourceId(defaultId);
-          this.pendingNewThread = true;
-          this.chatContainer.clear();
-          this.pendingTools.clear();
-          this.toolInputBuffers.clear();
-          this.allToolComponents = [];
+          this.state.harness.setResourceId(defaultId);
+          this.state.pendingNewThread = true;
+          this.state.chatContainer.clear();
+          this.state.pendingTools.clear();
+          this.state.toolInputBuffers.clear();
+          this.state.allToolComponents = [];
           this.resetStatusLineState();
-          this.ui.requestRender();
+          this.state.ui.requestRender();
           this.showInfo(`Resource ID reset to: ${defaultId}`);
         } else {
           const newId = args.join(' ').trim();
-          this.harness.setResourceId(newId);
-          this.pendingNewThread = true;
-          this.chatContainer.clear();
-          this.pendingTools.clear();
-          this.toolInputBuffers.clear();
-          this.allToolComponents = [];
+          this.state.harness.setResourceId(newId);
+          this.state.pendingNewThread = true;
+          this.state.chatContainer.clear();
+          this.state.pendingTools.clear();
+          this.state.toolInputBuffers.clear();
+          this.state.allToolComponents = [];
           this.resetStatusLineState();
-          this.ui.requestRender();
+          this.state.ui.requestRender();
           this.showInfo(`Switched to resource: ${newId}`);
         }
         return true;
@@ -3948,15 +3784,15 @@ ${modeList}`);
         process.exit(0);
 
       case 'help': {
-        const modes = this.harness.getModes();
+        const modes = this.state.harness.getModes();
         const modeHelp = modes.length > 1 ? '\n/mode     - Switch or list modes' : '';
 
         // Build custom commands help
         let customCommandsHelp = '';
-        if (this.customSlashCommands.length > 0) {
+        if (this.state.customSlashCommands.length > 0) {
           customCommandsHelp =
             '\n\nCustom commands (use // prefix):\n' +
-            this.customSlashCommands
+            this.state.customSlashCommands
               .map(cmd => `  //${cmd.name.padEnd(8)} - ${cmd.description || 'No description'}`)
               .join('\n');
         }
@@ -4000,7 +3836,7 @@ Keyboard shortcuts:
       }
 
       case 'hooks': {
-        const hm = this.hookManager;
+        const hm = this.state.hookManager;
         if (!hm) {
           this.showInfo('Hooks system not initialized.');
           return true;
@@ -4068,7 +3904,7 @@ Keyboard shortcuts:
       }
 
       case 'mcp': {
-        const mm = this.mcpManager;
+        const mm = this.state.mcpManager;
         if (!mm) {
           this.showInfo('MCP system not initialized.');
           return true;
@@ -4143,7 +3979,7 @@ Keyboard shortcuts:
 
       default: {
         // Fall back to custom commands for single-slash input
-        const customCommand = this.customSlashCommands.find(cmd => cmd.name === command);
+        const customCommand = this.state.customSlashCommands.find(cmd => cmd.name === command);
         if (customCommand) {
           await this.handleCustomSlashCommand(customCommand, args);
           return true;
@@ -4158,15 +3994,15 @@ Keyboard shortcuts:
    * With no args: lists open PRs. With a PR number: reviews that PR.
    */
   private async handleReviewCommand(args: string[]): Promise<void> {
-    if (!this.harness.hasModelSelected()) {
+    if (!this.state.harness.hasModelSelected()) {
       this.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
       return;
     }
 
     // Ensure thread exists
-    if (this.pendingNewThread) {
-      await this.harness.createThread();
-      this.pendingNewThread = false;
+    if (this.state.pendingNewThread) {
+      await this.state.harness.createThread();
+      this.state.pendingNewThread = false;
       this.updateStatusLine();
     }
 
@@ -4215,10 +4051,10 @@ Keyboard shortcuts:
       ],
       createdAt: new Date(),
     });
-    this.ui.requestRender();
+    this.state.ui.requestRender();
 
     // Send to the agent
-    this.harness.sendMessage(prompt).catch(error => {
+    this.state.harness.sendMessage(prompt).catch(error => {
       this.showError(error instanceof Error ? error.message : 'Review failed');
     });
   }
@@ -4234,14 +4070,14 @@ Keyboard shortcuts:
       if (processedContent.trim()) {
         // Show bordered indicator immediately with content
         const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
-        this.allSlashCommandComponents.push(slashComp);
-        this.chatContainer.addChild(slashComp);
-        this.ui.requestRender();
+        this.state.allSlashCommandComponents.push(slashComp);
+        this.state.chatContainer.addChild(slashComp);
+        this.state.ui.requestRender();
 
         // Wrap in <slash-command> tags so the assistant sees the full
         // content but addUserMessage won't double-render it.
         const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
-        await this.harness.sendMessage(wrapped);
+        await this.state.harness.sendMessage(wrapped);
       } else {
         this.showInfo(`Executed //${command.name} (no output)`);
       }
@@ -4273,9 +4109,9 @@ Keyboard shortcuts:
       });
 
       // System reminders always go at the end (after plan approval)
-      this.chatContainer.addChild(new Spacer(1));
-      this.chatContainer.addChild(reminderComponent);
-      this.ui.requestRender();
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(reminderComponent);
+      this.state.ui.requestRender();
       return;
     }
 
@@ -4285,9 +4121,9 @@ Keyboard shortcuts:
       const commandName = slashCommandMatch[1]!;
       const commandContent = slashCommandMatch[2]!.trim();
       const slashComp = new SlashCommandComponent(commandName, commandContent);
-      this.allSlashCommandComponents.push(slashComp);
-      this.chatContainer.addChild(slashComp);
-      this.ui.requestRender();
+      this.state.allSlashCommandComponents.push(slashComp);
+      this.state.chatContainer.addChild(slashComp);
+      this.state.ui.requestRender();
       return;
     }
 
@@ -4296,25 +4132,25 @@ Keyboard shortcuts:
       const userComponent = new UserMessageComponent(prefix + displayText);
 
       // Always append to end — follow-ups should stay at the bottom
-      this.chatContainer.addChild(userComponent);
+      this.state.chatContainer.addChild(userComponent);
 
       // Track follow-up components sent while streaming so tool calls
       // can be inserted before them (keeping them anchored at bottom).
       // Only track if the agent is already streaming a response — otherwise
       // this is the initial message that triggers the response, not a follow-up.
-      if (this.isAgentActive && this.streamingComponent) {
-        this.followUpComponents.push(userComponent);
+      if (this.state.isAgentActive && this.state.streamingComponent) {
+        this.state.followUpComponents.push(userComponent);
       }
     }
   }
 
   private async renderExistingMessages(): Promise<void> {
-    this.chatContainer.clear();
-    this.pendingTools.clear();
-    this.toolInputBuffers.clear();
-    this.allToolComponents = [];
+    this.state.chatContainer.clear();
+    this.state.pendingTools.clear();
+    this.state.toolInputBuffers.clear();
+    this.state.allToolComponents = [];
 
-    const messages = await this.harness.getMessages({ limit: 40 });
+    const messages = await this.state.harness.getMessages({ limit: 40 });
 
     for (const message of messages) {
       if (message.role === 'user') {
@@ -4336,10 +4172,10 @@ Keyboard shortcuts:
               };
               const textComponent = new AssistantMessageComponent(
                 textMessage,
-                this.hideThinkingBlock,
+                this.state.hideThinkingBlock,
                 getMarkdownTheme(),
               );
-              this.chatContainer.addChild(textComponent);
+              this.state.chatContainer.addChild(textComponent);
               accumulatedContent = [];
             }
 
@@ -4368,7 +4204,7 @@ Keyboard shortcuts:
               const subComponent = new SubagentExecutionComponent(
                 subArgs?.agentType ?? 'unknown',
                 subArgs?.task ?? '',
-                this.ui,
+                this.state.ui,
                 modelId,
               );
               // Populate tool calls from metadata
@@ -4380,8 +4216,8 @@ Keyboard shortcuts:
               }
               // Mark as finished with result
               subComponent.finish(isErr ?? false, durationMs, resultText);
-              this.chatContainer.addChild(subComponent);
-              this.allToolComponents.push(subComponent as any);
+              this.state.chatContainer.addChild(subComponent);
+              this.state.allToolComponents.push(subComponent as any);
               continue;
             }
 
@@ -4391,9 +4227,9 @@ Keyboard shortcuts:
               content.args,
               {
                 showImages: false,
-                collapsedByDefault: !this.toolOutputExpanded,
+                collapsedByDefault: !this.state.toolOutputExpanded,
               },
-              this.ui,
+              this.state.ui,
             );
 
             if (toolResult && toolResult.type === 'tool_result') {
@@ -4421,14 +4257,14 @@ Keyboard shortcuts:
                 replacedWithInline = true;
               } else if (!tasks || tasks.length === 0) {
                 // Tasks were cleared - show with previous tasks if we have them
-                if (this.previousTasks.length > 0) {
-                  this.renderClearedTasksInline(this.previousTasks);
-                  this.previousTasks = [];
+                if (this.state.previousTasks.length > 0) {
+                  this.renderClearedTasksInline(this.state.previousTasks);
+                  this.state.previousTasks = [];
                   replacedWithInline = true;
                 }
               } else {
                 // Track for detecting clears
-                this.previousTasks = [...tasks];
+                this.state.previousTasks = [...tasks];
               }
             }
 
@@ -4462,14 +4298,14 @@ Keyboard shortcuts:
                   isApproved,
                   feedback,
                 });
-                this.chatContainer.addChild(planResult);
+                this.state.chatContainer.addChild(planResult);
                 replacedWithInline = true;
               }
             }
 
             if (!replacedWithInline) {
-              this.chatContainer.addChild(toolComponent);
-              this.allToolComponents.push(toolComponent);
+              this.state.chatContainer.addChild(toolComponent);
+              this.state.allToolComponents.push(toolComponent);
             }
           } else if (
             content.type === 'om_observation_start' ||
@@ -4487,10 +4323,10 @@ Keyboard shortcuts:
               };
               const textComponent = new AssistantMessageComponent(
                 textMessage,
-                this.hideThinkingBlock,
+                this.state.hideThinkingBlock,
                 getMarkdownTheme(),
               );
-              this.chatContainer.addChild(textComponent);
+              this.state.chatContainer.addChild(textComponent);
               accumulatedContent = [];
             }
 
@@ -4507,10 +4343,10 @@ Keyboard shortcuts:
                 observationTokens: content.observationTokens,
                 compressedTokens: isReflection ? content.observationTokens : undefined,
               });
-              this.chatContainer.addChild(outputComponent);
+              this.state.chatContainer.addChild(outputComponent);
             } else {
               // Failed marker
-              this.chatContainer.addChild(new OMMarkerComponent(content));
+              this.state.chatContainer.addChild(new OMMarkerComponent(content));
             }
           }
           // Skip tool_result - it's handled with tool_call above
@@ -4522,18 +4358,18 @@ Keyboard shortcuts:
             ...message,
             content: accumulatedContent,
           };
-          const textComponent = new AssistantMessageComponent(textMessage, this.hideThinkingBlock, getMarkdownTheme());
-          this.chatContainer.addChild(textComponent);
+          const textComponent = new AssistantMessageComponent(textMessage, this.state.hideThinkingBlock, getMarkdownTheme());
+          this.state.chatContainer.addChild(textComponent);
         }
       }
     }
 
     // Restore pinned task list from the last active task_write in history
-    if (this.previousTasks.length > 0 && this.taskProgress) {
-      this.taskProgress.updateTasks(this.previousTasks);
+    if (this.state.previousTasks.length > 0 && this.state.taskProgress) {
+      this.state.taskProgress.updateTasks(this.state.previousTasks);
     }
 
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   // ===========================================================================
@@ -4541,9 +4377,9 @@ Keyboard shortcuts:
   // ===========================================================================
 
   private showError(message: string): void {
-    this.chatContainer.addChild(new Spacer(1));
-    this.chatContainer.addChild(new Text(fg('error', `Error: ${message}`), 1, 0));
-    this.ui.requestRender();
+    this.state.chatContainer.addChild(new Spacer(1));
+    this.state.chatContainer.addChild(new Text(fg('error', `Error: ${message}`), 1, 0));
+    this.state.ui.requestRender();
   }
 
   /**
@@ -4562,7 +4398,7 @@ Keyboard shortcuts:
     const error = 'error' in event ? event.error : event;
     const parsed = parseError(error);
 
-    this.chatContainer.addChild(new Spacer(1));
+    this.state.chatContainer.addChild(new Spacer(1));
 
     // Check if this is a tool validation error
     const errorMessage = error.message || String(error);
@@ -4573,8 +4409,8 @@ Keyboard shortcuts:
 
     if (isValidationError) {
       // Show a simplified message for validation errors
-      this.chatContainer.addChild(new Text(fg('error', 'Tool validation error - see details above'), 1, 0));
-      this.chatContainer.addChild(
+      this.state.chatContainer.addChild(new Text(fg('error', 'Tool validation error - see details above'), 1, 0));
+      this.state.chatContainer.addChild(
         new Text(fg('muted', '  Check the tool execution box for specific parameter requirements'), 1, 0),
       );
     } else {
@@ -4589,16 +4425,16 @@ Keyboard shortcuts:
         errorText += fg('muted', ` (retry in ${seconds}s)`);
       }
 
-      this.chatContainer.addChild(new Text(fg('error', errorText), 1, 0));
+      this.state.chatContainer.addChild(new Text(fg('error', errorText), 1, 0));
 
       // Add helpful hints based on error type
       const hint = this.getErrorHint(parsed.type);
       if (hint) {
-        this.chatContainer.addChild(new Text(fg('muted', `  Hint: ${hint}`), 1, 0));
+        this.state.chatContainer.addChild(new Text(fg('muted', `  Hint: ${hint}`), 1, 0));
       }
     }
 
-    this.ui.requestRender();
+    this.state.ui.requestRender();
   }
 
   /**
@@ -4646,14 +4482,14 @@ Keyboard shortcuts:
             return;
           }
           const component = new DiffOutputComponent(`git diff --cached ${filePath}`, staged.stdout);
-          this.chatContainer.addChild(component);
-          this.ui.requestRender();
+          this.state.chatContainer.addChild(component);
+          this.state.ui.requestRender();
           return;
         }
 
         const component = new DiffOutputComponent(`git diff ${filePath}`, result.stdout);
-        this.chatContainer.addChild(component);
-        this.ui.requestRender();
+        this.state.chatContainer.addChild(component);
+        this.state.ui.requestRender();
       } catch (error) {
         this.showError(error instanceof Error ? error.message : 'Failed to get diff');
       }
@@ -4661,7 +4497,7 @@ Keyboard shortcuts:
     }
 
     // No path specified — show summary of all tracked modified files
-    if (this.modifiedFiles.size === 0) {
+    if (this.state.modifiedFiles.size === 0) {
       // Fall back to git diff --stat
       try {
         const { execa } = await import('execa');
@@ -4677,8 +4513,8 @@ Keyboard shortcuts:
         const output = [result.stdout, staged.stdout].filter(Boolean).join('\n');
         if (output.trim()) {
           const component = new DiffOutputComponent('git diff --stat', output);
-          this.chatContainer.addChild(component);
-          this.ui.requestRender();
+          this.state.chatContainer.addChild(component);
+          this.state.ui.requestRender();
         } else {
           this.showInfo('No file changes detected in this session or working tree.');
         }
@@ -4688,8 +4524,8 @@ Keyboard shortcuts:
       return;
     }
 
-    const lines: string[] = [`Modified files (${this.modifiedFiles.size}):`];
-    for (const [filePath, info] of this.modifiedFiles) {
+    const lines: string[] = [`Modified files (${this.state.modifiedFiles.size}):`];
+    for (const [filePath, info] of this.state.modifiedFiles) {
       const opCounts = new Map<string, number>();
       for (const op of info.operations) {
         opCounts.set(op, (opCounts.get(op) || 0) + 1);
@@ -4734,8 +4570,8 @@ Keyboard shortcuts:
         result.stderr ?? '',
         result.exitCode ?? 0,
       );
-      this.chatContainer.addChild(component);
-      this.ui.requestRender();
+      this.state.chatContainer.addChild(component);
+      this.state.ui.requestRender();
     } catch (error) {
       this.showError(error instanceof Error ? error.message : 'Shell command failed');
     }
@@ -4744,17 +4580,17 @@ Keyboard shortcuts:
    * Send a notification alert (bell / system / hooks) based on user settings.
    */
   private notify(reason: NotificationReason, message?: string): void {
-    const mode = ((this.harness.getState() as any)?.notifications ?? 'off') as NotificationMode;
+    const mode = ((this.state.harness.getState() as any)?.notifications ?? 'off') as NotificationMode;
     sendNotification(reason, {
       mode,
       message,
-      hookManager: this.hookManager,
+      hookManager: this.state.hookManager,
     });
   }
 
   private showInfo(message: string): void {
-    this.chatContainer.addChild(new Spacer(1));
-    this.chatContainer.addChild(new Text(fg('muted', message), 1, 0));
-    this.ui.requestRender();
+    this.state.chatContainer.addChild(new Spacer(1));
+    this.state.chatContainer.addChild(new Text(fg('muted', message), 1, 0));
+    this.state.ui.requestRender();
   }
 }
