@@ -1,20 +1,42 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
-import { describe, it, expect } from 'vitest';
+import { $ } from 'execa';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getResuableTests, StorageType } from './shared/reusable-tests';
 
 const files = ['upstash-test-vector.db', 'upstash-test-vector.db-shm', 'upstash-test-vector.db-wal'];
+const __dirname = fileURLToPath(import.meta.url);
 
 describe('Memory with UpstashStore Integration', () => {
-  for (const file of files) {
-    if (fs.existsSync(file)) {
-      fs.unlinkSync(file);
+  let dbPath: string;
+
+  beforeAll(async () => {
+    dbPath = await mkdtemp(join(tmpdir(), `memory-test-`));
+
+    return $({
+      cwd: join(__dirname, '..'),
+    })`docker compose up -d serverless-redis-http redis --wait`;
+  });
+
+  afterAll(() => {
+    for (const file of files) {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+      }
     }
-  }
+
+    return $({
+      cwd: join(__dirname, '..'),
+    })`docker compose down --volumes serverless-redis-http redis`;
+  });
 
   const memoryOptions = {
     lastMessages: 10,
@@ -31,28 +53,30 @@ describe('Memory with UpstashStore Integration', () => {
     id: randomUUID(),
   };
 
-  const memory = new Memory({
-    storage: new UpstashStore({
-      id: 'upstash-storage',
-      url: 'http://localhost:8079',
-      token: 'test_token',
-    }),
-    vector: new LibSQLVector({
-      // TODO: use upstash vector in tests
-      url: 'file:upstash-test-vector.db',
-      id: randomUUID(),
-    }),
-    embedder: fastembed,
-    options: memoryOptions,
+  getResuableTests(() => {
+    const memory = new Memory({
+      storage: new UpstashStore({
+        id: 'upstash-storage',
+        url: 'http://localhost:8079',
+        token: 'test_token',
+      }),
+      vector: new LibSQLVector({
+        // TODO: use upstash vector in tests
+        url: `file:${join(dbPath, 'upstash-test-vector.db')}`,
+        id: randomUUID(),
+      }),
+      embedder: fastembed,
+      options: memoryOptions,
+    });
+
+    const workerTestConfig = {
+      storageTypeForWorker: StorageType.Upstash,
+      storageConfigForWorker: storageConfig,
+      memoryOptionsForWorker: memoryOptions,
+    };
+
+    return { memory, workerTestConfig };
   });
-
-  const workerTestConfig = {
-    storageTypeForWorker: StorageType.Upstash,
-    storageConfigForWorker: storageConfig,
-    memoryOptionsForWorker: memoryOptions,
-  };
-
-  getResuableTests(memory, workerTestConfig);
 
   describe('lastMessages should return newest messages, not oldest', () => {
     it('should return the LAST N messages when using lastMessages config without explicit orderBy', async () => {

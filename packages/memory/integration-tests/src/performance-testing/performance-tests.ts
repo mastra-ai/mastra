@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { faker } from '@faker-js/faker';
 import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';
 // Test helpers
@@ -34,17 +34,24 @@ const createTestMessage = (
   };
 };
 
-export function getPerformanceTests(memory: Memory) {
-  beforeEach(async () => {
-    // Reset message counter
-    messageCounter = 0;
-    // Clean up before each test
-    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+export function getPerformanceTests(memoryFactory: () => Memory) {
+  let memory: Memory;
+  beforeAll(async () => {
+    memory = memoryFactory();
   });
 
   afterAll(async () => {
     // Final cleanup
+    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
+    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    // @ts-expect-error- could have wrong types
+    await Promise.allSettled([memory.storage?.close?.(), memory.vector?.disconnect?.()]);
+  });
+
+  beforeEach(async () => {
+    // Reset message counter
+    messageCounter = 0;
+    // Clean up before each test
     const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
@@ -135,6 +142,7 @@ export function getPerformanceTests(memory: Memory) {
           const start = performance.now();
           await memory.recall({
             threadId: thread.id,
+            resourceId,
             vectorSearchString: searchQuery,
             threadConfig: {
               semanticRecall: {

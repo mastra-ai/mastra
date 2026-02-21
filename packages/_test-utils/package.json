@@ -1,0 +1,54 @@
+{
+  "name": "@internal/test-utils",
+  "version": "0.0.1",
+  "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.7",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.36.0",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {},
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/_test-utils"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}

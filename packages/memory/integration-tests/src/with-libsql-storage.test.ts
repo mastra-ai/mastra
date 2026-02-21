@@ -1,22 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import dotenv from 'dotenv';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getResuableTests, StorageType } from './shared/reusable-tests';
 
-dotenv.config({ path: '.env.test' });
-
-const files = ['libsql-test.db', 'libsql-test.db-shm', 'libsql-test.db-wal'];
-
 describe('Memory with LibSQL Integration', () => {
-  for (const file of files) {
-    if (fs.existsSync(file)) {
-      fs.unlinkSync(file);
-    }
-  }
+  let dbStoragePath: string;
+  let memory: Memory;
 
   const memoryOptions = {
     lastMessages: 10,
@@ -26,27 +20,41 @@ describe('Memory with LibSQL Integration', () => {
     },
     generateTitle: false,
   };
-  const memory = new Memory({
-    storage: new LibSQLStore({
-      url: 'file:libsql-test.db',
-      id: randomUUID(),
-    }),
-    vector: new LibSQLVector({
-      url: 'file:libsql-test.db',
-      id: randomUUID(),
-    }),
-    embedder: fastembed,
-    options: memoryOptions,
+
+  beforeAll(async () => {
+    dbStoragePath = await mkdtemp(join(tmpdir(), `memory-test-`));
+
+    memory = new Memory({
+      storage: new LibSQLStore({
+        url: `file:${join(dbStoragePath, 'test.db')}`,
+        id: randomUUID(),
+      }),
+      vector: new LibSQLVector({
+        url: 'file:libsql-test.db',
+        id: randomUUID(),
+      }),
+      embedder: fastembed,
+      options: memoryOptions,
+    });
   });
 
-  getResuableTests(memory, {
-    storageTypeForWorker: StorageType.LibSQL,
-    storageConfigForWorker: { url: 'file:libsql-test.db', id: randomUUID() },
-    memoryOptionsForWorker: memoryOptions,
-    vectorConfigForWorker: {
-      url: 'file:libsql-test.db',
-      id: randomUUID(),
-    },
+  afterAll(async () => {
+    await rm(dbStoragePath, { recursive: true });
+  });
+
+  getResuableTests(() => {
+    return {
+      memory,
+      workerTestConfig: {
+        storageTypeForWorker: StorageType.LibSQL,
+        storageConfigForWorker: { url: `file:${join(dbStoragePath, 'libsql-test.db')}`, id: randomUUID() },
+        memoryOptionsForWorker: memoryOptions,
+        vectorConfigForWorker: {
+          url: 'file:libsql-test.db',
+          id: randomUUID(),
+        },
+      },
+    };
   });
 
   describe('lastMessages should return newest messages, not oldest', () => {
@@ -56,6 +64,7 @@ describe('Memory with LibSQL Integration', () => {
           url: 'file:libsql-test.db',
           id: randomUUID(),
         }),
+        embedder: fastembed.small,
         options: {
           lastMessages: 3,
         },

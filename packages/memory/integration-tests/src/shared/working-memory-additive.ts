@@ -6,15 +6,19 @@
  * preserving existing data when new data is added across multiple conversation turns.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { agentGenerate, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const resourceId = 'test-resource';
 
@@ -27,34 +31,7 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-// Helper to determine if model is v5+
-function isV5PlusModel(model: MastraModelConfig): boolean {
-  if (typeof model === 'string') return true;
-  if ('specificationVersion' in model) {
-    return model.specificationVersion === 'v2' || model.specificationVersion === 'v3';
-  }
-  return false;
-}
-
-// Helper to call the appropriate generate method based on model version
-async function agentGenerate(
-  agent: Agent,
-  prompt: string,
-  options: { threadId: string; resourceId: string },
-  isV5: boolean,
-) {
-  if (isV5) {
-    // Transform deprecated threadId/resourceId to memory format for v5+
-    return agent.generate(prompt, {
-      memory: { thread: options.threadId, resource: options.resourceId },
-    });
-  } else {
-    return agent.generateLegacy(prompt, options);
-  }
-}
-
 export function getWorkingMemoryAdditiveTests(model: MastraModelConfig) {
-  const isV5 = isV5PlusModel(model);
   const modelName = typeof model === 'string' ? model : (model as any).modelId || 'unknown';
 
   describe(`Working Memory Additive Updates (${modelName})`, () => {
@@ -113,7 +90,7 @@ You only need to include the fields that have new information - existing data is
 
       it('should preserve existing fields when adding new information across turns', async () => {
         // Turn 1: User provides their name
-        await agentGenerate(agent, 'Hi, my name is Sarah Johnson.', { threadId: thread.id, resourceId }, isV5);
+        await agentGenerate(agent, 'Hi, my name is Sarah Johnson.', { threadId: thread.id, resourceId }, model);
 
         // Check that name was saved
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -121,7 +98,7 @@ You only need to include the fields that have new information - existing data is
         expect(wmRaw!.toLowerCase()).toContain('sarah');
 
         // Turn 2: User provides their location
-        await agentGenerate(agent, 'I live in Portland, Oregon.', { threadId: thread.id, resourceId }, isV5);
+        await agentGenerate(agent, 'I live in Portland, Oregon.', { threadId: thread.id, resourceId }, model);
 
         // Check working memory again
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -136,13 +113,13 @@ You only need to include the fields that have new information - existing data is
 
       it('should accumulate profile data across multiple turns', async () => {
         // Turn 1: Name
-        await agentGenerate(agent, 'My name is Alex Chen.', { threadId: thread.id, resourceId }, isV5);
+        await agentGenerate(agent, 'My name is Alex Chen.', { threadId: thread.id, resourceId }, model);
 
         // Turn 2: Occupation
-        await agentGenerate(agent, 'I work as a software engineer.', { threadId: thread.id, resourceId }, isV5);
+        await agentGenerate(agent, 'I work as a software engineer.', { threadId: thread.id, resourceId }, model);
 
         // Turn 3: Location
-        await agentGenerate(agent, "I'm based in Seattle.", { threadId: thread.id, resourceId }, isV5);
+        await agentGenerate(agent, "I'm based in Seattle.", { threadId: thread.id, resourceId }, model);
 
         // Get final working memory
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -176,8 +153,9 @@ You only need to include the fields that have new information - existing data is
           .describe('Work-related information'),
       });
 
+      let dbPath: string;
       beforeEach(async () => {
-        const dbPath = join(await mkdtemp(join(tmpdir(), `wm-complex-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `wm-complex-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'complex-test-storage',
@@ -214,6 +192,8 @@ You only need to include fields that have changed - existing data is automatical
       afterEach(async () => {
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
+
+        await rm(dirname(dbPath), { force: true, recursive: true });
       });
 
       it('should preserve about info when adding work info', async () => {
@@ -222,7 +202,7 @@ You only need to include fields that have changed - existing data is automatical
           agent,
           "I'm Jordan and I live in San Francisco.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -235,7 +215,7 @@ You only need to include fields that have changed - existing data is automatical
           agent,
           'I work at TechCorp as a senior engineer.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -338,8 +318,9 @@ You only need to include fields that have changed - existing data is automatical
         extra: z.record(z.string(), z.unknown()).optional(),
       });
 
+      let dbPath: string;
       beforeEach(async () => {
-        const dbPath = join(await mkdtemp(join(tmpdir(), `wm-large-schema-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `wm-large-schema-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'large-schema-test-storage',
@@ -382,6 +363,8 @@ Schema structure reminder:
       afterEach(async () => {
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
+
+        await rm(dirname(dbPath), { force: true, recursive: true });
       });
 
       it('should build up a comprehensive user profile across many turns', async () => {
@@ -390,7 +373,7 @@ Schema structure reminder:
           agent,
           "Hi! I'm Marcus Chen, I'm based in Austin, Texas. My timezone is CST and my pronouns are he/him.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -403,7 +386,7 @@ Schema structure reminder:
           agent,
           "I'm the CTO at CloudScale, we're a Series B startup in the cloud infrastructure space. Our website is cloudscale.io and our mission is to simplify cloud deployments.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -419,7 +402,7 @@ Schema structure reminder:
           agent,
           'My co-founder is Sarah Kim, she handles product and is critical. Our lead engineer Dave Martinez is also very important.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -435,7 +418,7 @@ Schema structure reminder:
           agent,
           "We're working on Project Phoenix right now - it's our new serverless platform. The goal is to launch by Q2, next milestone is the beta release.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -451,7 +434,7 @@ Schema structure reminder:
           agent,
           'Today I need to focus on the investor pitch. This week my priorities are hiring and closing the Series C.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -468,7 +451,7 @@ Schema structure reminder:
           agent,
           'I prefer Slack and email for communication. My work hours are 9am to 6pm, and I like 30 minute meetings.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -488,7 +471,7 @@ Schema structure reminder:
           agent,
           'My name is Jordan Lee and I live in Seattle. I work at DataCorp as a software engineer.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -503,7 +486,7 @@ Schema structure reminder:
           agent,
           'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -524,7 +507,7 @@ Schema structure reminder:
           agent,
           'Please remember these people I work with: Alice (my manager), Bob (engineering lead), and Carol (design director). Add them to my people list.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -538,7 +521,7 @@ Schema structure reminder:
           agent,
           "Store this work info: We're at TechStartup Inc, a Series A company focused on AI tools.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -555,7 +538,7 @@ Schema structure reminder:
           agent,
           "Remember my personal info: my name is Jamie and I'm located in the Seattle area.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -567,14 +550,14 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('alice');
         expect(wmRaw!.toLowerCase()).toContain('bob');
       });
-
+      // 1568
       it('should clear work info when user changes jobs', async () => {
         // Turn 1: Set up work info
         await agentGenerate(
           agent,
           "I'm Sam, I work at OldCompany as an engineer. We're working on Project Legacy.",
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -588,7 +571,7 @@ Schema structure reminder:
           agent,
           'I just changed jobs! I now work at NewStartup. Please clear all my old work information - different company, different projects.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -611,7 +594,7 @@ Schema structure reminder:
           agent,
           'Please remember my team members: Alice (engineer), Bob (designer), and Charlie (PM). Store them in my people list.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
@@ -625,7 +608,7 @@ Schema structure reminder:
           agent,
           'Update my people list: my team has completely changed. Replace the list with Diana (engineer) and Eric (lead). Remove Alice, Bob, and Charlie.',
           { threadId: thread.id, resourceId },
-          isV5,
+          model,
         );
 
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });

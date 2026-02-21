@@ -1,0 +1,127 @@
+[
+  {
+    "hash": "281cc79a0aacf9a8",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "body": {
+        "model": "gpt-4o-mini",
+        "input": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant. Be concise."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "Say \"test\" and nothing else."
+              }
+            ]
+          }
+        ],
+        "temperature": 0
+      },
+      "timestamp": 1770767968756
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9cbf8f795ff5bde4-BRU",
+        "connection": "keep-alive",
+        "content-type": "application/json",
+        "date": "Tue, 10 Feb 2026 23:59:28 GMT",
+        "openai-organization": "mastra-qb2kpb",
+        "openai-processing-ms": "445",
+        "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+        "openai-version": "2020-10-01",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "x-ratelimit-limit-requests": "10000",
+        "x-ratelimit-limit-tokens": "10000000",
+        "x-ratelimit-remaining-requests": "9999",
+        "x-ratelimit-remaining-tokens": "9999953",
+        "x-ratelimit-reset-requests": "6ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_2f68e2f5b26443799a6cd9faa78c2506"
+      },
+      "body": {
+        "id": "resp_0a095c0f1abfebba00698bc6604dc08190947d32b19e95a8dd",
+        "object": "response",
+        "created_at": 1770767968,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1770767968,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-4o-mini-2024-07-18",
+        "output": [
+          {
+            "id": "msg_0a095c0f1abfebba00698bc6609f608190b6a4a63175eaf974",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Test."
+              }
+            ],
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": null,
+        "reasoning": {
+          "effort": null,
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 1,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 28,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 3,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 31
+        },
+        "user": null,
+        "metadata": {}
+      },
+      "isStreaming": false
+    }
+  }
+]

@@ -10,14 +10,14 @@ catalogs:
       specifier: ^7.56.3
       version: 7.56.3
     '@vitest/coverage-v8':
-      specifier: 4.0.12
-      version: 4.0.12
+      specifier: 4.0.18
+      version: 4.0.18
     '@vitest/ui':
-      specifier: 4.0.12
-      version: 4.0.12
+      specifier: 4.0.18
+      version: 4.0.18
     vitest:
-      specifier: 4.0.16
-      version: 4.0.16
+      specifier: 4.0.18
+      version: 4.0.18
     zod:
       specifier: ^4.3.6
       version: 4.3.6
@@ -64,10 +64,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       changesets-changelog-github-local:
         specifier: ^1.0.1
         version: 1.0.1
@@ -112,7 +112,7 @@ importers:
         version: 7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/auth0:
     dependencies:
@@ -134,10 +134,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -149,13 +149,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/better-auth:
     dependencies:
       better-auth:
         specifier: ^1.4.18
-        version: 1.4.18(mongodb@7.0.0(socks@2.8.7))(pg@8.16.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.16)
+        version: 1.4.18(mongodb@7.0.0(socks@2.8.7))(pg@8.16.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -171,10 +171,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -189,7 +189,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/clerk:
     dependencies:
@@ -214,10 +214,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -229,7 +229,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/firebase:
     dependencies:
@@ -251,10 +251,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -266,7 +266,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/supabase:
     dependencies:
@@ -288,10 +288,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -303,7 +303,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   auth/workos:
     dependencies:
@@ -328,10 +328,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -343,7 +343,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   client-sdks/ai-sdk:
     devDependencies:
@@ -367,10 +367,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^5.0.60
         version: 5.0.101(zod@3.25.76)
@@ -385,7 +385,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -428,10 +428,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -443,7 +443,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -498,10 +498,10 @@ importers:
         version: 5.1.4(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -534,7 +534,7 @@ importers:
         version: 4.5.4(@types/node@22.19.7)(rollup@4.55.3)(typescript@5.9.3)(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -583,10 +583,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -598,7 +598,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   deployers/cloudflare:
     dependencies:
@@ -641,10 +641,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -656,7 +656,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       wrangler:
         specifier: ^4.54.0
         version: 4.58.0
@@ -693,10 +693,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -708,7 +708,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   deployers/vercel:
     dependencies:
@@ -736,10 +736,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -751,7 +751,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   docs:
     dependencies:
@@ -959,7 +959,7 @@ importers:
         version: 4.11.9
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     devDependencies:
       typescript:
         specifier: ^5.9.3
@@ -979,7 +979,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   e2e-tests/client-js/zod-v4:
     dependencies:
@@ -995,7 +995,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   e2e-tests/workspace-compat:
     devDependencies:
@@ -1019,7 +1019,7 @@ importers:
         version: 10.3.1
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   explorations/longmemeval:
     dependencies:
@@ -1095,10 +1095,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       tsx:
         specifier: ^4.19.2
         version: 4.21.0
@@ -1107,7 +1107,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   integrations/opencode:
     dependencies:
@@ -1141,7 +1141,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   mastracode:
     dependencies:
@@ -1223,10 +1223,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1244,7 +1244,7 @@ importers:
         version: 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -1259,13 +1259,13 @@ importers:
         version: link:../mastra
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/arize:
     dependencies:
@@ -1308,10 +1308,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.36.0
         version: 9.39.2(jiti@2.6.1)
@@ -1323,7 +1323,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/braintrust:
     dependencies:
@@ -1354,10 +1354,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1369,7 +1369,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/datadog:
     dependencies:
@@ -1400,10 +1400,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1415,7 +1415,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/laminar:
     dependencies:
@@ -1452,10 +1452,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1467,7 +1467,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/langfuse:
     dependencies:
@@ -1495,10 +1495,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1510,7 +1510,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/langsmith:
     dependencies:
@@ -1541,10 +1541,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -1559,7 +1559,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1586,10 +1586,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1601,7 +1601,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1646,8 +1646,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/otel-exporter:
     dependencies:
@@ -1687,10 +1687,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1702,7 +1702,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     optionalDependencies:
       '@grpc/grpc-js':
         specifier: ^1.14.3
@@ -1754,8 +1754,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/sentry:
     dependencies:
@@ -1783,10 +1783,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1798,7 +1798,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/_changeset-cli:
     dependencies:
@@ -1865,10 +1865,10 @@ importers:
         version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -1880,13 +1880,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/_config:
     dependencies:
       '@vitest/eslint-plugin':
         specifier: ^1.3.20
-        version: 1.3.23(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.16)
+        version: 1.3.23(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.18)
       eslint-plugin-import-x:
         specifier: ^4.16.1
         version: 4.16.1(@typescript-eslint/utils@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))
@@ -1911,10 +1911,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
 
   packages/_external-types:
     dependencies:
@@ -1942,10 +1942,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -1960,7 +1960,83 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/_llm-recorder:
+    dependencies:
+      diff:
+        specifier: ^8.0.3
+        version: 8.0.3
+      msw:
+        specifier: ^2.8.4
+        version: 2.12.10(@types/node@22.19.7)(typescript@5.9.3)
+      string-similarity:
+        specifier: ^4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 22.19.7
+        version: 22.19.7
+      '@types/string-similarity':
+        specifier: ^4.0.2
+        version: 4.0.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.0.18(vitest@4.0.18)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.0.18(vitest@4.0.18)
+      eslint:
+        specifier: ^9.36.0
+        version: 9.39.2(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.56.3(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/_test-utils:
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@internal/llm-recorder':
+        specifier: workspace:*
+        version: link:../_llm-recorder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 22.19.7
+        version: 22.19.7
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.0.18(vitest@4.0.18)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.0.18(vitest@4.0.18)
+      eslint:
+        specifier: ^9.36.0
+        version: 9.39.2(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.56.3(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/_types-builder:
     dependencies:
@@ -1985,10 +2061,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
 
   packages/_vendored/ai_v4:
     dependencies:
@@ -2022,10 +2098,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -2083,10 +2159,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^5.0.97
         version: 5.0.101(zod@3.25.76)
@@ -2144,10 +2220,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^6.0.1
         version: 6.0.94(zod@3.25.76)
@@ -2238,10 +2314,10 @@ importers:
         version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai-v5:
         specifier: npm:ai@5.0.97
         version: ai@5.0.97(zod@3.25.76)
@@ -2259,7 +2335,7 @@ importers:
         version: 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2290,10 +2366,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -2305,7 +2381,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/cli:
     dependencies:
@@ -2402,10 +2478,10 @@ importers:
         version: 1.7.5
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -2426,7 +2502,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/codemod:
     dependencies:
@@ -2460,10 +2536,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -2475,7 +2551,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/core:
     dependencies:
@@ -2644,10 +2720,10 @@ importers:
         version: 4.0.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -2671,7 +2747,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2850,10 +2926,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -2877,7 +2953,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2935,7 +3011,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2975,10 +3051,10 @@ importers:
         version: 4.0.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -2993,7 +3069,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3024,10 +3100,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai-v4:
         specifier: npm:ai@4.3.19
         version: ai@4.3.19(react@19.2.3)(zod@3.25.76)
@@ -3039,7 +3115,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3067,10 +3143,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -3082,7 +3158,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/mcp:
     dependencies:
@@ -3128,10 +3204,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^5.0.60
         version: 5.0.101(zod@3.25.76)
@@ -3155,7 +3231,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3201,10 +3277,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@wong2/mcp-cli':
         specifier: ^1.13.0
         version: 1.13.0
@@ -3228,7 +3304,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/mcp-registry-registry:
     dependencies:
@@ -3265,10 +3341,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@wong2/mcp-cli':
         specifier: ^1.13.0
         version: 1.13.0
@@ -3292,7 +3368,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/memory:
     dependencies:
@@ -3353,10 +3429,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -3371,7 +3447,7 @@ importers:
         version: 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/playground:
     dependencies:
@@ -3718,7 +3794,7 @@ importers:
         version: 5.1.4(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       autoprefixer:
         specifier: ^10.4.24
         version: 10.4.24(postcss@8.5.6)
@@ -3757,7 +3833,7 @@ importers:
         version: 2.2.2(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/rag:
     dependencies:
@@ -3806,10 +3882,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -3827,7 +3903,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3870,10 +3946,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -3894,7 +3970,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3934,10 +4010,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -3952,7 +4028,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3995,10 +4071,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.16
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -4013,7 +4089,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   server-adapters/_test-utils:
     dependencies:
@@ -4104,8 +4180,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -4171,8 +4247,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -4241,8 +4317,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -4311,8 +4387,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -4321,17 +4397,17 @@ importers:
     dependencies:
       vitest:
         specifier: '*'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@3.2.4)
+        version: 4.0.18(vitest@3.2.4)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@3.2.4)
+        version: 4.0.18(vitest@3.2.4)
 
   stores/astra:
     dependencies:
@@ -4353,10 +4429,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4368,7 +4444,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/chroma:
     dependencies:
@@ -4393,10 +4469,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4408,7 +4484,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/clickhouse:
     dependencies:
@@ -4433,10 +4509,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4448,7 +4524,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/cloudflare:
     dependencies:
@@ -4476,10 +4552,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -4497,7 +4573,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/cloudflare-d1:
     dependencies:
@@ -4525,10 +4601,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -4546,7 +4622,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/convex:
     dependencies:
@@ -4571,10 +4647,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -4589,7 +4665,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/couchbase:
     dependencies:
@@ -4614,10 +4690,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4629,7 +4705,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/duckdb:
     dependencies:
@@ -4654,10 +4730,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4672,7 +4748,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/dynamodb:
     dependencies:
@@ -4703,10 +4779,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4718,7 +4794,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/elasticsearch:
     dependencies:
@@ -4743,10 +4819,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4758,7 +4834,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/lance:
     dependencies:
@@ -4786,10 +4862,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4801,7 +4877,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/libsql:
     dependencies:
@@ -4826,10 +4902,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4841,7 +4917,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/mongodb:
     dependencies:
@@ -4875,10 +4951,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4890,7 +4966,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/mssql:
     dependencies:
@@ -4918,10 +4994,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4933,7 +5009,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/opensearch:
     dependencies:
@@ -4958,10 +5034,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -4973,7 +5049,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/pg:
     dependencies:
@@ -5007,10 +5083,10 @@ importers:
         version: 8.16.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5022,7 +5098,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/pinecone:
     dependencies:
@@ -5047,10 +5123,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -5065,7 +5141,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/qdrant:
     dependencies:
@@ -5090,10 +5166,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5105,7 +5181,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/s3vectors:
     dependencies:
@@ -5133,10 +5209,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -5151,7 +5227,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/turbopuffer:
     dependencies:
@@ -5176,10 +5252,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -5194,7 +5270,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/upstash:
     dependencies:
@@ -5222,10 +5298,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -5240,7 +5316,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   stores/vectorize:
     dependencies:
@@ -5262,10 +5338,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -5280,7 +5356,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/azure:
     dependencies:
@@ -5302,10 +5378,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5317,7 +5393,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/cloudflare:
     dependencies:
@@ -5342,10 +5418,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5357,7 +5433,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5385,10 +5461,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5400,7 +5476,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/elevenlabs:
     dependencies:
@@ -5425,10 +5501,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5440,7 +5516,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/gladia:
     devDependencies:
@@ -5458,10 +5534,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5476,7 +5552,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5507,10 +5583,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5522,7 +5598,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/google-gemini-live-api:
     dependencies:
@@ -5559,10 +5635,10 @@ importers:
         version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5577,7 +5653,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/murf:
     dependencies:
@@ -5602,10 +5678,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5617,7 +5693,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/openai:
     dependencies:
@@ -5642,10 +5718,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5657,7 +5733,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/openai-realtime-api:
     dependencies:
@@ -5688,10 +5764,10 @@ importers:
         version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5703,7 +5779,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5728,10 +5804,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5743,7 +5819,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   voice/sarvam:
     devDependencies:
@@ -5761,10 +5837,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5776,7 +5852,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5804,10 +5880,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5819,9 +5895,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   workflows/_test-utils:
+    dependencies:
+      vitest:
+        specifier: '*'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -5832,9 +5912,6 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5898,10 +5975,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -5940,7 +6017,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   workspaces/_test-utils:
     devDependencies:
@@ -5949,13 +6026,13 @@ importers:
         version: link:../../packages/core
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   workspaces/e2b:
     dependencies:
@@ -5986,10 +6063,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -6004,7 +6081,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   workspaces/gcs:
     dependencies:
@@ -6029,10 +6106,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -6047,7 +6124,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   workspaces/s3:
     dependencies:
@@ -6072,10 +6149,10 @@ importers:
         version: 22.19.7
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.12(vitest@4.0.16)
+        version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -6090,7 +6167,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
 packages:
 
@@ -14118,11 +14195,11 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
-  '@vitest/coverage-v8@4.0.12':
-    resolution: {integrity: sha512-d+w9xAFJJz6jyJRU4BUU7MH409Ush7FWKNkxJU+jASKg6WX33YT0zc+YawMR1JesMWt9QRFQY/uAD3BTn23FaA==}
+  '@vitest/coverage-v8@4.0.18':
+    resolution: {integrity: sha512-7i+N2i0+ME+2JFZhfuz7Tg/FqKtilHjGyGvoHYQ6iLV0zahbsJ9sljC9OcFcPDbhYKCet+sG8SsVqlyGvPflZg==}
     peerDependencies:
-      '@vitest/browser': 4.0.12
-      vitest: 4.0.12
+      '@vitest/browser': 4.0.18
+      vitest: 4.0.18
     peerDependenciesMeta:
       '@vitest/browser':
         optional: true
@@ -14143,8 +14220,8 @@ packages:
   '@vitest/expect@3.2.4':
     resolution: {integrity: sha512-Io0yyORnB6sikFlt8QW5K7slY4OjqNX9jmJQ02QDda8lyM6B5oNgVWoSoKPac8/kgnCUzuHQKrSLtu/uOqqrig==}
 
-  '@vitest/expect@4.0.16':
-    resolution: {integrity: sha512-eshqULT2It7McaJkQGLkPjPjNph+uevROGuIMJdG3V+0BSR2w9u6J9Lwu+E8cK5TETlfou8GRijhafIMhXsimA==}
+  '@vitest/expect@4.0.18':
+    resolution: {integrity: sha512-8sCWUyckXXYvx4opfzVY03EOiYVxyNrHS5QxX3DAIi5dpJAAkyJezHCP77VMX4HKA2LDT/Jpfo8i2r5BE3GnQQ==}
 
   '@vitest/mocker@3.2.4':
     resolution: {integrity: sha512-46ryTE9RZO/rfDd7pEqFl7etuyzekzEhUbTW3BvmeO/BcCMEgq59BKhek3dXDWgAj4oMK6OZi+vRr1wPW6qjEQ==}
@@ -14157,8 +14234,8 @@ packages:
       vite:
         optional: true
 
-  '@vitest/mocker@4.0.16':
-    resolution: {integrity: sha512-yb6k4AZxJTB+q9ycAvsoxGn+j/po0UaPgajllBgt1PzoMAAmJGYFdDk0uCcRcxb3BrME34I6u8gHZTQlkqSZpg==}
+  '@vitest/mocker@4.0.18':
+    resolution: {integrity: sha512-HhVd0MDnzzsgevnOWCBj5Otnzobjy5wLBe4EdeeFGv8luMsGcYqDuFRMcttKWZA5vVO8RFjexVovXvAM4JoJDQ==}
     peerDependencies:
       msw: ^2.4.9
       vite: ^6.0.0 || ^7.0.0-0
@@ -14171,48 +14248,42 @@ packages:
   '@vitest/pretty-format@3.2.4':
     resolution: {integrity: sha512-IVNZik8IVRJRTr9fxlitMKeJeXFFFN0JaB9PHPGQ8NKQbGpfjlTx9zO4RefN8gp7eqjNy8nyK3NZmBzOPeIxtA==}
 
-  '@vitest/pretty-format@4.0.12':
-    resolution: {integrity: sha512-R7nMAcnienG17MvRN8TPMJiCG8rrZJblV9mhT7oMFdBXvS0x+QD6S1G4DxFusR2E0QIS73f7DqSR1n87rrmE+g==}
-
-  '@vitest/pretty-format@4.0.16':
-    resolution: {integrity: sha512-eNCYNsSty9xJKi/UdVD8Ou16alu7AYiS2fCPRs0b1OdhJiV89buAXQLpTbe+X8V9L6qrs9CqyvU7OaAopJYPsA==}
+  '@vitest/pretty-format@4.0.18':
+    resolution: {integrity: sha512-P24GK3GulZWC5tz87ux0m8OADrQIUVDPIjjj65vBXYG17ZeU3qD7r+MNZ1RNv4l8CGU2vtTRqixrOi9fYk/yKw==}
 
   '@vitest/runner@3.2.4':
     resolution: {integrity: sha512-oukfKT9Mk41LreEW09vt45f8wx7DordoWUZMYdY/cyAk7w5TWkTRCNZYF7sX7n2wB7jyGAl74OxgwhPgKaqDMQ==}
 
-  '@vitest/runner@4.0.16':
-    resolution: {integrity: sha512-VWEDm5Wv9xEo80ctjORcTQRJ539EGPB3Pb9ApvVRAY1U/WkHXmmYISqU5E79uCwcW7xYUV38gwZD+RV755fu3Q==}
+  '@vitest/runner@4.0.18':
+    resolution: {integrity: sha512-rpk9y12PGa22Jg6g5M3UVVnTS7+zycIGk9ZNGN+m6tZHKQb7jrP7/77WfZy13Y/EUDd52NDsLRQhYKtv7XfPQw==}
 
   '@vitest/snapshot@3.2.4':
     resolution: {integrity: sha512-dEYtS7qQP2CjU27QBC5oUOxLE/v5eLkGqPE0ZKEIDGMs4vKWe7IjgLOeauHsR0D5YuuycGRO5oSRXnwnmA78fQ==}
 
-  '@vitest/snapshot@4.0.16':
-    resolution: {integrity: sha512-sf6NcrYhYBsSYefxnry+DR8n3UV4xWZwWxYbCJUt2YdvtqzSPR7VfGrY0zsv090DAbjFZsi7ZaMi1KnSRyK1XA==}
+  '@vitest/snapshot@4.0.18':
+    resolution: {integrity: sha512-PCiV0rcl7jKQjbgYqjtakly6T1uwv/5BQ9SwBLekVg/EaYeQFPiXcgrC2Y7vDMA8dM1SUEAEV82kgSQIlXNMvA==}
 
   '@vitest/spy@3.2.4':
     resolution: {integrity: sha512-vAfasCOe6AIK70iP5UD11Ac4siNUNJ9i/9PZ3NKx07sG6sUxeag1LWdNrMWeKKYBLlzuK+Gn65Yd5nyL6ds+nw==}
 
-  '@vitest/spy@4.0.16':
-    resolution: {integrity: sha512-4jIOWjKP0ZUaEmJm00E0cOBLU+5WE0BpeNr3XN6TEF05ltro6NJqHWxXD0kA8/Zc8Nh23AT8WQxwNG+WeROupw==}
+  '@vitest/spy@4.0.18':
+    resolution: {integrity: sha512-cbQt3PTSD7P2OARdVW3qWER5EGq7PHlvE+QfzSC0lbwO+xnt7+XH06ZzFjFRgzUX//JmpxrCu92VdwvEPlWSNw==}
 
   '@vitest/ui@3.2.4':
     resolution: {integrity: sha512-hGISOaP18plkzbWEcP/QvtRW1xDXF2+96HbEX6byqQhAUbiS5oH6/9JwW+QsQCIYON2bI6QZBF+2PvOmrRZ9wA==}
     peerDependencies:
       vitest: 3.2.4
 
-  '@vitest/ui@4.0.12':
-    resolution: {integrity: sha512-RCqeApCnbwd5IFvxk6OeKMXTvzHU/cVqY8HAW0gWk0yAO6wXwQJMKhDfDtk2ss7JCy9u7RNC3kyazwiaDhBA/g==}
+  '@vitest/ui@4.0.18':
+    resolution: {integrity: sha512-CGJ25bc8fRi8Lod/3GHSvXRKi7nBo3kxh0ApW4yCjmrWmRmlT53B5E08XRSZRliygG0aVNxLrBEqPYdz/KcCtQ==}
     peerDependencies:
-      vitest: 4.0.12
+      vitest: 4.0.18
 
   '@vitest/utils@3.2.4':
     resolution: {integrity: sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA==}
 
-  '@vitest/utils@4.0.12':
-    resolution: {integrity: sha512-DVS/TLkLdvGvj1avRy0LSmKfrcI9MNFvNGN6ECjTUHWJdlcgPDOXhjMis5Dh7rBH62nAmSXnkPbE+DZ5YD75Rw==}
-
-  '@vitest/utils@4.0.16':
-    resolution: {integrity: sha512-h8z9yYhV3e1LEfaQ3zdypIrnAg/9hguReGZoS7Gl0aBG5xgA410zBqECqmaF/+RkTggRsfnzc1XaAHA6bmUufA==}
+  '@vitest/utils@4.0.18':
+    resolution: {integrity: sha512-msMRKLMVLWygpK3u2Hybgi4MNjcYJvwTb0Ru09+fOyCXIgT5raYP041DRRdiJiI3k/2U6SEbAETB3YtBrUkCFA==}
 
   '@volar/language-core@2.4.23':
     resolution: {integrity: sha512-hEEd5ET/oSmBC6pi1j6NaNYRWoAiDhINbT8rmwtINugR39loROSlufGdYMF9TaKGfz+ViGs1Idi3mAhnuPcoGQ==}
@@ -14664,8 +14735,8 @@ packages:
     resolution: {integrity: sha512-6t10qk83GOG8p0vKmaCr8eiilZwO171AvbROMtvvNiwrTly62t+7XkA8RdIIVbpMhCASAsxgAzdRSwh6nw/5Dg==}
     engines: {node: '>=4'}
 
-  ast-v8-to-istanbul@0.3.8:
-    resolution: {integrity: sha512-szgSZqUxI5T8mLKvS7WTjF9is+MVbOeLADU73IseOcrqhxr/VAvy6wfoVE39KnKzA7JRhjF5eUagNlHwvZPlKQ==}
+  ast-v8-to-istanbul@0.3.11:
+    resolution: {integrity: sha512-Qya9fkoofMjCBNVdWINMjB5KZvkYfaO9/anwkWnjxibpWUxo5iHl2sOdP7/uAqaRuUYuoo8rDwnbaaKVFxoUvw==}
 
   astring@1.9.0:
     resolution: {integrity: sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg==}
@@ -15986,6 +16057,10 @@ packages:
 
   diff@8.0.2:
     resolution: {integrity: sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg==}
+    engines: {node: '>=0.3.1'}
+
+  diff@8.0.3:
+    resolution: {integrity: sha512-qejHi7bcSD4hQAZE0tNAawRK1ZtafHDmMTMkrrIGgSLl7hTnQHmKCeB45xAcbfTqK2zowkM3j3bHt/4b/ARbYQ==}
     engines: {node: '>=0.3.1'}
 
   dir-glob@3.0.1:
@@ -17861,10 +17936,6 @@ packages:
     resolution: {integrity: sha512-GCfE1mtsHGOELCU8e/Z7YWzpmybrx/+dSTfLrvY8qRmaY6zXTKWn6WQIjaAFw069icm6GVMNkgu0NzI4iPZUNw==}
     engines: {node: '>=10'}
 
-  istanbul-lib-source-maps@5.0.6:
-    resolution: {integrity: sha512-yg2d+Em4KizZC5niWhQaIomgf5WlL4vOOjZ5xGCmF8SnPE/mDWWXgvRExdcpCgh9lLRRa1/fSYp2ymmbJ1pI+A==}
-    engines: {node: '>=10'}
-
   istanbul-reports@3.2.0:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
@@ -17931,6 +18002,9 @@ packages:
 
   js-tiktoken@1.0.21:
     resolution: {integrity: sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g==}
+
+  js-tokens@10.0.0:
+    resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -22484,18 +22558,18 @@ packages:
       jsdom:
         optional: true
 
-  vitest@4.0.16:
-    resolution: {integrity: sha512-E4t7DJ9pESL6E3I8nFjPa4xGUd3PmiWDLsDztS2qXSJWfHtbQnwAWylaBvSNY48I3vr8PTqIZlyK8TE3V3CA4Q==}
+  vitest@4.0.18:
+    resolution: {integrity: sha512-hOQuK7h0FGKgBAas7v0mSAsnvrIgAvWmRFjmzpJ7SwFHH3g1k2u37JtYwOwmEKhK6ZO3v9ggDBBm0La1LCK4uQ==}
     engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
     hasBin: true
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@opentelemetry/api': ^1.9.0
       '@types/node': 22.19.7
-      '@vitest/browser-playwright': 4.0.16
-      '@vitest/browser-preview': 4.0.16
-      '@vitest/browser-webdriverio': 4.0.16
-      '@vitest/ui': 4.0.16
+      '@vitest/browser-playwright': 4.0.18
+      '@vitest/browser-preview': 4.0.18
+      '@vitest/browser-webdriverio': 4.0.18
+      '@vitest/ui': 4.0.18
       happy-dom: '*'
       jsdom: '*'
     peerDependenciesMeta:
@@ -33685,48 +33759,42 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@4.0.12(vitest@3.2.4)':
+  '@vitest/coverage-v8@4.0.18(vitest@3.2.4)':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.12
-      ast-v8-to-istanbul: 0.3.8
-      debug: 4.4.3
+      '@vitest/utils': 4.0.18
+      ast-v8-to-istanbul: 0.3.11
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
-      istanbul-lib-source-maps: 5.0.6
       istanbul-reports: 3.2.0
       magicast: 0.5.1
+      obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-    transitivePeerDependencies:
-      - supports-color
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  '@vitest/coverage-v8@4.0.12(vitest@4.0.16)':
+  '@vitest/coverage-v8@4.0.18(vitest@4.0.18)':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.12
-      ast-v8-to-istanbul: 0.3.8
-      debug: 4.4.3
+      '@vitest/utils': 4.0.18
+      ast-v8-to-istanbul: 0.3.11
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
-      istanbul-lib-source-maps: 5.0.6
       istanbul-reports: 3.2.0
       magicast: 0.5.1
+      obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-    transitivePeerDependencies:
-      - supports-color
+      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  '@vitest/eslint-plugin@1.3.23(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.16)':
+  '@vitest/eslint-plugin@1.3.23(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.18)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.51.0
       '@typescript-eslint/utils': 8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       eslint: 9.39.2(jiti@2.6.1)
     optionalDependencies:
       typescript: 5.9.3
-      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -33738,12 +33806,12 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
-  '@vitest/expect@4.0.16':
+  '@vitest/expect@4.0.18':
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@types/chai': 5.2.3
-      '@vitest/spy': 4.0.16
-      '@vitest/utils': 4.0.16
+      '@vitest/spy': 4.0.18
+      '@vitest/utils': 4.0.18
       chai: 6.2.1
       tinyrainbow: 3.0.3
 
@@ -33756,9 +33824,9 @@ snapshots:
       msw: 2.12.10(@types/node@22.19.7)(typescript@5.9.3)
       vite: 7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  '@vitest/mocker@4.0.16(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))':
+  '@vitest/mocker@4.0.18(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))':
     dependencies:
-      '@vitest/spy': 4.0.16
+      '@vitest/spy': 4.0.18
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
@@ -33769,11 +33837,7 @@ snapshots:
     dependencies:
       tinyrainbow: 2.0.0
 
-  '@vitest/pretty-format@4.0.12':
-    dependencies:
-      tinyrainbow: 3.0.3
-
-  '@vitest/pretty-format@4.0.16':
+  '@vitest/pretty-format@4.0.18':
     dependencies:
       tinyrainbow: 3.0.3
 
@@ -33783,9 +33847,9 @@ snapshots:
       pathe: 2.0.3
       strip-literal: 3.1.0
 
-  '@vitest/runner@4.0.16':
+  '@vitest/runner@4.0.18':
     dependencies:
-      '@vitest/utils': 4.0.16
+      '@vitest/utils': 4.0.18
       pathe: 2.0.3
 
   '@vitest/snapshot@3.2.4':
@@ -33794,9 +33858,9 @@ snapshots:
       magic-string: 0.30.21
       pathe: 2.0.3
 
-  '@vitest/snapshot@4.0.16':
+  '@vitest/snapshot@4.0.18':
     dependencies:
-      '@vitest/pretty-format': 4.0.16
+      '@vitest/pretty-format': 4.0.18
       magic-string: 0.30.21
       pathe: 2.0.3
 
@@ -33804,7 +33868,7 @@ snapshots:
     dependencies:
       tinyspy: 4.0.4
 
-  '@vitest/spy@4.0.16': {}
+  '@vitest/spy@4.0.18': {}
 
   '@vitest/ui@3.2.4(vitest@3.2.4)':
     dependencies:
@@ -33818,27 +33882,27 @@ snapshots:
       vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     optional: true
 
-  '@vitest/ui@4.0.12(vitest@3.2.4)':
+  '@vitest/ui@4.0.18(vitest@3.2.4)':
     dependencies:
-      '@vitest/utils': 4.0.12
+      '@vitest/utils': 4.0.18
       fflate: 0.8.2
       flatted: 3.3.3
       pathe: 2.0.3
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  '@vitest/ui@4.0.12(vitest@4.0.16)':
+  '@vitest/ui@4.0.18(vitest@4.0.18)':
     dependencies:
-      '@vitest/utils': 4.0.12
+      '@vitest/utils': 4.0.18
       fflate: 0.8.2
       flatted: 3.3.3
       pathe: 2.0.3
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -33846,14 +33910,9 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@vitest/utils@4.0.12':
+  '@vitest/utils@4.0.18':
     dependencies:
-      '@vitest/pretty-format': 4.0.12
-      tinyrainbow: 3.0.3
-
-  '@vitest/utils@4.0.16':
-    dependencies:
-      '@vitest/pretty-format': 4.0.16
+      '@vitest/pretty-format': 4.0.18
       tinyrainbow: 3.0.3
 
   '@volar/language-core@2.4.23':
@@ -34420,11 +34479,11 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  ast-v8-to-istanbul@0.3.8:
+  ast-v8-to-istanbul@0.3.11:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
-      js-tokens: 9.0.1
+      js-tokens: 10.0.0
 
   astring@1.9.0: {}
 
@@ -34544,7 +34603,7 @@ snapshots:
       caseless: 0.12.0
       is-stream: 2.0.1
 
-  better-auth@1.4.18(mongodb@7.0.0(socks@2.8.7))(pg@8.16.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.16):
+  better-auth@1.4.18(mongodb@7.0.0(socks@2.8.7))(pg@8.16.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18):
     dependencies:
       '@better-auth/core': 1.4.18(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@4.3.6))(jose@6.1.3)(kysely@0.28.8)(nanostores@1.1.0)
       '@better-auth/telemetry': 1.4.18(@better-auth/core@1.4.18(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.21)(better-call@1.1.8(zod@4.3.6))(jose@6.1.3)(kysely@0.28.8)(nanostores@1.1.0))
@@ -34563,7 +34622,7 @@ snapshots:
       pg: 8.16.3
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
-      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   better-call@1.1.8(zod@4.3.6):
     dependencies:
@@ -35749,6 +35808,8 @@ snapshots:
   diff@5.2.2: {}
 
   diff@8.0.2: {}
+
+  diff@8.0.3: {}
 
   dir-glob@3.0.1:
     dependencies:
@@ -38229,14 +38290,6 @@ snapshots:
       make-dir: 4.0.0
       supports-color: 7.2.0
 
-  istanbul-lib-source-maps@5.0.6:
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      debug: 4.4.3
-      istanbul-lib-coverage: 3.2.2
-    transitivePeerDependencies:
-      - supports-color
-
   istanbul-reports@3.2.0:
     dependencies:
       html-escaper: 2.0.2
@@ -38314,6 +38367,8 @@ snapshots:
   js-tiktoken@1.0.21:
     dependencies:
       base64-js: 1.5.1
+
+  js-tokens@10.0.0: {}
 
   js-tokens@4.0.0: {}
 
@@ -43932,7 +43987,7 @@ snapshots:
       - tsx
       - yaml
 
-  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1):
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.4
@@ -43960,7 +44015,7 @@ snapshots:
     optionalDependencies:
       '@types/debug': 4.1.12
       '@types/node': 22.19.7
-      '@vitest/ui': 4.0.12(vitest@3.2.4)
+      '@vitest/ui': 4.0.18(vitest@3.2.4)
       jsdom: 26.1.0
     transitivePeerDependencies:
       - jiti
@@ -43976,15 +44031,15 @@ snapshots:
       - tsx
       - yaml
 
-  vitest@4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1):
+  vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1):
     dependencies:
-      '@vitest/expect': 4.0.16
-      '@vitest/mocker': 4.0.16(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
-      '@vitest/pretty-format': 4.0.16
-      '@vitest/runner': 4.0.16
-      '@vitest/snapshot': 4.0.16
-      '@vitest/spy': 4.0.16
-      '@vitest/utils': 4.0.16
+      '@vitest/expect': 4.0.18
+      '@vitest/mocker': 4.0.18(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(vite@7.3.0(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
+      '@vitest/pretty-format': 4.0.18
+      '@vitest/runner': 4.0.18
+      '@vitest/snapshot': 4.0.18
+      '@vitest/spy': 4.0.18
+      '@vitest/utils': 4.0.18
       es-module-lexer: 1.7.0
       expect-type: 1.3.0
       magic-string: 0.30.21
@@ -44001,7 +44056,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@types/node': 22.19.7
-      '@vitest/ui': 4.0.12(vitest@4.0.16)
+      '@vitest/ui': 4.0.18(vitest@4.0.18)
       jsdom: 26.1.0
     transitivePeerDependencies:
       - jiti
