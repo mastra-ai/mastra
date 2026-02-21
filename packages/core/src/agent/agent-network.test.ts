@@ -6341,8 +6341,9 @@ describe('Agent - network - onStepFinish and onError callbacks', () => {
     // Verify onError was called
     expect(errorCallbacks.length).toBeGreaterThan(0);
 
-    // Verify the callback received error data
+    // Verify the callback received the expected error
     const errorEvent = errorCallbacks[0];
-    expect(errorEvent.error).toBeDefined();
+    expect(errorEvent.error).toBeInstanceOf(Error);
+    expect(errorEvent.error.message).toContain('Sub-agent stream error');
   });
 });
