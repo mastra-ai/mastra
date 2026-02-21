@@ -1174,3 +1174,27 @@ exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle un
   "type": "object",
 }
 `;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - ZodNull Handling > should handle object schema with null field (MCP use case) 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "extra": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null",
+      ],
+    },
+    "result": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "result",
+  ],
+  "type": "object",
+}
+`;

@@ -352,6 +352,8 @@ export class SchemaCompatLayer {
 
   /**
    * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
+   * ZodNull is coerced to z.any().optional() instead of throwing, since { "type": "null" } is
+   * valid JSON Schema (used by MCP servers) and should not crash the compatibility layer.
    *
    * @param value - The Zod type to check
    * @param throwOnTypes - Array of type names to throw errors for
@@ -362,6 +364,9 @@ export class SchemaCompatLayer {
     value: z.ZodTypeAny,
     throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES,
   ): ShapeValue<T> {
+    if (value instanceof ZodNull) {
+      return z.any().optional() as ShapeValue<T>;
+    }
     if (throwOnTypes.includes(value._def?.typeName as UnsupportedZodType)) {
       throw new Error(`${this.model.modelId} does not support zod type: ${value._def?.typeName}`);
     }

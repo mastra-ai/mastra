@@ -96,6 +96,54 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
   });
 
+  describe('processZodType - ZodNull Handling', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should coerce z.null() to z.any().optional() instead of throwing', () => {
+      const schema = z.object({
+        value: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle object schema with null field (MCP use case)', () => {
+      const schema = z.object({
+        result: z.string(),
+        extra: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(layer.toJSONSchema(schema)).toMatchSnapshot();
+    });
+
+    it('should handle standalone z.null() schema without throwing', () => {
+      const schema = z.null();
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      let result: ReturnType<typeof layer.processZodType>;
+      expect(() => {
+        result = layer.processZodType(schema);
+      }).not.toThrow();
+      // Verify the coercion: ZodNull → z.any().optional()
+      expect(result!).toBeInstanceOf(z.ZodOptional);
+    });
+
+    it('should handle z.null().optional() field without throwing', () => {
+      const schema = z.object({
+        value: z.null().optional(),
+      });
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+      expect(layer.toJSONSchema(schema)).toMatchSnapshot();
+    });
+  });
+
   describe('processZodType - Nested Objects', () => {
     const modelInfo: ModelInformation = {
       provider: 'anthropic',
