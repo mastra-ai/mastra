@@ -4,13 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  CombinedAutocompleteProvider,
-  Container,
-  Spacer,
-  Text,
-  visibleWidth,
-} from '@mariozechner/pi-tui';
+import { CombinedAutocompleteProvider, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type {
   HarnessEvent,
@@ -1375,7 +1369,8 @@ ${instructions}`,
     const obsThreshold = this.state.harness.getObservationThreshold();
     const refThreshold = this.state.harness.getReflectionThreshold();
     this.state.omProgress.threshold = obsThreshold;
-    this.state.omProgress.thresholdPercent = obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
+    this.state.omProgress.thresholdPercent =
+      obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
     this.state.omProgress.reflectionThreshold = refThreshold;
     this.state.omProgress.reflectionThresholdPercent =
       refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
@@ -1517,7 +1512,9 @@ ${instructions}`,
     // Update observation tokens to show the total being reflected
     this.state.omProgress.observationTokens = tokensToReflect;
     this.state.omProgress.reflectionThresholdPercent =
-      this.state.omProgress.reflectionThreshold > 0 ? (tokensToReflect / this.state.omProgress.reflectionThreshold) * 100 : 0;
+      this.state.omProgress.reflectionThreshold > 0
+        ? (tokensToReflect / this.state.omProgress.reflectionThreshold) * 100
+        : 0;
     // Show in-progress marker in chat
     this.state.activeOMMarker = new OMMarkerComponent({
       type: 'om_observation_start',
@@ -1542,7 +1539,9 @@ ${instructions}`,
     // Observations were compressed — update token count
     this.state.omProgress.observationTokens = compressedTokens;
     this.state.omProgress.reflectionThresholdPercent =
-      this.state.omProgress.reflectionThreshold > 0 ? (compressedTokens / this.state.omProgress.reflectionThreshold) * 100 : 0;
+      this.state.omProgress.reflectionThreshold > 0
+        ? (compressedTokens / this.state.omProgress.reflectionThreshold) * 100
+        : 0;
     // Remove in-progress marker — the output box replaces it
     if (this.state.activeOMMarker) {
       const idx = this.state.chatContainer.children.indexOf(this.state.activeOMMarker);
@@ -1688,7 +1687,11 @@ ${instructions}`,
       this.state.lastAskUserComponent = undefined;
       this.state.lastSubmitPlanComponent = undefined;
       if (!this.state.streamingComponent) {
-        this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+        this.state.streamingComponent = new AssistantMessageComponent(
+          undefined,
+          this.state.hideThinkingBlock,
+          getMarkdownTheme(),
+        );
         this.addChildBeforeFollowUps(this.state.streamingComponent);
         this.state.streamingMessage = message;
         const trailingParts = this.getTrailingContentParts(message);
@@ -1933,7 +1936,11 @@ ${instructions}`,
       this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
 
       this.state.ui.requestRender();
@@ -2005,7 +2012,11 @@ ${instructions}`,
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
       // (even though task_write doesn't render a tool component inline, we still need
       // to split the streaming component so getTrailingContentParts doesn't overwrite it)
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
       this.state.ui.requestRender();
     } else if (toolName !== 'subagent') {
@@ -2022,7 +2033,11 @@ ${instructions}`,
       this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
 
       this.state.ui.requestRender();
@@ -3272,7 +3287,8 @@ ${instructions}`,
           onObservationThresholdChange: value => {
             this.state.harness.setState({ observationThreshold: value } as any);
             this.state.omProgress.threshold = value;
-            this.state.omProgress.thresholdPercent = value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
+            this.state.omProgress.thresholdPercent =
+              value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onReflectionThresholdChange: value => {
@@ -4358,7 +4374,11 @@ Keyboard shortcuts:
             ...message,
             content: accumulatedContent,
           };
-          const textComponent = new AssistantMessageComponent(textMessage, this.state.hideThinkingBlock, getMarkdownTheme());
+          const textComponent = new AssistantMessageComponent(
+            textMessage,
+            this.state.hideThinkingBlock,
+            getMarkdownTheme(),
+          );
           this.state.chatContainer.addChild(textComponent);
         }
       }
