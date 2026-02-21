@@ -176,12 +176,6 @@
 
 - Fixed duplicate Vercel AI Gateway configuration that could cause incorrect API key resolution. Removed a redundant override that conflicted with the upstream models.dev registry. ([#13291](https://github.com/mastra-ai/mastra/pull/13291))
 
-- Improved Observational Memory activation to preserve more usable context after activation. Previously, activation could leave the agent with too much or too little context depending on how chunks aligned with the retention target. ([#13305](https://github.com/mastra-ai/mastra/pull/13305))
-  - Activation now lands closer to the retention target by biasing chunk selection to slightly overshoot rather than undershoot
-  - Added safeguards to prevent activation from consuming too much context (95% ceiling and 1000-token floor)
-  - When pending tokens exceed `blockAfter`, activation now aggressively reduces context to unblock the conversation
-  - `bufferActivation` now accepts absolute token values (>= 1000) in addition to ratios (0–1), giving more precise control over when activation triggers
-
 - Fixed Vercel AI Gateway failing when using the model router string format (e.g. `vercel/openai/gpt-oss-120b`). The provider registry was overriding `createGateway`'s base URL with an incorrect value, causing API requests to hit the wrong endpoint. Removed the URL override so the AI SDK uses its own correct default. Closes #13280. ([#13287](https://github.com/mastra-ai/mastra/pull/13287))
 
 - Fixed recursive schema warnings for processor graph entries by unrolling to a fixed depth of 3 levels, matching the existing rule group pattern ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
@@ -192,7 +186,7 @@
 
 - Fixed a crash where the Node.js process would terminate with an unhandled TypeError when an LLM stream encountered an error. The ReadableStreamDefaultController would throw "Controller is already closed" when chunks were enqueued after a downstream consumer cancelled or terminated the stream. All controller.enqueue(), controller.close(), and controller.error() calls now check if the controller is still open before attempting operations. (https://github.com/mastra-ai/mastra/issues/13107) ([#13142](https://github.com/mastra-ai/mastra/pull/13142))
 
-- Observational Memory activation now preserves the agent's suggested next response and current task, so agents maintain conversational continuity when the memory window shrinks during activation. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
+- Added `suggestedContinuation` and `currentTask` fields to the in-memory storage adapter's Observational Memory activation result, aligning it with the persistent storage implementations. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
 
 - Fixed provider-executed tools (e.g. Anthropic web_search) causing stream bail when called in parallel with regular tools. The tool-call-step now provides a fallback result for provider-executed tools whose output was not propagated, preventing the mapping step from misidentifying them as pending HITL interactions. Fixes #13125. ([#13126](https://github.com/mastra-ai/mastra/pull/13126))
 
