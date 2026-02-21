@@ -5,4 +5,4 @@
 '@mastra/mongodb': patch
 ---
 
-Extended `SwapBufferedToActiveResult` to include `suggestedContinuation` and `currentTask` from the most recent activated buffered chunk. Updated all storage adapters to populate these fields during activation.
+`SwapBufferedToActiveResult` now includes `suggestedContinuation` and `currentTask` from the last activated buffered chunk. Storage adapters return these fields on activation so callers can propagate continuation context.
