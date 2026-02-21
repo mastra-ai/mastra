@@ -24,6 +24,7 @@
  * ```
  */
 
+import type { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
@@ -71,9 +72,10 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Get instructions describing how this sandbox works.
    * Used in tool descriptions to help agents understand execution context.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this sandbox
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
   // Command Execution

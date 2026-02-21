@@ -31,6 +31,7 @@
  */
 
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -802,8 +803,65 @@ export class Workspace<
   }
 
   /**
+   * Get human-readable instructions describing the workspace environment.
+   *
+   * When both a sandbox with mounts and a filesystem exist, each mount path
+   * is classified as sandbox-accessible (state === 'mounted') or
+   * workspace-only (pending / mounting / error / unsupported). When there's
+   * no sandbox or no mounts, falls back to provider-level instructions.
+   *
+   * @param opts - Optional options including request context for per-request customisation
+   * @returns Combined instructions string (may be empty)
+   */
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const parts: string[] = [];
+
+    // Sandbox-level instructions (working directory, provider type)
+    const sandboxInstructions = this._sandbox?.getInstructions?.(opts);
+    if (sandboxInstructions) parts.push(sandboxInstructions);
+
+    // Mount state overlay: check actual MountManager state
+    const mountEntries = this._sandbox?.mounts?.entries;
+    if (mountEntries && mountEntries.size > 0) {
+      const sandboxAccessible: string[] = [];
+      const workspaceOnly: string[] = [];
+
+      for (const [mountPath, entry] of mountEntries) {
+        const fsName = entry.filesystem.displayName || entry.filesystem.provider;
+        const access = entry.filesystem.readOnly ? 'read-only' : 'read-write';
+
+        if (entry.state === 'mounted') {
+          sandboxAccessible.push(`  - ${mountPath}: ${fsName} (${access})`);
+        } else {
+          // pending, mounting, error, unsupported — NOT accessible in sandbox
+          workspaceOnly.push(`  - ${mountPath}: ${fsName} (${access})`);
+        }
+      }
+
+      if (sandboxAccessible.length) {
+        parts.push(`Sandbox-mounted filesystems (accessible in shell commands):\n${sandboxAccessible.join('\n')}`);
+      }
+      if (workspaceOnly.length) {
+        parts.push(
+          `Workspace-only filesystems (use file tools, NOT available in shell commands):\n${workspaceOnly.join('\n')}`,
+        );
+      }
+    } else {
+      // No mounts or no sandbox — fall back to filesystem-level instructions
+      const fsInstructions = this._fs?.getInstructions?.(opts);
+      if (fsInstructions) parts.push(fsInstructions);
+    }
+
+    return parts.join('\n\n');
+  }
+
+  /**
    * Get information about how filesystem and sandbox paths relate.
    * Useful for understanding how to access workspace files from sandbox code.
+   *
+   * @deprecated Use {@link getInstructions} instead. `getInstructions()` is
+   * mount-state-aware and feeds into the system message via
+   * `WorkspaceInstructionsProcessor`.
    *
    * @returns PathContext with paths and instructions from providers
    */

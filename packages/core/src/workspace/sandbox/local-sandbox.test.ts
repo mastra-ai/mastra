@@ -2,8 +2,9 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
@@ -112,6 +113,63 @@ describe('LocalSandbox', () => {
       expect(info.resources?.cpuCores).toBeGreaterThan(0);
       expect(info.metadata?.platform).toBe(os.platform());
       expect(info.metadata?.nodeVersion).toBe(process.version);
+    });
+  });
+
+  // ===========================================================================
+  // getInstructions
+  // ===========================================================================
+  describe('getInstructions', () => {
+    it('should return auto-generated instructions with working directory', () => {
+      const instructions = sandbox.getInstructions();
+      expect(instructions).toContain('Local command execution');
+      expect(instructions).toContain(tempDir);
+    });
+
+    it('should return custom instructions when override is provided', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: 'Custom sandbox instructions.',
+      });
+      expect(sb.getInstructions()).toBe('Custom sandbox instructions.');
+    });
+
+    it('should return empty string when override is empty string', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: '',
+      });
+      expect(sb.getInstructions()).toBe('');
+    });
+
+    it('should return auto-generated instructions when no override', () => {
+      const sb = new LocalSandbox({ workingDirectory: tempDir });
+      expect(sb.getInstructions()).toContain('Local command execution');
+    });
+
+    it('should support function form that extends auto instructions', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: ({ auto }) => `${auto}\nExtra sandbox info.`,
+      });
+      const result = sb.getInstructions();
+      expect(result).toContain('Local command execution');
+      expect(result).toContain('Extra sandbox info.');
+    });
+
+    it('should pass requestContext to function form', () => {
+      const ctx = new RequestContext([['tenant', 'acme']]);
+      const fn = vi.fn(({ auto, requestContext }: any) => {
+        return `${auto} tenant=${requestContext?.get('tenant')}`;
+      });
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: fn,
+      });
+      const result = sb.getInstructions({ requestContext: ctx });
+      expect(fn).toHaveBeenCalledOnce();
+      expect(result).toContain('tenant=acme');
+      expect(result).toContain('Local command execution');
     });
   });
 

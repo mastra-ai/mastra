@@ -21,6 +21,7 @@
 
 import posixPath from 'node:path/posix';
 
+import type { RequestContext } from '../../request-context';
 import { PermissionError } from '../errors';
 import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
@@ -450,7 +451,7 @@ export class CompositeFilesystem<
    * Get instructions describing the mounted filesystems.
    * Used by agents to understand available storage locations.
    */
-  getInstructions(): string {
+  getInstructions(_opts?: { requestContext?: RequestContext }): string {
     const mountDescriptions = Array.from(this._mounts.entries())
       .map(([mountPath, fs]) => {
         const name = fs.displayName || fs.provider;
@@ -459,7 +460,7 @@ export class CompositeFilesystem<
       })
       .join('\n');
 
-    return `Mounted filesystems:\n${mountDescriptions}`;
+    return `Filesystem mount points:\n${mountDescriptions}`;
   }
 }
 
