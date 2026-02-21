@@ -91,6 +91,25 @@ export type ServerConfig = {
    */
   host?: string;
   /**
+   * Public-facing host for Studio API URL. Use this when the server bind address
+   * differs from the public domain (e.g., binding to '0.0.0.0' but accessible at 'my-app.run.app').
+   * When not set, falls back to `host`.
+   */
+  publicHost?: string;
+  /**
+   * Public-facing protocol for Studio API URL ('http' or 'https').
+   * Use this when the public protocol differs from the server's local protocol
+   * (e.g., behind a TLS-terminating reverse proxy).
+   * When not set, falls back to auto-detected protocol based on HTTPS config.
+   */
+  publicProtocol?: 'http' | 'https';
+  /**
+   * Public-facing port for Studio API URL. Use this when the external port differs
+   * from the server's local port (e.g., server listens on 8080 but is exposed on 443).
+   * When not set, falls back to `port`.
+   */
+  publicPort?: number;
+  /**
    * Base path for Mastra Studio UI
    * @default '/'
    * @example '/my-mastra-studio'
