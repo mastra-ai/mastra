@@ -62,6 +62,14 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream._getBaseStream()) {
+    // Stop processing chunks if the abort signal has fired.
+    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
+    // so we must check the signal on each iteration to avoid accumulating the full
+    // response into the messageList after the caller has disconnected.
+    if (options?.abortSignal?.aborted) {
+      break;
+    }
+
     if (!chunk) {
       continue;
     }
@@ -888,6 +896,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } else {
             throw error;
           }
+        }
+
+        // Handle abort detected via signal check in processOutputStream (loop broke early).
+        // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
+        // so this handles the case where processOutputStream completed normally via `break`.
+        if (options?.abortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+          });
+
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+          return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
         }
 
         return {
