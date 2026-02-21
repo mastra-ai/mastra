@@ -2,6 +2,7 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CombinedAutocompleteProvider, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
@@ -65,6 +66,19 @@ import { getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
 
 /** Tools that modify files, used for /diff tracking */
 const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+
+/** Detect the fd binary (fast file finder) for @ fuzzy file autocomplete */
+function detectFdPath(): string | null {
+  for (const bin of ['fd', 'fdfind']) {
+    try {
+      const resolved = execSync(`which ${bin}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      if (resolved) return resolved;
+    } catch {
+      // not found, try next
+    }
+  }
+  return null;
+}
 
 // =============================================================================
 // Types
@@ -951,7 +965,8 @@ ${instructions}`,
       });
     }
 
-    this.state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd());
+    const fdPath = detectFdPath();
+    this.state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
     this.state.editor.setAutocompleteProvider(this.state.autocompleteProvider);
   }
   /**
