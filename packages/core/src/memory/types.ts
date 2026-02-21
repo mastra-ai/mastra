@@ -42,6 +42,7 @@ export type StorageThreadType = {
   resourceId: string;
   createdAt: Date;
   updatedAt: Date;
+  lastMessageAt?: Date | null;
   metadata?: Record<string, unknown>;
 };
 

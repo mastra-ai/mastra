@@ -408,11 +408,19 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Update thread timestamps for each unique threadId
+    const now = new Date();
     const threadIds = new Set(messages.map(msg => msg.threadId).filter((id): id is string => Boolean(id)));
     for (const threadId of threadIds) {
       const thread = this.db.threads.get(threadId);
       if (thread) {
-        thread.updatedAt = new Date();
+        thread.updatedAt = now;
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMessages = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt = new Date(Math.max(...threadMessages.map(m => new Date(m.createdAt).getTime())));
+        // Only advance lastMessageAt, never regress
+        if (!thread.lastMessageAt || maxCreatedAt > thread.lastMessageAt) {
+          thread.lastMessageAt = maxCreatedAt;
+        }
       }
     }
 
@@ -533,12 +541,19 @@ export class InMemoryMemory extends MemoryStorage {
       this.db.messages.delete(messageId);
     }
 
-    // Update thread timestamps
+    // Update thread timestamps and recompute lastMessageAt
     const now = new Date();
     for (const threadId of threadIds) {
       const thread = this.db.threads.get(threadId);
       if (thread) {
         thread.updatedAt = now;
+        // Recompute lastMessageAt from remaining messages
+        const remainingMessages = Array.from(this.db.messages.values()).filter(m => m.thread_id === threadId);
+        if (remainingMessages.length > 0) {
+          thread.lastMessageAt = new Date(Math.max(...remainingMessages.map(m => new Date(m.createdAt).getTime())));
+        } else {
+          thread.lastMessageAt = null;
+        }
       }
     }
   }
@@ -712,6 +727,10 @@ export class InMemoryMemory extends MemoryStorage {
       },
       createdAt: now,
       updatedAt: now,
+      lastMessageAt:
+        sourceMessages.length > 0
+          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt).getTime())))
+          : null,
     };
 
     // Save the new thread
@@ -760,9 +779,15 @@ export class InMemoryMemory extends MemoryStorage {
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {
     return threads.sort((a, b) => {
-      const isDateField = field === 'createdAt' || field === 'updatedAt';
-      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
-      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+      const isDateField = field === 'createdAt' || field === 'updatedAt' || field === 'lastMessageAt';
+      const aRaw = a[field];
+      const bRaw = b[field];
+      // Handle null/undefined - nulls last for DESC, nulls first for ASC
+      if (aRaw == null && bRaw == null) return 0;
+      if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+      if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+      const aValue = isDateField ? new Date(aRaw).getTime() : aRaw;
+      const bValue = isDateField ? new Date(bRaw).getTime() : bRaw;
 
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         if (direction === 'ASC') {

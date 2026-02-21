@@ -78,6 +78,13 @@ type MessageRowFromDB = {
   resourceId: string;
 };
 
+// Thread row type returned by DB queries, extending StorageThreadType with timezone-aware columns
+type ThreadRowFromDB = StorageThreadType & {
+  createdAtZ: Date;
+  updatedAtZ: Date;
+  lastMessageAtZ?: Date | null;
+};
+
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
 }
@@ -163,6 +170,19 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    await this.#db.client.none(
+      `UPDATE ${threadTableName} SET "lastMessageAt" = sub.max_created, "lastMessageAtZ" = sub.max_created
+       FROM (SELECT thread_id, MAX("createdAt") as max_created FROM ${messageTableName} GROUP BY thread_id) sub
+       WHERE ${threadTableName}.id = sub.thread_id AND ${threadTableName}."lastMessageAt" IS NULL`,
+    );
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       const omTableName = getTableName({
@@ -312,10 +332,9 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
-      const thread = await this.#db.client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `SELECT * FROM ${tableName} WHERE id = $1`,
-        [threadId],
-      );
+      const thread = await this.#db.client.oneOrNone<ThreadRowFromDB>(`SELECT * FROM ${tableName} WHERE id = $1`, [
+        threadId,
+      ]);
 
       if (!thread) {
         return null;
@@ -328,6 +347,7 @@ export class MemoryPG extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        lastMessageAt: thread.lastMessageAtZ || thread.lastMessageAt || null,
       };
     } catch (error) {
       throw new MastraError(
@@ -424,11 +444,11 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        dataQuery,
-        [...queryParams, limitValue, offset],
-      );
+      // For nullable fields like lastMessageAt, ensure deterministic NULL ordering:
+      // nulls last for DESC, nulls first for ASC
+      const nullsClause = field === 'lastMessageAt' ? (direction === 'DESC' ? ' NULLS LAST' : ' NULLS FIRST') : '';
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", "lastMessageAt", "lastMessageAtZ" ${baseQuery} ORDER BY "${field}" ${direction}${nullsClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const rows = await this.#db.client.manyOrNone<ThreadRowFromDB>(dataQuery, [...queryParams, limitValue, offset]);
 
       const threads = (rows || []).map(thread => ({
         id: thread.id,
@@ -438,6 +458,7 @@ export class MemoryPG extends MemoryStorage {
         // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        lastMessageAt: thread.lastMessageAtZ || thread.lastMessageAt || null,
       }));
 
       return {
@@ -485,8 +506,10 @@ export class MemoryPG extends MemoryStorage {
           "createdAt",
           "createdAtZ",
           "updatedAt",
-          "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          "updatedAtZ",
+          "lastMessageAt",
+          "lastMessageAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (id) DO UPDATE SET
           "resourceId" = EXCLUDED."resourceId",
           title = EXCLUDED.title,
@@ -494,7 +517,9 @@ export class MemoryPG extends MemoryStorage {
           "createdAt" = EXCLUDED."createdAt",
           "createdAtZ" = EXCLUDED."createdAtZ",
           "updatedAt" = EXCLUDED."updatedAt",
-          "updatedAtZ" = EXCLUDED."updatedAtZ"`,
+          "updatedAtZ" = EXCLUDED."updatedAtZ",
+          "lastMessageAt" = COALESCE(EXCLUDED."lastMessageAt", "${TABLE_THREADS}"."lastMessageAt"),
+          "lastMessageAtZ" = COALESCE(EXCLUDED."lastMessageAtZ", "${TABLE_THREADS}"."lastMessageAtZ")`,
         [
           thread.id,
           thread.resourceId,
@@ -504,6 +529,8 @@ export class MemoryPG extends MemoryStorage {
           thread.createdAt,
           thread.updatedAt,
           thread.updatedAt,
+          thread.lastMessageAt || null,
+          thread.lastMessageAt || null,
         ],
       );
 
@@ -554,7 +581,7 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const now = new Date().toISOString();
-      const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      const thread = await this.#db.client.one<ThreadRowFromDB>(
         `UPDATE ${threadTableName}
                     SET
                         title = $1,
@@ -574,6 +601,7 @@ export class MemoryPG extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        lastMessageAt: thread.lastMessageAtZ || thread.lastMessageAt || null,
       };
     } catch (error) {
       throw new MastraError(
@@ -1152,14 +1180,22 @@ export class MemoryPG extends MemoryStorage {
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const nowStr = new Date().toISOString();
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMessages = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt =
+          threadMessages.length > 0
+            ? new Date(Math.max(...threadMessages.map(m => new Date(m.createdAt ?? nowStr).getTime()))).toISOString()
+            : nowStr;
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
                             "updatedAt" = $1,
-                            "updatedAtZ" = $2
-                        WHERE id = $3
+                            "updatedAtZ" = $2,
+                            "lastMessageAt" = GREATEST(COALESCE("lastMessageAt", $3::timestamptz), $3::timestamptz),
+                            "lastMessageAtZ" = GREATEST(COALESCE("lastMessageAtZ", $4::timestamptz), $4::timestamptz)
+                        WHERE id = $5
                     `,
-          [nowStr, nowStr, threadId],
+          [nowStr, nowStr, maxCreatedAt, maxCreatedAt, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
@@ -1340,7 +1376,19 @@ export class MemoryPG extends MemoryStorage {
 
         if (threadIds.length > 0) {
           const updatePromises = threadIds.map(threadId =>
-            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+            t.none(
+              `UPDATE ${threadTableName} SET
+                "updatedAt" = NOW(), "updatedAtZ" = NOW(),
+                ("lastMessageAt", "lastMessageAtZ") = (
+                  SELECT "createdAt", COALESCE("createdAtZ", "createdAt")
+                  FROM ${messageTableName}
+                  WHERE thread_id = $1
+                  ORDER BY COALESCE("createdAtZ", "createdAt") DESC
+                  LIMIT 1
+                )
+              WHERE id = $1`,
+              [threadId],
+            ),
           );
           await Promise.all(updatePromises);
         }
@@ -1535,6 +1583,10 @@ export class MemoryPG extends MemoryStorage {
         };
 
         // Create the new thread
+        const hasMessages = sourceMessages.length > 0;
+        const maxMessageDate = hasMessages
+          ? new Date(Math.max(...sourceMessages.map(m => new Date((m.createdAtZ || m.createdAt) as string).getTime())))
+          : null;
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
@@ -1545,6 +1597,7 @@ export class MemoryPG extends MemoryStorage {
           },
           createdAt: now,
           updatedAt: now,
+          lastMessageAt: maxMessageDate,
         };
 
         // Insert the new thread
@@ -1557,8 +1610,10 @@ export class MemoryPG extends MemoryStorage {
             "createdAt",
             "createdAtZ",
             "updatedAt",
-            "updatedAtZ"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            "updatedAtZ",
+            "lastMessageAt",
+            "lastMessageAtZ"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             newThread.id,
             newThread.resourceId,
@@ -1568,6 +1623,8 @@ export class MemoryPG extends MemoryStorage {
             now,
             now,
             now,
+            maxMessageDate,
+            maxMessageDate,
           ],
         );
 

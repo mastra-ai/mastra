@@ -354,7 +354,8 @@ describe('ClickHouse Domain with URL/credentials config', () => {
             "title" String,
             "metadata" Nullable(String),
             "createdAt" DateTime64(3),
-            "updatedAt" DateTime64(3)
+            "updatedAt" DateTime64(3),
+            "lastMessageAt" Nullable(DateTime64(3))
           )
           ENGINE = ReplacingMergeTree()
           PRIMARY KEY (createdAt, id)

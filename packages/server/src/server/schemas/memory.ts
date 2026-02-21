@@ -38,7 +38,7 @@ const storageOrderBySchema = z.preprocess(
   },
   z
     .object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
+      field: z.enum(['createdAt', 'updatedAt', 'lastMessageAt']).optional(),
       direction: z.enum(['ASC', 'DESC']).optional(),
     })
     .optional(),
@@ -146,6 +146,7 @@ const threadSchema = z.object({
   resourceId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  lastMessageAt: z.date().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

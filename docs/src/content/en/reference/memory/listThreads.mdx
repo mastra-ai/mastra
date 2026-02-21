@@ -95,9 +95,9 @@ const result = await memory.listThreads({
     },
     {
       name: "orderBy",
-      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      type: "{ field: 'createdAt' | 'updatedAt' | 'lastMessageAt', direction: 'ASC' | 'DESC' }",
       description:
-        "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+        "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' }). Use 'lastMessageAt' to sort by when the last message was saved, ignoring title/metadata edits.",
       isOptional: true,
     },
   ]}

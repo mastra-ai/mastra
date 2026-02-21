@@ -6,7 +6,7 @@ import type {
   StorageUpdatePromptBlockInput,
   StorageListPromptBlocksInput,
   StorageListPromptBlocksOutput,
-  ThreadOrderBy,
+  EntityOrderBy,
   ThreadSortDirection,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
@@ -329,7 +329,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
 
   private sortBlocks(
     blocks: StoragePromptBlockType[],
-    field: ThreadOrderBy,
+    field: EntityOrderBy,
     direction: ThreadSortDirection,
   ): StoragePromptBlockType[] {
     return blocks.sort((a, b) => {

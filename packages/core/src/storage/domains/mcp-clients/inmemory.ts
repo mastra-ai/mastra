@@ -6,7 +6,7 @@ import type {
   StorageUpdateMCPClientInput,
   StorageListMCPClientsInput,
   StorageListMCPClientsOutput,
-  ThreadOrderBy,
+  EntityOrderBy,
   ThreadSortDirection,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
@@ -331,7 +331,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
 
   private sortConfigs(
     configs: StorageMCPClientType[],
-    field: ThreadOrderBy,
+    field: EntityOrderBy,
     direction: ThreadSortDirection,
   ): StorageMCPClientType[] {
     return configs.sort((a, b) => {

@@ -473,6 +473,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     metadata: { type: 'jsonb', nullable: true },
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
+    lastMessageAt: { type: 'timestamp', nullable: true },
   },
   [TABLE_MESSAGES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
