@@ -36,6 +36,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   targetType?: TargetType;
   /** Registry-based target ID (existing) */
   targetId?: string;
+  /** Pin to specific target version snapshot (resolved via editor when available) */
+  targetVersionId?: string;
   /** Inline task function (sync or async) */
   task?: (args: {
     input: I;

@@ -57,6 +57,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     datasetId,
     targetType,
     targetId,
+    targetVersionId,
     scorers: scorerInput,
     version,
     maxConcurrency = 5,
@@ -157,7 +158,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     };
   } else if (targetType && targetId) {
     // Registry-based target path (existing)
-    const target = resolveTarget(mastra, targetType, targetId);
+    const target = await resolveTarget(mastra, targetType, targetId, { targetVersionId });
     if (!target) {
       throw new Error(`Target not found: ${targetType}/${targetId}`);
     }
@@ -385,15 +386,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 }
 
 /**
- * Resolve a target from Mastra's registries by type and ID.
+ * Resolve agent via editor when targetVersionId is provided.
+ * Returns the hydrated agent or null if editor unavailable / version not found.
  */
-function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Target | null {
+async function resolveAgentVersion(mastra: Mastra, targetId: string, targetVersionId: string): Promise<Target | null> {
+  try {
+    const editor = mastra.getEditor();
+    const agent = await editor?.agent.getById(targetId, { versionId: targetVersionId });
+    return agent ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a target from Mastra's registries (sync lookup).
+ */
+function resolveTargetFromRegistry(mastra: Mastra, targetType: string, targetId: string): Target | null {
   switch (targetType) {
     case 'agent':
       try {
         return mastra.getAgentById(targetId as any);
       } catch {
-        // Try by name if ID lookup fails
         try {
           return mastra.getAgent(targetId);
         } catch {
@@ -404,7 +418,6 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
       try {
         return mastra.getWorkflowById(targetId as any);
       } catch {
-        // Try by name if ID lookup fails
         try {
           return mastra.getWorkflow(targetId);
         } catch {
@@ -418,9 +431,26 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
         return null;
       }
     case 'processor':
-      // Processors not yet in registry - Phase 4
       return null;
     default:
       return null;
   }
+}
+
+/**
+ * Resolve a target by type and ID, with optional editor-based version resolution for agents.
+ * When targetVersionId is provided for agents, attempts editor resolution first, then falls back to registry.
+ */
+async function resolveTarget(
+  mastra: Mastra,
+  targetType: string,
+  targetId: string,
+  options?: { targetVersionId?: string },
+): Promise<Target | null> {
+  // For agents with targetVersionId, try editor-based version resolution first
+  if (targetType === 'agent' && options?.targetVersionId) {
+    const agent = await resolveAgentVersion(mastra, targetId, options.targetVersionId);
+    if (agent) return agent;
+  }
+  return resolveTargetFromRegistry(mastra, targetType, targetId);
 }

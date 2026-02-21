@@ -471,9 +471,10 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { targetType, targetId, scorerIds, version, maxConcurrency } = params as {
+      const { targetType, targetId, targetVersionId, scorerIds, version, maxConcurrency } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
+        targetVersionId?: string;
         scorerIds?: string[];
         version?: number;
         maxConcurrency?: number;
@@ -482,6 +483,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
+        targetVersionId,
         scorers: scorerIds,
         version,
         maxConcurrency,
