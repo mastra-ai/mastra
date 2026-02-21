@@ -2601,7 +2601,7 @@ importers:
         specifier: npm:@ai-sdk/xai@2.0.57
         version: '@ai-sdk/xai@2.0.57(zod@3.25.76)'
       '@ast-grep/napi':
-        specifier: ^0.40.0
+        specifier: ^0.40.5
         version: 0.40.5
       '@babel/core':
         specifier: ^7.29.0
