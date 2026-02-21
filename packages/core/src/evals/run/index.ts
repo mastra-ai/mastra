@@ -254,10 +254,10 @@ async function executeTarget(
 async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, targetOptions?: WorkflowRunOptions) {
   const run = await target.createRun({ disableScorers: true });
   const workflowResult = await run.start({
-    inputData: item.input,
-    requestContext: item.requestContext,
     ...targetOptions,
     ...item.startOptions,
+    inputData: item.input,
+    requestContext: item.requestContext,
   });
 
   return {

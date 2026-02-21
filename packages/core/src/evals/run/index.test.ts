@@ -713,7 +713,6 @@ describe('runEvals', () => {
   describe('targetOptions', () => {
     it('should pass targetOptions to agent.generate (modern path)', async () => {
       const mockAgent = createMockAgentV2();
-      vi.spyOn(mockAgent, 'generate');
 
       await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
@@ -730,7 +729,6 @@ describe('runEvals', () => {
 
     it('should not allow targetOptions to override scorers or returnScorerData', async () => {
       const mockAgent = createMockAgentV2();
-      vi.spyOn(mockAgent, 'generate');
 
       await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
