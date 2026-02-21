@@ -6237,10 +6237,14 @@ describe('Agent - network - onStepFinish and onError callbacks', () => {
     // Verify onStepFinish was called at least once
     expect(stepFinishCallbacks.length).toBeGreaterThan(0);
 
-    // Verify the callback received step data with expected properties
+    // Verify the callback received step data with exact expected values
     const lastStep = stepFinishCallbacks[stepFinishCallbacks.length - 1];
-    expect(lastStep).toHaveProperty('finishReason');
-    expect(lastStep).toHaveProperty('usage');
+    expect(lastStep.finishReason).toBe('stop');
+    expect(lastStep.usage).toMatchObject({
+      inputTokens: 5,
+      outputTokens: 10,
+      totalTokens: 15,
+    });
   });
 
   it('should call onError callback when sub-agent encounters an error', async () => {
