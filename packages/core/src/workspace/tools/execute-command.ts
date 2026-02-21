@@ -36,6 +36,7 @@ Usage:
       const result = await sandbox.executeCommand(command, args ?? [], {
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
+        abortSignal: context?.abortSignal,
         onStdout: async (data: string) => {
           stdout += data;
           await context?.writer?.custom({

@@ -28,6 +28,8 @@ interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   timeout?: number;
   onStdout?: (data: string) => void;
   onStderr?: (data: string) => void;
+  /** Abort signal to cancel the command */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -39,13 +41,20 @@ function execWithStreaming(
   args: string[],
   options: ExecStreamingOptions,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const { timeout, onStdout, onStderr, cwd, env, ...spawnOptions } = options;
+  const { timeout, onStdout, onStderr, abortSignal, cwd, env, ...spawnOptions } = options;
+
+  // If already aborted before spawning, reject immediately
+  if (abortSignal?.aborted) {
+    return Promise.resolve({ stdout: '', stderr: '\nProcess aborted', exitCode: 130 });
+  }
+
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(command, args, { cwd, env, ...spawnOptions });
 
     let stdout = '';
     let stderr = '';
     let killed = false;
+    let aborted = false;
 
     // Set up timeout
     const timeoutId = timeout
@@ -54,6 +63,13 @@ function execWithStreaming(
           proc.kill('SIGTERM');
         }, timeout)
       : undefined;
+
+    // Set up abort signal listener
+    const onAbort = () => {
+      aborted = true;
+      proc.kill('SIGTERM');
+    };
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
 
     proc.stdout.on('data', (data: Buffer) => {
       const str = data.toString();
@@ -69,6 +85,7 @@ function execWithStreaming(
 
     proc.on('error', err => {
       if (timeoutId) clearTimeout(timeoutId);
+      abortSignal?.removeEventListener('abort', onAbort);
       const errorMsg = err.message;
       stderr += errorMsg;
       onStderr?.(errorMsg);
@@ -77,7 +94,12 @@ function execWithStreaming(
 
     proc.on('close', (code, signal) => {
       if (timeoutId) clearTimeout(timeoutId);
-      if (killed) {
+      abortSignal?.removeEventListener('abort', onAbort);
+      if (aborted) {
+        const abortMsg = `\nProcess aborted`;
+        onStderr?.(abortMsg);
+        resolve({ stdout, stderr: stderr + abortMsg, exitCode: 130 });
+      } else if (killed) {
         const timeoutMsg = `\nProcess timed out after ${timeout}ms`;
         onStderr?.(timeoutMsg);
         resolve({ stdout, stderr: stderr + timeoutMsg, exitCode: 124 });
@@ -418,6 +440,7 @@ export class LocalSandbox extends MastraSandbox {
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,
+        abortSignal: options.abortSignal,
       });
 
       const commandResult: CommandResult = {

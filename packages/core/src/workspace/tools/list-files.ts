@@ -56,6 +56,7 @@ Examples:
       exclude: exclude || undefined,
       extension: extension || undefined,
       pattern: pattern || undefined,
+      abortSignal: context?.abortSignal,
     });
 
     return `${result.tree}\n\n${result.summary}`;

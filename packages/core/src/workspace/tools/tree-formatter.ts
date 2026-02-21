@@ -42,6 +42,8 @@ export interface TreeOptions {
   extension?: string | string[];
   /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
   pattern?: string | string[];
+  /** Abort signal to cancel the tree walk */
+  abortSignal?: AbortSignal;
 }
 
 export interface TreeResult {
@@ -101,8 +103,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   /**
    * Build tree recursively
    */
+  const abortSignal = options?.abortSignal;
+
   async function buildTree(currentPath: string, prefix: string, depth: number): Promise<void> {
-    if (depth >= maxDepth) {
+    if (abortSignal?.aborted || depth >= maxDepth) {
       truncated = true;
       return;
     }
@@ -180,6 +184,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     });
 
     for (let i = 0; i < filtered.length; i++) {
+      if (abortSignal?.aborted) break;
       const entry = filtered[i]!;
       const isLast = i === filtered.length - 1;
       const connector = isLast ? LAST_BRANCH : BRANCH;
