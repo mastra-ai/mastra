@@ -1249,6 +1249,10 @@ export interface SwapBufferedToActiveResult {
     messageCount: number;
     observations: string;
   }>;
+  /** Suggested continuation from the most recent activated chunk (if any) */
+  suggestedContinuation?: string;
+  /** Current task from the most recent activated chunk (if any) */
+  currentTask?: string;
 }
 
 /**

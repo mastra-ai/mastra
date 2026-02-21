@@ -12,6 +12,8 @@ import {
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
 } from '../observer-agent';
 import {
   buildReflectorPrompt,
@@ -846,6 +848,61 @@ User asked about </current-task> parsing and how it works
         expect(result.currentTask).toContain('User asked about </current-task> parsing');
         expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
+    });
+  });
+
+  describe('sanitizeObservationLines', () => {
+    it('should pass through normal observations unchanged', () => {
+      const obs = '- 🔴 User asked about React\n- 🟡 Some context';
+      expect(sanitizeObservationLines(obs)).toBe(obs);
+    });
+
+    it('should truncate lines exceeding 10k characters', () => {
+      const longLine = 'x'.repeat(15_000);
+      const obs = `- 🔴 Short line\n${longLine}\n- 🟡 Another line`;
+      const result = sanitizeObservationLines(obs);
+      expect(result).toContain('- 🔴 Short line');
+      expect(result).toContain('- 🟡 Another line');
+      expect(result).toContain(' … [truncated]');
+      // The truncated line should be 10k + the suffix
+      const lines = result.split('\n');
+      expect(lines[1]!.length).toBeLessThan(11_000);
+    });
+
+    it('should handle empty input', () => {
+      expect(sanitizeObservationLines('')).toBe('');
+    });
+  });
+
+  describe('detectDegenerateRepetition', () => {
+    it('should return false for normal text', () => {
+      const text = '- 🔴 User asked about React\n- 🟡 Some context\n- 🔴 Another observation';
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should return false for short text', () => {
+      expect(detectDegenerateRepetition('hello')).toBe(false);
+    });
+
+    it('should detect repeated content patterns', () => {
+      // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100); // ~11k chars of the same block
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect extremely long single lines', () => {
+      const line = 'a'.repeat(60_000);
+      expect(detectDegenerateRepetition(line)).toBe(true);
+    });
+
+    it('should flag degenerate output in parseObserverOutput', () => {
+      const block = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, ';
+      const text = `<observations>\n${block.repeat(100)}\n</observations>`;
+      const result = parseObserverOutput(text);
+      expect(result.degenerate).toBe(true);
+      expect(result.observations).toBe('');
     });
   });
 
@@ -3580,6 +3637,193 @@ describe('Async Buffering Storage Operations', () => {
 
       expect(result.chunksActivated).toBe(1);
       expect(result.observations).toContain('Important observation about X');
+    });
+
+    it('should return suggestedContinuation and currentTask from the most recent activated chunk', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with a stale hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 observation',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion from chunk 1',
+          currentTask: 'Old task from chunk 1',
+        },
+      });
+
+      // Chunk 2: newer, with the latest hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 observation',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Latest suggestion from chunk 2',
+          currentTask: 'Current task from chunk 2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should return the hints from the most recent chunk
+      expect(result.suggestedContinuation).toBe('Latest suggestion from chunk 2');
+      expect(result.currentTask).toBe('Current task from chunk 2');
+    });
+
+    it('should return suggestedContinuation from partial activation when latest activated chunk has hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: with hints (will be activated)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Activated suggestion',
+          currentTask: 'Activated task',
+        },
+      });
+
+      // Chunk 2: with newer hints (will remain buffered)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Remaining buffered suggestion',
+          currentTask: 'Remaining buffered task',
+        },
+      });
+
+      // Activate only chunk 1 (activationRatio=0.5, target=5000, chunk1=5000 exact match)
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 0.5,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBe('Activated suggestion');
+      expect(result.currentTask).toBe('Activated task');
+    });
+
+    it('should return undefined continuation hints when chunks have no hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk without hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
+    });
+
+    it('should discard stale hints from older chunks when the most recent activated chunk has none', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 with hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion',
+          currentTask: 'Stale task',
+        },
+      });
+
+      // Chunk 2: newer, without hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 without hints',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should NOT fall back to chunk 1's stale hints
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
     });
   });
 
