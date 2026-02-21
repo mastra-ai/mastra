@@ -111,6 +111,95 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw i
   ]}
 />
 
+### `appendFile(path, content)`
+
+Append content to an existing file.
+
+```typescript
+await filesystem.appendFile('/logs/app.log', 'New log entry\n');
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "Content to append",
+    },
+  ]}
+/>
+
+### `copyFile(src, dest, options?)`
+
+Copy a file to a new location.
+
+```typescript
+await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md');
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "Source file path",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "Destination file path",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite destination if it exists",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `moveFile(src, dest, options?)`
+
+Move or rename a file.
+
+```typescript
+await filesystem.moveFile('/docs/draft.md', '/docs/final.md');
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "Source file path",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "Destination file path",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite destination if it exists",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
 ### `readdir(path, options?)`
 
 List directory contents.
@@ -127,7 +216,8 @@ interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
-  modifiedAt?: Date;
+  isSymlink?: boolean;
+  symlinkTarget?: string;
 }
 ```
 
@@ -217,11 +307,13 @@ const stat = await filesystem.stat('/docs/guide.md');
 
 ```typescript
 interface FileStat {
+  name: string;
+  path: string;
   type: 'file' | 'directory';
   size: number;
-  modifiedAt: Date;
   createdAt: Date;
-  path: string;
+  modifiedAt: Date;
+  mimeType?: string;
 }
 ```
 

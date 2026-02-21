@@ -118,6 +118,18 @@ const filesystem = new GCSFilesystem({
       isOptional: true,
     },
     {
+      name: "icon",
+      type: "FilesystemIcon",
+      description: "Icon identifier for the UI",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Short description of this filesystem for the UI",
+      isOptional: true,
+    },
+    {
       name: "readOnly",
       type: "boolean",
       description: "When true, all write operations are blocked",
