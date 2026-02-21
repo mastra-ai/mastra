@@ -235,7 +235,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.4.0
-        version: 13.5.0
+        version: 13.5.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -515,7 +515,7 @@ importers:
         specifier: '>=19.0.0'
         version: 19.2.3(react@19.2.3)
       rollup-plugin-node-externals:
-        specifier: ^8.0.1
+        specifier: ^8.1.2
         version: 8.1.2(rollup@4.55.3)
       storybook:
         specifier: ^9.1.10
@@ -3732,7 +3732,7 @@ importers:
         specifier: ^8.5.6
         version: 8.5.6
       rollup-plugin-node-externals:
-        specifier: ^8.0.1
+        specifier: ^8.1.2
         version: 8.1.2(rollup@4.55.3)
       storybook:
         specifier: ^9.1.10
@@ -27913,7 +27913,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       fast-deep-equal: 3.1.3
@@ -36862,7 +36862,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.1
 
-  firebase-admin@13.5.0:
+  firebase-admin@13.5.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -36876,7 +36876,7 @@ snapshots:
       node-forge: 1.3.3
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
