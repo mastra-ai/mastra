@@ -164,6 +164,15 @@ export class Tool<
   mcp?: MCPToolProperties;
 
   /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: {
+    serverName: string;
+    serverVersion?: string;
+  };
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -191,6 +200,7 @@ export class Tool<
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
