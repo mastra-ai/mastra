@@ -3,20 +3,9 @@
 '@mastra/editor': minor
 '@mastra/server': minor
 '@mastra/client-js': minor
-'@mastra/mongodb': patch
-'@mastra/libsql': patch
-'@mastra/pg': patch
 ---
 
-Added Processor Providers — a new system for configuring and hydrating processors on stored agents.
-
-**What's new:**
-
-- `ProcessorProvider` interface for registering processor types with config schemas, available phases, and a factory method
-- `PhaseFilteredProcessor` wrapper that selectively enables specific processor phases (e.g. only `processInput` from a processor that also supports `processOutputStream`)
-- `StoredProcessorGraph` — a serializable DSL for processor pipelines that supports sequential, parallel, and conditional execution
-- Stored agents now use `StorageConditionalField<StoredProcessorGraph>` for `inputProcessors` and `outputProcessors`, enabling request-context-based processor selection
-- Graph hydration converts stored configs into live `Processor[]` (sequential) or `ProcessorWorkflow` (parallel/conditional) instances at runtime
+Added Processor Providers — a new system for configuring and hydrating processors on stored agents. Define custom processor types with config schemas, available phases, and a factory method, then compose them into serializable processor graphs that support sequential, parallel, and conditional execution.
 
 **Example — custom processor provider:**
 

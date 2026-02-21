@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Adapted TUI and tool call sites to the updated Harness object-parameter API, ensuring commands, approvals, and thread flows continue to work.
+Updated TUI to work with the new Harness object-parameter API, ensuring all commands, approvals, and thread flows continue to function correctly.

@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Added Header with Combobox to Dataset page
+Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list.

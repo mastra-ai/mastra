@@ -5,4 +5,4 @@
 '@mastra/mongodb': patch
 ---
 
-`SwapBufferedToActiveResult` now includes `suggestedContinuation` and `currentTask` from the last activated buffered chunk. Storage adapters return these fields on activation so callers can propagate continuation context.
+Observational Memory activation now preserves the agent's suggested next response and current task, so agents maintain conversational continuity when the memory window shrinks during activation.
