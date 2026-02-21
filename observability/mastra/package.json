@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "1.2.0",
+  "version": "1.2.1-alpha.0",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,5 @@
 ---
 '@mastra/memory': patch
-'@mastra/core': patch
 ---
 
 Improved Observational Memory activation to preserve more usable context after activation. Previously, activation could leave the agent with too much or too little context depending on how chunks aligned with the retention target.
