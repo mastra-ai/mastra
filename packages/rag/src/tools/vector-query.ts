@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { MastraEmbeddingModel } from '@mastra/core/vector';
+import type { MastraEmbeddingModel, SearchMode, HybridConfig } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
@@ -43,6 +43,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const model: MastraEmbeddingModel<string> = requestContext?.get('model') ?? options.model;
       const providerOptions: ProviderOptions['providerOptions'] =
         requestContext?.get('providerOptions') ?? options.providerOptions;
+      const searchMode: SearchMode | undefined = requestContext?.get('searchMode') ?? options.searchMode;
+      const hybridConfig: HybridConfig | undefined = requestContext?.get('hybridConfig') ?? options.hybridConfig;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
@@ -83,6 +85,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           includeVectors,
           databaseConfig,
           providerOptions,
+          searchMode,
+          hybridConfig,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
