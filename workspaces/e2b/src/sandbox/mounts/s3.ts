@@ -23,8 +23,6 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
-  /** AWS session token for temporary credentials (STS/AssumeRole/Federation) */
-  sessionToken?: string;
   /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
 }
@@ -90,13 +88,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
 
   if (hasCredentials) {
     // Write credentials file (remove old one first to avoid permission issues)
-    // Format: accessKeyId:secretAccessKey[:sessionToken]
-    // The three-part format is required for STS/AssumeRole temporary credentials
-    const credentialsParts = [config.accessKeyId, config.secretAccessKey];
-    if (config.sessionToken) {
-      credentialsParts.push(config.sessionToken);
-    }
-    const credentialsContent = credentialsParts.join(':');
+    const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
     await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
     await sandbox.files.write(credentialsPath, credentialsContent);
     await sandbox.commands.run(`chmod 600 ${credentialsPath}`);
