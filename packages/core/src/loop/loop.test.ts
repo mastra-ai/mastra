@@ -6,6 +6,7 @@ import { optionsTests } from './test-utils/options';
 import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
 import { textStreamTests } from './test-utils/textStream';
+import { textDeltaToolLeakTests } from './test-utils/text-delta-tool-leak';
 import { toolsTests } from './test-utils/tools';
 import { mockDate } from './test-utils/utils';
 
@@ -27,6 +28,7 @@ describe('Loop Tests', () => {
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
+    textDeltaToolLeakTests({ loopFn: loop, runId: 'test-run-id' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
   });

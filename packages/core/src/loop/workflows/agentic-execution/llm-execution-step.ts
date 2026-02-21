@@ -61,7 +61,13 @@ async function processOutputStream<OUTPUT = undefined>({
   includeRawChunks,
   logger,
 }: ProcessOutputStreamOptions<OUTPUT>) {
-  for await (const chunk of outputStream._getBaseStream()) {
+  // Buffer text chunks per step so we can suppress them if the step contains tool calls.
+  // This prevents tool result JSON from leaking into text-delta events.
+  const pendingTextChunks: any[] = [];
+  let stepHasToolCalls = false;
+
+  try {
+    for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
       continue;
     }
@@ -133,6 +139,28 @@ async function processOutputStream<OUTPUT = undefined>({
       });
     }
 
+    // Early-flush: when a safe (non-text, non-tool, non-metadata) chunk arrives,
+    // flush any pending text so it appears before the non-text content in the stream.
+    // This preserves original chunk ordering for text-only steps while still allowing
+    // tool-call steps to discard buffered text later.
+    if (
+      pendingTextChunks.length > 0 &&
+      !stepHasToolCalls &&
+      chunk.type !== 'text-start' &&
+      chunk.type !== 'text-delta' &&
+      chunk.type !== 'text-end' &&
+      chunk.type !== 'response-metadata' &&
+      chunk.type !== 'tool-call' &&
+      chunk.type !== 'tool-call-input-streaming-start' &&
+      chunk.type !== 'tool-call-delta' &&
+      chunk.type !== 'finish'
+    ) {
+      for (const buffered of pendingTextChunks) {
+        safeEnqueue(controller, buffered);
+      }
+      pendingTextChunks.length = 0;
+    }
+
     switch (chunk.type) {
       case 'response-metadata':
         runState.setState({
@@ -156,7 +184,7 @@ async function processOutputStream<OUTPUT = undefined>({
             providerOptions: chunk.payload.providerMetadata,
           });
         }
-        safeEnqueue(controller, chunk);
+        pendingTextChunks.push(chunk);
         break;
       }
 
@@ -167,7 +195,7 @@ async function processOutputStream<OUTPUT = undefined>({
           textDeltas: textDeltasFromState,
           isStreaming: true,
         });
-        safeEnqueue(controller, chunk);
+        pendingTextChunks.push(chunk);
         break;
       }
 
@@ -177,11 +205,16 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: undefined,
         });
-        safeEnqueue(controller, chunk);
+        pendingTextChunks.push(chunk);
         break;
       }
 
       case 'tool-call-input-streaming-start': {
+        if (!chunk.payload.providerExecuted) {
+          stepHasToolCalls = true;
+          pendingTextChunks.length = 0;
+        }
+
         const tool =
           tools?.[chunk.payload.toolName] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
@@ -204,6 +237,11 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'tool-call-delta': {
+        if (!chunk.payload.providerExecuted) {
+          stepHasToolCalls = true;
+          pendingTextChunks.length = 0;
+        }
+
         const tool =
           tools?.[chunk.payload.toolName || ''] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
@@ -353,6 +391,16 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'finish':
+        // Flush buffered text only if this step had no tool calls.
+        // If tool calls were present, the text is likely leaked JSON and should be suppressed.
+        if (!stepHasToolCalls && pendingTextChunks.length > 0) {
+          for (const buffered of pendingTextChunks) {
+            safeEnqueue(controller, buffered);
+          }
+        }
+        pendingTextChunks.length = 0;
+        stepHasToolCalls = false;
+
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
           stepResult: {
@@ -392,6 +440,10 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       default:
+        if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
+          stepHasToolCalls = true;
+          pendingTextChunks.length = 0;
+        }
         safeEnqueue(controller, chunk);
     }
 
@@ -415,6 +467,15 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (runState.state.hasErrored) {
       break;
+    }
+    }
+  } finally {
+    // Flush any remaining buffered text on early exit (e.g., abort/error before finish)
+    if (!stepHasToolCalls && pendingTextChunks.length > 0) {
+      for (const buffered of pendingTextChunks) {
+        safeEnqueue(controller, buffered);
+      }
+      pendingTextChunks.length = 0;
     }
   }
 }
