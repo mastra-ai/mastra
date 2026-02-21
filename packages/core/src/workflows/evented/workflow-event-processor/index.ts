@@ -55,7 +55,11 @@ export type ParentWorkflow = {
   runId: string;
   executionPath: number[];
   resume: boolean;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
+  /**
+   * @deprecated No longer carried through events to reduce memory.
+   * Parent stepResults are loaded from storage instead.
+   */
+  stepResults?: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
   stepId: string;
 };
@@ -363,7 +367,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult,
           resumeData,
           activeSteps,
@@ -414,7 +418,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult: {
             ...prevResult,
             suspendPayload: {
@@ -500,7 +504,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult,
           timeTravel,
           resumeData,
@@ -904,7 +908,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
               input: prevResult,
               parentWorkflow,
             },
@@ -956,7 +960,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
               timeTravel,
               input: prevResult,
               parentWorkflow,
@@ -986,7 +990,8 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
+              // to avoid carrying the full (and growing) result set through every event
               input: prevResult,
               parentWorkflow,
             },
@@ -1259,6 +1264,19 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+
+    // For nested workflow completions, load the parent's stepResults from storage.
+    // parentWorkflow no longer carries stepResults through events to avoid
+    // O(depth × results) memory growth per event in deeply nested workflows.
+    if (parentContext) {
+      const parentSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+      });
+      if (parentSnapshot?.context) {
+        stepResults = parentSnapshot.context;
+      }
+    }
 
     if (step.type === 'foreach') {
       const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -1573,7 +1591,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
-      const newStepResults = await workflowsStore?.updateWorkflowResults({
+      await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
@@ -1581,11 +1599,21 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
       });
 
-      if (!newStepResults) {
+      // Re-read from storage to get the authoritative state.
+      // This prevents a race condition in parallel step completion where
+      // concurrent branches each only see their own result from the write's
+      // return value (stale read), causing both to return early and the
+      // workflow to hang permanently.
+      const freshSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId,
+      });
+
+      if (!freshSnapshot?.context) {
         return;
       }
 
-      stepResults = newStepResults;
+      stepResults = freshSnapshot.context;
     }
 
     // Update stepResults with current state
@@ -1931,57 +1959,83 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    switch (type) {
-      case 'workflow.cancel':
-        await this.processWorkflowCancel({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.start':
-        await this.processWorkflowStart({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.resume':
-        await this.processWorkflowStart({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.end':
-        await this.processWorkflowEnd({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.end':
-        await this.processWorkflowStepEnd({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.run':
-        await this.processWorkflowStepRun({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.suspend':
-        await this.processWorkflowSuspend({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.fail':
-        await this.processWorkflowFail({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      default:
-        break;
+    try {
+      switch (type) {
+        case 'workflow.cancel':
+          await this.processWorkflowCancel({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.start':
+          await this.processWorkflowStart({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.resume':
+          await this.processWorkflowStart({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.end':
+          await this.processWorkflowEnd({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.end':
+          await this.processWorkflowStepEnd({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.run':
+          await this.processWorkflowStepRun({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.suspend':
+          await this.processWorkflowSuspend({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.fail':
+          await this.processWorkflowFail({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      this.mastra.getLogger()?.error(`Error processing workflow event ${type} for run ${workflowData.runId}`, e);
+      if (type !== 'workflow.fail') {
+        // Publish workflow.fail so the execution engine's result promise resolves
+        // instead of hanging forever.
+        await this.errorWorkflow(workflowData, e instanceof Error ? e : new Error(String(e)));
+      } else {
+        // workflow.fail handler itself threw (e.g. storage error during state persist).
+        // Publish workflows-finish directly so the execution engine's result promise
+        // resolves instead of hanging forever.
+        try {
+          await this.mastra.pubsub.publish('workflows-finish', {
+            type: 'workflow.fail',
+            runId: workflowData.runId,
+            data: {
+              ...workflowData,
+              workflow: undefined,
+              prevResult: { status: 'failed', error: e instanceof Error ? e.message : String(e) },
+            },
+          });
+        } catch {
+          // Last resort — nothing more we can do
+        }
+      }
     }
 
     try {
