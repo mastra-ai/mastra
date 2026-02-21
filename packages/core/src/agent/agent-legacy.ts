@@ -113,6 +113,21 @@ export interface AgentLegacyCapabilities {
       processorId?: string;
     };
   }>;
+  /** Run processInputStep phase on input processors (for legacy path compatibility) */
+  __runProcessInputStep(args: {
+    requestContext: RequestContext;
+    tracingContext: TracingContext;
+    messageList: MessageList;
+    stepNumber?: number;
+  }): Promise<{
+    messageList: MessageList;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
+  }>;
   /** Get most recent user message */
   getMostRecentUserMessage(
     messages: Array<UIMessage | UIMessageWithMetadata>,
@@ -306,6 +321,26 @@ export class AgentLegacyHandler {
             tracingContext: innerTracingContext,
             messageList,
           });
+          // Run processInputStep for step 0 (legacy path compatibility)
+          if (!tripwire) {
+            const inputStepResult = await this.capabilities.__runProcessInputStep({
+              requestContext,
+              tracingContext: innerTracingContext,
+              messageList,
+              stepNumber: 0,
+            });
+            if (inputStepResult.tripwire) {
+              return {
+                messageObjects: [],
+                convertedTools,
+                threadExists: false,
+                thread: undefined,
+                messageList,
+                agentSpan,
+                tripwire: inputStepResult.tripwire,
+              };
+            }
+          }
           return {
             messageObjects: tripwire ? [] : messageList.get.all.prompt(),
             convertedTools,
@@ -391,8 +426,32 @@ export class AgentLegacyHandler {
         });
         messageList = processedMessageList;
 
-        // Messages are already processed by __runInputProcessors above
-        // which includes memory processors (WorkingMemory, MessageHistory, etc.)
+        // Run processInputStep phase for step 0 (legacy path compatibility).
+        // The v5 agentic loop runs this per-step in llm-execution-step, but the legacy
+        // path doesn't have that loop. This is needed for processors like Observational Memory
+        // that implement processInputStep (not processInput) to inject context.
+        if (!tripwire) {
+          const inputStepResult = await this.capabilities.__runProcessInputStep({
+            requestContext,
+            tracingContext: innerTracingContext,
+            messageList,
+            stepNumber: 0,
+          });
+          if (inputStepResult.tripwire) {
+            return {
+              convertedTools,
+              thread: threadObject,
+              messageList,
+              messageObjects: [],
+              agentSpan,
+              tripwire: inputStepResult.tripwire,
+              threadExists: !!existingThread,
+            };
+          }
+        }
+
+        // Messages are already processed by __runInputProcessors and __runProcessInputStep above
+        // which includes memory processors (WorkingMemory, MessageHistory, OM, etc.)
         const processedList = messageList.get.all.prompt();
 
         return {
