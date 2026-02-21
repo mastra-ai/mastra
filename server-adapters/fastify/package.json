@@ -26,28 +26,28 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/server": "workspace:*",
-    "@fastify/busboy": "^3.2.0"
+    "@fastify/busboy": "^3.2.0",
+    "@mastra/server": "workspace:*"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "^2.0.62",
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.5",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@mastra/observability": "workspace:*",
     "@types/node": "^20.19.30",
     "eslint": "^9.37.0",
+    "fastify": "^5.7.3",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*",
-    "fastify": "^5.6.2",
-    "@fastify/swagger": "^9.6.1",
-    "@fastify/swagger-ui": "^5.2.5",
-    "@ai-sdk/openai": "^2.0.62",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
