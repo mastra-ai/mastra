@@ -15,6 +15,7 @@ export function getDynamicInstructions({ requestContext }: { requestContext: { g
     platform: process.platform,
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
+    modelId: state?.currentModelId || undefined,
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,

@@ -42,6 +42,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
     platform: process.platform,
     date: ctx.currentDate,
     mode: ctx.modeId,
+    modelId: ctx.modelId,
     activePlan: ctx.state?.activePlan,
   };
 
