@@ -7,6 +7,7 @@ import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '..
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
@@ -121,7 +122,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
    */
   processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
     const jsonSchema = super.processToJSONSchema(zodSchema);
-    return this.fixAdditionalProperties(jsonSchema);
+    const fixedSchema = this.fixAdditionalProperties(jsonSchema);
+    return ensureAllPropertiesRequired(fixedSchema);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
