@@ -195,6 +195,28 @@ CONVERSATION CONTEXT:
 - When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
 - For any described entity (like a person, place, thing, etc), preserve the attributes that would help identify or describe the specific entity later: location ("near X"), specialty ("focuses on Y"), unique feature ("has Z"), relationship ("owned by W"), or other details. The entity's name is important, but so are any additional details that distinguish it. If there are a list of entities, preserve these details for each of them.
 
+USER MESSAGE CAPTURE:
+- Short and medium-length user messages should be captured nearly verbatim in your own words.
+- For very long user messages, summarize but quote key phrases that carry specific intent or meaning.
+- This is critical for continuity: when the conversation window shrinks, the observations are the only record of what the user said.
+
+AVOIDING REPETITIVE OBSERVATIONS:
+- Do NOT repeat the same observation across multiple turns if there is no new information.
+- When the agent performs repeated similar actions (e.g., browsing files, running the same tool type multiple times), group them into a single parent observation with sub-bullets for each new result.
+
+Example — BAD (repetitive):
+* 🟡 (14:30) Agent used view tool on src/auth.ts
+* 🟡 (14:31) Agent used view tool on src/users.ts
+* 🟡 (14:32) Agent used view tool on src/routes.ts
+
+Example — GOOD (grouped):
+* 🟡 (14:30) Agent browsed source files for auth flow
+  * -> viewed src/auth.ts — found token validation logic
+  * -> viewed src/users.ts — found user lookup by email
+  * -> viewed src/routes.ts — found middleware chain
+
+Only add a new observation for a repeated action if the NEW result changes the picture.
+
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
@@ -255,12 +277,12 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
 - Use terse language to save tokens. Sentences should be dense without unnecessary words
-- Do not add repetitive observations that have already been observed
+- Do not add repetitive observations that have already been observed. Group repeated similar actions (tool calls, file browsing) under a single parent with sub-bullets for new results
 - If the agent calls tools, observe what was called, why, and what was learned
 - When observing files with line numbers, include the line number if useful
 - If the agent provides a detailed response, observe the contents so it could be repeated
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- User messages are always 🔴 priority, so are the completions of tasks
+- User messages are always 🔴 priority, so are the completions of tasks. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 
@@ -384,6 +406,9 @@ export interface ObserverResult {
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -523,6 +548,8 @@ export interface MultiThreadObserverResult {
   threads: Map<string, ObserverResult>;
   /** Raw output from the model (for debugging) */
   rawOutput: string;
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -530,6 +557,11 @@ export interface MultiThreadObserverResult {
  */
 export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
+
+  // Check for degenerate repetition on the whole output
+  if (detectDegenerateRepetition(output)) {
+    return { threads, rawOutput: output, degenerate: true };
+  }
 
   // Extract the <observations> block first
   const observationsMatch = output.match(/^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/im);
@@ -564,8 +596,8 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
-    // Clean up observations
-    observations = observations.trim();
+    // Clean up observations and apply line truncation
+    observations = sanitizeObservationLines(observations.trim());
 
     threads.set(threadId, {
       observations,
@@ -620,11 +652,20 @@ export function buildObserverPrompt(
  * Uses XML tag parsing for structured extraction.
  */
 export function parseObserverOutput(output: string): ObserverResult {
+  // Check for degenerate repetition before parsing (operates on raw output)
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      rawOutput: output,
+      degenerate: true,
+    };
+  }
+
   const parsed = parseMemorySectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,
@@ -704,6 +745,71 @@ function extractListItemsOnly(content: string): string {
   }
 
   return listLines.join('\n').trim();
+}
+
+/**
+ * Maximum length (in characters) for a single observation line.
+ * Lines exceeding this are truncated with an ellipsis marker.
+ * This guards against LLM degeneration that produces enormous single-line outputs.
+ */
+const MAX_OBSERVATION_LINE_CHARS = 10_000;
+
+/**
+ * Truncate individual observation lines that exceed the maximum length.
+ */
+export function sanitizeObservationLines(observations: string): string {
+  if (!observations) return observations;
+  const lines = observations.split('\n');
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
+      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      changed = true;
+    }
+  }
+  return changed ? lines.join('\n') : observations;
+}
+
+/**
+ * Detect degenerate repetition in observer/reflector output.
+ * Returns true if the text contains suspicious levels of repeated content,
+ * which indicates an LLM repeat-penalty bug (e.g., Gemini Flash looping).
+ *
+ * Strategy: sample sequential chunks of the text and check if a high
+ * proportion are near-identical to previous chunks.
+ */
+export function detectDegenerateRepetition(text: string): boolean {
+  if (!text || text.length < 2000) return false;
+
+  // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
+  // If the same ~200-char window appears many times, it's degenerate.
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50)); // sample ~50 windows
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  // If more than 40% of sampled windows are duplicates, it's degenerate
+  if (totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
+    return true;
+  }
+
+  // Strategy 2: Check for extremely long lines (a single line with 50k+ chars
+  // is almost certainly degenerate enumeration)
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.length > 50_000) return true;
+  }
+
+  return false;
 }
 
 /**
