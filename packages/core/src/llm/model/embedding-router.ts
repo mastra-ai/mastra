@@ -218,6 +218,8 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
   async doEmbed(
     args: Parameters<EmbeddingModelV2<VALUE>['doEmbed']>[0],
   ): Promise<Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>> {
-    return this.providerModel.doEmbed(args);
+    const result = await this.providerModel.doEmbed(args);
+    const warnings = (result as { warnings?: unknown[] }).warnings ?? [];
+    return { ...result, warnings };
   }
 }
