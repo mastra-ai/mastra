@@ -141,6 +141,17 @@ export interface PIIDetectorOptions {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Optional callback invoked after each detection, whether or not PII was found.
+   * Receives the detection result, the original input text, and the strategy that was applied.
+   * May return a Promise, which will be awaited before continuing.
+   */
+  onDetection?: (event: {
+    detectionResult: PIIDetectionResult;
+    input: string;
+    strategyApplied: string;
+  }) => void | Promise<void>;
 }
 
 /**
@@ -163,6 +174,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private preserveFormat: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private onDetection?: PIIDetectorOptions['onDetection'];
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -190,6 +202,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.preserveFormat = options.preserveFormat ?? true;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.onDetection = options.onDetection;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -224,6 +237,8 @@ export class PIIDetector implements Processor<'pii-detector'> {
         }
 
         const detectionResult = await this.detectPII(textContent, tracingContext);
+
+        await this.onDetection?.({ detectionResult, input: textContent, strategyApplied: this.strategy });
 
         if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
@@ -596,6 +611,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
       const detectionResult = await this.detectPII(textContent, tracingContext);
 
+      await this.onDetection?.({ detectionResult, input: textContent, strategyApplied: this.strategy });
+
       if (this.isPIIFlagged(detectionResult)) {
         switch (this.strategy) {
           case 'block':
@@ -674,6 +691,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         }
 
         const detectionResult = await this.detectPII(textContent, tracingContext);
+
+        await this.onDetection?.({ detectionResult, input: textContent, strategyApplied: this.strategy });
 
         if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
