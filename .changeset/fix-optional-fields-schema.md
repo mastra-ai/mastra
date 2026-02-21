@@ -1,6 +1,5 @@
 ---
-'@mastra/core': patch
 '@mastra/schema-compat': patch
 ---
 
-Fixed optional fields being omitted from the `required` array in converted JSON Schemas, which caused OpenAI strict mode to reject tool calls. All properties are now included in `required` with proper `nullable` handling for optional fields.
+Added `ensureAllPropertiesRequired` utility that populates the JSON Schema `required` array with all properties from converted schemas. This fixes OpenAI strict mode rejecting tool call and structured output schemas that had optional fields omitted from `required`. Note: nullable conversion for optional fields is handled separately by `processZodType` in the OpenAI compat layer (tool schemas only).
