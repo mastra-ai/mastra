@@ -77,6 +77,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const currentContent = allContent.slice(previousContentLength);
       previousContentLength = allContent.length;
 
+      const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
+
       const currentStep: StepResult<Tools> = {
         content: currentContent,
         usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -94,12 +96,16 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         reasoningText: typedInputData.output.reasoningText || '',
         files: typedInputData.output.files || [],
         toolCalls: typedInputData.output.toolCalls || [],
-        toolResults: typedInputData.output.toolResults || [],
+        toolResults: toolResultParts as StepResult<Tools>['toolResults'],
         sources: typedInputData.output.sources || [],
         staticToolCalls: typedInputData.output.staticToolCalls || [],
         dynamicToolCalls: typedInputData.output.dynamicToolCalls || [],
-        staticToolResults: typedInputData.output.staticToolResults || [],
-        dynamicToolResults: typedInputData.output.dynamicToolResults || [],
+        staticToolResults: toolResultParts.filter(
+          (part: any) => part.dynamic === false,
+        ) as StepResult<Tools>['staticToolResults'],
+        dynamicToolResults: toolResultParts.filter(
+          (part: any) => part.dynamic === true,
+        ) as StepResult<Tools>['dynamicToolResults'],
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
