@@ -379,7 +379,7 @@ ${skillInstructions}`;
         'Read a script file from an activated skill. Scripts contain executable code. Optionally specify line range.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        scriptPath: z.string().describe('Path to the script file (relative to scripts/ directory)'),
+        scriptPath: z.string().describe('Path to the script file (relative to the skill root directory, e.g. "scripts/run.sh")'),
         startLine: z
           .number()
           .optional()
@@ -442,7 +442,7 @@ ${skillInstructions}`;
         'Read an asset file from an activated skill. Assets include templates, data files, and other static resources. Binary files are returned as base64.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        assetPath: z.string().describe('Path to the asset file (relative to assets/ directory)'),
+        assetPath: z.string().describe('Path to the asset file (relative to the skill root directory, e.g. "assets/logo.png")'),
       }),
       execute: async ({ skillName, assetPath }) => {
         if (!skills) {
