@@ -200,6 +200,8 @@ As the agent converses, message tokens accumulate. At regular intervals (`buffer
 
 When message tokens reach the `messageTokens` threshold, buffered chunks activate: their observations move into the active observation log, and the corresponding raw messages are removed from the context window. The agent never pauses.
 
+Buffered observations also include continuation hints — a suggested next response and the current task — so the main agent maintains conversational continuity after activation shrinks the context window.
+
 If the agent produces messages faster than the Observer can process them, a `blockAfter` safety threshold forces a synchronous observation as a last resort.
 
 Reflection works similarly — the Reflector runs in the background when observations reach a fraction of the reflection threshold.

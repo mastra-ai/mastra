@@ -553,7 +553,9 @@ export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, ref
 
 KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
 
-PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
+PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
+
+MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -2182,20 +2184,35 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
 
-    const result = await this.withAbortCheck(
-      () =>
-        agent.generate(prompt, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-        }),
-      abortSignal,
-    );
+    const doGenerate = async () => {
+      const result = await this.withAbortCheck(
+        () =>
+          agent.generate(prompt, {
+            modelSettings: {
+              ...this.observationConfig.modelSettings,
+            },
+            providerOptions: this.observationConfig.providerOptions as any,
+            ...(abortSignal ? { abortSignal } : {}),
+            ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+          }),
+        abortSignal,
+      );
+      return result;
+    };
 
-    const parsed = parseObserverOutput(result.text);
+    let result = await doGenerate();
+    let parsed = parseObserverOutput(result.text);
+
+    // Retry once if degenerate repetition was detected
+    if (parsed.degenerate) {
+      omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
+      result = await doGenerate();
+      parsed = parseObserverOutput(result.text);
+      if (parsed.degenerate) {
+        omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
+        throw new Error('Observer produced degenerate output after retry');
+      }
+    }
 
     // Extract usage from result (totalUsage or usage)
     const usage = result.totalUsage ?? result.usage;
@@ -2258,20 +2275,34 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
-    const result = await this.withAbortCheck(
-      () =>
-        agent.generate(prompt, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-        }),
-      abortSignal,
-    );
+    const doGenerate = async () => {
+      return this.withAbortCheck(
+        () =>
+          agent.generate(prompt, {
+            modelSettings: {
+              ...this.observationConfig.modelSettings,
+            },
+            providerOptions: this.observationConfig.providerOptions as any,
+            ...(abortSignal ? { abortSignal } : {}),
+            ...(requestContext ? { requestContext } : {}),
+          }),
+        abortSignal,
+      );
+    };
 
-    const parsed = parseMultiThreadObserverOutput(result.text);
+    let result = await doGenerate();
+    let parsed = parseMultiThreadObserverOutput(result.text);
+
+    // Retry once if degenerate repetition was detected
+    if (parsed.degenerate) {
+      omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
+      result = await doGenerate();
+      parsed = parseMultiThreadObserverOutput(result.text);
+      if (parsed.degenerate) {
+        omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
+        throw new Error('Multi-thread observer produced degenerate output after retry');
+      }
+    }
 
     // Convert to the expected return format
     const results = new Map<
@@ -2419,13 +2450,28 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       parsed = parseReflectorOutput(result.text);
-      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+
+      // If degenerate repetition detected, treat as compression failure
+      if (parsed.degenerate) {
+        omDebug(
+          `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure`,
+        );
+        reflectedTokens = originalTokens; // Force retry
+      } else {
+        reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+      }
       omDebug(
-        `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}`,
+        `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
       );
 
       // If compression succeeded or we've exhausted all levels, stop
-      if (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel) {
+      if (!parsed.degenerate && (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)) {
+        break;
+      }
+
+      // Guard against infinite loop: if degenerate persists at maxLevel, stop
+      if (parsed.degenerate && currentLevel >= maxLevel) {
+        omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
         break;
       }
 
@@ -2827,6 +2873,8 @@ ${suggestedResponse}
         updatedRecord?: ObservationalMemoryRecord;
         messageTokensActivated?: number;
         activatedMessageIds?: string[];
+        suggestedContinuation?: string;
+        currentTask?: string;
       } = { success: false };
       if (this.isAsyncObservationEnabled()) {
         // Wait for any in-flight async buffering to complete first
@@ -2870,6 +2918,22 @@ ${suggestedResponse}
           omDebug(
             `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
           );
+
+          // Propagate continuation hints from activation to thread metadata
+          if (activationResult.suggestedContinuation || activationResult.currentTask) {
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread) {
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                suggestedResponse: activationResult.suggestedContinuation,
+                currentTask: activationResult.currentTask,
+              });
+              await this.storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
+            }
+          }
 
           // Note: lastBufferedBoundary is updated by the caller AFTER cleanupAfterObservation
           // removes the activated messages from messageList and recounts the actual context size.
@@ -3371,6 +3435,23 @@ ${suggestedResponse}
             const bufKey = this.getObservationBufferKey(lockKey);
             ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
             this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+
+            // Propagate continuation hints from activation to thread metadata so
+            // injectObservationsIntoContext can include them immediately.
+            if (activationResult.suggestedContinuation || activationResult.currentTask) {
+              const thread = await this.storage.getThreadById({ threadId });
+              if (thread) {
+                const newMetadata = setThreadOMMetadata(thread.metadata, {
+                  suggestedResponse: activationResult.suggestedContinuation,
+                  currentTask: activationResult.currentTask,
+                });
+                await this.storage.updateThread({
+                  id: threadId,
+                  title: thread.title ?? '',
+                  metadata: newMetadata,
+                });
+              }
+            }
 
             // Check if reflection should be triggered or activated
             await this.maybeReflect({
@@ -4465,13 +4546,21 @@ ${formattedMessages}
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
-    // Call observer with combined context (skip continuation hints for async buffering)
+    // Call observer with combined context
+    // Allow the observer to produce suggestedResponse/currentTask so they survive
+    // activation and maintain continuity when the context window shrinks
     const result = await this.callObserver(
       combinedObservations,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { skipContinuationHints: true, requestContext },
+      { requestContext },
     );
+
+    // If the observer returned empty observations, skip buffering
+    if (!result.observations) {
+      omDebug(`[OM:doAsyncBufferedObservation] empty observations returned, skipping buffer storage`);
+      return;
+    }
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
@@ -4503,6 +4592,8 @@ ${formattedMessages}
         messageIds: newMessageIds,
         messageTokens,
         lastObservedAt,
+        suggestedContinuation: result.suggestedContinuation,
+        currentTask: result.currentTask,
       },
       lastBufferedAtTime: lastObservedAt,
     });
@@ -4570,6 +4661,8 @@ ${formattedMessages}
     updatedRecord?: ObservationalMemoryRecord;
     messageTokensActivated?: number;
     activatedMessageIds?: string[];
+    suggestedContinuation?: string;
+    currentTask?: string;
   }> {
     // Check if there's buffered content to activate
     const chunks = this.getBufferedChunks(record);
@@ -4688,6 +4781,8 @@ ${formattedMessages}
       updatedRecord: updatedRecord ?? undefined,
       messageTokensActivated: activationResult.messageTokensActivated,
       activatedMessageIds: activationResult.activatedMessageIds,
+      suggestedContinuation: activationResult.suggestedContinuation,
+      currentTask: activationResult.currentTask,
     };
   }
 

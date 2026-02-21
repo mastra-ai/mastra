@@ -3,6 +3,8 @@
  */
 
 export { MastraTUI, type MastraTUIOptions } from './mastra-tui.js';
+export { createTUIState } from './state.js';
+export type { TUIState } from './state.js';
 export { AssistantMessageComponent } from './components/assistant-message.js';
 export { OMProgressComponent, type OMProgressState, type OMStatus, formatOMStatus } from './components/om-progress.js';
 export {

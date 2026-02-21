@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -73,6 +73,7 @@
     "fastest-levenshtein": "latest",
     "js-tiktoken": "^1.0.21",
     "js-yaml": "latest",
+    "partial-json": "^0.1.7",
     "strip-ansi": "^7.1.2",
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
@@ -89,11 +90,11 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "typescript-eslint": "^8.51.0",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
     "tsx": "^4.19.4",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.51.0",
+    "vitest": "catalog:",
     "zod": "catalog:"
   },
   "engines": {

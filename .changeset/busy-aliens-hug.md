@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Removed redundant Vercel AI Gateway `apiKeyEnvVar` override from `PROVIDER_OVERRIDES` since models.dev already provides it.
+Fixed duplicate Vercel AI Gateway configuration that could cause incorrect API key resolution. Removed a redundant override that conflicted with the upstream models.dev registry.
