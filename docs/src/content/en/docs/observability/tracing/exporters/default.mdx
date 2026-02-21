@@ -20,29 +20,29 @@ Observability data can quickly overwhelm general-purpose databases in production
 ### Prerequisites
 
 1. **Storage Backend**: Configure a storage provider (libSQL, PostgreSQL, etc.)
-2. **Studio**: Install for viewing traces locally
+1. **Studio**: Install for viewing traces locally
 
 ### Basic Setup
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability, DefaultExporter } from "@mastra/observability";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: "file:./mastra.db", // Required for trace persistence
+    url: 'file:./mastra.db', // Required for trace persistence
   }),
   observability: new Observability({
     configs: {
       local: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new DefaultExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Recommended Configuration
@@ -50,35 +50,33 @@ export const mastra = new Mastra({
 Include DefaultExporter in your observability configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 import {
   Observability,
   DefaultExporter,
   CloudExporter,
   SensitiveDataFilter,
-} from "@mastra/observability";
-import { LibSQLStore } from "@mastra/libsql";
+} from '@mastra/observability'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "mastra",
+        serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(),
-        ],
+        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
-});
+})
 ```
 
 ## Viewing Traces
@@ -88,9 +86,9 @@ export const mastra = new Mastra({
 Access your traces through Studio:
 
 1. Start Studio
-2. Navigate to Observability
-3. Filter and search your local traces
-4. Inspect detailed span information
+1. Navigate to Observability
+1. Filter and search your local traces
+1. Inspect detailed span information
 
 ## Tracing Strategies
 
@@ -98,17 +96,17 @@ DefaultExporter automatically selects the optimal tracing strategy based on your
 
 ### Available Strategies
 
-| Strategy               | Description                                               | Use Case                            |
-| ---------------------- | --------------------------------------------------------- | ----------------------------------- |
-| **realtime**           | Process each event immediately                            | Development, debugging, low traffic |
-| **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production               |
-| **insert-only**        | Only process completed spans, ignore updates              | High volume Production              |
+| Strategy | Description | Use Case |
+| - | - | - |
+| **realtime** | Process each event immediately | Development, debugging, low traffic |
+| **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production |
+| **insert-only** | Only process completed spans, ignore updates | High volume Production |
 
 ### Strategy Configuration
 
 ```typescript
 new DefaultExporter({
-  strategy: "auto", // Default - let storage provider decide
+  strategy: 'auto', // Default - let storage provider decide
   // or explicitly set:
   // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
 
@@ -116,7 +114,7 @@ new DefaultExporter({
   maxBatchSize: 1000, // Max spans per batch
   maxBatchWaitMs: 5000, // Max wait before flushing
   maxBufferSize: 10000, // Max spans to buffer
-});
+})
 ```
 
 ## Storage Provider Support
@@ -127,13 +125,13 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 ### Providers with Observability Support
 
-| Storage Provider                                | Preferred Strategy | Supported Strategies                      | Recommended Use                       |
-| ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **ClickHouse** (`@mastra/clickhouse`)           | insert-only        | insert-only                               | Production (high-volume)              |
-| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
-| **[MSSQL](/reference/storage/mssql)**           | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
-| **[MongoDB](/reference/storage/mongodb)**       | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
-| **[libSQL](/reference/storage/libsql)**         | batch-with-updates | batch-with-updates, insert-only           | Default storage, good for development |
+| Storage Provider | Preferred Strategy | Supported Strategies | Recommended Use |
+| - | - | - | - |
+| **ClickHouse** (`@mastra/clickhouse`) | insert-only | insert-only | Production (high-volume) |
+| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[MSSQL](/reference/storage/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[MongoDB](/reference/storage/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[libSQL](/reference/storage/libsql)** | batch-with-updates | batch-with-updates, insert-only | Default storage, good for development |
 
 ### Providers without Observability Support
 
@@ -176,9 +174,9 @@ If you're using a provider without observability support (like Convex or DynamoD
 For both batch strategies (`batch-with-updates` and `insert-only`), traces are flushed to storage when any of these conditions are met:
 
 1. **Size trigger**: Buffer reaches `maxBatchSize` spans
-2. **Time trigger**: `maxBatchWaitMs` elapsed since first event
-3. **Emergency flush**: Buffer approaches `maxBufferSize` limit
-4. **Shutdown**: Force flush all pending events
+1. **Time trigger**: `maxBatchWaitMs` elapsed since first event
+1. **Emergency flush**: Buffer approaches `maxBufferSize` limit
+1. **Shutdown**: Force flush all pending events
 
 ### Error Handling
 
@@ -193,25 +191,25 @@ The DefaultExporter includes robust error handling for production use:
 
 ```typescript
 // Zero config - recommended for most users
-new DefaultExporter();
+new DefaultExporter()
 
 // Development override
 new DefaultExporter({
-  strategy: "realtime", // Immediate visibility for debugging
-});
+  strategy: 'realtime', // Immediate visibility for debugging
+})
 
 // High-throughput production
 new DefaultExporter({
   maxBatchSize: 2000, // Larger batches
   maxBatchWaitMs: 10000, // Wait longer to fill batches
   maxBufferSize: 50000, // Handle longer outages
-});
+})
 
 // Low-latency production
 new DefaultExporter({
   maxBatchSize: 100, // Smaller batches
   maxBatchWaitMs: 1000, // Flush quickly
-});
+})
 ```
 
 ## Related

@@ -13,92 +13,92 @@ The `MessageHistory` is a **hybrid processor** that handles both retrieval and p
 ## Usage example
 
 ```typescript
-import { MessageHistory } from "@mastra/core/processors";
+import { MessageHistory } from '@mastra/core/processors'
 
 const processor = new MessageHistory({
   storage: memoryStorage,
   lastMessages: 50,
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "MessageHistoryOptions",
-      description: "Configuration options for the message history processor",
-      isOptional: false,
-    },
-  ]}
+{
+name: "options",
+type: "MessageHistoryOptions",
+description: "Configuration options for the message history processor",
+isOptional: false,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MemoryStorage",
-      description: "Storage instance for retrieving and persisting messages",
-      isOptional: false,
-    },
-    {
-      name: "lastMessages",
-      type: "number",
-      description: "Maximum number of historical messages to retrieve. If not specified, retrieves all messages",
-      isOptional: true,
-    },
-  ]}
+{
+name: "storage",
+type: "MemoryStorage",
+description: "Storage instance for retrieving and persisting messages",
+isOptional: false,
+},
+{
+name: "lastMessages",
+type: "number",
+description: "Maximum number of historical messages to retrieve. If not specified, retrieves all messages",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'message-history'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Processor display name set to 'MessageHistory'",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-      description: "Fetches historical messages from storage and adds them to the message list",
-      isOptional: false,
-    },
-    {
-      name: "processOutputResult",
-      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>",
-      description: "Persists new messages (user input and assistant response) to storage, excluding system messages",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Processor identifier set to 'message-history'",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Processor display name set to 'MessageHistory'",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+description: "Fetches historical messages from storage and adds them to the message list",
+isOptional: false,
+},
+{
+name: "processOutputResult",
+type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>",
+description: "Persists new messages (user input and assistant response) to storage, excluding system messages",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { MessageHistory } from "@mastra/core/processors";
-import { PostgresStorage } from "@mastra/pg";
+import { Agent } from '@mastra/core/agent'
+import { MessageHistory } from '@mastra/core/processors'
+import { PostgresStorage } from '@mastra/pg'
 
 const storage = new PostgresStorage({
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 export const agent = new Agent({
-  name: "memory-agent",
-  instructions: "You are a helpful assistant with conversation memory",
-  model: "openai:gpt-4o",
+  name: 'memory-agent',
+  instructions: 'You are a helpful assistant with conversation memory',
+  model: 'openai:gpt-4o',
   inputProcessors: [
     new MessageHistory({
       storage,
@@ -110,24 +110,26 @@ export const agent = new Agent({
       storage,
     }),
   ],
-});
+})
 ```
 
 ## Behavior
 
 ### Input processing
+
 1. Retrieves `threadId` from the request context
-2. Fetches historical messages from storage (ordered by creation date, descending)
-3. Filters out system messages (they should not be stored in the database)
-4. Merges historical messages with incoming messages, avoiding duplicates by ID
-5. Adds historical messages with `source: 'memory'` tag
+1. Fetches historical messages from storage (ordered by creation date, descending)
+1. Filters out system messages (they should not be stored in the database)
+1. Merges historical messages with incoming messages, avoiding duplicates by ID
+1. Adds historical messages with `source: 'memory'` tag
 
 ### Output processing
+
 1. Retrieves `threadId` from the request context
-2. Skips persistence if `readOnly` is set in memory config
-3. Filters out incomplete tool calls from messages
-4. Persists new user input and assistant response messages to storage
-5. Updates the thread's `updatedAt` timestamp
+1. Skips persistence if `readOnly` is set in memory config
+1. Filters out incomplete tool calls from messages
+1. Persists new user input and assistant response messages to storage
+1. Updates the thread's `updatedAt` timestamp
 
 ## Related
 

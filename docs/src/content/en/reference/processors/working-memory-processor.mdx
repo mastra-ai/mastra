@@ -13,157 +13,157 @@ The `WorkingMemory` is an **input processor** that injects working memory data a
 ## Usage example
 
 ```typescript
-import { WorkingMemory } from "@mastra/core/processors";
+import { WorkingMemory } from '@mastra/core/processors'
 
 const processor = new WorkingMemory({
   storage: memoryStorage,
-  scope: "resource",
+  scope: 'resource',
   template: {
-    format: "markdown",
+    format: 'markdown',
     content: `# User Profile
 - **Name**:
 - **Preferences**:
 - **Goals**:
 `,
   },
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for the working memory processor",
-      isOptional: false,
-    },
-  ]}
+{
+name: "options",
+type: "Options",
+description: "Configuration options for the working memory processor",
+isOptional: false,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MemoryStorage",
-      description: "Storage instance for retrieving working memory data",
-      isOptional: false,
-    },
-    {
-      name: "template",
-      type: "WorkingMemoryTemplate",
-      description: "Template defining the format and structure of working memory",
-      isOptional: true,
-    },
-    {
-      name: "scope",
-      type: "'thread' | 'resource'",
-      description: "Scope of working memory. 'thread' scopes to current thread, 'resource' shares across all threads for the resource",
-      isOptional: true,
-      default: "'resource'",
-    },
-    {
-      name: "useVNext",
-      type: "boolean",
-      description: "Use the next-generation instruction format with improved guidelines",
-      isOptional: true,
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, working memory is provided as read-only context. The data is injected into the conversation but without the updateWorkingMemory tool or update instructions. Useful for agents that should reference working memory without modifying it.",
-      isOptional: true,
-      default: "false",
-    },
-    {
-      name: "templateProvider",
-      type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
-      description: "Dynamic template provider for runtime template resolution",
-      isOptional: true,
-    },
-    {
-      name: "logger",
-      type: "IMastraLogger",
-      description: "Optional logger instance for structured logging",
-      isOptional: true,
-    },
-  ]}
+{
+name: "storage",
+type: "MemoryStorage",
+description: "Storage instance for retrieving working memory data",
+isOptional: false,
+},
+{
+name: "template",
+type: "WorkingMemoryTemplate",
+description: "Template defining the format and structure of working memory",
+isOptional: true,
+},
+{
+name: "scope",
+type: "'thread' | 'resource'",
+description: "Scope of working memory. 'thread' scopes to current thread, 'resource' shares across all threads for the resource",
+isOptional: true,
+default: "'resource'",
+},
+{
+name: "useVNext",
+type: "boolean",
+description: "Use the next-generation instruction format with improved guidelines",
+isOptional: true,
+},
+{
+name: "readOnly",
+type: "boolean",
+description: "When true, working memory is provided as read-only context. The data is injected into the conversation but without the updateWorkingMemory tool or update instructions. Useful for agents that should reference working memory without modifying it.",
+isOptional: true,
+default: "false",
+},
+{
+name: "templateProvider",
+type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
+description: "Dynamic template provider for runtime template resolution",
+isOptional: true,
+},
+{
+name: "logger",
+type: "IMastraLogger",
+description: "Optional logger instance for structured logging",
+isOptional: true,
+},
+]}
 />
 
 ### WorkingMemoryTemplate
 
 <PropertiesTable
   content={[
-    {
-      name: "format",
-      type: "'markdown' | 'json'",
-      description: "Format of the working memory content",
-      isOptional: false,
-    },
-    {
-      name: "content",
-      type: "string",
-      description: "Template content defining the structure of working memory data",
-      isOptional: false,
-    },
-  ]}
+{
+name: "format",
+type: "'markdown' | 'json'",
+description: "Format of the working memory content",
+isOptional: false,
+},
+{
+name: "content",
+type: "string",
+description: "Template content defining the structure of working memory data",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'working-memory'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Processor display name set to 'WorkingMemory'",
-      isOptional: false,
-    },
-    {
-      name: "defaultWorkingMemoryTemplate",
-      type: "string",
-      description: "The default markdown template used when no custom template is provided",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-      description: "Retrieves working memory and adds it as a system message to the message list",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Processor identifier set to 'working-memory'",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Processor display name set to 'WorkingMemory'",
+isOptional: false,
+},
+{
+name: "defaultWorkingMemoryTemplate",
+type: "string",
+description: "The default markdown template used when no custom template is provided",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+description: "Retrieves working memory and adds it as a system message to the message list",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/personalized-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { WorkingMemory, MessageHistory } from "@mastra/core/processors";
-import { PostgresStorage } from "@mastra/pg";
+import { Agent } from '@mastra/core/agent'
+import { WorkingMemory, MessageHistory } from '@mastra/core/processors'
+import { PostgresStorage } from '@mastra/pg'
 
 const storage = new PostgresStorage({
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 export const agent = new Agent({
-  name: "personalized-agent",
-  instructions: "You are a helpful assistant that remembers user preferences",
-  model: "openai:gpt-4o",
+  name: 'personalized-agent',
+  instructions: 'You are a helpful assistant that remembers user preferences',
+  model: 'openai:gpt-4o',
   inputProcessors: [
     new WorkingMemory({
       storage,
-      scope: "resource",
+      scope: 'resource',
       template: {
-        format: "markdown",
+        format: 'markdown',
         content: `# User Information
 - **Name**:
 - **Location**:
@@ -175,51 +175,53 @@ export const agent = new Agent({
     }),
     new MessageHistory({ storage, lastMessages: 50 }),
   ],
-  outputProcessors: [
-    new MessageHistory({ storage }),
-  ],
-});
+  outputProcessors: [new MessageHistory({ storage })],
+})
 ```
 
 ## JSON format example
 
 ```typescript
-import { WorkingMemory } from "@mastra/core/processors";
+import { WorkingMemory } from '@mastra/core/processors'
 
 const processor = new WorkingMemory({
   storage: memoryStorage,
-  scope: "resource",
+  scope: 'resource',
   template: {
-    format: "json",
+    format: 'json',
     content: JSON.stringify({
       user: {
-        name: { type: "string" },
-        preferences: { type: "object" },
-        goals: { type: "array" },
+        name: { type: 'string' },
+        preferences: { type: 'object' },
+        goals: { type: 'array' },
       },
     }),
   },
-});
+})
 ```
 
 ## Behavior
 
 ### Input processing
+
 1. Retrieves `threadId` and `resourceId` from the request context
-2. Based on scope, fetches working memory from either:
+1. Based on scope, fetches working memory from either:
    - Thread metadata (`scope: 'thread'`)
    - Resource record (`scope: 'resource'`)
-3. Resolves the template (from provider, options, or default)
-4. Generates system instructions based on mode:
+1. Resolves the template (from provider, options, or default)
+1. Generates system instructions based on mode:
    - **Normal mode**: Includes guidelines for storing/updating information, template structure, and current data
    - **Read-only mode** (`readOnly: true`): Includes only the current data as context without update instructions
-5. Adds the instruction as a system message with `source: 'memory'` tag
+1. Adds the instruction as a system message with `source: 'memory'` tag
 
 ### Working memory updates
+
 Working memory updates happen through the `updateWorkingMemory` tool provided by the Memory class, not through this processor. The processor only handles injecting the current working memory state into conversations.
 
 ### Default template
+
 If no template is provided, the processor uses a default markdown template with fields for:
+
 - First Name, Last Name
 - Location, Occupation
 - Interests, Goals

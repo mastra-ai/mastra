@@ -26,8 +26,8 @@ npm run dev
 
 Once the server's running, you can:
 
-- Open the Studio UI at http://localhost:4111/ to test your agent interactively.
-- Visit http://localhost:4111/swagger-ui to discover and interact with the underlying REST API.
+- Open the Studio UI at [http://localhost:4111/](http://localhost:4111/) to test your agent interactively.
+- Visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
 
 ## Studio UI
 
@@ -37,7 +37,9 @@ The Studio UI provides an interactive development environment for you to test yo
 
 Chat with your agent directly, dynamically switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
+/>
 
 When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
@@ -45,7 +47,9 @@ When you interact with your agent, you can follow each step of its reasoning, vi
 
 Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4" />
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4"
+/>
 
 When running a workflow, you can also view detailed traces showing tool calls, raw JSON outputs, and any errors that might have occurred along the way.
 
@@ -53,7 +57,9 @@ When running a workflow, you can also view detailed traces showing tool calls, r
 
 Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
+/>
 
 ### MCP
 
@@ -65,7 +71,7 @@ List the MCP servers attached to your Mastra instance and explore their availabl
 
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
-![](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
+![](https://mastra.ai/_next/image?url=%2Ftracingafter.png\&w=1920\&q=75)
 
 Tracing filters out low-level framework details so your traces stay focused and readable.
 
@@ -77,9 +83,9 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/server/mastra-server), allowing you to develop and test against it with full parity.
 
-You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request and response schemas.
+You can explore all available endpoints in the OpenAPI specification at [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json), which details every endpoint and its request and response schemas.
 
-To explore the API interactively, visit the Swagger UI at http://localhost:4111/swagger-ui. Here, you can discover endpoints and test them directly from your browser.
+To explore the API interactively, visit the Swagger UI at [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui). Here, you can discover endpoints and test them directly from your browser.
 
 :::info
 The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
@@ -87,7 +93,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 ## Configuration
 
-By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and [`studioBase`](/reference/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
+By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and [`studioBase`](/reference/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
 
 Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
 

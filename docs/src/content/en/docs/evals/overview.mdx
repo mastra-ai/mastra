@@ -19,8 +19,8 @@ Scorers can be run in the cloud, capturing real-time results. But scorers can al
 There are different kinds of scorers, each serving a specific purpose. Here are some common types:
 
 1. **Textual Scorers**: Evaluate accuracy, reliability, and context understanding of agent responses
-2. **Classification Scorers**: Measure accuracy in categorizing data based on predefined categories
-3. **Prompt Engineering Scorers**: Explore impact of different instructions and input formats
+1. **Classification Scorers**: Measure accuracy in categorizing data based on predefined categories
+1. **Prompt Engineering Scorers**: Explore impact of different instructions and input formats
 
 ## Installation
 
@@ -39,31 +39,28 @@ npm install @mastra/evals@latest
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/evals/built-in-scorers) for all available options.
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import {
-  createAnswerRelevancyScorer,
-  createToxicityScorer,
-} from "@mastra/evals/scorers/prebuilt";
+import { Agent } from '@mastra/core/agent'
+import { createAnswerRelevancyScorer, createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const evaluatedAgent = new Agent({
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
-      sampling: { type: "ratio", rate: 0.5 },
+      scorer: createAnswerRelevancyScorer({ model: 'openai/gpt-4.1-nano' }),
+      sampling: { type: 'ratio', rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
-      sampling: { type: "ratio", rate: 1 },
+      scorer: createToxicityScorer({ model: 'openai/gpt-4.1-nano' }),
+      sampling: { type: 'ratio', rate: 1 },
     },
   },
-});
+})
 ```
 
 ### Adding scorers to workflow steps
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
 
-```typescript title="src/mastra/workflows/content-generation.ts"
+```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
@@ -102,9 +99,7 @@ export const contentWorkflow = createWorkflow({ ... })
 
 In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows. This is particularly useful for analyzing past performance, debugging issues, or running batch evaluations.
 
-:::info
-
-**Observability Required**
+:::info[Observability Required]
 
 To score traces, you must first configure observability in your Mastra instance to collect trace data. See [Tracing documentation](../observability/tracing/overview) for setup instructions.
 
@@ -120,7 +115,7 @@ const mastra = new Mastra({
     answerRelevancy: myAnswerRelevancyScorer,
     responseQuality: myResponseQualityScorer,
   },
-});
+})
 ```
 
 Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.

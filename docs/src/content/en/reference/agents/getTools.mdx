@@ -12,34 +12,34 @@ The `.getTools()` method retrieves the tools configured for an agent, resolving 
 ## Usage example
 
 ```typescript
-await agent.getTools();
+await agent.getTools()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "tools",
-      type: "TTools | Promise<TTools>",
-      description:
-        "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
-    },
-  ]}
+{
+name: "tools",
+type: "TTools | Promise<TTools>",
+description:
+"The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+},
+]}
 />
 
 ## Extended usage example
@@ -47,20 +47,20 @@ await agent.getTools();
 ```typescript
 await agent.getTools({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Runtime context for dependency injection and contextual information.",
+},
+]}
 />

@@ -30,19 +30,19 @@ npm install @mastra/express@latest express
 ## Usage example
 
 ```typescript title="server.ts"
-import express from 'express';
-import { MastraServer } from '@mastra/express';
-import { mastra } from './mastra';
+import express from 'express'
+import { MastraServer } from '@mastra/express'
+import { mastra } from './mastra'
 
-const app = express();
-app.use(express.json()); // Required for body parsing
+const app = express()
+app.use(express.json()) // Required for body parsing
 
-const server = new MastraServer({ app, mastra });
-await server.init();
+const server = new MastraServer({ app, mastra })
+await server.init()
 
 app.listen(4111, () => {
-  console.log('Server running on port 4111');
-});
+  console.log('Server running on port 4111')
+})
 ```
 
 :::note
@@ -55,77 +55,77 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 <PropertiesTable
   content={[
-    {
-      name: "app",
-      type: "Application",
-      description: "Express app instance",
-      isOptional: false,
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Mastra instance",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Route path prefix (e.g., `/api/v2`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "openapiPath",
-      type: "string",
-      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "bodyLimitOptions",
-      type: "{ maxSize: number, onError: (err) => unknown }",
-      description: "Request body size limits",
-      isOptional: true,
-    },
-    {
-      name: "streamOptions",
-      type: "{ redact?: boolean }",
-      description: "Stream redaction config. When true, redacts sensitive data from streams.",
-      isOptional: true,
-      defaultValue: "{ redact: true }",
-    },
-    {
-      name: "customRouteAuthConfig",
-      type: "Map<string, boolean>",
-      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
-      isOptional: true,
-    },
-    {
-      name: "tools",
-      type: "Record<string, Tool>",
-      description: "Available tools for the server",
-      isOptional: true,
-    },
-    {
-      name: "taskStore",
-      type: "InMemoryTaskStore",
-      description: "Task store for A2A (Agent-to-Agent) operations",
-      isOptional: true,
-    },
-    {
-      name: "mcpOptions",
-      type: "MCPOptions",
-      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "app",
+type: "Application",
+description: "Express app instance",
+isOptional: false,
+},
+{
+name: "mastra",
+type: "Mastra",
+description: "Mastra instance",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Route path prefix (e.g., `/api/v2`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "openapiPath",
+type: "string",
+description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "bodyLimitOptions",
+type: "{ maxSize: number, onError: (err) => unknown }",
+description: "Request body size limits",
+isOptional: true,
+},
+{
+name: "streamOptions",
+type: "{ redact?: boolean }",
+description: "Stream redaction config. When true, redacts sensitive data from streams.",
+isOptional: true,
+defaultValue: "{ redact: true }",
+},
+{
+name: "customRouteAuthConfig",
+type: "Map<string, boolean>",
+description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+isOptional: true,
+},
+{
+name: "tools",
+type: "Record<string, Tool>",
+description: "Available tools for the server",
+isOptional: true,
+},
+{
+name: "taskStore",
+type: "InMemoryTaskStore",
+description: "Task store for A2A (Agent-to-Agent) operations",
+isOptional: true,
+},
+{
+name: "mcpOptions",
+type: "MCPOptions",
+typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
+isOptional: true,
+},
+]}
 />
 
 ## Differences from Hono
 
 | Aspect | Express | Hono |
-|--------|---------|------|
+| - | - | - |
 | Body parsing | Requires `express.json()` | Handled by framework |
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
@@ -137,23 +137,23 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 Add routes directly to the Express app:
 
 ```typescript title="server.ts"
-const app = express();
-app.use(express.json());
+const app = express()
+app.use(express.json())
 
-const server = new MastraServer({ app, mastra });
+const server = new MastraServer({ app, mastra })
 
 // Before init - runs before Mastra middleware
-app.get('/early-health', (req, res) => res.json({ status: 'ok' }));
+app.get('/early-health', (req, res) => res.json({ status: 'ok' }))
 
-await server.init();
+await server.init()
 
 // After init - has access to Mastra context
 app.get('/custom', (req, res) => {
-  const mastraInstance = res.locals.mastra;
-  res.json({ agents: Object.keys(mastraInstance.listAgents()) });
-});
+  const mastraInstance = res.locals.mastra
+  res.json({ agents: Object.keys(mastraInstance.listAgents()) })
+})
 
-app.listen(4111);
+app.listen(4111)
 ```
 
 :::tip
@@ -168,19 +168,19 @@ In Express middleware and routes, access Mastra context via `res.locals`:
 
 ```typescript
 app.get('/custom', (req, res) => {
-  const mastra = res.locals.mastra;
-  const requestContext = res.locals.requestContext;
-  const abortSignal = res.locals.abortSignal;
+  const mastra = res.locals.mastra
+  const requestContext = res.locals.requestContext
+  const abortSignal = res.locals.abortSignal
 
-  const agent = mastra.getAgent('myAgent');
-  res.json({ agent: agent.name });
-});
+  const agent = mastra.getAgent('myAgent')
+  res.json({ agent: agent.name })
+})
 ```
 
 Available properties on `res.locals`:
 
 | Key | Description |
-|-----|-------------|
+| - | - |
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
@@ -194,23 +194,23 @@ Available properties on `res.locals`:
 Add Express middleware before or after `init()`:
 
 ```typescript title="server.ts"
-const app = express();
-app.use(express.json());
+const app = express()
+app.use(express.json())
 
 // Middleware before init
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
+  console.log(`${req.method} ${req.url}`)
+  next()
+})
 
-const server = new MastraServer({ app, mastra });
-await server.init();
+const server = new MastraServer({ app, mastra })
+await server.init()
 
 // Middleware after init has access to Mastra context
 app.use((req, res, next) => {
-  const mastra = res.locals.mastra;
-  next();
-});
+  const mastra = res.locals.mastra
+  next()
+})
 ```
 
 ## Manual initialization

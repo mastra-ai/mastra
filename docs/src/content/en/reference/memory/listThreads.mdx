@@ -17,7 +17,7 @@ The `listThreads()` method retrieves threads with pagination support and optiona
 const result = await memory.listThreads({
   page: 0,
   perPage: 10,
-});
+})
 ```
 
 ### Fetch all threads without pagination
@@ -32,29 +32,29 @@ Generally speaking it's recommended to use pagination, especially for large data
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: "user-123" },
+  filter: { resourceId: 'user-123' },
   perPage: false,
-});
+})
 ```
 
 ### Filter by resourceId
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: "user-123" },
+  filter: { resourceId: 'user-123' },
   page: 0,
   perPage: 10,
-});
+})
 ```
 
 ### Filter by metadata
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { metadata: { category: "support", priority: "high" } },
+  filter: { metadata: { category: 'support', priority: 'high' } },
   page: 0,
   perPage: 10,
-});
+})
 ```
 
 ### Combined filter (resourceId & metadata)
@@ -62,57 +62,57 @@ const result = await memory.listThreads({
 ```typescript
 const result = await memory.listThreads({
   filter: {
-    resourceId: "user-123",
-    metadata: { status: "active" },
+    resourceId: 'user-123',
+    metadata: { status: 'active' },
   },
   page: 0,
   perPage: 10,
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "filter",
-      type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
-      description:
-        "Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)",
-      isOptional: true,
-    },
-    {
-      name: "page",
-      type: "number",
-      description: "Page number (0-indexed) to retrieve",
-      isOptional: true,
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description: "Maximum number of threads to return per page, or false to fetch all",
-      isOptional: true,
-    },
-    {
-      name: "orderBy",
-      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
-      description:
-        "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
-      isOptional: true,
-    },
-  ]}
+{
+name: "filter",
+type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
+description:
+"Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)",
+isOptional: true,
+},
+{
+name: "page",
+type: "number",
+description: "Page number (0-indexed) to retrieve",
+isOptional: true,
+},
+{
+name: "perPage",
+type: "number | false",
+description: "Maximum number of threads to return per page, or false to fetch all",
+isOptional: true,
+},
+{
+name: "orderBy",
+type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+description:
+"Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<StorageListThreadsOutput>",
-      description: "A promise that resolves to paginated thread results with metadata",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<StorageListThreadsOutput>",
+description: "A promise that resolves to paginated thread results with metadata",
+},
+]}
 />
 
 The return object contains:
@@ -126,38 +126,38 @@ The return object contains:
 ## Extended usage example
 
 ```typescript title="src/test-memory.ts"
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const agent = mastra.getAgent("agent");
-const memory = await agent.getMemory();
+const agent = mastra.getAgent('agent')
+const memory = await agent.getMemory()
 
-let currentPage = 0;
-const perPage = 25;
-let hasMorePages = true;
+let currentPage = 0
+const perPage = 25
+let hasMorePages = true
 
 // Fetch all active threads for a user, sorted by creation date
 while (hasMorePages) {
   const result = await memory?.listThreads({
     filter: {
-      resourceId: "user-123",
-      metadata: { status: "active" },
+      resourceId: 'user-123',
+      metadata: { status: 'active' },
     },
     page: currentPage,
     perPage: perPage,
-    orderBy: { field: "createdAt", direction: "ASC" },
-  });
+    orderBy: { field: 'createdAt', direction: 'ASC' },
+  })
 
   if (!result) {
-    console.log("No threads");
-    break;
+    console.log('No threads')
+    break
   }
 
-  result.threads.forEach((thread) => {
-    console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
-  });
+  result.threads.forEach(thread => {
+    console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`)
+  })
 
-  hasMorePages = result.hasMore;
-  currentPage++; // Move to next page
+  hasMorePages = result.hasMore
+  currentPage++ // Move to next page
 }
 ```
 
@@ -172,11 +172,11 @@ The metadata filter uses AND logic - all specified key-value pairs must match fo
 await memory.listThreads({
   filter: {
     metadata: {
-      category: "support",
-      priority: "high",
+      category: 'support',
+      priority: 'high',
     },
   },
-});
+})
 ```
 
 ## Related

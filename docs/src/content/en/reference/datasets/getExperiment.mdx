@@ -14,38 +14,40 @@ Retrieves a specific experiment (run) by its ID.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-const experiment = await dataset.getExperiment({ experimentId: "exp-id" });
+const experiment = await dataset.getExperiment({ experimentId: 'exp-id' })
 
-console.log(`Status: ${experiment.status}`);
-console.log(`${experiment.succeededCount}/${experiment.totalItems} succeeded`);
+console.log(`Status: ${experiment.status}`)
+console.log(`${experiment.succeededCount}/${experiment.totalItems} succeeded`)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "experimentId",
-      type: "string",
-      description: "ID of the experiment to retrieve.",
-    },
-  ]}
+{
+name: "experimentId",
+type: "string",
+description: "ID of the experiment to retrieve.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<Experiment>",
-      description: "The experiment record. See dataset.listExperiments() for the full shape.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<Experiment>",
+description: "The experiment record. See dataset.listExperiments() for the full shape.",
+},
+]}
 />

@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleChatStream()
 
-Framework-agnostic handler for streaming agent chat in AI SDK-compatible format. Use this function directly when you need to handle chat streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature. 
+Framework-agnostic handler for streaming agent chat in AI SDK-compatible format. Use this function directly when you need to handle chat streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
 
 `handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
@@ -20,18 +20,18 @@ Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat r
 Next.js App Router example:
 
 ```typescript title="app/api/chat/route.ts"
-import { handleChatStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '@/src/mastra';
+import { handleChatStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = await req.json()
   const stream = await handleChatStream({
     mastra,
     agentId: 'weatherAgent',
     params,
-  });
-  return createUIMessageStreamResponse({ stream });
+  })
+  return createUIMessageStreamResponse({ stream })
 }
 ```
 
@@ -39,81 +39,81 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "The Mastra instance containing registered agents.",
-      isOptional: false,
-    },
-    {
-      name: "agentId",
-      type: "string",
-      description: "The ID of the agent to use for chat.",
-      isOptional: false,
-    },
-    {
-      name: "params",
-      type: "ChatStreamHandlerParams",
-      description: "Parameters for the chat stream, including messages and optional resume data.",
-      isOptional: false,
-    },
-    {
-      name: "params.messages",
-      type: "UIMessage[]",
-      description: "Array of messages in the conversation.",
-      isOptional: false,
-    },
-    {
-      name: "params.resumeData",
-      type: "Record<string, any>",
-      description: "Data for resuming a suspended agent execution. Requires `runId` to be set.",
-      isOptional: true,
-    },
-    {
-      name: "params.runId",
-      type: "string",
-      description: "The run ID. Required when `resumeData` is provided.",
-      isOptional: true,
-    },
-    {
-      name: "params.requestContext",
-      type: "RequestContext",
-      description: "Request context to pass to the agent execution.",
-      isOptional: true,
-    },
-    {
-      name: "defaultOptions",
-      type: "AgentExecutionOptions",
-      description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
-      isOptional: true,
-    },
-    {
-      name: "sendStart",
-      type: "boolean",
-      description: "Whether to send start events in the stream.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "sendFinish",
-      type: "boolean",
-      description: "Whether to send finish events in the stream.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "sendReasoning",
-      type: "boolean",
-      description: "Whether to include reasoning steps in the stream.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "sendSources",
-      type: "boolean",
-      description: "Whether to include source citations in the stream.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "mastra",
+type: "Mastra",
+description: "The Mastra instance containing registered agents.",
+isOptional: false,
+},
+{
+name: "agentId",
+type: "string",
+description: "The ID of the agent to use for chat.",
+isOptional: false,
+},
+{
+name: "params",
+type: "ChatStreamHandlerParams",
+description: "Parameters for the chat stream, including messages and optional resume data.",
+isOptional: false,
+},
+{
+name: "params.messages",
+type: "UIMessage[]",
+description: "Array of messages in the conversation.",
+isOptional: false,
+},
+{
+name: "params.resumeData",
+type: "Record<string, any>",
+description: "Data for resuming a suspended agent execution. Requires `runId` to be set.",
+isOptional: true,
+},
+{
+name: "params.runId",
+type: "string",
+description: "The run ID. Required when `resumeData` is provided.",
+isOptional: true,
+},
+{
+name: "params.requestContext",
+type: "RequestContext",
+description: "Request context to pass to the agent execution.",
+isOptional: true,
+},
+{
+name: "defaultOptions",
+type: "AgentExecutionOptions",
+description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
+isOptional: true,
+},
+{
+name: "sendStart",
+type: "boolean",
+description: "Whether to send start events in the stream.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "sendFinish",
+type: "boolean",
+description: "Whether to send finish events in the stream.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "sendReasoning",
+type: "boolean",
+description: "Whether to include reasoning steps in the stream.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "sendSources",
+type: "boolean",
+description: "Whether to include source citations in the stream.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />

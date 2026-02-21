@@ -18,27 +18,27 @@ The `WorkspaceFilesystem` interface defines how workspaces interact with file st
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md');
-const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+const content = await filesystem.readFile('/docs/guide.md')
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path relative to basePath",
-    },
-    {
-      name: "options.encoding",
-      type: "'utf-8' | 'binary'",
-      description: "Text or binary encoding",
-      isOptional: true,
-      defaultValue: "'utf-8'",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path relative to basePath",
+},
+{
+name: "options.encoding",
+type: "'utf-8' | 'binary'",
+description: "Text or binary encoding",
+isOptional: true,
+defaultValue: "'utf-8'",
+},
+]}
 />
 
 **Returns:** `Promise<string | Buffer>`
@@ -48,39 +48,39 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
 Write file contents.
 
 ```typescript
-await filesystem.writeFile('/docs/new.md', '# New Document');
-await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+await filesystem.writeFile('/docs/new.md', '# New Document')
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path relative to basePath",
-    },
-    {
-      name: "content",
-      type: "string | Buffer",
-      description: "File content",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Create parent directories if they don't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "options.overwrite",
-      type: "boolean",
-      description: "Overwrite existing file",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path relative to basePath",
+},
+{
+name: "content",
+type: "string | Buffer",
+description: "File content",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Create parent directories if they don't exist",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite existing file",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />
 
 ### `deleteFile(path, options?)`
@@ -88,27 +88,27 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 Delete a file.
 
 ```typescript
-await filesystem.deleteFile('/docs/old.md');
-await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw if missing
+await filesystem.deleteFile('/docs/old.md')
+await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if missing
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path",
-    },
-    {
-      name: "options.force",
-      type: "boolean",
-      description: "Don't throw error if file doesn't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path",
+},
+{
+name: "options.force",
+type: "boolean",
+description: "Don't throw error if file doesn't exist",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `readdir(path, options?)`
@@ -116,7 +116,7 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw i
 List directory contents.
 
 ```typescript
-const entries = await filesystem.readdir('/docs');
+const entries = await filesystem.readdir('/docs')
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
 ```
 
@@ -124,10 +124,10 @@ const entries = await filesystem.readdir('/docs');
 
 ```typescript
 interface FileEntry {
-  name: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modifiedAt?: Date;
+  name: string
+  type: 'file' | 'directory'
+  size?: number
+  modifiedAt?: Date
 }
 ```
 
@@ -136,27 +136,27 @@ interface FileEntry {
 Create a directory.
 
 ```typescript
-await filesystem.mkdir('/docs/api');
-await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+await filesystem.mkdir('/docs/api')
+await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "Directory path",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Create parent directories",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "Directory path",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Create parent directories",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `rmdir(path, options?)`
@@ -164,34 +164,34 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true });
 Remove a directory.
 
 ```typescript
-await filesystem.rmdir('/docs/old');
-await filesystem.rmdir('/docs/nested', { recursive: true });
+await filesystem.rmdir('/docs/old')
+await filesystem.rmdir('/docs/nested', { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "Directory path",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Remove contents recursively",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "options.force",
-      type: "boolean",
-      description: "Don't throw if directory doesn't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "Directory path",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Remove contents recursively",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "options.force",
+type: "boolean",
+description: "Don't throw if directory doesn't exist",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `exists(path)`
@@ -199,7 +199,7 @@ await filesystem.rmdir('/docs/nested', { recursive: true });
 Check if a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/docs/guide.md');
+const exists = await filesystem.exists('/docs/guide.md')
 ```
 
 **Returns:** `Promise<boolean>`
@@ -209,7 +209,7 @@ const exists = await filesystem.exists('/docs/guide.md');
 Get file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/docs/guide.md');
+const stat = await filesystem.stat('/docs/guide.md')
 // { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
 ```
 
@@ -217,11 +217,11 @@ const stat = await filesystem.stat('/docs/guide.md');
 
 ```typescript
 interface FileStat {
-  type: 'file' | 'directory';
-  size: number;
-  modifiedAt: Date;
-  createdAt: Date;
-  path: string;
+  type: 'file' | 'directory'
+  size: number
+  modifiedAt: Date
+  createdAt: Date
+  path: string
 }
 ```
 
@@ -232,7 +232,7 @@ interface FileStat {
 Initialize the filesystem. Called by `workspace.init()`.
 
 ```typescript
-await filesystem.init?.();
+await filesystem.init?.()
 ```
 
 ### `destroy()`
@@ -240,7 +240,7 @@ await filesystem.init?.();
 Clean up resources. Called by `workspace.destroy()`.
 
 ```typescript
-await filesystem.destroy?.();
+await filesystem.destroy?.()
 ```
 
 ### `getInfo()`
@@ -248,7 +248,7 @@ await filesystem.destroy?.();
 Get filesystem metadata.
 
 ```typescript
-const info = await filesystem.getInfo?.();
+const info = await filesystem.getInfo?.()
 // { id, name, provider, basePath, readOnly, status, storage? }
 ```
 
@@ -256,17 +256,17 @@ const info = await filesystem.getInfo?.();
 
 ```typescript
 interface FilesystemInfo {
-  id: string;
-  name: string;
-  provider: string;
-  basePath?: string;
-  readOnly?: boolean;
-  status?: string;
+  id: string
+  name: string
+  provider: string
+  basePath?: string
+  readOnly?: boolean
+  status?: string
   storage?: {
-    totalBytes?: number;
-    usedBytes?: number;
-    availableBytes?: number;
-  };
+    totalBytes?: number
+    usedBytes?: number
+    availableBytes?: number
+  }
 }
 ```
 
@@ -275,7 +275,7 @@ interface FilesystemInfo {
 Get a description of how this filesystem works. Used in tool descriptions to help agents understand path semantics.
 
 ```typescript
-const instructions = filesystem.getInstructions?.();
+const instructions = filesystem.getInstructions?.()
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
 

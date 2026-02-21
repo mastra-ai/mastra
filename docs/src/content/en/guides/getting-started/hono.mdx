@@ -40,9 +40,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll pass the `src/mastra/index.ts` file to the Hono server adapter later.
 
@@ -59,28 +59,27 @@ Open the Hono entry file at `src/index.ts` and add the required import and initi
 ```typescript title="src/index.ts" {3-8,10-11,13}
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import {
-  type HonoBindings,
-  type HonoVariables,
-  MastraServer
-} from '@mastra/hono';
-import { mastra } from './mastra/index.js';
+import { type HonoBindings, type HonoVariables, MastraServer } from '@mastra/hono'
+import { mastra } from './mastra/index.js'
 
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-const server = new MastraServer({ app, mastra });
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
+const server = new MastraServer({ app, mastra })
 
-await server.init();
+await server.init()
 
-app.get('/', (c) => {
+app.get('/', c => {
   return c.text('Hello Hono!')
 })
 
-serve({
-  fetch: app.fetch,
-  port: 3000
-}, (info) => {
-  console.log(`Server is running on http://localhost:${info.port}`)
-})
+serve(
+  {
+    fetch: app.fetch,
+    port: 3000,
+  },
+  info => {
+    console.log(`Server is running on http://localhost:${info.port}`)
+  },
+)
 ```
 
 The ⁠`MastraServer` is initialized with the existing Hono `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.

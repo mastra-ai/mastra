@@ -29,8 +29,8 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 ## How Retrieval Works
 
 1. The user's query is converted to an embedding using the same model used for document embeddings
-2. This embedding is compared to stored embeddings using vector similarity
-3. The most similar chunks are retrieved and can be optionally:
+1. This embedding is compared to stored embeddings using vector similarity
+1. The most similar chunks are retrieved and can be optionally:
 
 - Filtered by metadata
 - Re-ranked for better relevance
@@ -41,29 +41,29 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts
-import { embed } from "ai";
-import { PgVector } from "@mastra/pg";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { embed } from 'ai'
+import { PgVector } from '@mastra/pg'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 // Convert query to embedding
 const { embedding } = await embed({
-  value: "What are the main points in the article?",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
+  value: 'What are the main points in the article?',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+})
 
 // Query vector store
 const pgVector = new PgVector({
   id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
-});
+})
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
-});
+})
 
 // Display results
-console.log(results);
+console.log(results)
 ```
 
 The `topK` parameter specifies the maximum number of most similar results to return from the vector search.
@@ -73,16 +73,16 @@ Results include both the text content and a similarity score:
 ```ts
 [
   {
-    text: "Climate change poses significant challenges...",
+    text: 'Climate change poses significant challenges...',
     score: 0.89,
-    metadata: { source: "article1.txt" },
+    metadata: { source: 'article1.txt' },
   },
   {
-    text: "Rising temperatures affect crop yields...",
+    text: 'Rising temperatures affect crop yields...',
     score: 0.82,
-    metadata: { source: "article1.txt" },
+    metadata: { source: 'article1.txt' },
   },
-];
+]
 ```
 
 ## Advanced Retrieval options
@@ -100,56 +100,56 @@ Basic filtering examples:
 ```ts
 // Simple equality filter
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    source: "article1.txt",
+    source: 'article1.txt',
   },
-});
+})
 
 // Numeric comparison
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
     price: { $gt: 100 },
   },
-});
+})
 
 // Multiple conditions
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    category: "electronics",
+    category: 'electronics',
     price: { $lt: 1000 },
     inStock: true,
   },
-});
+})
 
 // Array operations
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    tags: { $in: ["sale", "new"] },
+    tags: { $in: ['sale', 'new'] },
   },
-});
+})
 
 // Logical operators
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $or: [{ category: 'electronics' }, { category: 'accessories' }],
     $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
   },
-});
+})
 ```
 
 Common use cases for metadata filtering:
@@ -166,14 +166,14 @@ Common use cases for metadata filtering:
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
 ```ts
-import { createVectorQueryTool } from "@mastra/rag";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createVectorQueryTool } from '@mastra/rag'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+})
 ```
 
 When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
@@ -189,33 +189,32 @@ This is particularly useful when:
 The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores.
 
 :::note
-These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
-
+These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup.
 
 Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
 
 ```ts
-import { createVectorQueryTool } from "@mastra/rag";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createVectorQueryTool } from '@mastra/rag'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 // Pinecone with namespace
 const pineconeQueryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pinecone: {
-      namespace: "production", // Isolate data by environment
+      namespace: 'production', // Isolate data by environment
     },
   },
-});
+})
 
 // pgVector with performance tuning
 const pgVectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "postgres",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'postgres',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pgvector: {
       minScore: 0.7, // Filter low-quality results
@@ -223,33 +222,33 @@ const pgVectorQueryTool = createVectorQueryTool({
       probes: 10, // IVFFlat probe parameter
     },
   },
-});
+})
 
 // Chroma with advanced filtering
 const chromaQueryTool = createVectorQueryTool({
-  vectorStoreName: "chroma",
-  indexName: "documents",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'chroma',
+  indexName: 'documents',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     chroma: {
-      where: { category: "technical" },
-      whereDocument: { $contains: "API" },
+      where: { category: 'technical' },
+      whereDocument: { $contains: 'API' },
     },
   },
-});
+})
 
 // LanceDB with table specificity
 const lanceQueryTool = createVectorQueryTool({
-  vectorStoreName: "lance",
-  indexName: "documents",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'lance',
+  indexName: 'documents',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     lance: {
-      tableName: "myVectors", // Specify which table to query
+      tableName: 'myVectors', // Specify which table to query
       includeAllColumns: true, // Include all metadata columns in results
     },
   },
-});
+})
 ```
 
 **Key Benefits:**
@@ -271,19 +270,16 @@ const lanceQueryTool = createVectorQueryTool({
 You can also override these configurations at runtime using the request context:
 
 ```ts
-import { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from '@mastra/core/request-context'
 
-const requestContext = new RequestContext();
-requestContext.set("databaseConfig", {
+const requestContext = new RequestContext()
+requestContext.set('databaseConfig', {
   pinecone: {
-    namespace: "runtime-namespace",
+    namespace: 'runtime-namespace',
   },
-});
+})
 
-await pineconeQueryTool.execute(
-  { queryText: "search query" },
-  { mastra, requestContext }
-);
+await pineconeQueryTool.execute({ queryText: 'search query' }, { mastra, requestContext })
 ```
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
@@ -295,214 +291,191 @@ When implementing filtering, these prompts are required in the agent's instructi
 
 <Tabs>
   <TabItem value="pgvector" label="pgVector">
+    ```ts
+    import { PGVECTOR_PROMPT } from '@mastra/pg'
 
-```ts
-import { PGVECTOR_PROMPT } from "@mastra/pg";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${PGVECTOR_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${PGVECTOR_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="pinecone" label="Pinecone">
+    ```ts title="vector-store.ts"
+    import { PINECONE_PROMPT } from '@mastra/pinecone'
 
-```ts title="vector-store.ts"
-import { PINECONE_PROMPT } from "@mastra/pinecone";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${PINECONE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${PINECONE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="qdrant" label="Qdrant">
+    ```ts title="vector-store.ts"
+    import { QDRANT_PROMPT } from '@mastra/qdrant'
 
-```ts title="vector-store.ts"
-import { QDRANT_PROMPT } from "@mastra/qdrant";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${QDRANT_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${QDRANT_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="chroma" label="Chroma">
+    ```ts title="vector-store.ts"
+    import { CHROMA_PROMPT } from '@mastra/chroma'
 
-```ts title="vector-store.ts"
-import { CHROMA_PROMPT } from "@mastra/chroma";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${CHROMA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${CHROMA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="astra" label="Astra">
+    ```ts title="vector-store.ts"
+    import { ASTRA_PROMPT } from '@mastra/astra'
 
-```ts title="vector-store.ts"
-import { ASTRA_PROMPT } from "@mastra/astra";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${ASTRA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${ASTRA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="libsql" label="libSQL">
+    ```ts title="vector-store.ts"
+    import { LIBSQL_PROMPT } from '@mastra/libsql'
 
-```ts title="vector-store.ts"
-import { LIBSQL_PROMPT } from "@mastra/libsql";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${LIBSQL_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${LIBSQL_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="upstash" label="Upstash">
+    ```ts title="vector-store.ts"
+    import { UPSTASH_PROMPT } from '@mastra/upstash'
 
-```ts title="vector-store.ts"
-import { UPSTASH_PROMPT } from "@mastra/upstash";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${UPSTASH_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${UPSTASH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="vectorize" label="Vectorize">
+    ```ts title="vector-store.ts"
+    import { VECTORIZE_PROMPT } from '@mastra/vectorize'
 
-```ts title="vector-store.ts"
-import { VECTORIZE_PROMPT } from "@mastra/vectorize";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${VECTORIZE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${VECTORIZE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="mongodb" label="MongoDB">
+    ```ts title="vector-store.ts"
+    import { MONGODB_PROMPT } from '@mastra/mongodb'
 
-```ts title="vector-store.ts"
-import { MONGODB_PROMPT } from "@mastra/mongodb";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${MONGODB_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${MONGODB_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="opensearch" label="OpenSearch">
+    ```ts title="vector-store.ts"
+    import { OPENSEARCH_PROMPT } from '@mastra/opensearch'
 
-```ts title="vector-store.ts"
-import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${OPENSEARCH_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${OPENSEARCH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
 
   <TabItem value="s3vectors" label="S3Vectors">
+    ```ts title="vector-store.ts"
+    import { S3VECTORS_PROMPT } from '@mastra/s3vectors'
 
-```ts title="vector-store.ts"
-import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
-
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  model: "openai/gpt-5.1",
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${S3VECTORS_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: 'openai/gpt-5.1',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${S3VECTORS_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
   </TabItem>
-
 </Tabs>
 
 ### Re-ranking
@@ -516,20 +489,17 @@ Initial vector similarity search can sometimes miss nuanced relevance. Re-rankin
 Here's how to use re-ranking:
 
 ```ts
-import {
-  rerankWithScorer as rerank,
-  MastraAgentRelevanceScorer
-} from "@mastra/rag";
+import { rerankWithScorer as rerank, MastraAgentRelevanceScorer } from '@mastra/rag'
 
 // Get initial results from vector search
 const initialResults = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: queryEmbedding,
   topK: 10,
-});
+})
 
 // Create a relevance scorer
-const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "openai/gpt-5.1");
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', 'openai/gpt-5.1')
 
 // Re-rank the results
 const rerankedResults = await rerank({
@@ -544,7 +514,7 @@ const rerankedResults = await rerank({
     },
     topK: 10,
   },
-);
+})
 ```
 
 The weights control how different factors influence the final ranking:
@@ -560,11 +530,11 @@ For semantic scoring to work properly during re-ranking, each result must includ
 You can also use other relevance score providers like Cohere or ZeroEntropy:
 
 ```ts
-const relevanceProvider = new CohereRelevanceScorer("rerank-v3.5");
+const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 ```
 
 ```ts
-const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
+const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.

@@ -12,151 +12,151 @@ the `.recall()` method retrieves messages from a specific thread, with support f
 ## Usage Example
 
 ```typescript
-await memory?.recall({ threadId: "user-123" });
+await memory?.recall({ threadId: 'user-123' })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "threadId",
-      type: "string",
-      description:
-        "The unique identifier of the thread to retrieve messages from",
-      isOptional: false,
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      description:
-        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
-      isOptional: true,
-    },
-    {
-      name: "vectorSearchString",
-      type: "string",
-      description:
-        "Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
-      isOptional: true,
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description:
-        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination. If not provided, defaults to threadConfig.lastMessages.",
-      isOptional: true,
-    },
-    {
-      name: "page",
-      type: "number",
-      description:
-        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
-      isOptional: true,
-    },
-    {
-      name: "include",
-      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
-      description:
-        "Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).",
-      isOptional: true,
-    },
-    {
-      name: "filter",
-      type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
-      description:
-        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).",
-      isOptional: true,
-    },
-    {
-      name: "orderBy",
-      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
-      description:
-        "Sort order for retrieved messages. Defaults to descending by creation date.",
-      isOptional: true,
-    },
-    {
-      name: "threadConfig",
-      type: "MemoryConfig",
-      description:
-        "Configuration options for message retrieval and semantic search",
-      isOptional: true,
-    },
+{
+name: "threadId",
+type: "string",
+description:
+"The unique identifier of the thread to retrieve messages from",
+isOptional: false,
+},
+{
+name: "resourceId",
+type: "string",
+description:
+"Optional ID of the resource that owns the thread. If provided, validates thread ownership",
+isOptional: true,
+},
+{
+name: "vectorSearchString",
+type: "string",
+description:
+"Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
+isOptional: true,
+},
+{
+name: "perPage",
+type: "number | false",
+description:
+"Number of messages to retrieve per page. Set to false to fetch all messages without pagination. If not provided, defaults to threadConfig.lastMessages.",
+isOptional: true,
+},
+{
+name: "page",
+type: "number",
+description:
+"Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
+isOptional: true,
+},
+{
+name: "include",
+type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
+description:
+"Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).",
+isOptional: true,
+},
+{
+name: "filter",
+type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
+description:
+"Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).",
+isOptional: true,
+},
+{
+name: "orderBy",
+type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
+description:
+"Sort order for retrieved messages. Defaults to descending by creation date.",
+isOptional: true,
+},
+{
+name: "threadConfig",
+type: "MemoryConfig",
+description:
+"Configuration options for message retrieval and semantic search",
+isOptional: true,
+},
 
-  ]}
+]}
 />
 
 ### threadConfig parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable. When perPage is not explicitly provided, this value is used as the default.",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description:
-        "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "workingMemory",
-      type: "WorkingMemory",
-      description:
-        "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
-    },
-    {
-      name: "threads",
-      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-      description:
-        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
-      isOptional: true,
-      defaultValue: "{ generateTitle: false }",
-    },
-  ]}
+{
+name: "lastMessages",
+type: "number | false",
+description:
+"Number of most recent messages to retrieve. Set to false to disable. When perPage is not explicitly provided, this value is used as the default.",
+isOptional: true,
+defaultValue: "10",
+},
+{
+name: "semanticRecall",
+type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+description:
+"Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "workingMemory",
+type: "WorkingMemory",
+description:
+"Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
+isOptional: true,
+defaultValue:
+"{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+},
+{
+name: "threads",
+type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+description:
+"Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+isOptional: true,
+defaultValue: "{ generateTitle: false }",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "messages",
-      type: "MastraDBMessage[]",
-      description: "Array of retrieved messages in the database format",
-    },
-  ]}
+{
+name: "messages",
+type: "MastraDBMessage[]",
+description: "Array of retrieved messages in the database format",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/test-memory.ts"
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const agent = mastra.getAgent("agent");
-const memory = await agent.getMemory();
+const agent = mastra.getAgent('agent')
+const memory = await agent.getMemory()
 
 // Retrieve messages with pagination
 const { messages } = await memory!.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   perPage: 50,
-  vectorSearchString: "What messages are there?",
+  vectorSearchString: 'What messages are there?',
   include: [
     {
-      id: "msg-123",
+      id: 'msg-123',
     },
     {
-      id: "msg-456",
+      id: 'msg-456',
       withPreviousMessages: 3,
       withNextMessages: 1,
     },
@@ -164,19 +164,19 @@ const { messages } = await memory!.recall({
   threadConfig: {
     semanticRecall: true,
   },
-});
+})
 
-console.log(messages); // MastraDBMessage[]
+console.log(messages) // MastraDBMessage[]
 
 // Fetch all messages without pagination
 const allMessages = await memory!.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   perPage: false, // Fetch all
-});
+})
 
 // Convert to AI SDK format if needed
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-const uiMessages = toAISdkV5Messages(messages);
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+const uiMessages = toAISdkV5Messages(messages)
 ```
 
 ### Related

@@ -13,7 +13,7 @@ Sends Tracing data to LangSmith for observability.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new LangSmithExporter(config: LangSmithExporterConfig)
 ```
 
@@ -21,73 +21,74 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
-  client?: Client;
-  projectName?: string;
+  client?: Client
+  projectName?: string
 }
 ```
 
 Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
+
 - From `BaseExporterConfig`: `logger?: IMastraLogger`, `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'`
 - From `ClientConfig`: `apiKey`, `apiUrl`, `callerOptions`, `hideInputs`, `hideOutputs`, etc.
 
 <PropertiesTable
   props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "projectName",
-      type: "string",
-      description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
-      required: false,
-    },
-    {
-      name: "apiUrl",
-      type: "string",
-      description: "LangSmith API URL",
-      required: false,
-    },
-    {
-      name: "callerOptions",
-      type: "object",
-      description: "HTTP client configuration options",
-      required: false,
-    },
-    {
-      name: "hideInputs",
-      type: "boolean",
-      description: "Hide input data in the LangSmith UI",
-      required: false,
-    },
-    {
-      name: "hideOutputs",
-      type: "boolean",
-      description: "Hide output data in the LangSmith UI",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "client",
-      type: "Client",
-      description: "Pre-configured LangSmith client instance",
-      required: false,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
+required: false,
+},
+{
+name: "projectName",
+type: "string",
+description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
+required: false,
+},
+{
+name: "apiUrl",
+type: "string",
+description: "LangSmith API URL",
+required: false,
+},
+{
+name: "callerOptions",
+type: "object",
+description: "HTTP client configuration options",
+required: false,
+},
+{
+name: "hideInputs",
+type: "boolean",
+description: "Hide input data in the LangSmith UI",
+required: false,
+},
+{
+name: "hideOutputs",
+type: "boolean",
+description: "Hide output data in the LangSmith UI",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "client",
+type: "Client",
+description: "Pre-configured LangSmith client instance",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -95,7 +96,7 @@ Exports a tracing event to LangSmith.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -103,7 +104,7 @@ Force flushes any pending spans to LangSmith without shutting down the exporter.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -112,33 +113,33 @@ Ends all active spans and clears the trace map.
 ## Usage
 
 ```typescript
-import { LangSmithExporter } from "@mastra/langsmith";
+import { LangSmithExporter } from '@mastra/langsmith'
 
 const exporter = new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY,
-  projectName: "my-project", // Optional: specify which project to send traces to
-  apiUrl: "https://api.smith.langchain.com",
-  logLevel: "info",
-});
+  projectName: 'my-project', // Optional: specify which project to send traces to
+  apiUrl: 'https://api.smith.langchain.com',
+  logLevel: 'info',
+})
 ```
 
 ## Environment Variables
 
 | Variable | Description |
-|----------|-------------|
+| - | - |
 | `LANGSMITH_API_KEY` | Your LangSmith API key |
 | `LANGCHAIN_PROJECT` | Default project name for traces (used if `projectName` not specified) |
 | `LANGSMITH_BASE_URL` | API URL for self-hosted instances |
 
 ## Span Type Mapping
 
-| Span Type       | LangSmith Type |
-| ------------------ | -------------- |
-| `MODEL_GENERATION` | `llm`          |
-| `MODEL_CHUNK`      | `llm`          |
-| `TOOL_CALL`        | `tool`         |
-| `MCP_TOOL_CALL`    | `tool`         |
-| All others         | `chain`        |
+| Span Type | LangSmith Type |
+| - | - |
+| `MODEL_GENERATION` | `llm` |
+| `MODEL_CHUNK` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| All others | `chain` |
 
 ## withLangsmithMetadata
 
@@ -152,43 +153,41 @@ function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptions
 
 <PropertiesTable
   props={[
-    {
-      name: "projectName",
-      type: "string",
-      description: "Override the project name for this span and its children",
-      required: false,
-    },
-    {
-      name: "sessionId",
-      type: "string",
-      description: "Session ID for grouping related traces",
-      required: false,
-    },
-    {
-      name: "sessionName",
-      type: "string",
-      description: "Display name for the session",
-      required: false,
-    },
-  ]}
+{
+name: "projectName",
+type: "string",
+description: "Override the project name for this span and its children",
+required: false,
+},
+{
+name: "sessionId",
+type: "string",
+description: "Session ID for grouping related traces",
+required: false,
+},
+{
+name: "sessionName",
+type: "string",
+description: "Display name for the session",
+required: false,
+},
+]}
 />
 
 ### Usage
 
 ```typescript
-import { buildTracingOptions } from "@mastra/observability";
-import { withLangsmithMetadata } from "@mastra/langsmith";
+import { buildTracingOptions } from '@mastra/observability'
+import { withLangsmithMetadata } from '@mastra/langsmith'
 
 // Route to a specific project
-const tracingOptions = buildTracingOptions(
-  withLangsmithMetadata({ projectName: "my-project" }),
-);
+const tracingOptions = buildTracingOptions(withLangsmithMetadata({ projectName: 'my-project' }))
 
 // Set multiple fields
 const tracingOptions = buildTracingOptions(
   withLangsmithMetadata({
-    projectName: "my-project",
-    sessionId: "user-123",
+    projectName: 'my-project',
+    sessionId: 'user-123',
   }),
-);
+)
 ```

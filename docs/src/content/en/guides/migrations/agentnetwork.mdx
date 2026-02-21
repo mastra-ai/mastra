@@ -7,7 +7,7 @@ description: "Learn how to migrate from AgentNetwork primitives to .network() in
 
 As of `v0.20.0` for `@mastra/core`, the following changes apply.
 
-### Upgrade from AI SDK v4 to v5
+## Upgrade from AI SDK v4 to v5
 
 - Bump all your model provider packages by a major version.
 
@@ -17,7 +17,7 @@ This will ensure that they are all v5 models now.
 
 :::
 
-### Memory is required
+## Memory is required
 
 - Memory is now required for the agent network to function properly.
 
@@ -34,40 +34,38 @@ If you were using the `AgentNetwork` primitive, you can replace the `AgentNetwor
 Before:
 
 ```typescript
-import { AgentNetwork } from "@mastra/core/network";
+import { AgentNetwork } from '@mastra/core/network'
 
 const agent = new AgentNetwork({
-  name: "agent-network",
+  name: 'agent-network',
   agents: [agent1, agent2],
   tools: { tool1, tool2 },
-  model: "openai/gpt-5.1",
-  instructions:
-    "You are a network agent that can help users with a variety of tasks.",
-});
+  model: 'openai/gpt-5.1',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
+})
 
-await agent.stream("Find me the weather in Tokyo.");
+await agent.stream('Find me the weather in Tokyo.')
 ```
 
 After:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
-const memory = new Memory();
+const memory = new Memory()
 
 const agent = new Agent({
-  id: "agent-network",
-  name: "agent-network",
+  id: 'agent-network',
+  name: 'agent-network',
   agents: { agent1, agent2 },
   tools: { tool1, tool2 },
-  model: "openai/gpt-5.1",
-  instructions:
-    "You are a network agent that can help users with a variety of tasks.",
+  model: 'openai/gpt-5.1',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
   memory,
-});
+})
 
-await agent.network("Find me the weather in Tokyo.");
+await agent.network('Find me the weather in Tokyo.')
 ```
 
 If you were using the `NewAgentNetwork` primitive, you can replace the `NewAgentNetwork` with `Agent`.
@@ -75,40 +73,38 @@ If you were using the `NewAgentNetwork` primitive, you can replace the `NewAgent
 Before:
 
 ```typescript
-import { NewAgentNetwork } from "@mastra/core/network/vnext";
+import { NewAgentNetwork } from '@mastra/core/network/vnext'
 
 const agent = new NewAgentNetwork({
-  id: "agent-network",
-  name: "agent-network",
+  id: 'agent-network',
+  name: 'agent-network',
   agents: { agent1, agent2 },
   workflows: { workflow1 },
   tools: { tool1, tool2 },
-  model: "openai/gpt-5.1",
-  instructions:
-    "You are a network agent that can help users with a variety of tasks.",
-});
+  model: 'openai/gpt-5.1',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
+})
 
-await agent.loop("Find me the weather in Tokyo.");
+await agent.loop('Find me the weather in Tokyo.')
 ```
 
 After:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
-const memory = new Memory();
+const memory = new Memory()
 
 const agent = new Agent({
-  name: "agent-network",
+  name: 'agent-network',
   agents: { agent1, agent2 },
   workflows: { workflow1 },
   tools: { tool1, tool2 },
-  model: "openai/gpt-5.1",
-  instructions:
-    "You are a network agent that can help users with a variety of tasks.",
+  model: 'openai/gpt-5.1',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
   memory,
-});
+})
 
-await agent.network("Find me the weather in Tokyo.");
+await agent.network('Find me the weather in Tokyo.')
 ```

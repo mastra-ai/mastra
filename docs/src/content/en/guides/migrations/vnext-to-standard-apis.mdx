@@ -3,7 +3,7 @@ title: "Migration: VNext to Standard APIs | Migration Guide"
 description: "Learn how to migrate from VNext methods to the new standard agent APIs in Mastra."
 ---
 
-#  Migrate from VNext to Standard APIs
+# Migrate from VNext to Standard APIs
 
 As of `v0.20.0` for `@mastra/core`, the following changes apply.
 
@@ -102,16 +102,16 @@ See the following API references for more information:
 
 ### Format control
 
-**Legacy APIs**
+#### Legacy APIs
 
 No `format` option: Always return AI SDK v4 types
 
 ```typescript
 // Mastra native format (default)
-const result = await agent.stream(messages);
+const result = await agent.stream(messages)
 ```
 
-**Standard APIs**
+#### Standard APIs
 
 Use `format` option to choose output:
 
@@ -121,8 +121,8 @@ Use `format` option to choose output:
 ```typescript
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
-  format: "aisdk",
-});
+  format: 'aisdk',
+})
 ```
 
 ### New options in standard APIs
@@ -133,22 +133,23 @@ The following options are available in the standard `.stream()` and `generate()`
 
   ```typescript
   const result = await agent.stream(messages, {
-    format: "aisdk", // or 'mastra' (default)
-  });
+    format: 'aisdk', // or 'mastra' (default)
+  })
   ```
 
 - `system` - Custom system message (separate from instructions).
 
   ```typescript
   const result = await agent.stream(messages, {
-    system: "You are a helpful assistant",
-  });
+    system: 'You are a helpful assistant',
+  })
   ```
 
 - `structuredOutput` - Enhanced structured output with model override and custom options.
-  - `jsonPromptInjection` - Used to override the default behaviour of passing response_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
+  - `jsonPromptInjection` - Used to override the default behaviour of passing response\_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
   - `model` - If a model is added this will create a sub agent to structure the response from the main agent. The main agent will call tools and return text, and the sub agent will return an object that conforms to your schema provided. This is a replacement for `experimental_output`.
   - `errorStrategy` - Determines what happens when the output doesn’t match the schema:
+
     - 'warn' - log a warning
     - 'error' - throw an error
     - 'fallback' - return a fallback value you provide
@@ -160,12 +161,12 @@ The following options are available in the standard `.stream()` and `generate()`
           name: z.string(),
           age: z.number(),
         }),
-        model: "openai/gpt-5.1", // Optional model override for structuring
-        errorStrategy: "fallback",
-        fallbackValue: { name: "unknown", age: 0 },
-        instructions: "Extract user information", // Override default structuring instructions
+        model: 'openai/gpt-5.1', // Optional model override for structuring
+        errorStrategy: 'fallback',
+        fallbackValue: { name: 'unknown', age: 0 },
+        instructions: 'Extract user information', // Override default structuring instructions
       },
-    });
+    })
     ```
 
 - `stopWhen` - Flexible stop conditions (step count, token limit, etc).
@@ -173,7 +174,7 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.stream(messages, {
     stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
-  });
+  })
   ```
 
 - `providerOptions` - Provider-specific options (e.g., OpenAI-specific settings)
@@ -183,30 +184,30 @@ The following options are available in the standard `.stream()` and `generate()`
     providerOptions: {
       openai: {
         store: true,
-        metadata: { userId: "123" },
+        metadata: { userId: '123' },
       },
     },
-  });
+  })
   ```
 
 - `onChunk` - Callback for each streaming chunk.
 
   ```typescript
   const result = await agent.stream(messages, {
-    onChunk: (chunk) => {
-      console.log("Received chunk:", chunk);
+    onChunk: chunk => {
+      console.log('Received chunk:', chunk)
     },
-  });
+  })
   ```
 
 - `onError` - Error callback.
 
   ```typescript
   const result = await agent.stream(messages, {
-    onError: (error) => {
-      console.error("Stream error:", error);
+    onError: error => {
+      console.error('Stream error:', error)
     },
-  });
+  })
   ```
 
 - `onAbort` - Abort callback.
@@ -214,26 +215,26 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.stream(messages, {
     onAbort: () => {
-      console.log("Stream aborted");
+      console.log('Stream aborted')
     },
-  });
+  })
   ```
 
 - `activeTools` - Specify which tools are active for this execution.
 
   ```typescript
   const result = await agent.stream(messages, {
-    activeTools: ["search", "calculator"], // Only these tools will be available
-  });
+    activeTools: ['search', 'calculator'], // Only these tools will be available
+  })
   ```
 
 - `abortSignal` - AbortSignal for cancellation.
 
   ```typescript
-  const controller = new AbortController();
+  const controller = new AbortController()
   const result = await agent.stream(messages, {
     abortSignal: controller.signal,
-  });
+  })
 
   // Later: controller.abort();
   ```
@@ -243,12 +244,12 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.stream(messages, {
     prepareStep: ({ step, state }) => {
-      console.log("About to execute step:", step);
+      console.log('About to execute step:', step)
       return {
         /* modified state */
-      };
+      }
     },
-  });
+  })
   ```
 
 - `requireToolApproval` - Require approval for all tool calls.
@@ -256,7 +257,7 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.stream(messages, {
     requireToolApproval: true,
-  });
+  })
   ```
 
 ### Legacy options that moved
@@ -272,7 +273,7 @@ The following options are available in the standard `.stream()` and `generate()`
       maxTokens: 1000,
       topP: 0.9,
     },
-  });
+  })
   ```
 
 - `resourceId` and `threadId`.
@@ -282,10 +283,10 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.stream(messages, {
     memory: {
-      resource: "user-123",
-      thread: "thread-456",
+      resource: 'user-123',
+      thread: 'thread-456',
     },
-  });
+  })
   ```
 
 ### Deprecated or removed options
@@ -300,9 +301,9 @@ The following options are available in the standard `.stream()` and `generate()`
       schema: z.object({
         summary: z.string(),
       }),
-      model: "openai/gpt-5.1",
+      model: 'openai/gpt-5.1',
     },
-  });
+  })
   ```
 
 - `output`
@@ -312,13 +313,11 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.generate(messages, {
     structuredOutput: {
-      schema: {
-        z.object({
-          name: z.string()
-        })
-      }
+      schema: z.object({
+        name: z.string(),
+      }),
     },
-  });
+  })
   ```
 
 - `memoryOptions`
@@ -328,7 +327,7 @@ The following options are available in the standard `.stream()` and `generate()`
   ```typescript
   const result = await agent.generate(messages, {
     memory: {},
-  });
+  })
   ```
 
 ### Type changes
@@ -350,13 +349,13 @@ See the following API references for more information:
 
   ```typescript
   type ToolChoice<TOOLS extends Record<string, unknown>> =
-    | "auto"
-    | "none"
-    | "required"
+    | 'auto'
+    | 'none'
+    | 'required'
     | {
-        type: "tool";
-        toolName: Extract<keyof TOOLS, string>;
-      };
+        type: 'tool'
+        toolName: Extract<keyof TOOLS, string>
+      }
   ```
 
 See the following API references for more information:

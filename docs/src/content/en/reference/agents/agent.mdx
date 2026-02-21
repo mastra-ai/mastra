@@ -14,37 +14,37 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 ### Basic string instructions
 
 ```typescript title="src/mastra/agents/string-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 // String instructions
 export const agent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
-  instructions: "You are a helpful assistant that provides concise answers.",
-  model: "openai/gpt-5.1",
-});
+  id: 'test-agent',
+  name: 'Test Agent',
+  instructions: 'You are a helpful assistant that provides concise answers.',
+  model: 'openai/gpt-5.1',
+})
 
 // System message object
 export const agent2 = new Agent({
-  id: "test-agent-2",
-  name: "Test Agent 2",
+  id: 'test-agent-2',
+  name: 'Test Agent 2',
   instructions: {
-    role: "system",
-    content: "You are an expert programmer",
+    role: 'system',
+    content: 'You are an expert programmer',
   },
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 
 // Array of system messages
 export const agent3 = new Agent({
-  id: "test-agent-3",
-  name: "Test Agent 3",
+  id: 'test-agent-3',
+  name: 'Test Agent 3',
   instructions: [
-    { role: "system", content: "You are a helpful assistant" },
-    { role: "system", content: "You have expertise in TypeScript" },
+    { role: 'system', content: 'You are a helpful assistant' },
+    { role: 'system', content: 'You have expertise in TypeScript' },
   ],
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 ```
 
 ### Single CoreSystemMessage
@@ -52,201 +52,200 @@ export const agent3 = new Agent({
 Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
 
 ```typescript title="src/mastra/agents/core-message-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  id: "core-message-agent",
-  name: "Core Message Agent",
+  id: 'core-message-agent',
+  name: 'Core Message Agent',
   instructions: {
-    role: "system",
-    content:
-      "You are a helpful assistant specialized in technical documentation.",
+    role: 'system',
+    content: 'You are a helpful assistant specialized in technical documentation.',
     providerOptions: {
       openai: {
-        reasoningEffort: "low",
+        reasoningEffort: 'low',
       },
     },
   },
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 ```
 
 ### Multiple CoreSystemMessages
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 // This could be customizable based on the user
 const preferredTone = {
-  role: "system",
-  content: "Always maintain a professional and empathetic tone.",
-};
+  role: 'system',
+  content: 'Always maintain a professional and empathetic tone.',
+}
 
 export const agent = new Agent({
-  id: "multi-message-agent",
-  name: "Multi Message Agent",
+  id: 'multi-message-agent',
+  name: 'Multi Message Agent',
   instructions: [
-    { role: "system", content: "You are a customer service representative." },
+    { role: 'system', content: 'You are a customer service representative.' },
     preferredTone,
     {
-      role: "system",
-      content: "Escalate complex issues to human agents when needed.",
+      role: 'system',
+      content: 'Escalate complex issues to human agents when needed.',
       providerOptions: {
-        anthropic: { cacheControl: { type: "ephemeral" } },
+        anthropic: { cacheControl: { type: 'ephemeral' } },
       },
     },
   ],
-  model: "anthropic/claude-sonnet-4-20250514",
-});
+  model: 'anthropic/claude-sonnet-4-20250514',
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description:
-        "Unique identifier for the agent. Defaults to `name` if not provided.",
-    },
-    {
-      name: "name",
-      type: "string",
-      isOptional: false,
-      description: "Display name for the agent. Used as the identifier if `id` is not provided.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description:
-        "Optional description of the agent's purpose and capabilities.",
-    },
-    {
-      name: "instructions",
-      type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
-      isOptional: false,
-      description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
-        array of system messages, or a function that returns any of these types dynamically.
-        SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`,
-    },
-    {
-      name: "model",
-      type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
-      isOptional: false,
-      description:
-        "The language model used by the agent. Can be provided statically or resolved at runtime.",
-    },
-    {
-      name: "agents",
-      type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
-      isOptional: true,
-      description:
-        "Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
-    },
-    {
-      name: "tools",
-      type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
-      isOptional: true,
-      description:
-        "Tools that the agent can access. Can be provided statically or resolved dynamically.",
-    },
-    {
-      name: "workflows",
-      type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
-      isOptional: true,
-      description:
-        "Workflows that the agent can execute. Can be static or dynamically resolved.",
-    },
-    {
-      name: "defaultOptions",
-      type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
-      isOptional: true,
-      description:
-        "Default options used when calling `stream()` and `generate()`.",
-    },
-    {
-      name: "defaultGenerateOptionsLegacy",
-      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
-      isOptional: true,
-      description: "Default options used when calling `generateLegacy()`.",
-    },
-    {
-      name: "defaultStreamOptionsLegacy",
-      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
-      isOptional: true,
-      description: "Default options used when calling `streamLegacy()`.",
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      isOptional: true,
-      description:
-        "Reference to the Mastra runtime instance (injected automatically).",
-    },
-    {
-      name: "scorers",
-      type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
-      isOptional: true,
-      description:
-        "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
-    },
-    {
-      name: "memory",
-      type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
-      isOptional: true,
-      description:
-        "Memory module used for storing and retrieving stateful context.",
-    },
-    {
-      name: "voice",
-      type: "CompositeVoice",
-      isOptional: true,
-      description: "Voice settings for speech input and output.",
-    },
-    {
-      name: "inputProcessors",
-      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
-      isOptional: true,
-      description:
-        "Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.",
-    },
-    {
-      name: "outputProcessors",
-      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
-      isOptional: true,
-      description:
-        "Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.",
-    },
-    {
-      name: "maxProcessorRetries",
-      type: "number",
-      isOptional: true,
-      description:
-        "Maximum number of times a processor can request retrying the LLM step.",
-    },
-    {
-      name: "requestContextSchema",
-      type: "z.ZodType<any>",
-      isOptional: true,
-      description:
-        "Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+isOptional: true,
+description:
+"Unique identifier for the agent. Defaults to `name` if not provided.",
+},
+{
+name: "name",
+type: "string",
+isOptional: false,
+description: "Display name for the agent. Used as the identifier if `id` is not provided.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description:
+"Optional description of the agent's purpose and capabilities.",
+},
+{
+name: "instructions",
+type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
+isOptional: false,
+description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+array of system messages, or a function that returns any of these types dynamically.
+SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`,
+},
+{
+name: "model",
+type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+isOptional: false,
+description:
+"The language model used by the agent. Can be provided statically or resolved at runtime.",
+},
+{
+name: "agents",
+type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+isOptional: true,
+description:
+"Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
+},
+{
+name: "tools",
+type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
+isOptional: true,
+description:
+"Tools that the agent can access. Can be provided statically or resolved dynamically.",
+},
+{
+name: "workflows",
+type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+isOptional: true,
+description:
+"Workflows that the agent can execute. Can be static or dynamically resolved.",
+},
+{
+name: "defaultOptions",
+type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+isOptional: true,
+description:
+"Default options used when calling `stream()` and `generate()`.",
+},
+{
+name: "defaultGenerateOptionsLegacy",
+type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+isOptional: true,
+description: "Default options used when calling `generateLegacy()`.",
+},
+{
+name: "defaultStreamOptionsLegacy",
+type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+isOptional: true,
+description: "Default options used when calling `streamLegacy()`.",
+},
+{
+name: "mastra",
+type: "Mastra",
+isOptional: true,
+description:
+"Reference to the Mastra runtime instance (injected automatically).",
+},
+{
+name: "scorers",
+type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
+isOptional: true,
+description:
+"Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
+},
+{
+name: "memory",
+type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
+isOptional: true,
+description:
+"Memory module used for storing and retrieving stateful context.",
+},
+{
+name: "voice",
+type: "CompositeVoice",
+isOptional: true,
+description: "Voice settings for speech input and output.",
+},
+{
+name: "inputProcessors",
+type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
+isOptional: true,
+description:
+"Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.",
+},
+{
+name: "outputProcessors",
+type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
+isOptional: true,
+description:
+"Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.",
+},
+{
+name: "maxProcessorRetries",
+type: "number",
+isOptional: true,
+description:
+"Maximum number of times a processor can request retrying the LLM step.",
+},
+{
+name: "requestContextSchema",
+type: "z.ZodType<any>",
+isOptional: true,
+description:
+"Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "agent",
-      type: "Agent<TAgentId, TTools>",
-      description: "A new Agent instance with the specified configuration.",
-    },
-  ]}
+{
+name: "agent",
+type: "Agent<TAgentId, TTools>",
+description: "A new Agent instance with the specified configuration.",
+},
+]}
 />
 
 ## Related

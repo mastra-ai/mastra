@@ -28,26 +28,26 @@ Mastra agent networks operate using these principles:
 An agent network is built around a top-level routing agent that delegates tasks to subagents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
 ```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
 
-import { researchAgent } from "./research-agent";
-import { writingAgent } from "./writing-agent";
+import { researchAgent } from './research-agent'
+import { writingAgent } from './writing-agent'
 
-import { cityWorkflow } from "../workflows/city-workflow";
-import { weatherTool } from "../tools/weather-tool";
+import { cityWorkflow } from '../workflows/city-workflow'
+import { weatherTool } from '../tools/weather-tool'
 
 export const routingAgent = new Agent({
-  id: "routing-agent",
-  name: "Routing Agent",
+  id: 'routing-agent',
+  name: 'Routing Agent',
   instructions: `
       You are a network of writers and researchers.
       The user will ask you to research a topic.
       Always respond with a complete report—no bullet points.
       Write in full paragraphs, like a blog post.
       Do not answer with incomplete or uncertain information.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   agents: {
     researchAgent,
     writingAgent,
@@ -61,10 +61,10 @@ export const routingAgent = new Agent({
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'mastra-storage',
-      url: "file:../mastra.db",
+      url: 'file:../mastra.db',
     }),
   }),
-});
+})
 ```
 
 ### Writing descriptions for network primitives
@@ -77,22 +77,22 @@ Each subagent in a network should include a clear `description` that explains wh
 
 ```typescript title="src/mastra/agents/research-agent.ts"
 export const researchAgent = new Agent({
-  id: "research-agent",
-  name: "Research Agent",
+  id: 'research-agent',
+  name: 'Research Agent',
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
-});
+})
 ```
 
 ```typescript title="src/mastra/agents/writing-agent.ts"
 export const writingAgent = new Agent({
-  id: "writing-agent",
-  name: "Writing Agent",
+  id: 'writing-agent',
+  name: 'Writing Agent',
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
-});
+})
 ```
 
 #### Workflow descriptions
@@ -101,7 +101,7 @@ Workflows in a network should include a `description` to explain their purpose, 
 
 ```typescript title="src/mastra/workflows/city-workflow.ts"
 export const cityWorkflow = createWorkflow({
-  id: "city-workflow",
+  id: 'city-workflow',
   description: `This workflow handles city-specific research tasks.
     It first gathers factual information about the city, then synthesizes
     that research into a full written report. Use it when the user input
@@ -112,7 +112,7 @@ export const cityWorkflow = createWorkflow({
   outputSchema: z.object({
     text: z.string(),
   }),
-});
+})
 ```
 
 #### Tool descriptions
@@ -121,7 +121,7 @@ Tools in a network should include a `description` to explain their purpose, alon
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export const weatherTool = createTool({
-  id: "weather-tool",
+  id: 'weather-tool',
   description: ` Retrieves current weather information using the wttr.in API.
     Accepts a city or location name as input and returns a short weather summary.
     Use this tool whenever up-to-date weather data is requested.
@@ -132,7 +132,7 @@ export const weatherTool = createTool({
   outputSchema: z.object({
     weather: z.string(),
   }),
-});
+})
 ```
 
 ## Calling agent networks
@@ -144,14 +144,12 @@ Call a Mastra agent network using `.network()` with a user message. The method r
 In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
 
 ```typescript
-const result = await routingAgent.network(
-  "Tell me three cool ways to use Mastra",
-);
+const result = await routingAgent.network('Tell me three cool ways to use Mastra')
 
 for await (const chunk of result) {
-  console.log(chunk.type);
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  console.log(chunk.type)
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -180,19 +178,17 @@ network-execution-event-step-finish
 In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
 
 ```typescript
-const result = await routingAgent.network(
-  "Tell me some historical facts about London",
-);
+const result = await routingAgent.network('Tell me some historical facts about London')
 
 for await (const chunk of result) {
-  console.log(chunk.type);
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  console.log(chunk.type)
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
 
-#### Workflow output
+### Workflow output
 
 The following `chunk.type` events are emitted during this request:
 
@@ -213,12 +209,12 @@ network-execution-event-step-finish
 In this example, the routing agent skips the `researchAgent`, `writingAgent`, and `cityWorkflow`, and calls the `weatherTool` directly to complete the task.
 
 ```typescript
-const result = await routingAgent.network("What's the weather in London?");
+const result = await routingAgent.network("What's the weather in London?")
 
 for await (const chunk of result) {
-  console.log(chunk.type);
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  console.log(chunk.type)
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -240,37 +236,37 @@ network-execution-event-step-finish
 When you need typed, validated results from a network, use the `structuredOutput` option. After the network completes its task, it generates a structured response matching your schema.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
 const resultSchema = z.object({
-  summary: z.string().describe("A brief summary of the findings"),
-  recommendations: z.array(z.string()).describe("List of recommendations"),
-  confidence: z.number().min(0).max(1).describe("Confidence score"),
-});
+  summary: z.string().describe('A brief summary of the findings'),
+  recommendations: z.array(z.string()).describe('List of recommendations'),
+  confidence: z.number().min(0).max(1).describe('Confidence score'),
+})
 
-const stream = await routingAgent.network("Research AI trends", {
+const stream = await routingAgent.network('Research AI trends', {
   structuredOutput: {
     schema: resultSchema,
   },
-});
+})
 
 // Consume the stream
 for await (const chunk of stream) {
-  if (chunk.type === "network-object") {
+  if (chunk.type === 'network-object') {
     // Partial object during generation
-    console.log("Partial:", chunk.payload.object);
+    console.log('Partial:', chunk.payload.object)
   }
-  if (chunk.type === "network-object-result") {
+  if (chunk.type === 'network-object-result') {
     // Final structured object
-    console.log("Final:", chunk.payload.object);
+    console.log('Final:', chunk.payload.object)
   }
 }
 
 // Get the typed result
-const result = await stream.object;
-console.log(result?.summary);
-console.log(result?.recommendations);
-console.log(result?.confidence);
+const result = await stream.object
+console.log(result?.summary)
+console.log(result?.recommendations)
+console.log(result?.confidence)
 ```
 
 ### Streaming partial objects
@@ -278,17 +274,17 @@ console.log(result?.confidence);
 For real-time updates during structured output generation, use `objectStream`:
 
 ```typescript
-const stream = await routingAgent.network("Analyze market data", {
+const stream = await routingAgent.network('Analyze market data', {
   structuredOutput: { schema: resultSchema },
-});
+})
 
 // Stream partial objects as they're generated
 for await (const partial of stream.objectStream) {
-  console.log("Building result:", partial);
+  console.log('Building result:', partial)
 }
 
 // Get the final typed result
-const final = await stream.object;
+const final = await stream.object
 ```
 
 ## Related

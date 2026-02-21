@@ -14,22 +14,22 @@ This guide covers only the Mastra-specific aspects of the migration.
 - **Data compatibility**: New data stored in v5 format will no longer work if you downgrade from v5 to v4
 - **Backup recommendation**: Keep DB backups from before you upgrade to v5
 
-### Memory and Storage
+## Memory and Storage
 
 Mastra automatically handles AI SDK v4 data using its internal `MessageList` class, which manages format conversion—including v4 to v5. No database migrations are required; your existing messages are translated on the fly and continue working after you upgrade.
 
-### Message Format Conversion
+## Message Format Conversion
 
 For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages()` utility:
 
 ```typescript
-import { convertMessages } from "@mastra/core/agent";
+import { convertMessages } from '@mastra/core/agent'
 
 // Convert AI SDK v4 messages to v5
-const aiv5Messages = convertMessages(aiv4Messages).to("AIV5.UI");
+const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI')
 
 // Convert Mastra messages to AI SDK v5
-const aiv5Messages = convertMessages(mastraMessages).to("AIV5.Core");
+const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core')
 
 // Supported output formats:
 // 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
@@ -37,38 +37,38 @@ const aiv5Messages = convertMessages(mastraMessages).to("AIV5.Core");
 
 This utility is helpful when you want to fetch messages directly from your storage DB and convert them for use in AI SDK.
 
-### Type Inference for Tools
+## Type Inference for Tools
 
 When using tools with TypeScript in AI SDK v5, Mastra provides type inference helpers to ensure type safety for your tool inputs and outputs.
 
-#### `InferUITool`
+### `InferUITool`
 
 The `InferUITool` type helper infers the input and output types of a single Mastra tool:
 
 ```typescript title="app/types.ts"
-import { InferUITool, createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { InferUITool, createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get the current weather",
+  id: 'get-weather',
+  description: 'Get the current weather',
   inputSchema: z.object({
-    location: z.string().describe("The city and state"),
+    location: z.string().describe('The city and state'),
   }),
   outputSchema: z.object({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async inputData => {
     return {
       temperature: 72,
-      conditions: "sunny",
-    };
+      conditions: 'sunny',
+    }
   },
-});
+})
 
 // Infer the types from the tool
-type WeatherUITool = InferUITool<typeof weatherTool>;
+type WeatherUITool = InferUITool<typeof weatherTool>
 // This creates:
 // {
 //   input: { location: string };
@@ -76,37 +76,37 @@ type WeatherUITool = InferUITool<typeof weatherTool>;
 // }
 ```
 
-#### `InferUITools`
+### `InferUITools`
 
 The `InferUITools` type helper infers the input and output types of multiple tools:
 
 ```typescript title="app/mastra/tools.ts"
-import { InferUITools, createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { InferUITools, createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 // Using weatherTool from the previous example
 const tools = {
   weather: weatherTool,
   calculator: createTool({
-    id: "calculator",
-    description: "Perform basic arithmetic",
+    id: 'calculator',
+    description: 'Perform basic arithmetic',
     inputSchema: z.object({
-      operation: z.enum(["add", "subtract", "multiply", "divide"]),
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
       a: z.number(),
       b: z.number(),
     }),
     outputSchema: z.object({
       result: z.number(),
     }),
-    execute: async (inputData) => {
+    execute: async inputData => {
       // implementation...
-      return { result: 0 };
+      return { result: 0 }
     },
   }),
-};
+}
 
 // Infer types from the tool set
-export type MyUITools = InferUITools<typeof tools>;
+export type MyUITools = InferUITools<typeof tools>
 // This creates:
 // {
 //   weather: { input: { location: string }; output: { temperature: number; conditions: string } };
@@ -115,5 +115,3 @@ export type MyUITools = InferUITools<typeof tools>;
 ```
 
 These type helpers provide full TypeScript support when using Mastra tools with AI SDK v5 UI components, ensuring type safety across your application.
-
-

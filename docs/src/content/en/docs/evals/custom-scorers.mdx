@@ -8,18 +8,18 @@ packages:
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
-### The Four-Step Pipeline
+## The Four-Step Pipeline
 
 All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
 1. **preprocess** (optional): Prepare or transform input/output data
-2. **analyze** (optional): Perform evaluation analysis and gather insights
-3. **generateScore** (required): Convert analysis into a numerical score
-4. **generateReason** (optional): Generate human-readable explanations
+1. **analyze** (optional): Perform evaluation analysis and gather insights
+1. **generateScore** (required): Convert analysis into a numerical score
+1. **generateReason** (optional): Generate human-readable explanations
 
 Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
 
-### Functions vs Prompt Objects
+## Functions vs Prompt Objects
 
 **Functions** use JavaScript for deterministic logic. They're ideal for:
 
@@ -39,11 +39,11 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
-### Initializing a Scorer
+## Initializing a Scorer
 
 Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
-```typescript
+```typescript prettier:false
 import { createScorer } from '@mastra/core/evals';
 
 const glutenCheckerScorer = createScorer({
@@ -65,24 +65,24 @@ The judge configuration is only needed if you plan to use prompt objects in any 
 
 If all steps are function-based, the judge is never called and there is no judge output. To see LLM output, define at least one step as a prompt object and read the corresponding step result (for example, `results.analyzeStepResult`).
 
-#### Minimal judge example (prompt object)
+### Minimal judge example (prompt object)
 
 This example uses a prompt object in `analyze`, so the judge runs and its structured output is available as `results.analyzeStepResult`.
 
 ```typescript
-import { createScorer } from "@mastra/core/evals";
-import { z } from "zod";
+import { createScorer } from '@mastra/core/evals'
+import { z } from 'zod'
 
 const quoteSourcesScorer = createScorer({
-  id: "quote-sources",
-  description: "Check if the response includes sources",
+  id: 'quote-sources',
+  description: 'Check if the response includes sources',
   judge: {
-    model: "openai/gpt-4.1-nano",
-    instructions: "You are a strict evaluator.",
+    model: 'openai/gpt-4.1-nano',
+    instructions: 'You are a strict evaluator.',
   },
 })
   .analyze({
-    description: "Detect whether sources are present",
+    description: 'Detect whether sources are present',
     outputSchema: z.object({
       hasSources: z.boolean(),
       sources: z.array(z.string()),
@@ -94,40 +94,40 @@ Response:
 ${run.output}
 `,
   })
-  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0));
+  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0))
 
 // Run the scorer and inspect judge output
 const result = await quoteSourcesScorer.run({
-  input: "What is the capital of France?",
-  output: "Paris is the capital of France [1]. Source: [1] Wikipedia",
-});
+  input: 'What is the capital of France?',
+  output: 'Paris is the capital of France [1]. Source: [1] Wikipedia',
+})
 
-console.log(result.score);              // 1
-console.log(result.analyzeStepResult);  // { hasSources: true, sources: ["Wikipedia"] }
+console.log(result.score) // 1
+console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedia"] }
 ```
 
-#### Agent Type for Agent Evaluation
+### Agent Type for Agent Evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. This allows you to use the same scorer for an agent and also use it to score traces:
 
 ```typescript
 const myScorer = createScorer({
-  type: "agent", // Automatically handles agent input/output types
+  type: 'agent', // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
   // run.input is automatically typed as ScorerRunInputForAgent
-});
+})
 ```
 
-### Step-by-Step Breakdown
+## Step-by-Step Breakdown
 
-#### preprocess Step (Optional)
+### preprocess Step (Optional)
 
 Prepares input/output data when you need to extract specific elements, filter content, or transform complex data structures.
 
 **Functions:** `({ run, results }) => any`
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer(...)
 .preprocess(({ run }) => {
   // Extract and clean recipe text
@@ -144,7 +144,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` to structure LLM-based preprocessing.
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer(...)
 .preprocess({
   description: 'Extract ingredients from the recipe',
@@ -163,13 +163,13 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-#### analyze Step (Optional)
+### analyze Step (Optional)
 
 Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
 **Functions:** `({ run, results }) => any`
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(({ run, results }) => {
@@ -191,7 +191,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` for LLM-based analysis.
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze({
@@ -213,13 +213,13 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** Results are available to subsequent steps as `results.analyzeStepResult`
 
-#### generateScore Step (Required)
+### generateScore Step (Required)
 
 Converts analysis results into a numerical score. This is the only required step in the pipeline.
 
 **Functions:** `({ run, results }) => number`
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -236,13 +236,13 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
-#### generateReason Step (Optional)
+### generateReason Step (Optional)
 
 Generates human-readable explanations for the score, useful for debugging, transparency, or user feedback.
 
 **Functions:** `({ run, results, score }) => string`
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -260,7 +260,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Prompt Objects:** Use `description` and `createPrompt` for LLM-generated explanations.
 
-```typescript
+```typescript prettier:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -281,9 +281,9 @@ const glutenCheckerScorer = createScorer({...})
 A custom scorer in Mastra uses `createScorer` with four core components:
 
 1. [**Judge Configuration**](#judge-configuration)
-2. [**Analysis Step**](#analysis-step)
-3. [**Score Generation**](#score-generation)
-4. [**Reason Generation**](#reason-generation)
+1. [**Analysis Step**](#analysis-step)
+1. [**Score Generation**](#score-generation)
+1. [**Reason Generation**](#reason-generation)
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
@@ -294,15 +294,15 @@ Visit [createScorer](/reference/evals/create-scorer) for the full API and config
 :::
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
-import { createScorer } from "@mastra/core/evals";
-import { z } from "zod";
+import { createScorer } from '@mastra/core/evals'
+import { z } from 'zod'
 
-export const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`;
+export const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`
 
 export const generateGlutenPrompt = ({
   output,
 }: {
-  output: string;
+  output: string
 }) => `Check if this recipe is gluten-free.
 
 Check for:
@@ -332,59 +332,59 @@ Return your response in this format:
 {
   "isGlutenFree": boolean,
   "glutenSources": ["list ingredients containing gluten"]
-}`;
+}`
 
 export const generateReasonPrompt = ({
   isGlutenFree,
   glutenSources,
 }: {
-  isGlutenFree: boolean;
-  glutenSources: string[];
-}) => `Explain why this recipe is${isGlutenFree ? "" : " not"} gluten-free.
+  isGlutenFree: boolean
+  glutenSources: string[]
+}) => `Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
 
-${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(", ")}` : "No gluten-containing ingredients found"}
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
 
 Return your response in this format:
-"This recipe is [gluten-free/contains gluten] because [explanation]"`;
+"This recipe is [gluten-free/contains gluten] because [explanation]"`
 
 export const glutenCheckerScorer = createScorer({
-  id: "gluten-checker",
-  description: "Check if the output contains any gluten",
+  id: 'gluten-checker',
+  description: 'Check if the output contains any gluten',
   judge: {
-    model: "openai/gpt-4.1-nano",
+    model: 'openai/gpt-4.1-nano',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
   .analyze({
-    description: "Analyze the output for gluten",
+    description: 'Analyze the output for gluten',
     outputSchema: z.object({
       isGlutenFree: z.boolean(),
       glutenSources: z.array(z.string()),
     }),
     createPrompt: ({ run }) => {
-      const { output } = run;
-      return generateGlutenPrompt({ output: output.text });
+      const { output } = run
+      return generateGlutenPrompt({ output: output.text })
     },
   })
   .generateScore(({ results }) => {
-    return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+    return results.analyzeStepResult.isGlutenFree ? 1 : 0
   })
   .generateReason({
-    description: "Generate a reason for the score",
+    description: 'Generate a reason for the score',
     createPrompt: ({ results }) => {
       return generateReasonPrompt({
         glutenSources: results.analyzeStepResult.glutenSources,
         isGlutenFree: results.analyzeStepResult.isGlutenFree,
-      });
+      })
     },
-  });
+  })
 ```
 
 ### Judge Configuration
 
 Sets up the LLM model and defines its role as a domain expert.
 
-```typescript
+```typescript prettier:false
 judge: {
   model: 'openai/gpt-4.1-nano',
   instructions: GLUTEN_INSTRUCTIONS,
@@ -395,7 +395,7 @@ judge: {
 
 Defines how the LLM should analyze the input and what structured output to return.
 
-```typescript
+```typescript prettier:false
 .analyze({
   description: 'Analyze the output for gluten',
   outputSchema: z.object({
@@ -419,7 +419,7 @@ The analysis step uses a prompt object to:
 
 Converts the LLM's structured analysis into a numerical score.
 
-```typescript
+```typescript prettier:false
 .generateScore(({ results }) => {
   return results.analyzeStepResult.isGlutenFree ? 1 : 0;
 })
@@ -431,7 +431,7 @@ The score generation function takes the analysis results and applies business lo
 
 Provides human-readable explanations for the score using another LLM call.
 
-```typescript
+```typescript prettier:false
 .generateReason({
   description: 'Generate a reason for the score',
   createPrompt: ({ results }) => {
@@ -451,16 +451,16 @@ The reason generation step creates explanations that help users understand why a
 const result = await glutenCheckerScorer.run({
   input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
   output: { text: 'Mix rice, beans, and vegetables' },
-});
+})
 
-console.log('Score:', result.score);
-console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
-console.log('Reason:', result.reason);
+console.log('Score:', result.score)
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources)
+console.log('Reason:', result.reason)
 ```
 
 ### High gluten-free output
 
-```typescript
+```typescript prettier:false
 {
   score: 1,
   analyzeStepResult: {
@@ -475,18 +475,18 @@ console.log('Reason:', result.reason);
 
 ```typescript title="src/example-partial-gluten.ts"
 const result = await glutenCheckerScorer.run({
-  input: [{ role: "user", content: "Mix flour and water to make dough" }],
-  output: { text: "Mix flour and water to make dough" },
-});
+  input: [{ role: 'user', content: 'Mix flour and water to make dough' }],
+  output: { text: 'Mix flour and water to make dough' },
+})
 
-console.log("Score:", result.score);
-console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
-console.log("Reason:", result.reason);
+console.log('Score:', result.score)
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources)
+console.log('Reason:', result.reason)
 ```
 
 ### Partial gluten output
 
-```typescript
+```typescript prettier:false
 {
   score: 0,
   analyzeStepResult: {
@@ -501,18 +501,18 @@ console.log("Reason:", result.reason);
 
 ```typescript title="src/example-low-gluten-free.ts"
 const result = await glutenCheckerScorer.run({
-  input: [{ role: "user", content: "Add soy sauce and noodles" }],
-  output: { text: "Add soy sauce and noodles" },
-});
+  input: [{ role: 'user', content: 'Add soy sauce and noodles' }],
+  output: { text: 'Add soy sauce and noodles' },
+})
 
-console.log("Score:", result.score);
-console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
-console.log("Reason:", result.reason);
+console.log('Score:', result.score)
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources)
+console.log('Reason:', result.reason)
 ```
 
 ### Low gluten-free output
 
-```typescript
+```typescript prettier:false
 {
   score: 0,
   analyzeStepResult: {

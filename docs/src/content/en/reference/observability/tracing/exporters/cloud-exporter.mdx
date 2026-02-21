@@ -13,19 +13,19 @@ Sends traces to Mastra Cloud for online visualization and monitoring.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new CloudExporter(config?: CloudExporterConfig)
 ```
 
 <PropertiesTable
   props={[
-    {
-      name: "config",
-      type: "CloudExporterConfig",
-      description: "Configuration options",
-      required: false,
-    },
-  ]}
+{
+name: "config",
+type: "CloudExporterConfig",
+description: "Configuration options",
+required: false,
+},
+]}
 />
 
 ## CloudExporterConfig
@@ -33,23 +33,24 @@ new CloudExporter(config?: CloudExporterConfig)
 ```typescript
 interface CloudExporterConfig extends BaseExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
-  maxBatchSize?: number;
+  maxBatchSize?: number
 
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
-  maxBatchWaitMs?: number;
+  maxBatchWaitMs?: number
 
   /** Maximum retry attempts. Default: 3 */
-  maxRetries?: number;
+  maxRetries?: number
 
   /** Cloud access token (from env or config) */
-  accessToken?: string;
+  accessToken?: string
 
   /** Cloud observability endpoint */
-  endpoint?: string;
+  endpoint?: string
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
@@ -62,7 +63,7 @@ The exporter reads these environment variables if not provided in config:
 
 ## Properties
 
-```typescript
+```typescript prettier:false
 readonly name = 'mastra-cloud-observability-exporter';
 ```
 
@@ -70,26 +71,26 @@ readonly name = 'mastra-cloud-observability-exporter';
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Processes tracing events. Only exports SPAN_ENDED events to Cloud.
+Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
 
 <PropertiesTable
   props={[
-    {
-      name: "event",
-      type: "TracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+{
+name: "event",
+type: "TracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -97,7 +98,7 @@ Force flushes any buffered events to Mastra Cloud without shutting down the expo
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -138,39 +139,39 @@ Internal format for cloud spans:
 
 ```typescript
 interface MastraCloudSpanRecord {
-  traceId: string;
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  spanType: string;
-  attributes: Record<string, any> | null;
-  metadata: Record<string, any> | null;
-  startedAt: Date;
-  endedAt: Date | null;
-  input: any;
-  output: any;
-  error: any;
-  isEvent: boolean;
-  createdAt: Date;
-  updatedAt: Date | null;
+  traceId: string
+  spanId: string
+  parentSpanId: string | null
+  name: string
+  spanType: string
+  attributes: Record<string, any> | null
+  metadata: Record<string, any> | null
+  startedAt: Date
+  endedAt: Date | null
+  input: any
+  output: any
+  error: any
+  isEvent: boolean
+  createdAt: Date
+  updatedAt: Date | null
 }
 ```
 
 ## Usage
 
 ```typescript
-import { CloudExporter } from "@mastra/observability";
+import { CloudExporter } from '@mastra/observability'
 
 // Uses environment variable for token
-const exporter = new CloudExporter();
+const exporter = new CloudExporter()
 
 // Explicit configuration
 const customExporter = new CloudExporter({
-  accessToken: "your-token",
+  accessToken: 'your-token',
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
-  logLevel: 'debug'
-});
+  logLevel: 'debug',
+})
 ```
 
 ## See Also

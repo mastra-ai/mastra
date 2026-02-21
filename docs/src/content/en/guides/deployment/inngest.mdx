@@ -38,27 +38,27 @@ Initialize the Inngest integration to obtain Mastra-compatible workflow helpers.
 In development:
 
 ```ts title="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { Inngest } from 'inngest'
+import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
-  id: "mastra",
-  baseUrl: "http://localhost:8288",
+  id: 'mastra',
+  baseUrl: 'http://localhost:8288',
   isDev: true,
   middleware: [realtimeMiddleware()],
-});
+})
 ```
 
 In production:
 
 ```ts title="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { Inngest } from 'inngest'
+import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
-  id: "mastra",
+  id: 'mastra',
   middleware: [realtimeMiddleware()],
-});
+})
 ```
 
 ### Creating steps
@@ -66,16 +66,16 @@ export const inngest = new Inngest({
 Define the individual steps that will compose your workflow:
 
 ```ts title="src/mastra/workflows/index.ts"
-import { z } from "zod";
-import { inngest } from "../inngest";
-import { init } from "@mastra/inngest";
+import { z } from 'zod'
+import { inngest } from '../inngest'
+import { init } from '@mastra/inngest'
 
 // Initialize Inngest with Mastra, pointing to your local Inngest server
-const { createWorkflow, createStep } = init(inngest);
+const { createWorkflow, createStep } = init(inngest)
 
 // Step: Increment the counter value
 const incrementStep = createStep({
-  id: "increment",
+  id: 'increment',
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -83,9 +83,9 @@ const incrementStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 };
+    return { value: inputData.value + 1 }
   },
-});
+})
 ```
 
 ### Creating the workflow
@@ -95,18 +95,18 @@ Compose the steps into a workflow using the `dountil` loop pattern. The `createW
 ```ts title="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
-  id: "increment-workflow",
+  id: 'increment-workflow',
   inputSchema: z.object({
     value: z.number(),
   }),
   outputSchema: z.object({
     value: z.number(),
   }),
-}).then(incrementStep);
+}).then(incrementStep)
 
-workflow.commit();
+workflow.commit()
 
-export { workflow as incrementWorkflow };
+export { workflow as incrementWorkflow }
 ```
 
 ### Configuring the Mastra instance
@@ -114,28 +114,28 @@ export { workflow as incrementWorkflow };
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { serve } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import { PinoLogger } from "@mastra/loggers";
+import { Mastra } from '@mastra/core'
+import { serve } from '@mastra/inngest'
+import { incrementWorkflow } from './workflows'
+import { inngest } from './inngest'
+import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
   workflows: { incrementWorkflow },
   server: {
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     apiRoutes: [
       {
-        path: "/api/inngest",
-        method: "ALL",
+        path: '/api/inngest',
+        method: 'ALL',
         createHandler: async ({ mastra }) => {
-          return serve({ mastra, inngest });
+          return serve({ mastra, inngest })
         },
       },
     ],
   },
-  logger: new PinoLogger({ name: "Mastra", level: "info" }),
-});
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+})
 ```
 
 ## Running workflows
@@ -143,31 +143,32 @@ export const mastra = new Mastra({
 ### Running locally
 
 1. Run `npx mastra dev` to start the Mastra server locally on port 4111
-2. Start the Inngest Dev Server. In a new terminal, run:
 
-    ```bash
-    npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
-    ```
+1. Start the Inngest Dev Server. In a new terminal, run:
 
-    :::note
-    The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint
-    :::
+   ```bash
+   npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
+   ```
 
-3. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
+   :::note
+   The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint
+   :::
 
-4. Invoke the workflow by going to **Functions**, selecting your workflow, and clicking **Invoke** with the following input:
+1. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
 
-    ```json
-    {
-      "data": {
-        "inputData": {
-          "value": 5
-        }
-      }
-    }
-    ```
+1. Invoke the workflow by going to **Functions**, selecting your workflow, and clicking **Invoke** with the following input:
 
-5. Monitor the workflow execution in the **Runs** tab to see step-by-step execution progress
+   ```json
+   {
+     "data": {
+       "inputData": {
+         "value": 5
+       }
+     }
+   }
+   ```
+
+1. Monitor the workflow execution in the **Runs** tab to see step-by-step execution progress
 
 ### Running in production
 
@@ -177,59 +178,57 @@ Before you begin, make sure you have:
 - Inngest account
 - Vercel token
 
-
 1. Set your Vercel token in your environment:
 
-    ```bash title=".env"
-    export VERCEL_TOKEN=your_vercel_token
-    ```
+   ```bash title=".env"
+   export VERCEL_TOKEN=your_vercel_token
+   ```
 
-2. Add `VercelDeployer` to Mastra instance
+1. Add `VercelDeployer` to Mastra instance
 
-    ```ts title="src/mastra/index.ts"
-    import { VercelDeployer } from "@mastra/deployer-vercel";
+   ```ts title="src/mastra/index.ts"
+   import { VercelDeployer } from '@mastra/deployer-vercel'
 
-    export const mastra = new Mastra({
-      deployer: new VercelDeployer({
-        teamSlug: "your_team_slug",
-        projectName: "your_project_name",
-        // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
-        // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
-        token: process.env.VERCEL_TOKEN,
-      }),
-    });
-    ```
+   export const mastra = new Mastra({
+     deployer: new VercelDeployer({
+       teamSlug: 'your_team_slug',
+       projectName: 'your_project_name',
+       // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
+       // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
+       token: process.env.VERCEL_TOKEN,
+     }),
+   })
+   ```
 
+1. Build the mastra instance
 
-3. Build the mastra instance
+   ```bash
+   npx mastra build
+   ```
 
-    ```bash
-    npx mastra build
-    ```
+1. Deploy to Vercel
 
-4. Deploy to Vercel
+   ```bash
+   cd .mastra/output
+   vercel login
+   vercel --prod
+   ```
 
-    ```bash
-    cd .mastra/output
-    vercel login
-    vercel --prod
-    ```
+1. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by clicking **Sync new app with Vercel** and following the instructions
 
-5. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by clicking **Sync new app with Vercel** and following the instructions
+1. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, clicking **All actions** > **Invoke**, and providing the following input:
 
-6. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, clicking **All actions** > **Invoke**, and providing the following input:
+   ```json
+   {
+     "data": {
+       "inputData": {
+         "value": 5
+       }
+     }
+   }
+   ```
 
-    ```json
-    {
-      "data": {
-        "inputData": {
-          "value": 5
-        }
-      }
-    }
-    ```
-
-7. Monitor execution in the **Runs** tab to see step-by-step progress
+1. Monitor execution in the **Runs** tab to see step-by-step progress
 
 ## Adding custom Inngest functions
 
@@ -240,28 +239,28 @@ You can serve additional Inngest functions alongside your Mastra workflows by us
 First, create your custom Inngest functions:
 
 ```ts title="src/inngest/custom-functions.ts"
-import { inngest } from "../inngest";
+import { inngest } from '../inngest'
 
 // Define custom Inngest functions
 export const customEmailFunction = inngest.createFunction(
-  { id: "send-welcome-email" },
-  { event: "user/registered" },
+  { id: 'send-welcome-email' },
+  { event: 'user/registered' },
   async ({ event }) => {
     // Custom email logic here
-    console.log(`Sending welcome email to ${event.data.email}`);
-    return { status: "email_sent" };
+    console.log(`Sending welcome email to ${event.data.email}`)
+    return { status: 'email_sent' }
   },
-);
+)
 
 export const customWebhookFunction = inngest.createFunction(
-  { id: "process-webhook" },
-  { event: "webhook/received" },
+  { id: 'process-webhook' },
+  { event: 'webhook/received' },
   async ({ event }) => {
     // Custom webhook processing
-    console.log(`Processing webhook: ${event.data.type}`);
-    return { processed: true };
+    console.log(`Processing webhook: ${event.data.type}`)
+    return { processed: true }
   },
-);
+)
 ```
 
 ### Serving custom functions with workflows
@@ -269,36 +268,33 @@ export const customWebhookFunction = inngest.createFunction(
 Update your Mastra configuration to import and include the custom functions. The highlighted lines show the additions:
 
 ```ts title="src/mastra/index.ts" {5-8,23}
-import { Mastra } from "@mastra/core";
-import { serve } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import {
-  customEmailFunction,
-  customWebhookFunction,
-} from "./inngest/custom-functions";
-import { PinoLogger } from "@mastra/loggers";
+import { Mastra } from '@mastra/core'
+import { serve } from '@mastra/inngest'
+import { incrementWorkflow } from './workflows'
+import { inngest } from './inngest'
+import { customEmailFunction, customWebhookFunction } from './inngest/custom-functions'
+import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
   workflows: { incrementWorkflow },
   server: {
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     apiRoutes: [
       {
-        path: "/api/inngest",
-        method: "ALL",
+        path: '/api/inngest',
+        method: 'ALL',
         createHandler: async ({ mastra }) => {
           return serve({
             mastra,
             inngest,
             functions: [customEmailFunction, customWebhookFunction],
-          });
+          })
         },
       },
     ],
   },
-  logger: new PinoLogger({ name: "Mastra", level: "info" }),
-});
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+})
 ```
 
 ### Function registration
@@ -306,8 +302,8 @@ export const mastra = new Mastra({
 When you include custom functions:
 
 1. Mastra workflows are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
-2. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
-3. All functions are served together on the same `/api/inngest` endpoint
+1. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
+1. All functions are served together on the same `/api/inngest` endpoint
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
 
@@ -318,79 +314,79 @@ The default `serve` function uses Hono internally. If you're using a different w
 ### Express
 
 ```ts title="src/server.ts"
-import express from "express";
-import { createServe } from "@mastra/inngest";
-import { serve as expressAdapter } from "inngest/express";
-import { mastra, inngest } from "./mastra";
+import express from 'express'
+import { createServe } from '@mastra/inngest'
+import { serve as expressAdapter } from 'inngest/express'
+import { mastra, inngest } from './mastra'
 
-const app = express();
+const app = express()
 
 // Body parsing middleware required for Inngest
-app.use(express.json());
+app.use(express.json())
 
-const handler = createServe(expressAdapter)({ mastra, inngest });
-app.use("/api/inngest", handler);
+const handler = createServe(expressAdapter)({ mastra, inngest })
+app.use('/api/inngest', handler)
 
-app.listen(3000);
+app.listen(3000)
 ```
 
 ### Fastify
 
 ```ts title="src/server.ts"
-import Fastify from "fastify";
-import { createServe } from "@mastra/inngest";
-import { serve as fastifyAdapter } from "inngest/fastify";
-import { mastra, inngest } from "./mastra";
+import Fastify from 'fastify'
+import { createServe } from '@mastra/inngest'
+import { serve as fastifyAdapter } from 'inngest/fastify'
+import { mastra, inngest } from './mastra'
 
-const fastify = Fastify();
+const fastify = Fastify()
 
 // JSON parsing is handled by Fastify's default content-type parser
-const handler = createServe(fastifyAdapter)({ mastra, inngest });
+const handler = createServe(fastifyAdapter)({ mastra, inngest })
 
 fastify.route({
-  method: ["GET", "POST", "PUT"],
-  url: "/api/inngest",
+  method: ['GET', 'POST', 'PUT'],
+  url: '/api/inngest',
   handler,
-});
+})
 
-fastify.listen({ port: 3000 });
+fastify.listen({ port: 3000 })
 ```
 
 ### Koa
 
 ```ts title="src/server.ts"
-import Koa from "koa";
-import Router from "@koa/router";
-import bodyParser from "koa-bodyparser";
-import { createServe } from "@mastra/inngest";
-import { serve as koaAdapter } from "inngest/koa";
-import { mastra, inngest } from "./mastra";
+import Koa from 'koa'
+import Router from '@koa/router'
+import bodyParser from 'koa-bodyparser'
+import { createServe } from '@mastra/inngest'
+import { serve as koaAdapter } from 'inngest/koa'
+import { mastra, inngest } from './mastra'
 
-const app = new Koa();
-const router = new Router();
+const app = new Koa()
+const router = new Router()
 
 // Body parsing middleware required for Inngest
-app.use(bodyParser());
+app.use(bodyParser())
 
-const handler = createServe(koaAdapter)({ mastra, inngest });
-router.all("/api/inngest", handler);
+const handler = createServe(koaAdapter)({ mastra, inngest })
+router.all('/api/inngest', handler)
 
-app.use(router.routes());
-app.use(router.allowedMethods());
+app.use(router.routes())
+app.use(router.allowedMethods())
 
-app.listen(3000);
+app.listen(3000)
 ```
 
 ### Next.js
 
 ```ts title="app/api/inngest/route.ts"
-import { createServe } from "@mastra/inngest";
-import { serve as nextAdapter } from "inngest/next";
-import { mastra, inngest } from "@/mastra";
+import { createServe } from '@mastra/inngest'
+import { serve as nextAdapter } from 'inngest/next'
+import { mastra, inngest } from '@/mastra'
 
-const handler = createServe(nextAdapter)({ mastra, inngest });
+const handler = createServe(nextAdapter)({ mastra, inngest })
 
-export { handler as GET, handler as POST, handler as PUT };
+export { handler as GET, handler as POST, handler as PUT }
 ```
 
 ### Available adapters
@@ -407,16 +403,16 @@ Control how many workflow instances can run simultaneously:
 
 ```ts
 const workflow = createWorkflow({
-  id: "user-processing-workflow",
+  id: 'user-processing-workflow',
   inputSchema: z.object({ userId: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   steps: [processUserStep],
   // Limit to 10 concurrent executions, scoped by user ID
   concurrency: {
     limit: 10,
-    key: "event.data.userId",
+    key: 'event.data.userId',
   },
-});
+})
 ```
 
 ### Rate limiting
@@ -425,16 +421,16 @@ Limit the number of workflow executions within a time period:
 
 ```ts
 const workflow = createWorkflow({
-  id: "api-sync-workflow",
+  id: 'api-sync-workflow',
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ status: z.string() }),
   steps: [apiSyncStep],
   // Maximum 1000 executions per hour
   rateLimit: {
-    period: "1h",
+    period: '1h',
     limit: 1000,
   },
-});
+})
 ```
 
 ### Throttling
@@ -443,17 +439,17 @@ Ensure minimum time between workflow executions:
 
 ```ts
 const workflow = createWorkflow({
-  id: "email-notification-workflow",
+  id: 'email-notification-workflow',
   inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
   outputSchema: z.object({ sent: z.boolean() }),
   steps: [sendEmailStep],
   // Only one execution per 10 seconds per organization
   throttle: {
-    period: "10s",
+    period: '10s',
     limit: 1,
-    key: "event.data.organizationId",
+    key: 'event.data.organizationId',
   },
-});
+})
 ```
 
 ### Debouncing
@@ -462,16 +458,16 @@ Delay execution until no new events arrive within a time window:
 
 ```ts
 const workflow = createWorkflow({
-  id: "search-index-workflow",
+  id: 'search-index-workflow',
   inputSchema: z.object({ documentId: z.string() }),
   outputSchema: z.object({ indexed: z.boolean() }),
   steps: [indexDocumentStep],
   // Wait 5 seconds of no updates before indexing
   debounce: {
-    period: "5s",
-    key: "event.data.documentId",
+    period: '5s',
+    key: 'event.data.documentId',
   },
-});
+})
 ```
 
 ### Priority
@@ -480,7 +476,7 @@ Set execution priority for workflows:
 
 ```ts
 const workflow = createWorkflow({
-  id: "order-processing-workflow",
+  id: 'order-processing-workflow',
   inputSchema: z.object({
     orderId: z.string(),
     priority: z.number().optional(),
@@ -489,9 +485,9 @@ const workflow = createWorkflow({
   steps: [processOrderStep],
   // Higher priority orders execute first
   priority: {
-    run: "event.data.priority ?? 50",
+    run: 'event.data.priority ?? 50',
   },
-});
+})
 ```
 
 ### Combining flow control options
@@ -500,7 +496,7 @@ Multiple flow control options can be combined in a single workflow:
 
 ```ts
 const workflow = createWorkflow({
-  id: "comprehensive-workflow",
+  id: 'comprehensive-workflow',
   inputSchema: z.object({
     userId: z.string(),
     organizationId: z.string(),
@@ -510,21 +506,21 @@ const workflow = createWorkflow({
   steps: [comprehensiveStep],
   concurrency: {
     limit: 5,
-    key: "event.data.userId",
+    key: 'event.data.userId',
   },
   rateLimit: {
-    period: "1m",
+    period: '1m',
     limit: 100,
   },
   throttle: {
-    period: "10s",
+    period: '10s',
     limit: 1,
-    key: "event.data.organizationId",
+    key: 'event.data.organizationId',
   },
   priority: {
-    run: "event.data.priority ?? 0",
+    run: 'event.data.priority ?? 0',
   },
-});
+})
 ```
 
 All flow control options are optional. If not specified, workflows run with Inngest's default behavior. For more information, see the [Inngest flow control documentation](https://www.inngest.com/docs/guides/flow-control).
@@ -539,13 +535,13 @@ Configure a workflow to run on a schedule by adding a `cron` property:
 
 ```ts
 const workflow = createWorkflow({
-  id: "daily-report-workflow",
+  id: 'daily-report-workflow',
   inputSchema: z.object({ reportType: z.string() }),
   outputSchema: z.object({ generated: z.boolean() }),
   steps: [generateReportStep],
   // Run daily at midnight
-  cron: "0 0 * * *",
-});
+  cron: '0 0 * * *',
+})
 ```
 
 ### Cron schedule format
@@ -562,28 +558,28 @@ Common cron patterns:
 
 ```ts
 // Every 15 minutes
-cron: "*/15 * * * *"
+cron: '*/15 * * * *'
 
 // Every hour at minute 0
-cron: "0 * * * *"
+cron: '0 * * * *'
 
 // Every 6 hours
-cron: "0 */6 * * *"
+cron: '0 */6 * * *'
 
 // Daily at midnight
-cron: "0 0 * * *"
+cron: '0 0 * * *'
 
 // Daily at 9 AM
-cron: "0 9 * * *"
+cron: '0 9 * * *'
 
 // Every weekday at 9 AM
-cron: "0 9 * * 1-5"
+cron: '0 9 * * 1-5'
 
 // First day of every month at midnight
-cron: "0 0 1 * *"
+cron: '0 0 1 * *'
 
 // Every Monday at 8 AM
-cron: "0 8 * * 1"
+cron: '0 8 * * 1'
 ```
 
 ### Providing input data for scheduled runs
@@ -592,20 +588,20 @@ You can provide static input data that will be used for each scheduled execution
 
 ```ts
 const workflow = createWorkflow({
-  id: "scheduled-data-sync",
+  id: 'scheduled-data-sync',
   inputSchema: z.object({
     source: z.string(),
     destination: z.string(),
   }),
   outputSchema: z.object({ synced: z.boolean() }),
   steps: [syncDataStep],
-  cron: "0 */6 * * *", // Every 6 hours
+  cron: '0 */6 * * *', // Every 6 hours
   // Input data provided to each scheduled run
   inputData: {
-    source: "production-db",
-    destination: "analytics-warehouse",
+    source: 'production-db',
+    destination: 'analytics-warehouse',
   },
-});
+})
 ```
 
 ### Providing initial state for scheduled runs
@@ -614,7 +610,7 @@ You can also set an initial state for scheduled workflow runs:
 
 ```ts
 const workflow = createWorkflow({
-  id: "scheduled-aggregation",
+  id: 'scheduled-aggregation',
   inputSchema: z.object({ date: z.string() }),
   outputSchema: z.object({ aggregated: z.boolean() }),
   stateSchema: z.object({
@@ -622,15 +618,15 @@ const workflow = createWorkflow({
     lastProcessedDate: z.string(),
   }),
   steps: [aggregateDataStep],
-  cron: "0 0 * * *", // Daily at midnight
+  cron: '0 0 * * *', // Daily at midnight
   inputData: {
-    date: new Date().toISOString().split("T")[0], // Today's date
+    date: new Date().toISOString().split('T')[0], // Today's date
   },
   initialState: {
     processedCount: 0,
-    lastProcessedDate: "",
+    lastProcessedDate: '',
   },
-});
+})
 ```
 
 ### Combining cron with flow control
@@ -639,13 +635,13 @@ Cron scheduling can be combined with flow control options:
 
 ```ts
 const workflow = createWorkflow({
-  id: "scheduled-api-sync",
+  id: 'scheduled-api-sync',
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ synced: z.boolean() }),
   steps: [syncApiStep],
-  cron: "*/30 * * * *", // Every 30 minutes
+  cron: '*/30 * * * *', // Every 30 minutes
   inputData: {
-    endpoint: "https://api.example.com/data",
+    endpoint: 'https://api.example.com/data',
   },
   // Limit concurrent executions even for scheduled runs
   concurrency: {
@@ -653,10 +649,10 @@ const workflow = createWorkflow({
   },
   // Rate limit scheduled executions
   rateLimit: {
-    period: "1h",
+    period: '1h',
     limit: 100,
   },
-});
+})
 ```
 
 ### How cron functions work
@@ -664,9 +660,9 @@ const workflow = createWorkflow({
 When you configure a workflow with a `cron` property:
 
 1. A separate Inngest function is automatically created with the ID `workflow.${workflowId}.cron`
-2. This function is registered with Inngest and will trigger at the specified schedule
-3. Each scheduled execution creates a new workflow run with the provided `inputData` and `initialState`
-4. The cron function and the main workflow function are both served together when you call `serve()`
+1. This function is registered with Inngest and will trigger at the specified schedule
+1. Each scheduled execution creates a new workflow run with the provided `inputData` and `initialState`
+1. The cron function and the main workflow function are both served together when you call `serve()`
 
 You can monitor scheduled executions in the Inngest dashboard under **Functions** and **Runs** sections. The cron function will appear as a separate function alongside your main workflow function.
 

@@ -31,14 +31,14 @@ npm install @mastra/deployer-netlify@latest
 Import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 // highlight-next-line
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   // highlight-next-line
   deployer: new NetlifyDeployer(),
-});
+})
 ```
 
 Create a `netlify.toml` file with the following contents in your project root:
@@ -53,43 +53,37 @@ Create a `netlify.toml` file with the following contents in your project root:
 After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
 
 <Steps>
-<StepItem>
+  <StepItem>
+    Connect your repository to Netlify. During the setup process, Netlify will detect your `netlify.toml` file and set the build command to `mastra build`.
 
-Connect your repository to Netlify. During the setup process, Netlify will detect your `netlify.toml` file and set the build command to `mastra build`.
+    :::note
 
-:::note
+    Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
 
-Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
+    :::
+  </StepItem>
 
-:::
+  <StepItem>
+    Once you're ready, click the **Deploy** button and wait for the first deployment to complete. It'll tell you that one function has been deployed.
+  </StepItem>
 
-</StepItem>
-<StepItem>
+  <StepItem>
+    Verify your deployment at `https://<random-slug>.netlify.app/api/agents`, which should return a JSON list of your agents.
 
-Once you're ready, click the **Deploy** button and wait for the first deployment to complete. It'll tell you that one function has been deployed.
+    Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
 
-</StepItem>
-<StepItem>
+    :::info
 
-Verify your deployment at `https://<random-slug>.netlify.app/api/agents`, which should return a JSON list of your agents.
+    Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
 
-Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
+    :::
+  </StepItem>
 
-:::info
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
 
-Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
-
-:::
-
-</StepItem>
-<StepItem>
-
-You can now call your Mastra endpoints over HTTP.
-
-:::warning
-Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
-:::
-
-</StepItem>
-
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
 </Steps>

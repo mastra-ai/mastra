@@ -24,33 +24,33 @@ npm install @mastra/libsql@latest
 ## Usage
 
 ```typescript
-import { LibSQLStore } from "@mastra/libsql";
-import { Mastra } from "@mastra/core";
+import { LibSQLStore } from '@mastra/libsql'
+import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'libsql-storage',
-    url: "file:./storage.db",
+    url: 'file:./storage.db',
   }),
-});
+})
 ```
 
 Agent-level file storage:
 
 ```typescript
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const agent = new Agent({
-  id: "example-agent",
+  id: 'example-agent',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-storage',
-      url: "file:./agent.db",
+      url: 'file:./agent.db',
     }),
   }),
-});
+})
 ```
 
 :::warning
@@ -59,22 +59,23 @@ File storage doesn't work with serverless platforms that have ephemeral file sys
 
 Production with remote database:
 
-```typescript 
+```typescript
 storage: new LibSQLStore({
   id: 'libsql-storage',
-  url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
+  url: 'libsql://your-db-name.aws-ap-northeast-1.turso.io',
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
 ```
 
 For local development and testing, you can store data in memory:
 
-```typescript 
+```typescript
 storage: new LibSQLStore({
   id: 'libsql-storage',
-  url: ":memory:",
+  url: ':memory:',
 })
 ```
+
 :::warning
 In-memory storage resets when the process changes. Only suitable for development.
 :::
@@ -83,55 +84,55 @@ In-memory storage resets when the process changes. Only suitable for development
 
 <PropertiesTable
   content={[
-    {
-      name: "url",
-      type: "string",
-      description:
-        "Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
-      isOptional: false,
-    },
-    {
-      name: "authToken",
-      type: "string",
-      description: "Authentication token for remote libSQL databases.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "url",
+type: "string",
+description:
+"Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
+isOptional: false,
+},
+{
+name: "authToken",
+type: "string",
+description: "Authentication token for remote libSQL databases.",
+isOptional: true,
+},
+]}
 />
 
 ## Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/storage/overview#core-schema):
 
-```typescript 
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
+```typescript
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
   id: 'libsql-storage',
-  url: "file:./storage.db",
-});
+  url: 'file:./storage.db',
+})
 
 const mastra = new Mastra({
   storage, // init() called automatically
-});
+})
 ```
 
 If using storage directly without Mastra, call `init()` explicitly:
 
 ```typescript
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
   id: 'libsql-storage',
-  url: "file:./storage.db",
-});
+  url: 'file:./storage.db',
+})
 
-await storage.init();
+await storage.init()
 
 // Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore('memory');
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 ## Observability

@@ -19,7 +19,7 @@ npm install @mastra/duckdb@latest
 
 ## Usage
 
-```typescript
+```typescript prettier:false
 import { DuckDBVector } from "@mastra/duckdb";
 
 // Create a new vector store instance
@@ -64,34 +64,34 @@ await store.close();
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the vector store instance",
-    },
-    {
-      name: "path",
-      type: "string",
-      isOptional: true,
-      defaultValue: "':memory:'",
-      description:
-        "Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
-    },
-    {
-      name: "dimensions",
-      type: "number",
-      isOptional: true,
-      defaultValue: "1536",
-      description: "Default dimension for vector embeddings",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Default distance metric for similarity search",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the vector store instance",
+},
+{
+name: "path",
+type: "string",
+isOptional: true,
+defaultValue: "':memory:'",
+description:
+"Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
+},
+{
+name: "dimensions",
+type: "number",
+isOptional: true,
+defaultValue: "1536",
+description: "Default dimension for vector embeddings",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Default distance metric for similarity search",
+},
+]}
 />
 
 ## Methods
@@ -102,24 +102,24 @@ Creates a new vector collection with optional HNSW index for fast approximate ne
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension size (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension size (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
@@ -128,29 +128,29 @@ Adds or updates vectors and their metadata in the index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated UUIDs if not provided)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to insert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated UUIDs if not provided)",
+},
+]}
 />
 
 ### query()
@@ -159,37 +159,37 @@ Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Filter",
-      isOptional: true,
-      description: "Metadata filters using MongoDB-like query syntax",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to search in",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors for",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Filter",
+isOptional: true,
+description: "Metadata filters using MongoDB-like query syntax",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vector data in results",
+},
+]}
 />
 
 ### describeIndex()
@@ -198,21 +198,21 @@ Gets information about an index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -222,12 +222,12 @@ Deletes an index and all its data.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### listIndexes()
@@ -242,43 +242,43 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description:
-        "ID of the vector entry to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description:
-        "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data to update",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description:
+"ID of the vector entry to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "object",
+description: "Update data containing vector and/or metadata",
+},
+{
+name: "update.vector",
+type: "number[]",
+isOptional: true,
+description: "New vector data to update",
+},
+{
+name: "update.metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -287,17 +287,17 @@ Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector entry to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector entry to delete",
+},
+]}
 />
 
 ### deleteVectors()
@@ -306,26 +306,26 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description:
-        "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description:
-        "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description:
+"Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ### close()
@@ -333,7 +333,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 Closes the database connection and releases resources.
 
 ```typescript
-await store.close();
+await store.close()
 ```
 
 ## Response Types
@@ -342,10 +342,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -353,17 +353,17 @@ interface QueryResult {
 
 DuckDB vector store supports MongoDB-like filter operators:
 
-| Category   | Operators                            |
-| ---------- | ------------------------------------ |
+| Category | Operators |
+| - | - |
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` |
-| Logical    | `$and`, `$or`, `$not`, `$nor`        |
-| Array      | `$in`, `$nin`                        |
-| Element    | `$exists`                            |
-| Text       | `$contains`                          |
+| Logical | `$and`, `$or`, `$not`, `$nor` |
+| Array | `$in`, `$nin` |
+| Element | `$exists` |
+| Text | `$contains` |
 
 ### Filter Examples
 
-```typescript
+```typescript prettier:false
 // Allegato operators
 const results = await store.query({
   indexName: "docs",
@@ -386,11 +386,11 @@ const results = await store.query({
 
 ## Distance Metrics
 
-| Metric       | Description       | Score Interpretation         | Best For                              |
-| ------------ | ----------------- | ---------------------------- | ------------------------------------- |
-| `cosine`     | Cosine similarity | 0-1 (1 = most similar)       | Text embeddings, normalized vectors   |
-| `euclidean`  | L2 distance       | 0-∞ (0 = most similar)       | Image embeddings, spatial data        |
-| `dotproduct` | Inner product     | Higher = more similar        | When vector magnitude matters         |
+| Metric | Description | Score Interpretation | Best For |
+| - | - | - | - |
+| `cosine` | Cosine similarity | 0-1 (1 = most similar) | Text embeddings, normalized vectors |
+| `euclidean` | L2 distance | 0-∞ (0 = most similar) | Image embeddings, spatial data |
+| `dotproduct` | Inner product | Higher = more similar | When vector magnitude matters |
 
 ## Error Handling
 
@@ -399,16 +399,16 @@ The store throws specific errors for different failure cases:
 ```typescript
 try {
   await store.query({
-    indexName: "my-collection",
+    indexName: 'my-collection',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
-  if (error.message.includes("not found")) {
-    console.error("The specified index does not exist");
-  } else if (error.message.includes("Invalid identifier")) {
-    console.error("Index name contains invalid characters");
+  if (error.message.includes('not found')) {
+    console.error('The specified index does not exist')
+  } else if (error.message.includes('Invalid identifier')) {
+    console.error('Index name contains invalid characters')
   } else {
-    console.error("Vector store error:", error.message);
+    console.error('Vector store error:', error.message)
   }
 }
 ```
@@ -429,9 +429,9 @@ Build offline-capable AI applications with semantic search that runs entirely in
 
 ```typescript
 const store = new DuckDBVector({
-  id: "offline-search",
-  path: "./search.duckdb",
-});
+  id: 'offline-search',
+  path: './search.duckdb',
+})
 ```
 
 ### Local RAG Pipelines
@@ -440,10 +440,10 @@ Process sensitive documents locally without sending data to cloud vector databas
 
 ```typescript
 const store = new DuckDBVector({
-  id: "private-rag",
-  path: "./confidential.duckdb",
+  id: 'private-rag',
+  path: './confidential.duckdb',
   dimensions: 1536,
-});
+})
 ```
 
 ### Development and Testing
@@ -452,13 +452,12 @@ Rapidly prototype vector search features with zero infrastructure:
 
 ```typescript
 const store = new DuckDBVector({
-  id: "dev-store",
-  path: ":memory:", // Fast in-memory for tests
-});
+  id: 'dev-store',
+  path: ':memory:', // Fast in-memory for tests
+})
 ```
 
 ## Related
 
 - [Metadata Filters](../rag/metadata-filters)
 - [DuckDB Documentation](https://duckdb.org/docs/)
-

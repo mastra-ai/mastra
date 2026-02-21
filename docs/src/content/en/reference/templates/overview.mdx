@@ -38,7 +38,7 @@ After installation:
    cd your-project-name
    ```
 
-2. **Configure environment variables**:
+1. **Configure environment variables**:
 
    ```bash
    cp .env.example .env
@@ -46,13 +46,13 @@ After installation:
 
    Edit `.env` with required API keys as documented in the template's README.
 
-3. **Install dependencies** (if not done automatically):
+1. **Install dependencies** (if not done automatically):
 
    ```bash
    npm install
    ```
 
-4. **Start development server**:
+1. **Start development server**:
 
    ```bash
    npm run dev
@@ -119,13 +119,13 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 We recommend using OpenAI, Anthropic, or Google model providers for templates. Choose the provider that best fits your use case:
 
 ```typescript title="src/mastra/agents/example-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  name: "example-agent",
-  model: "openai/gpt-5.1", // or other provider strings
-  instructions: "Your agent instructions here",
-});
+  name: 'example-agent',
+  model: 'openai/gpt-5.1', // or other provider strings
+  instructions: 'Your agent instructions here',
+})
 ```
 
 #### Compatibility Requirements

@@ -25,24 +25,24 @@ Use processors for content moderation, prompt injection prevention, response san
 Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
 ```typescript {2,9-17} title="src/mastra/agents/moderated-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { ModerationProcessor } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { ModerationProcessor } from '@mastra/core/processors'
 
 export const moderatedAgent = new Agent({
-  id: "moderated-agent",
-  name: "Moderated Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'moderated-agent',
+  name: 'Moderated Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [
     new ModerationProcessor({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
-      categories: ["hate", "harassment", "violence"],
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
+      categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
-      strategy: "block",
-      instructions: "Detect and flag inappropriate content in user messages",
+      strategy: 'block',
+      instructions: 'Detect and flag inappropriate content in user messages',
     }),
   ],
-});
+})
 ```
 
 ## Input processors
@@ -54,18 +54,18 @@ Input processors are applied before user messages reach the language model. They
 The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
 ```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
-import { UnicodeNormalizer } from "@mastra/core/processors";
+import { UnicodeNormalizer } from '@mastra/core/processors'
 
 export const normalizedAgent = new Agent({
-  id: "normalized-agent",
-  name: "Normalized Agent",
+  id: 'normalized-agent',
+  name: 'Normalized Agent',
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
       collapseWhitespace: true,
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -79,20 +79,20 @@ Visit [UnicodeNormalizer](/reference/processors/unicode-normalizer) for a full l
 The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
 ```typescript {7-12} title="src/mastra/agents/secure-agent.ts"
-import { PromptInjectionDetector } from "@mastra/core/processors";
+import { PromptInjectionDetector } from '@mastra/core/processors'
 
 export const secureAgent = new Agent({
-  id: "secure-agent",
-  name: "Secure Agent",
+  id: 'secure-agent',
+  name: 'Secure Agent',
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
       threshold: 0.8,
-      strategy: "rewrite",
-      detectionTypes: ["injection", "jailbreak", "system-override"],
+      strategy: 'rewrite',
+      detectionTypes: ['injection', 'jailbreak', 'system-override'],
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -106,20 +106,20 @@ Visit [PromptInjectionDetector](/reference/processors/prompt-injection-detector)
 The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
 ```typescript {7-12} title="src/mastra/agents/multilingual-agent.ts"
-import { LanguageDetector } from "@mastra/core/processors";
+import { LanguageDetector } from '@mastra/core/processors'
 
 export const multilingualAgent = new Agent({
-  id: "multilingual-agent",
-  name: "Multilingual Agent",
+  id: 'multilingual-agent',
+  name: 'Multilingual Agent',
   inputProcessors: [
     new LanguageDetector({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
-      targetLanguages: ["English", "en"],
-      strategy: "translate",
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
+      targetLanguages: ['English', 'en'],
+      strategy: 'translate',
       threshold: 0.8,
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -137,11 +137,11 @@ Output processors are applied after the language model generates a response, but
 The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
 
 ```typescript {7-11} title="src/mastra/agents/batched-agent.ts"
-import { BatchPartsProcessor } from "@mastra/core/processors";
+import { BatchPartsProcessor } from '@mastra/core/processors'
 
 export const batchedAgent = new Agent({
-  id: "batched-agent",
-  name: "Batched Agent",
+  id: 'batched-agent',
+  name: 'Batched Agent',
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
@@ -149,7 +149,7 @@ export const batchedAgent = new Agent({
       emitOnNonText: true,
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -163,19 +163,19 @@ Visit [BatchPartsProcessor](/reference/processors/batch-parts-processor) for a f
 The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
 ```typescript {7-11} title="src/mastra/agents/limited-agent.ts"
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const limitedAgent = new Agent({
-  id: "limited-agent",
-  name: "Limited Agent",
+  id: 'limited-agent',
+  name: 'Limited Agent',
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
-      strategy: "truncate",
-      countMode: "cumulative",
+      strategy: 'truncate',
+      countMode: 'cumulative',
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -189,24 +189,24 @@ Visit [TokenLimiterProcessor](/reference/processors/token-limiter-processor) for
 The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
 
 ```typescript {7-16} title="src/mastra/agents/scrubbed-agent.ts"
-import { SystemPromptScrubber } from "@mastra/core/processors";
+import { SystemPromptScrubber } from '@mastra/core/processors'
 
 const scrubbedAgent = new Agent({
-  id: "scrubbed-agent",
-  name: "Scrubbed Agent",
+  id: 'scrubbed-agent',
+  name: 'Scrubbed Agent',
   outputProcessors: [
     new SystemPromptScrubber({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
-      strategy: "redact",
-      customPatterns: ["system prompt", "internal instructions"],
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
+      strategy: 'redact',
+      customPatterns: ['system prompt', 'internal instructions'],
       includeDetections: true,
       instructions:
-        "Detect and redact system prompts, internal instructions, and security-sensitive content",
-      redactionMethod: "placeholder",
-      placeholderText: "[REDACTED]",
+        'Detect and redact system prompts, internal instructions, and security-sensitive content',
+      redactionMethod: 'placeholder',
+      placeholderText: '[REDACTED]',
     }),
   ],
-});
+})
 ```
 
 :::info
@@ -228,23 +228,21 @@ Hybrid processors can be applied either before messages are sent to the language
 The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
 ```typescript {7-12,15} title="src/mastra/agents/moderated-agent.ts"
-import { ModerationProcessor } from "@mastra/core/processors";
+import { ModerationProcessor } from '@mastra/core/processors'
 
 export const moderatedAgent = new Agent({
-  id: "moderated-agent",
-  name: "Moderated Agent",
+  id: 'moderated-agent',
+  name: 'Moderated Agent',
   inputProcessors: [
     new ModerationProcessor({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
       threshold: 0.7,
-      strategy: "block",
-      categories: ["hate", "harassment", "violence"],
+      strategy: 'block',
+      categories: ['hate', 'harassment', 'violence'],
     }),
   ],
-  outputProcessors: [
-    new ModerationProcessor(),
-  ],
-});
+  outputProcessors: [new ModerationProcessor()],
+})
 ```
 
 :::info
@@ -258,25 +256,23 @@ Visit [ModerationProcessor](/reference/processors/moderation-processor) for a fu
 The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
 
 ```typescript {7-14,17} title="src/mastra/agents/private-agent.ts"
-import { PIIDetector } from "@mastra/core/processors";
+import { PIIDetector } from '@mastra/core/processors'
 
 export const privateAgent = new Agent({
-  id: "private-agent",
-  name: "Private Agent",
+  id: 'private-agent',
+  name: 'Private Agent',
   inputProcessors: [
     new PIIDetector({
-      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      model: 'openrouter/openai/gpt-oss-safeguard-20b',
       threshold: 0.6,
-      strategy: "redact",
-      redactionMethod: "mask",
-      detectionTypes: ["email", "phone", "credit-card"],
-      instructions: "Detect and mask personally identifiable information.",
+      strategy: 'redact',
+      redactionMethod: 'mask',
+      detectionTypes: ['email', 'phone', 'credit-card'],
+      instructions: 'Detect and mask personally identifiable information.',
     }),
   ],
-  outputProcessors: [
-    new PIIDetector(),
-  ],
-});
+  outputProcessors: [new PIIDetector()],
+})
 ```
 
 :::info
@@ -292,8 +288,8 @@ You can apply multiple processors by listing them in the `inputProcessors` or `o
 A typical order might be:
 
 1. **Normalization**: Standardize input format (`UnicodeNormalizer`).
-2. **Security checks**: Detect threats or sensitive content (`PromptInjectionDetector`, `PIIDetector`).
-3. **Filtering**: Block or transform messages (`ModerationProcessor`).
+1. **Security checks**: Detect threats or sensitive content (`PromptInjectionDetector`, `PIIDetector`).
+1. **Filtering**: Block or transform messages (`ModerationProcessor`).
 
 The order affects behavior, so arrange processors to suit your goals.
 
@@ -303,18 +299,18 @@ import {
   ModerationProcessor,
   PromptInjectionDetector,
   PIIDetector,
-} from "@mastra/core/processors";
+} from '@mastra/core/processors'
 
 export const testAgent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
+  id: 'test-agent',
+  name: 'Test Agent',
   inputProcessors: [
     new UnicodeNormalizer(),
     new PromptInjectionDetector(),
     new PIIDetector(),
     new ModerationProcessor(),
   ],
-});
+})
 ```
 
 ## Processor strategies
@@ -324,17 +320,17 @@ Many of the built-in processors support a `strategy` parameter that controls how
 Most strategies allow the request to continue without interruption. When `block` is used, the processor calls its internal `abort()` function, which immediately stops the request and prevents any subsequent processors from running.
 
 ```typescript {8} title="src/mastra/agents/private-agent.ts"
-import { PIIDetector } from "@mastra/core/processors";
+import { PIIDetector } from '@mastra/core/processors'
 
 export const privateAgent = new Agent({
-  id: "private-agent",
-  name: "Private Agent",
+  id: 'private-agent',
+  name: 'Private Agent',
   inputProcessors: [
     new PIIDetector({
-      strategy: "block",
+      strategy: 'block',
     }),
   ],
-});
+})
 ```
 
 ### Handling blocked requests
@@ -346,31 +342,27 @@ For example, if an agent uses the `PIIDetector` with `strategy: "block"` and the
 #### `.generate()` example
 
 ```typescript
-const result = await agent.generate(
-  "Is this credit card number valid?: 4543 1374 5089 4332",
-);
+const result = await agent.generate('Is this credit card number valid?: 4543 1374 5089 4332')
 
 if (result.tripwire) {
-  console.error("Blocked:", result.tripwire.reason);
-  console.error("Processor:", result.tripwire.processorId);
+  console.error('Blocked:', result.tripwire.reason)
+  console.error('Processor:', result.tripwire.processorId)
   // Optional: check if retry was requested
-  console.error("Retry requested:", result.tripwire.retry);
+  console.error('Retry requested:', result.tripwire.retry)
   // Optional: access additional metadata
-  console.error("Metadata:", result.tripwire.metadata);
+  console.error('Metadata:', result.tripwire.metadata)
 }
 ```
 
 #### `.stream()` example
 
 ```typescript
-const stream = await agent.stream(
-  "Is this credit card number valid?: 4543 1374 5089 4332",
-);
+const stream = await agent.stream('Is this credit card number valid?: 4543 1374 5089 4332')
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === "tripwire") {
-    console.error("Blocked:", chunk.payload.reason);
-    console.error("Processor:", chunk.payload.processorId);
+  if (chunk.type === 'tripwire') {
+    console.error('Blocked:', chunk.payload.reason)
+    console.error('Processor:', chunk.payload.processorId)
   }
 }
 ```
@@ -387,25 +379,26 @@ Processors can request that the LLM retry its response with feedback. This is us
 
 ```typescript
 export class QualityChecker implements Processor {
-  id = "quality-checker";
+  id = 'quality-checker'
 
   async processOutputStep({ text, abort, retryCount }) {
-    const score = await evaluateQuality(text);
+    const score = await evaluateQuality(text)
 
     if (score < 0.7 && retryCount < 3) {
       // Request retry with feedback for the LLM
-      abort("Response quality too low. Please be more specific.", {
+      abort('Response quality too low. Please be more specific.', {
         retry: true,
         metadata: { score },
-      });
+      })
     }
 
-    return [];
+    return []
   }
 }
 ```
 
 The `abort()` function accepts an optional second parameter with:
+
 - `retry: true` - Request the LLM retry the step
 - `metadata: unknown` - Attach additional data for debugging/logging
 

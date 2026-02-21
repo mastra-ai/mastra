@@ -42,7 +42,7 @@ Only if you have existing spans data from Mastra versions prior to v1 and encoun
 The storage initialization may fail when trying to add the unique constraint, or you may see errors like "duplicate key value violates unique constraint".
 :::
 
-**Option 1: Use the CLI (Recommended)**
+#### Option 1: Use the CLI (Recommended)
 
 Run the migration command which automatically deduplicates spans and adds the constraint:
 
@@ -52,7 +52,7 @@ npx mastra migrate
 
 The CLI bundles your project, connects to your configured storage, and runs the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
 
-**Option 2: Manual SQL (PostgreSQL)**
+#### Option 2: Manual SQL (PostgreSQL)
 
 If you prefer to run the migration manually:
 
@@ -67,21 +67,21 @@ WHERE a.ctid < b.ctid
 ALTER TABLE mastra_spans ADD CONSTRAINT mastra_spans_trace_span_unique UNIQUE ("traceId", "spanId");
 ```
 
-**Option 3: Manual migration (Other databases)**
+#### Option 3: Manual migration (Other databases)
 
 For ClickHouse, LibSQL, MongoDB, or MSSQL, use the programmatic API:
 
 ```typescript
-const storage = mastra.getStorage();
-const observabilityStore = await storage.getStore('observability');
+const storage = mastra.getStorage()
+const observabilityStore = await storage.getStore('observability')
 
 // Check if migration is needed
-const status = await observabilityStore?.checkSpansMigrationStatus();
-console.log(status);
+const status = await observabilityStore?.checkSpansMigrationStatus()
+console.log(status)
 
 // Run the migration
-const result = await observabilityStore?.migrateSpans();
-console.log(result);
+const result = await observabilityStore?.migrateSpans()
+console.log(result)
 ```
 
 ### JSON columns (TEXT → JSONB)
@@ -109,22 +109,22 @@ USING snapshot::jsonb;
 `MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
 ```typescript
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
-import { MemoryLibSQL } from "@mastra/libsql";
-import { Mastra } from "@mastra/core";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { MemoryLibSQL } from '@mastra/libsql'
+import { Mastra } from '@mastra/core'
 
 // Compose domains from different stores
 const mastra = new Mastra({
   storage: new MastraCompositeStore({
-    id: "composite",
+    id: 'composite',
     domains: {
-      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
       workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
       scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
     },
   }),
-});
+})
 ```
 
 See the [Storage Composition reference](/reference/storage/composite) for more details.
@@ -236,9 +236,10 @@ npx @mastra/codemod@latest v1/storage-get-messages-paginated .
 
 ### Domain-specific storage access via `getStore()`
 
-Storage operations are now accessed through domain-specific stores instead of directly on the storage instance. 
+Storage operations are now accessed through domain-specific stores instead of directly on the storage instance.
 
 Domains include:
+
 - **`memory`** - Threads, messages, and resources
 - **`workflows`** - Workflow snapshots
 - **`scores`** - Evaluation scores
@@ -310,20 +311,21 @@ To migrate, use the memory store and the new `listThreads()` method with paginat
 ```
 
 The new method also supports:
+
 - Listing all threads (omit filter)
 - Filtering by metadata only
 - Combined resourceId + metadata filters
 
 ```typescript
 // List all threads
-await memoryStore?.listThreads({ page: 0, perPage: 20 });
+await memoryStore?.listThreads({ page: 0, perPage: 20 })
 
 // Filter by metadata only
 await memoryStore?.listThreads({
   filter: { metadata: { status: 'active' } },
   page: 0,
   perPage: 20,
-});
+})
 
 // Combined filter
 await memoryStore?.listThreads({
@@ -333,7 +335,7 @@ await memoryStore?.listThreads({
   },
   page: 0,
   perPage: 20,
-});
+})
 ```
 
 :::tip[Codemod]
@@ -589,7 +591,7 @@ To migrate, use storage APIs directly for testing instead of specialized evals t
 + // Use storage APIs directly for testing
 ```
 
-### TABLE_EVALS from MSSQL storage
+### TABLE\_EVALS from MSSQL storage
 
 The `TABLE_EVALS` table has been removed from MSSQL storage implementations. This change reflects the removal of legacy evals functionality.
 

@@ -19,33 +19,33 @@ npm install @mastra/mssql@latest
 ## Usage
 
 ```typescript
-import { MSSQLStore } from "@mastra/mssql";
+import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
   id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "connectionString",
-      type: "string",
-      description:
-        "MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
-      isOptional: false,
-    },
-    {
-      name: "schemaName",
-      type: "string",
-      description:
-        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "connectionString",
+type: "string",
+description:
+"MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
+isOptional: false,
+},
+{
+name: "schemaName",
+type: "string",
+description:
+"The name of the schema you want the storage to use. Will use the default schema if not provided.",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -53,41 +53,43 @@ const storage = new MSSQLStore({
 You can instantiate `MSSQLStore` in the following ways:
 
 ```ts
-import { MSSQLStore } from "@mastra/mssql";
+import { MSSQLStore } from '@mastra/mssql'
 
 // Using a connection string only
 const store1 = new MSSQLStore({
   id: 'mssql-storage-1',
-  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
-});
+  connectionString:
+    'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
+})
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
   id: 'mssql-storage-2',
-  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
-  schemaName: "custom_schema", // optional
-});
+  connectionString:
+    'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
+  schemaName: 'custom_schema', // optional
+})
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
   id: 'mssql-storage-3',
-  server: "localhost",
+  server: 'localhost',
   port: 1433,
-  database: "mydb",
-  user: "user",
-  password: "password",
-});
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+})
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
   id: 'mssql-storage-4',
-  server: "localhost",
+  server: 'localhost',
   port: 1433,
-  database: "mydb",
-  user: "user",
-  password: "password",
-  schemaName: "custom_schema", // optional
-});
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // optional
+})
 ```
 
 ## Additional Notes
@@ -109,34 +111,34 @@ The storage implementation handles schema creation and updates automatically. It
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { MSSQLStore } from "@mastra/mssql";
+import { Mastra } from '@mastra/core'
+import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 const mastra = new Mastra({
   storage, // init() is called automatically
-});
+})
 ```
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
 ```typescript
-import { MSSQLStore } from "@mastra/mssql";
+import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
   id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 // Required when using storage directly
-await storage.init();
+await storage.init()
 
 // Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore('memory');
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
@@ -148,7 +150,7 @@ If `init()` is not called, tables won't be created and storage operations will f
 `MSSQLStore` exposes the mssql connection pool as public fields:
 
 ```typescript
-store.pool; // mssql connection pool instance
+store.pool // mssql connection pool instance
 ```
 
 This enables direct queries and custom transaction management. When using these fields:

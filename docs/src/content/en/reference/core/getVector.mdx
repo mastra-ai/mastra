@@ -12,33 +12,33 @@ The `.getVector()` method is used to retrieve a vector store by its name. The me
 ## Usage example
 
 ```typescript
-mastra.getVector("testVectorStore");
+mastra.getVector('testVectorStore')
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "TVectorName extends keyof TVectors",
-      description:
-        "The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
-    },
-  ]}
+{
+name: "name",
+type: "TVectorName extends keyof TVectors",
+description:
+"The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "vector",
-      type: "TVectors[TVectorName]",
-      description:
-        "The vector store instance with the specified name. Throws an error if the vector store is not found.",
-    },
-  ]}
+{
+name: "vector",
+type: "TVectors[TVectorName]",
+description:
+"The vector store instance with the specified name. Throws an error if the vector store is not found.",
+},
+]}
 />
 
 ## Related

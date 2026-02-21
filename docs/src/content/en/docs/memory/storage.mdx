@@ -14,25 +14,25 @@ import TabItem from "@theme/TabItem";
 
 # Storage
 
-For agents to remember previous interactions, Mastra needs a database. Use a storage adapter for one of the [supported databases](#supported-providers) and pass it to your Mastra instance. 
+For agents to remember previous interactions, Mastra needs a database. Use a storage adapter for one of the [supported databases](#supported-providers) and pass it to your Mastra instance.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
-});
+})
 ```
 
 :::tip[Sharing the database with Mastra Studio]
 When running `mastra dev` alongside your application (e.g., Next.js), use an absolute path to ensure both processes access the same database:
 
 ```typescript
-url: "file:/absolute/path/to/your/project/mastra.db"
+url: 'file:/absolute/path/to/your/project/mastra.db'
 ```
 
 Relative paths like `file:./mastra.db` resolve based on each process's working directory, which may differ.
@@ -70,19 +70,19 @@ Storage can be configured at the instance level (shared by all agents) or at the
 Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
 
 export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
   }),
-});
+})
 
 // Both agents inherit storage from the Mastra instance above
-const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
-const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
+const agent1 = new Agent({ id: 'agent-1', memory: new Memory() })
+const agent2 = new Agent({ id: 'agent-2', memory: new Memory() })
 ```
 
 This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
@@ -92,18 +92,18 @@ This is useful when all primitives share the same storage backend and have simil
 [Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to set the `memory` domain (and any other [domains](/reference/storage/composite#storage-domains) you need) to different storage providers.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryLibSQL } from "@mastra/libsql";
-import { WorkflowsPG } from "@mastra/pg";
-import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryLibSQL } from '@mastra/libsql'
+import { WorkflowsPG } from '@mastra/pg'
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
-    id: "composite",
+    id: 'composite',
     domains: {
       // highlight-next-line
-      memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+      memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
       workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
       observability: new ObservabilityStorageClickhouse({
         url: process.env.CLICKHOUSE_URL,
@@ -112,7 +112,7 @@ export const mastra = new Mastra({
       }),
     },
   }),
-});
+})
 ```
 
 This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
@@ -122,19 +122,19 @@ This is useful when different types of data have different performance or operat
 Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need data boundaries or compliance requirements:
 
 ```typescript title="src/mastra/agents/your-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { PostgresStore } from "@mastra/pg";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { PostgresStore } from '@mastra/pg'
 
 export const agent = new Agent({
-  id: "agent",
+  id: 'agent',
   memory: new Memory({
     storage: new PostgresStore({
       id: 'agent-storage',
       connectionString: process.env.AGENT_DATABASE_URL,
     }),
   }),
-});
+})
 ```
 
 :::warning
@@ -143,7 +143,7 @@ export const agent = new Agent({
 
 ## Threads and resources
 
-Mastra organizes conversations using two identifiers: 
+Mastra organizes conversations using two identifiers:
 
 - **Thread** - a conversation session containing a sequence of messages.
 - **Resource** - the entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
@@ -152,28 +152,25 @@ Both identifiers are required for agents to store information:
 
 <Tabs>
   <TabItem value="generate" label="Generate">
-
-```typescript
-const response = await agent.generate("hello", {
-  memory: {
-    thread: "conversation-abc-123",
-    resource: "user_123",
-  },
-});
-```
-
+    ```typescript
+    const response = await agent.generate('hello', {
+      memory: {
+        thread: 'conversation-abc-123',
+        resource: 'user_123',
+      },
+    })
+    ```
   </TabItem>
+
   <TabItem value="stream" label="Stream">
-
-```typescript
-const stream = await agent.stream("hello", {
-  memory: {
-    thread: "conversation-abc-123",
-    resource: "user_123",
-  },
-});
-```
-
+    ```typescript
+    const stream = await agent.stream('hello', {
+      memory: {
+        thread: 'conversation-abc-123',
+        resource: 'user_123',
+      },
+    })
+    ```
   </TabItem>
 </Tabs>
 
@@ -189,13 +186,13 @@ Use this option when implementing a ChatGPT-style chat interface to render a tit
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const agent = new Agent({
-  id: "agent",
+  id: 'agent',
   memory: new Memory({
     options: {
       generateTitle: true,
     },
   }),
-});
+})
 ```
 
 Title generation runs asynchronously after the agent responds and does not affect response time.
@@ -204,16 +201,16 @@ To optimize cost or behavior, provide a smaller [`model`](/models) and custom `i
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const agent = new Agent({
-  id: "agent",
+  id: 'agent',
   memory: new Memory({
     options: {
       generateTitle: {
-        model: "openai/gpt-4o-mini",
-        instructions: "Generate a 1 word title",
+        model: 'openai/gpt-4o-mini',
+        instructions: 'Generate a 1 word title',
       },
     },
   }),
-});
+})
 ```
 
 ## Semantic recall
@@ -225,7 +222,7 @@ Semantic recall has different storage requirements - it needs a vector database 
 Some storage providers enforce record size limits that base64-encoded file attachments (such as images) can exceed:
 
 | Provider | Record size limit |
-| -------- | ----------------- |
+| - | - |
 | [DynamoDB](/reference/storage/dynamodb) | 400 KB |
 | [Convex](/reference/storage/convex) | 1 MiB |
 | [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
@@ -235,41 +232,41 @@ PostgreSQL, MongoDB, and libSQL have higher limits and are generally unaffected.
 To avoid this, use an input processor to upload attachments to external storage (S3, R2, GCS, [Convex file storage](https://docs.convex.dev/file-storage), etc.) and replace them with URL references before persistence.
 
 ```typescript title="src/mastra/processors/attachment-uploader.ts"
-import type { Processor } from "@mastra/core/processors";
-import type { MastraDBMessage } from "@mastra/core/memory";
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class AttachmentUploader implements Processor {
-  id = "attachment-uploader";
+  id = 'attachment-uploader'
 
   async processInput({ messages }: { messages: MastraDBMessage[] }) {
-    return Promise.all(messages.map((msg) => this.processMessage(msg)));
+    return Promise.all(messages.map(msg => this.processMessage(msg)))
   }
 
   async processMessage(msg: MastraDBMessage) {
-    const attachments = msg.content.experimental_attachments;
-    if (!attachments?.length) return msg;
+    const attachments = msg.content.experimental_attachments
+    if (!attachments?.length) return msg
 
     const uploaded = await Promise.all(
-      attachments.map(async (att) => {
+      attachments.map(async att => {
         // Skip if already a URL
-        if (!att.url?.startsWith("data:")) return att;
+        if (!att.url?.startsWith('data:')) return att
 
         // Upload base64 data and replace with URL
-        const url = await this.upload(att.url, att.contentType);
-        return { ...att, url };
-      })
-    );
+        const url = await this.upload(att.url, att.contentType)
+        return { ...att, url }
+      }),
+    )
 
-    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } };
+    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } }
   }
 
   async upload(dataUri: string, contentType?: string): Promise<string> {
-    const base64 = dataUri.split(",")[1];
-    const buffer = Buffer.from(base64, "base64");
+    const base64 = dataUri.split(',')[1]
+    const buffer = Buffer.from(base64, 'base64')
 
     // Replace with your storage provider (S3, R2, GCS, Convex, etc.)
     // return await s3.upload(buffer, contentType);
-    throw new Error("Implement upload() with your storage provider");
+    throw new Error('Implement upload() with your storage provider')
   }
 }
 ```
@@ -277,13 +274,13 @@ export class AttachmentUploader implements Processor {
 Use the processor with your agent:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { AttachmentUploader } from "./processors/attachment-uploader";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { AttachmentUploader } from './processors/attachment-uploader'
 
 const agent = new Agent({
-  id: "my-agent",
+  id: 'my-agent',
   memory: new Memory({ storage: yourStorage }),
   inputProcessors: [new AttachmentUploader()],
-});
+})
 ```

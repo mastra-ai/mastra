@@ -12,78 +12,78 @@ The `ToolCallFilter` is an **input processor** that filters out tool calls and t
 ## Usage example
 
 ```typescript
-import { ToolCallFilter } from "@mastra/core/processors";
+import { ToolCallFilter } from '@mastra/core/processors'
 
 // Exclude all tool calls
-const filterAll = new ToolCallFilter();
+const filterAll = new ToolCallFilter()
 
 // Exclude specific tools by name
 const filterSpecific = new ToolCallFilter({
-  exclude: ["searchDatabase", "sendEmail"],
-});
+  exclude: ['searchDatabase', 'sendEmail'],
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for the tool call filter",
-      isOptional: true,
-    },
-  ]}
+{
+name: "options",
+type: "Options",
+description: "Configuration options for the tool call filter",
+isOptional: true,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "exclude",
-      type: "string[]",
-      description: "List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded",
-      isOptional: true,
-    },
-  ]}
+{
+name: "exclude",
+type: "string[]",
+description: "List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'tool-call-filter'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Processor display name set to 'ToolCallFilter'",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-      description: "Processes input messages to filter out tool calls and their results based on configuration",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Processor identifier set to 'tool-call-filter'",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Processor display name set to 'ToolCallFilter'",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+description: "Processes input messages to filter out tool calls and their results based on configuration",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/filtered-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { ToolCallFilter } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { ToolCallFilter } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "filtered-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai:gpt-4o",
+  name: 'filtered-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai:gpt-4o',
   tools: {
     searchDatabase,
     sendEmail,
@@ -93,22 +93,22 @@ export const agent = new Agent({
     // Filter out database search tool calls from context
     // to reduce token usage while keeping other tool interactions
     new ToolCallFilter({
-      exclude: ["searchDatabase"],
+      exclude: ['searchDatabase'],
     }),
   ],
-});
+})
 ```
 
 ## Filtering all tool calls
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { ToolCallFilter } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { ToolCallFilter } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "no-tools-context-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai:gpt-4o",
+  name: 'no-tools-context-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai:gpt-4o',
   tools: {
     searchDatabase,
     sendEmail,
@@ -119,7 +119,7 @@ export const agent = new Agent({
     // won't be included in the context
     new ToolCallFilter(),
   ],
-});
+})
 ```
 
 ## Related

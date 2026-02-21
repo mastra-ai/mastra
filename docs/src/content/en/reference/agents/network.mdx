@@ -14,17 +14,16 @@ The `.network()` method enables multi-agent collaboration and routing. This meth
 ## Usage example
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { agent1, agent2 } from "./agents";
-import { workflow1 } from "./workflows";
-import { tool1, tool2 } from "./tools";
+import { Agent } from '@mastra/core/agent'
+import { agent1, agent2 } from './agents'
+import { workflow1 } from './workflows'
+import { tool1, tool2 } from './tools'
 
 const agent = new Agent({
-  id: "network-agent",
-  name: "Network Agent",
-  instructions:
-    "You are a network agent that can help users with a variety of tasks.",
-  model: "openai/gpt-5.1",
+  id: 'network-agent',
+  name: 'Network Agent',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
+  model: 'openai/gpt-5.1',
   agents: {
     agent1,
     agent2,
@@ -36,326 +35,326 @@ const agent = new Agent({
     tool1,
     tool2,
   },
-});
+})
 
 await agent.network(`
   Find me the weather in Tokyo.
   Based on the weather, plan an activity for me.
-`);
+`)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "messages",
-      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description:
-        "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
-    },
-    {
-      name: "options",
-      type: "MultiPrimitiveExecutionOptions",
-      isOptional: true,
-      description: "Optional configuration for the network process.",
-    },
-  ]}
+{
+name: "messages",
+type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+description:
+"The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+},
+{
+name: "options",
+type: "MultiPrimitiveExecutionOptions",
+isOptional: true,
+description: "Optional configuration for the network process.",
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "maxSteps",
-      type: "number",
-      isOptional: true,
-      description: "Maximum number of steps to run during execution.",
-    },
-    {
-      name: "memory",
-      type: "object",
-      isOptional: true,
-      description:
-        "Configuration for memory. This is the preferred way to manage memory.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "thread",
-              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
-              isOptional: false,
-              description:
-                "The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "resource",
-              type: "string",
-              isOptional: false,
-              description:
-                "Identifier for the user or resource associated with the thread.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "options",
-              type: "MemoryConfig",
-              isOptional: true,
-              description:
-                "Configuration for memory behavior, like message history and semantic recall.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "currentSpan",
-              type: "Span",
-              isOptional: true,
-              description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "requestContextKeys",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "traceId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "parentSpanId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tags",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "telemetry",
-      type: "TelemetrySettings",
-      isOptional: true,
-      description:
-        "Settings for OTLP telemetry collection during streaming (not Tracing).",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "isEnabled",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Enable or disable telemetry. Disabled by default while experimental.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "recordInputs",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "recordOutputs",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "functionId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Identifier for this function. Used to group telemetry data by function.",
-            },
-          ],
-        },
-      ],
-    },
-    MODEL_SETTINGS_OBJECT,
-    {
-      name: "structuredOutput",
-      type: "StructuredOutputOptions",
-      isOptional: true,
-      description:
-        "Configuration for generating a typed structured output from the network result.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "schema",
-              type: "ZodSchema | JSONSchema7",
-              isOptional: false,
-              description:
-                "The schema to validate the output against. Can be a Zod schema or JSON Schema.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "model",
-              type: "MastraModelConfig",
-              isOptional: true,
-              description:
-                "Model to use for generating the structured output. Defaults to the agent's model.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "instructions",
-              type: "string",
-              isOptional: true,
-              description:
-                "Custom instructions for generating the structured output.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "runId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Unique ID for this generation run. Useful for tracking and debugging purposes.",
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
+{
+name: "maxSteps",
+type: "number",
+isOptional: true,
+description: "Maximum number of steps to run during execution.",
+},
+{
+name: "memory",
+type: "object",
+isOptional: true,
+description:
+"Configuration for memory. This is the preferred way to manage memory.",
+properties: [
+{
+parameters: [
+{
+name: "thread",
+type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+isOptional: false,
+description:
+"The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
+},
+],
+},
+{
+parameters: [
+{
+name: "resource",
+type: "string",
+isOptional: false,
+description:
+"Identifier for the user or resource associated with the thread.",
+},
+],
+},
+{
+parameters: [
+{
+name: "options",
+type: "MemoryConfig",
+isOptional: true,
+description:
+"Configuration for memory behavior, like message history and semantic recall.",
+},
+],
+},
+],
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description:
+"Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+properties: [
+{
+parameters: [
+{
+name: "currentSpan",
+type: "Span",
+isOptional: true,
+description:
+"Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+},
+],
+},
+],
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for Tracing configuration.",
+properties: [
+{
+parameters: [
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+},
+],
+},
+{
+parameters: [
+{
+name: "requestContextKeys",
+type: "string[]",
+isOptional: true,
+description:
+"Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+},
+],
+},
+{
+parameters: [
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+},
+],
+},
+{
+parameters: [
+{
+name: "parentSpanId",
+type: "string",
+isOptional: true,
+description:
+"Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+},
+],
+},
+{
+parameters: [
+{
+name: "tags",
+type: "string[]",
+isOptional: true,
+description:
+"Tags to apply to this trace. String labels for categorizing and filtering traces.",
+},
+],
+},
+],
+},
+{
+name: "telemetry",
+type: "TelemetrySettings",
+isOptional: true,
+description:
+"Settings for OTLP telemetry collection during streaming (not Tracing).",
+properties: [
+{
+parameters: [
+{
+name: "isEnabled",
+type: "boolean",
+isOptional: true,
+description:
+"Enable or disable telemetry. Disabled by default while experimental.",
+},
+],
+},
+{
+parameters: [
+{
+name: "recordInputs",
+type: "boolean",
+isOptional: true,
+description:
+"Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
+},
+],
+},
+{
+parameters: [
+{
+name: "recordOutputs",
+type: "boolean",
+isOptional: true,
+description:
+"Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
+},
+],
+},
+{
+parameters: [
+{
+name: "functionId",
+type: "string",
+isOptional: true,
+description:
+"Identifier for this function. Used to group telemetry data by function.",
+},
+],
+},
+],
+},
+MODEL_SETTINGS_OBJECT,
+{
+name: "structuredOutput",
+type: "StructuredOutputOptions",
+isOptional: true,
+description:
+"Configuration for generating a typed structured output from the network result.",
+properties: [
+{
+parameters: [
+{
+name: "schema",
+type: "ZodSchema | JSONSchema7",
+isOptional: false,
+description:
+"The schema to validate the output against. Can be a Zod schema or JSON Schema.",
+},
+],
+},
+{
+parameters: [
+{
+name: "model",
+type: "MastraModelConfig",
+isOptional: true,
+description:
+"Model to use for generating the structured output. Defaults to the agent's model.",
+},
+],
+},
+{
+parameters: [
+{
+name: "instructions",
+type: "string",
+isOptional: true,
+description:
+"Custom instructions for generating the structured output.",
+},
+],
+},
+],
+},
+{
+name: "runId",
+type: "string",
+isOptional: true,
+description:
+"Unique ID for this generation run. Useful for tracking and debugging purposes.",
+},
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+description:
+"Request Context for dependency injection and contextual information.",
+},
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "stream",
-      type: "MastraAgentNetworkStream<NetworkChunkType>",
-      description:
-        "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
-    },
-    {
-      name: "status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A promise that resolves to the final workflow result",
-    },
-    {
-      name: "usage",
-      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
-      description: "A promise that resolves to token usage statistics",
-    },
-    {
-      name: "object",
-      type: "Promise<OUTPUT | undefined>",
-      description:
-        "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
-    },
-    {
-      name: "objectStream",
-      type: "ReadableStream<Partial<OUTPUT>>",
-      description:
-        "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
-    },
-  ]}
+{
+name: "stream",
+type: "MastraAgentNetworkStream<NetworkChunkType>",
+description:
+"A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
+},
+{
+name: "status",
+type: "Promise<RunStatus>",
+description: "A promise that resolves to the current workflow run status",
+},
+{
+name: "result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A promise that resolves to the final workflow result",
+},
+{
+name: "usage",
+type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+description: "A promise that resolves to token usage statistics",
+},
+{
+name: "object",
+type: "Promise<OUTPUT | undefined>",
+description:
+"A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
+},
+{
+name: "objectStream",
+type: "ReadableStream<Partial<OUTPUT>>",
+description:
+"A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
+},
+]}
 />
 
 ## Structured Output
@@ -363,19 +362,19 @@ await agent.network(`
 When you need typed, validated results from your network, use the `structuredOutput` option. The network will generate a response matching your schema after task completion.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
 const resultSchema = z.object({
-  summary: z.string().describe("A brief summary of the findings"),
-  recommendations: z.array(z.string()).describe("List of recommendations"),
-  confidence: z.number().min(0).max(1).describe("Confidence score"),
-});
+  summary: z.string().describe('A brief summary of the findings'),
+  recommendations: z.array(z.string()).describe('List of recommendations'),
+  confidence: z.number().min(0).max(1).describe('Confidence score'),
+})
 
-const stream = await agent.network("Research AI trends and summarize", {
+const stream = await agent.network('Research AI trends and summarize', {
   structuredOutput: {
     schema: resultSchema,
   },
-});
+})
 
 // Consume the stream
 for await (const chunk of stream) {
@@ -383,10 +382,10 @@ for await (const chunk of stream) {
 }
 
 // Get the typed result
-const result = await stream.object;
+const result = await stream.object
 // result is typed as { summary: string; recommendations: string[]; confidence: number }
-console.log(result?.summary);
-console.log(result?.recommendations);
+console.log(result?.summary)
+console.log(result?.recommendations)
 ```
 
 ### Streaming Partial Objects
@@ -394,17 +393,17 @@ console.log(result?.recommendations);
 You can also stream partial objects as they're being generated:
 
 ```typescript
-const stream = await agent.network("Analyze data", {
+const stream = await agent.network('Analyze data', {
   structuredOutput: { schema: resultSchema },
-});
+})
 
 // Stream partial objects
 for await (const partial of stream.objectStream) {
-  console.log("Partial result:", partial);
+  console.log('Partial result:', partial)
 }
 
 // Get final result
-const final = await stream.object;
+const final = await stream.object
 ```
 
 ### Chunk Types

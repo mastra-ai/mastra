@@ -14,7 +14,7 @@ Sends Tracing data to Sentry for AI tracing and monitoring using OpenTelemetry s
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new SentryExporter(config: SentryExporterConfig)
 ```
 
@@ -22,66 +22,67 @@ new SentryExporter(config: SentryExporterConfig)
 
 ```typescript
 interface SentryExporterConfig extends BaseExporterConfig {
-  dsn?: string;
-  environment?: string;
-  tracesSampleRate?: number;
-  release?: string;
-  options?: Partial<Sentry.NodeOptions>;
+  dsn?: string
+  environment?: string
+  tracesSampleRate?: number
+  release?: string
+  options?: Partial<Sentry.NodeOptions>
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "dsn",
-      type: "string",
-      description: "Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.",
-      required: false,
-    },
-    {
-      name: "environment",
-      type: "string",
-      description: "Deployment environment (enables filtering issues and alerts by environment). Falls back to SENTRY_ENVIRONMENT env var. Default: 'production'.",
-      required: false,
-    },
-    {
-      name: "tracesSampleRate",
-      type: "number",
-      description: "Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%). Default: 1.0.",
-      required: false,
-    },
-    {
-      name: "release",
-      type: "string",
-      description: "Version of your code deployed (helps identify regressions and track deployments). Falls back to SENTRY_RELEASE env var.",
-      required: false,
-    },
-    {
-      name: "options",
-      type: "Partial<Sentry.NodeOptions>",
-      description: "Additional Sentry SDK options (integrations, beforeSend, etc.). See Sentry SDK documentation for available options.",
-      required: false,
-    },
-  ]}
+{
+name: "dsn",
+type: "string",
+description: "Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.",
+required: false,
+},
+{
+name: "environment",
+type: "string",
+description: "Deployment environment (enables filtering issues and alerts by environment). Falls back to SENTRY_ENVIRONMENT env var. Default: 'production'.",
+required: false,
+},
+{
+name: "tracesSampleRate",
+type: "number",
+description: "Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%). Default: 1.0.",
+required: false,
+},
+{
+name: "release",
+type: "string",
+description: "Version of your code deployed (helps identify regressions and track deployments). Falls back to SENTRY_RELEASE env var.",
+required: false,
+},
+{
+name: "options",
+type: "Partial<Sentry.NodeOptions>",
+description: "Additional Sentry SDK options (integrations, beforeSend, etc.). See Sentry SDK documentation for available options.",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Exports a tracing event to Sentry. Handles SPAN_STARTED, SPAN_UPDATED, and SPAN_ENDED events.
+Exports a tracing event to Sentry. Handles SPAN\_STARTED, SPAN\_UPDATED, and SPAN\_ENDED events.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -89,7 +90,7 @@ Force flushes any pending spans to Sentry without shutting down the exporter. Wa
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -100,23 +101,23 @@ Ends all active spans, clears internal state, and closes the Sentry connection. 
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { SentryExporter } from "@mastra/sentry";
+import { SentryExporter } from '@mastra/sentry'
 
 // Reads from SENTRY_DSN, SENTRY_ENVIRONMENT, SENTRY_RELEASE
-const exporter = new SentryExporter();
+const exporter = new SentryExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { SentryExporter } from "@mastra/sentry";
+import { SentryExporter } from '@mastra/sentry'
 
 const exporter = new SentryExporter({
   dsn: process.env.SENTRY_DSN,
-  environment: "production",
+  environment: 'production',
   tracesSampleRate: 1.0,
-  release: "1.0.0",
-});
+  release: '1.0.0',
+})
 ```
 
 ### With Sampling
@@ -124,9 +125,9 @@ const exporter = new SentryExporter({
 ```typescript
 const exporter = new SentryExporter({
   dsn: process.env.SENTRY_DSN,
-  environment: "production",
+  environment: 'production',
   tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
-});
+})
 ```
 
 ### With Custom Sentry Options
@@ -134,63 +135,65 @@ const exporter = new SentryExporter({
 ```typescript
 const exporter = new SentryExporter({
   dsn: process.env.SENTRY_DSN,
-  environment: "production",
+  environment: 'production',
   options: {
     integrations: [
       // Custom Sentry integrations
     ],
-    beforeSend: (event) => {
+    beforeSend: event => {
       // Custom event processing
-      return event;
+      return event
     },
   },
-});
+})
 ```
 
 ## Span Mapping
 
 Mastra span types are mapped to Sentry operations:
 
-| Mastra SpanType             | Sentry Operation       |
-| --------------------------- | ---------------------- |
-| `AGENT_RUN`                 | `gen_ai.invoke_agent`  |
-| `MODEL_GENERATION`          | `gen_ai.chat`          |
-| `MODEL_STEP`                | _(skipped)_            |
-| `MODEL_CHUNK`               | _(skipped)_            |
-| `TOOL_CALL`                 | `gen_ai.execute_tool`  |
-| `MCP_TOOL_CALL`             | `gen_ai.execute_tool`  |
-| `WORKFLOW_RUN`              | `workflow.run`         |
-| `WORKFLOW_STEP`             | `workflow.step`        |
-| `WORKFLOW_CONDITIONAL`      | `workflow.conditional` |
+| Mastra SpanType | Sentry Operation |
+| - | - |
+| `AGENT_RUN` | `gen_ai.invoke_agent` |
+| `MODEL_GENERATION` | `gen_ai.chat` |
+| `MODEL_STEP` | _(skipped)_ |
+| `MODEL_CHUNK` | _(skipped)_ |
+| `TOOL_CALL` | `gen_ai.execute_tool` |
+| `MCP_TOOL_CALL` | `gen_ai.execute_tool` |
+| `WORKFLOW_RUN` | `workflow.run` |
+| `WORKFLOW_STEP` | `workflow.step` |
+| `WORKFLOW_CONDITIONAL` | `workflow.conditional` |
 | `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` |
-| `WORKFLOW_PARALLEL`         | `workflow.parallel`    |
-| `WORKFLOW_LOOP`             | `workflow.loop`        |
-| `WORKFLOW_SLEEP`            | `workflow.sleep`       |
-| `WORKFLOW_WAIT_EVENT`       | `workflow.wait`        |
-| `PROCESSOR_RUN`             | `ai.processor`         |
-| `GENERIC`                   | `ai.span`              |
+| `WORKFLOW_PARALLEL` | `workflow.parallel` |
+| `WORKFLOW_LOOP` | `workflow.loop` |
+| `WORKFLOW_SLEEP` | `workflow.sleep` |
+| `WORKFLOW_WAIT_EVENT` | `workflow.wait` |
+| `PROCESSOR_RUN` | `ai.processor` |
+| `GENERIC` | `ai.span` |
 
-MODEL_STEP and MODEL_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL_GENERATION spans.
+MODEL\_STEP and MODEL\_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL\_GENERATION spans.
 
 ## Environment Variables
 
 The exporter reads configuration from these environment variables:
 
-| Variable              | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `SENTRY_DSN`          | Data Source Name - tells the SDK where to send events |
-| `SENTRY_ENVIRONMENT`  | Deployment environment name                          |
-| `SENTRY_RELEASE`      | Version of your code deployed                        |
+| Variable | Description |
+| - | - |
+| `SENTRY_DSN` | Data Source Name - tells the SDK where to send events |
+| `SENTRY_ENVIRONMENT` | Deployment environment name |
+| `SENTRY_RELEASE` | Version of your code deployed |
 
 ## OpenTelemetry Attributes
 
 The exporter sets these standard OpenTelemetry attributes:
 
 **Common attributes (all spans):**
+
 - `sentry.origin`: `auto.ai.mastra` (identifies spans from Mastra)
 - `ai.span.type`: Mastra span type
 
-**MODEL_GENERATION spans:**
+**MODEL\_GENERATION spans:**
+
 - `gen_ai.operation.name`: `chat`
 - `gen_ai.system`: Model provider
 - `gen_ai.request.model`: Model identifier
@@ -205,7 +208,8 @@ The exporter sets these standard OpenTelemetry attributes:
 - `gen_ai.request.temperature`: Temperature parameter
 - `gen_ai.completion_start_time`: First token time
 
-**TOOL_CALL spans:**
+**TOOL\_CALL spans:**
+
 - `gen_ai.operation.name`: `execute_tool`
 - `gen_ai.tool.name`: Tool identifier
 - `gen_ai.tool.type`: `function`
@@ -214,7 +218,8 @@ The exporter sets these standard OpenTelemetry attributes:
 - `gen_ai.tool.output`: Tool output
 - `tool.success`: Success flag
 
-**AGENT_RUN spans:**
+**AGENT\_RUN spans:**
+
 - `gen_ai.operation.name`: `invoke_agent`
 - `gen_ai.agent.name`: Agent identifier
 - `gen_ai.pipeline.name`: Agent name

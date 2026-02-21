@@ -12,34 +12,34 @@ The `.getMemory()` method retrieves the memory system associated with an agent. 
 ## Usage example
 
 ```typescript
-await agent.getMemory();
+await agent.getMemory()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing request context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "memory",
-      type: "Promise<MastraMemory | undefined>",
-      description:
-        "A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
-    },
-  ]}
+{
+name: "memory",
+type: "Promise<MastraMemory | undefined>",
+description:
+"A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
+},
+]}
 />
 
 ## Extended usage example
@@ -47,22 +47,22 @@ await agent.getMemory();
 ```typescript
 await agent.getMemory({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related

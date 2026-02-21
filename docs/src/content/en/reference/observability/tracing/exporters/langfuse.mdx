@@ -14,7 +14,7 @@ Sends Tracing data to Langfuse for observability.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new LangfuseExporter(config: LangfuseExporterConfig)
 ```
 
@@ -22,64 +22,65 @@ new LangfuseExporter(config: LangfuseExporterConfig)
 
 ```typescript
 interface LangfuseExporterConfig extends BaseExporterConfig {
-  publicKey?: string;
-  secretKey?: string;
-  baseUrl?: string;
-  realtime?: boolean;
-  options?: any;
+  publicKey?: string
+  secretKey?: string
+  baseUrl?: string
+  realtime?: boolean
+  options?: any
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "publicKey",
-      type: "string",
-      description: "Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.",
-      required: false,
-    },
-    {
-      name: "secretKey",
-      type: "string",
-      description: "Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.",
-      required: false,
-    },
-    {
-      name: "baseUrl",
-      type: "string",
-      description: "Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.",
-      required: false,
-    },
-    {
-      name: "realtime",
-      type: "boolean",
-      description: "Enable realtime mode - flushes after each event",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "options",
-      type: "any",
-      description: "Additional Langfuse client options",
-      required: false,
-    },
-  ]}
+{
+name: "publicKey",
+type: "string",
+description: "Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.",
+required: false,
+},
+{
+name: "secretKey",
+type: "string",
+description: "Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.",
+required: false,
+},
+{
+name: "baseUrl",
+type: "string",
+description: "Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.",
+required: false,
+},
+{
+name: "realtime",
+type: "boolean",
+description: "Enable realtime mode - flushes after each event",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "options",
+type: "any",
+description: "Additional Langfuse client options",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -87,7 +88,7 @@ Exports a tracing event to Langfuse.
 
 ### export
 
-```typescript
+```typescript prettier:false
 async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
@@ -95,7 +96,7 @@ Batch exports spans to Langfuse.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -103,7 +104,7 @@ Force flushes any buffered spans to Langfuse without shutting down the exporter.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -114,23 +115,23 @@ Flushes pending data and shuts down the client.
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { LangfuseExporter } from "@mastra/langfuse";
+import { LangfuseExporter } from '@mastra/langfuse'
 
 // Reads from LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
-const exporter = new LangfuseExporter();
+const exporter = new LangfuseExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { LangfuseExporter } from "@mastra/langfuse";
+import { LangfuseExporter } from '@mastra/langfuse'
 
 const exporter = new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
   secretKey: process.env.LANGFUSE_SECRET_KEY,
-  baseUrl: "https://cloud.langfuse.com",
+  baseUrl: 'https://cloud.langfuse.com',
   realtime: true,
-});
+})
 ```
 
 ## Span Mapping
@@ -145,25 +146,25 @@ const exporter = new LangfuseExporter({
 Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
 
 ```typescript
-import { buildTracingOptions } from "@mastra/observability";
-import { withLangfusePrompt } from "@mastra/langfuse";
-import { Langfuse } from "langfuse";
+import { buildTracingOptions } from '@mastra/observability'
+import { withLangfusePrompt } from '@mastra/langfuse'
+import { Langfuse } from 'langfuse'
 
 const langfuse = new Langfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-});
+})
 
-const prompt = await langfuse.getPrompt("customer-support");
+const prompt = await langfuse.getPrompt('customer-support')
 
 const agent = new Agent({
-  name: "support-agent",
+  name: 'support-agent',
   instructions: prompt.prompt,
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },
-});
+})
 ```
 
 ### Helper Functions
@@ -177,8 +178,8 @@ Adds Langfuse prompt metadata to tracing options.
 withLangfusePrompt(prompt)
 
 // With manual fields
-withLangfusePrompt({ name: "my-prompt", version: 1 })
-withLangfusePrompt({ id: "prompt-uuid" })
+withLangfusePrompt({ name: 'my-prompt', version: 1 })
+withLangfusePrompt({ id: 'prompt-uuid' })
 ```
 
 When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.

@@ -14,21 +14,23 @@ Creates a new dataset. Zod schemas passed as `inputSchema` or `groundTruthSchema
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { z } from "zod";
+import { Mastra } from '@mastra/core'
+import { z } from 'zod'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
 // Create with metadata
 const dataset = await mastra.datasets.create({
-  name: "QA evaluation set",
-  description: "Question-answer pairs for testing",
-  metadata: { team: "ml" },
-});
+  name: 'QA evaluation set',
+  description: 'Question-answer pairs for testing',
+  metadata: { team: 'ml' },
+})
 
 // Create with Zod schemas
 const typedDataset = await mastra.datasets.create({
-  name: "Typed QA set",
+  name: 'Typed QA set',
   inputSchema: z.object({
     question: z.string(),
     context: z.string().optional(),
@@ -36,53 +38,53 @@ const typedDataset = await mastra.datasets.create({
   groundTruthSchema: z.object({
     answer: z.string(),
   }),
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Display name for the dataset.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description: "Description of the dataset.",
-    },
-    {
-      name: "inputSchema",
-      type: "unknown",
-      isOptional: true,
-      description: "JSON Schema or Zod schema for item inputs. Zod schemas are auto-converted.",
-    },
-    {
-      name: "groundTruthSchema",
-      type: "unknown",
-      isOptional: true,
-      description: "JSON Schema or Zod schema for item ground truths. Zod schemas are auto-converted.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "Arbitrary metadata.",
-    },
-  ]}
+{
+name: "name",
+type: "string",
+description: "Display name for the dataset.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "Description of the dataset.",
+},
+{
+name: "inputSchema",
+type: "unknown",
+isOptional: true,
+description: "JSON Schema or Zod schema for item inputs. Zod schemas are auto-converted.",
+},
+{
+name: "groundTruthSchema",
+type: "unknown",
+isOptional: true,
+description: "JSON Schema or Zod schema for item ground truths. Zod schemas are auto-converted.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<Dataset>",
-      description: "A Dataset instance for the newly created dataset.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<Dataset>",
+description: "A Dataset instance for the newly created dataset.",
+},
+]}
 />

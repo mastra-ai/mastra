@@ -29,176 +29,159 @@ Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world exa
 Run Mastra as a standalone server and connect your Next.js frontend (with CopilotKit) to its API endpoints.
 
 <Steps>
+  <StepItem>
+    Set up your directory structure. A possible directory structure could look like this:
 
-<StepItem>
+    ```bash
+    project-root
+    ├── mastra-server
+    │   ├── src
+    │   │   └── mastra
+    │   └── package.json
+    └── my-copilot-app
+        └── package.json
+    ```
 
-Set up your directory structure. A possible directory structure could look like this:
+    Bootstrap your Mastra server:
 
-```bash
-project-root
-├── mastra-server
-│   ├── src
-│   │   └── mastra
-│   └── package.json
-└── my-copilot-app
-    └── package.json
-```
+    ```bash npm2yarn
+    npx create-mastra@latest
+    ```
 
-Bootstrap your Mastra server:
+    This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
 
-```bash npm2yarn
-npx create-mastra@latest
-```
+    Navigate to your newly created Mastra server directory:
 
-This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
+    ```bash
+    cd mastra-server # Replace with the actual directory name you provided
+    ```
 
-Navigate to your newly created Mastra server directory:
+    You now have a basic Mastra server project ready. You should have the following files and folders:
 
-```bash
-cd mastra-server # Replace with the actual directory name you provided
-```
+    ```bash
+    src
+    └── mastra
+        ├── agents
+        │   └── weather-agent.ts
+        ├── scorers
+        │   └── weather-scorer.ts
+        ├── tools
+        │   └── weather-tool.ts
+        ├── workflows
+        │   └── weather-workflow.ts
+        └── index.ts
+    ```
 
-You now have a basic Mastra server project ready. You should have the following files and folders:
+    :::note
 
-```bash
-src
-└── mastra
-    ├── agents
-    │   └── weather-agent.ts
-    ├── scorers
-    │   └── weather-scorer.ts
-    ├── tools
-    │   └── weather-tool.ts
-    ├── workflows
-    │   └── weather-workflow.ts
-    └── index.ts
-```
+    Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
 
-:::note
+    :::
+  </StepItem>
 
-Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+  <StepItem>
+    Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
 
-:::
+    ```bash npm2yarn
+    npm install @ag-ui/mastra @mastra/client-js @mastra/core @ag-ui/core @ag-ui/client @copilotkit/runtime
+    ```
 
-</StepItem>
+    In your `src/mastra/index.ts` file, register the chat route:
 
-<StepItem>
+    ```typescript title="src/mastra/index.ts" {2,7-19}
+    import { Mastra } from '@mastra/core/mastra'
+    import { registerCopilotKit } from '@ag-ui/mastra/copilotkit'
+    // Rest of the imports...
 
-Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
+    export const mastra = new Mastra({
+      // Rest of the configuration...
+      server: {
+        cors: {
+          origin: '*',
+          allowMethods: ['*'],
+          allowHeaders: ['*'],
+        },
+        apiRoutes: [
+          registerCopilotKit({
+            path: '/chat',
+            resourceId: 'weatherAgent',
+          }),
+        ],
+      },
+    })
+    ```
 
-```bash npm2yarn
-npm install @ag-ui/mastra @mastra/client-js @mastra/core @ag-ui/core @ag-ui/client @copilotkit/runtime
-```
+    This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatible format. You have to add the CORS configuration to allow the CopilotKit frontend to access the Mastra server. For production deployments, make sure to restrict the CORS origins to only your frontend domain.
+  </StepItem>
 
-In your `src/mastra/index.ts` file, register the chat route:
+  <StepItem>
+    Run the Mastra server using the following command:
 
-```typescript title="src/mastra/index.ts" {2,7-19}
-import { Mastra } from '@mastra/core/mastra';
-import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
-// Rest of the imports...
+    ```bash npm2yarn
+    npm run dev
+    ```
 
-export const mastra = new Mastra({
-  // Rest of the configuration...
-  server: {
-    cors: {
-      origin: "*",
-      allowMethods: ["*"],
-      allowHeaders: ["*"],
-    },
-    apiRoutes: [
-      registerCopilotKit({
-        path: '/chat',
-        resourceId: 'weatherAgent'
-      })
-    ]
-  }
-});
-```
+    By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the CopilotKit frontend to connect to it.
+  </StepItem>
 
-This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatible format. You have to add the CORS configuration to allow the CopilotKit frontend to access the Mastra server. For production deployments, make sure to restrict the CORS origins to only your frontend domain.
+  <StepItem>
+    Go up one directory to your project root.
 
-</StepItem>
+    ```bash
+    cd ..
+    ```
 
-<StepItem>
+    Create a new Next.js project with the name `my-copilot-app`:
 
-Run the Mastra server using the following command:
+    ```bash npm2yarn
+    npx create-next-app@latest my-copilot-app
+    ```
 
-```bash npm2yarn
-npm run dev
-```
+    Navigate to your newly created Next.js project directory:
 
-By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the CopilotKit frontend to connect to it.
+    ```bash
+    cd my-copilot-app
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Install the CopilotKit UI packages which you'll use to display a chat interface:
 
-<StepItem>
+    ```bash npm2yarn
+    npm install @copilotkit/react-ui @copilotkit/react-core
+    ```
 
-Go up one directory to your project root.
+    Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
 
-```bash
-cd ..
-```
+    ```typescript title="app/page.tsx"
+    import { CopilotChat } from '@copilotkit/react-ui'
+    import { CopilotKit } from '@copilotkit/react-core'
+    import '@copilotkit/react-ui/styles.css'
 
-Create a new Next.js project with the name `my-copilot-app`:
+    export default function Home() {
+      return (
+        <CopilotKit runtimeUrl="http://localhost:4111/chat" agent="weatherAgent">
+          <CopilotChat
+            labels={{
+              title: 'Weather Agent',
+              initial: 'Hi! 👋 Ask me about the weather, forecasts, and climate.',
+            }}
+          />
+        </CopilotKit>
+      )
+    }
+    ```
+  </StepItem>
 
-```bash npm2yarn
-npx create-next-app@latest my-copilot-app
-```
+  <StepItem>
+    You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
 
-Navigate to your newly created Next.js project directory:
+    ```bash npm2yarn
+    npm run dev
+    ```
 
-```bash
-cd my-copilot-app
-```
-
-</StepItem>
-
-<StepItem>
-
-Install the CopilotKit UI packages which you'll use to display a chat interface:
-
-```bash npm2yarn
-npm install @copilotkit/react-ui @copilotkit/react-core
-```
-
-Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
-
-```typescript title="app/page.tsx"
-import { CopilotChat } from "@copilotkit/react-ui";
-import { CopilotKit } from "@copilotkit/react-core";
-import "@copilotkit/react-ui/styles.css";
-
-export default function Home() {
-  return (
-    <CopilotKit
-      runtimeUrl="http://localhost:4111/chat"
-      agent="weatherAgent"
-    >
-      <CopilotChat
-        labels={{
-          title: "Weather Agent",
-          initial: "Hi! 👋 Ask me about the weather, forecasts, and climate.",
-        }}
-      />
-    </CopilotKit>
-  );
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
-
-```bash npm2yarn
-npm run dev
-```
-
-You should now be able to chat with your agent in the browser.
-
-</StepItem>
-
+    You should now be able to chat with your agent in the browser.
+  </StepItem>
 </Steps>
 
 Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
@@ -220,5 +203,5 @@ export const mastra = new Mastra({
   bundler: {
     externals: ['@copilotkit/runtime'],
   },
-});
+})
 ```

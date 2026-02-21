@@ -20,17 +20,16 @@ Tool call approval can be enabled at the agent level and apply to every tool the
 Agent approval uses a snapshot to capture the state of the request. Ensure you've enabled a storage provider in your main Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: ":memory:"
-  })
-});
+    id: 'mastra-storage',
+    url: ':memory:',
+  }),
+})
 ```
-
 
 ## Agent-level approval
 
@@ -38,8 +37,8 @@ When calling an agent using `.stream()` set `requireToolApproval` to `true` whic
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?", {
-  requireToolApproval: true
-});
+  requireToolApproval: true,
+})
 ```
 
 ### Approving tool calls
@@ -48,13 +47,13 @@ To approve a tool call, access `approveToolCall` from the `agent`, passing in th
 
 ```typescript
 const handleApproval = async () => {
-  const approvedStream = await agent.approveToolCall({ runId: stream.runId });
+  const approvedStream = await agent.approveToolCall({ runId: stream.runId })
 
   for await (const chunk of approvedStream.textStream) {
-    process.stdout.write(chunk);
+    process.stdout.write(chunk)
   }
-  process.stdout.write("\n");
-};
+  process.stdout.write('\n')
+}
 ```
 
 ### Declining tool calls
@@ -63,13 +62,13 @@ To decline a tool call, access the `declineToolCall` from the `agent`. You will 
 
 ```typescript
 const handleDecline = async () => {
-  const declinedStream = await agent.declineToolCall({ runId: stream.runId });
+  const declinedStream = await agent.declineToolCall({ runId: stream.runId })
 
   for await (const chunk of declinedStream.textStream) {
-    process.stdout.write(chunk);
+    process.stdout.write(chunk)
   }
-  process.stdout.write("\n");
-};
+  process.stdout.write('\n')
+}
 ```
 
 ## Tool approval with generate()
@@ -89,21 +88,21 @@ When a tool requires approval during a `generate()` call, the response includes:
 To approve a tool call with `generate()`, use the `approveToolCallGenerate` method:
 
 ```typescript
-const output = await agent.generate("Find user John", {
+const output = await agent.generate('Find user John', {
   requireToolApproval: true,
-});
+})
 
-if (output.finishReason === "suspended") {
-  console.log("Tool requires approval:", output.suspendPayload.toolName);
-  console.log("Arguments:", output.suspendPayload.args);
+if (output.finishReason === 'suspended') {
+  console.log('Tool requires approval:', output.suspendPayload.toolName)
+  console.log('Arguments:', output.suspendPayload.args)
 
   // Approve the tool call and get the final result
   const result = await agent.approveToolCallGenerate({
     runId: output.runId,
     toolCallId: output.suspendPayload.toolCallId,
-  });
+  })
 
-  console.log("Final result:", result.text);
+  console.log('Final result:', result.text)
 }
 ```
 
@@ -112,21 +111,21 @@ if (output.finishReason === "suspended") {
 To decline a tool call, use the `declineToolCallGenerate` method:
 
 ```typescript
-if (output.finishReason === "suspended") {
+if (output.finishReason === 'suspended') {
   const result = await agent.declineToolCallGenerate({
     runId: output.runId,
     toolCallId: output.suspendPayload.toolCallId,
-  });
+  })
 
   // Agent will respond acknowledging the declined tool
-  console.log(result.text);
+  console.log(result.text)
 }
 ```
 
 ### Stream vs Generate comparison
 
 | Aspect | `stream()` | `generate()` |
-|--------|-----------|--------------|
+| - | - | - |
 | Response type | Streaming chunks | Complete response |
 | Approval detection | `tool-call-approval` chunk | `finishReason: 'suspended'` |
 | Approve method | `approveToolCall({ runId })` | `approveToolCallGenerate({ runId, toolCallId })` |
@@ -143,48 +142,47 @@ In this approach, `requireApproval` is configured on the tool definition (shown 
 
 ```typescript
 export const testTool = createTool({
-  id: "test-tool",
-  description: "Fetches weather for a location",
+  id: 'test-tool',
+  description: 'Fetches weather for a location',
   inputSchema: z.object({
-    location: z.string()
+    location: z.string(),
   }),
   outputSchema: z.object({
-    weather: z.string()
+    weather: z.string(),
   }),
   resumeSchema: z.object({
-    approved: z.boolean()
+    approved: z.boolean(),
   }),
-  execute: async (inputData) => {
-    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
-    const weather = await response.text();
+  execute: async inputData => {
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
+    const weather = await response.text()
 
-    return { weather };
+    return { weather }
   },
-  requireApproval: true
-});
+  requireApproval: true,
+})
 ```
 
 When `requireApproval` is true for a tool, the stream will include chunks of type `tool-call-approval` to indicate that the call is paused. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
 
 ```typescript
-const stream = await agent.stream("What's the weather in London?");
+const stream = await agent.stream("What's the weather in London?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === "tool-call-approval") {
-    console.log("Approval required.");
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Approval required.')
   }
 }
 
 const handleResume = async () => {
-  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId })
 
   for await (const chunk of resumedStream.textStream) {
-    process.stdout.write(chunk);
+    process.stdout.write(chunk)
   }
-  process.stdout.write("\n");
-};
+  process.stdout.write('\n')
+}
 ```
-
 
 ### Tool approval using `suspend`
 
@@ -192,55 +190,54 @@ With this approach, neither the agent nor the tool uses `requireApproval`. Inste
 
 ```typescript
 export const testToolB = createTool({
-  id: "test-tool-b",
-  description: "Fetches weather for a location",
+  id: 'test-tool-b',
+  description: 'Fetches weather for a location',
   inputSchema: z.object({
-    location: z.string()
+    location: z.string(),
   }),
   outputSchema: z.object({
-    weather: z.string()
+    weather: z.string(),
   }),
   resumeSchema: z.object({
-    approved: z.boolean()
+    approved: z.boolean(),
   }),
   suspendSchema: z.object({
-    reason: z.string()
+    reason: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {};
+    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {}
 
     if (!approved) {
-      return suspend?.({ reason: "Approval required." });
+      return suspend?.({ reason: 'Approval required.' })
     }
 
-    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
-    const weather = await response.text();
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
+    const weather = await response.text()
 
-    return { weather };
-  }
-});
+    return { weather }
+  },
+})
 ```
 
 With this approach the stream will include a `tool-call-suspended` chunk, and the `suspendPayload` will contain the `reason` defined by the tool's `suspendSchema`. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
 
 ```typescript
-const stream = await agent.stream("What's the weather in London?");
+const stream = await agent.stream("What's the weather in London?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === "tool-call-suspended") {
-    console.log(chunk.payload.suspendPayload);
+  if (chunk.type === 'tool-call-suspended') {
+    console.log(chunk.payload.suspendPayload)
   }
 }
 
 const handleResume = async () => {
-  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId })
 
   for await (const chunk of resumedStream.textStream) {
-    process.stdout.write(chunk);
+    process.stdout.write(chunk)
   }
-  process.stdout.write("\n");
-};
-
+  process.stdout.write('\n')
+}
 ```
 
 ## Automatic tool resumption
@@ -252,26 +249,26 @@ When using tools that call `suspend()`, you can enable automatic resumption so t
 Set `autoResumeSuspendedTools` to `true` in the agent's default options or when calling `stream()`:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 // Option 1: In agent configuration
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-4o-mini',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
-});
+})
 
 // Option 2: Per-request
 const stream = await agent.stream("What's the weather?", {
   autoResumeSuspendedTools: true,
-});
+})
 ```
 
 ### How it works
@@ -279,8 +276,8 @@ const stream = await agent.stream("What's the weather?", {
 When `autoResumeSuspendedTools` is enabled:
 
 1. A tool suspends execution by calling `suspend()` with a payload (e.g., requesting more information)
-2. The suspension is persisted to memory along with the conversation
-3. When the user sends their next message on the same thread, the agent:
+1. The suspension is persisted to memory along with the conversation
+1. When the user sends their next message on the same thread, the agent:
    - Detects the suspended tool from message history
    - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
    - Automatically resumes the tool with the extracted data
@@ -288,12 +285,12 @@ When `autoResumeSuspendedTools` is enabled:
 ### Example
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: "weather-info",
-  description: "Fetches weather information for a city",
+  id: 'weather-info',
+  description: 'Fetches weather information for a city',
   suspendSchema: z.object({
     message: z.string(),
   }),
@@ -305,47 +302,47 @@ export const weatherTool = createTool({
     if (!context?.agent?.resumeData) {
       // First call - suspend and ask for the city
       return context?.agent?.suspend({
-        message: "What city do you want to know the weather for?",
-      });
+        message: 'What city do you want to know the weather for?',
+      })
     }
 
     // Resume call - city was extracted from user's message
-    const { city } = context.agent.resumeData;
-    const response = await fetch(`https://wttr.in/${city}?format=3`);
-    const weather = await response.text();
+    const { city } = context.agent.resumeData
+    const response = await fetch(`https://wttr.in/${city}?format=3`)
+    const weather = await response.text()
 
-    return { city, weather };
+    return { city, weather }
   },
-});
+})
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-4o-mini',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
-});
+})
 
-const stream = await agent.stream("What's the weather like?");
+const stream = await agent.stream("What's the weather like?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === "tool-call-suspended") {
-    console.log(chunk.payload.suspendPayload);
+  if (chunk.type === 'tool-call-suspended') {
+    console.log(chunk.payload.suspendPayload)
   }
 }
 
 const handleResume = async () => {
-  const resumedStream = await agent.stream("San Francisco");
+  const resumedStream = await agent.stream('San Francisco')
 
   for await (const chunk of resumedStream.textStream) {
-    process.stdout.write(chunk);
+    process.stdout.write(chunk)
   }
-  process.stdout.write("\n");
-};
+  process.stdout.write('\n')
+}
 ```
 
 **Conversation flow:**
@@ -371,7 +368,7 @@ For automatic tool resumption to work:
 ### Manual vs automatic resumption
 
 | Approach | Use case |
-|----------|----------|
+| - | - |
 | Manual (`resumeStream()`) | Programmatic control, webhooks, button clicks, external triggers |
 | Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
 

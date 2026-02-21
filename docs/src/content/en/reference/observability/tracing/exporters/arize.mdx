@@ -13,7 +13,7 @@ Sends Tracing data to Arize Phoenix, Arize AX, or any OpenTelemetry-compatible o
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new ArizeExporter(config: ArizeExporterConfig)
 ```
 
@@ -22,19 +22,20 @@ new ArizeExporter(config: ArizeExporterConfig)
 ```typescript
 type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
   // Phoenix / OpenTelemetry configuration
-  endpoint?: string;
-  apiKey?: string;
+  endpoint?: string
+  apiKey?: string
 
   // Arize AX configuration
-  spaceId?: string;
+  spaceId?: string
 
   // Common configuration
-  projectName?: string;
-  headers?: Record<string, string>;
+  projectName?: string
+  headers?: Record<string, string>
 }
 ```
 
 Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
+
 - `timeout?: number` - Export timeout in milliseconds (default: 30000)
 - `batchSize?: number` - Number of spans per batch (default: 512)
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
@@ -46,72 +47,72 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 <PropertiesTable
   props={[
-    {
-      name: "endpoint",
-      type: "string",
-      description:
-        "Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.",
-      required: false,
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "spaceId",
-      type: "string",
-      description:
-        "Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.",
-      required: false,
-    },
-    {
-      name: "projectName",
-      type: "string",
-      description: "Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.",
-      required: false,
-    },
-    {
-      name: "headers",
-      type: "Record<string, string>",
-      description: "Additional headers for OTLP requests",
-      required: false,
-    },
-    {
-      name: "timeout",
-      type: "number",
-      description:
-        "Timeout in milliseconds before exporting spans (default: 30000)",
-      required: false,
-    },
-    {
-      name: "batchSize",
-      type: "number",
-      description: "Number of spans to batch before export (default: 512)",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "resourceAttributes",
-      type: "Record<string, any>",
-      description: "Custom resource attributes added to each span",
-      required: false,
-    },
-  ]}
+{
+name: "endpoint",
+type: "string",
+description:
+"Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.",
+required: false,
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.",
+required: false,
+},
+{
+name: "spaceId",
+type: "string",
+description:
+"Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.",
+required: false,
+},
+{
+name: "projectName",
+type: "string",
+description: "Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.",
+required: false,
+},
+{
+name: "headers",
+type: "Record<string, string>",
+description: "Additional headers for OTLP requests",
+required: false,
+},
+{
+name: "timeout",
+type: "number",
+description:
+"Timeout in milliseconds before exporting spans (default: 30000)",
+required: false,
+},
+{
+name: "batchSize",
+type: "number",
+description: "Number of spans to batch before export (default: 512)",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "resourceAttributes",
+type: "Record<string, any>",
+description: "Custom resource attributes added to each span",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -119,7 +120,7 @@ Exports a tracing event to the configured endpoint.
 
 ### export
 
-```typescript
+```typescript prettier:false
 async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
@@ -127,7 +128,7 @@ Batch exports spans using OpenTelemetry with OpenInference semantic conventions.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -135,7 +136,7 @@ Force flushes any buffered spans to the configured endpoint without shutting dow
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -146,35 +147,35 @@ Flushes pending data and shuts down the client.
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { ArizeExporter } from "@mastra/arize";
+import { ArizeExporter } from '@mastra/arize'
 
 // For Phoenix: Set PHOENIX_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME
 // For Arize AX: Set ARIZE_SPACE_ID, ARIZE_API_KEY, ARIZE_PROJECT_NAME
-const exporter = new ArizeExporter();
+const exporter = new ArizeExporter()
 ```
 
 ### Phoenix Configuration
 
 ```typescript
-import { ArizeExporter } from "@mastra/arize";
+import { ArizeExporter } from '@mastra/arize'
 
 const exporter = new ArizeExporter({
-  endpoint: "http://localhost:6006/v1/traces",
+  endpoint: 'http://localhost:6006/v1/traces',
   apiKey: process.env.PHOENIX_API_KEY, // Optional for local Phoenix
-  projectName: "my-ai-project",
-});
+  projectName: 'my-ai-project',
+})
 ```
 
 ### Arize AX Configuration
 
 ```typescript
-import { ArizeExporter } from "@mastra/arize";
+import { ArizeExporter } from '@mastra/arize'
 
 const exporter = new ArizeExporter({
   spaceId: process.env.ARIZE_SPACE_ID!,
   apiKey: process.env.ARIZE_API_KEY!,
-  projectName: "my-ai-project",
-});
+  projectName: 'my-ai-project',
+})
 ```
 
 ## OpenInference Semantic Conventions
@@ -188,11 +189,11 @@ The ArizeExporter supports trace tagging for categorization and filtering. Tags 
 ### Usage
 
 ```typescript
-const result = await agent.generate("Hello", {
+const result = await agent.generate('Hello', {
   tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
+    tags: ['production', 'experiment-v2', 'user-request'],
   },
-});
+})
 ```
 
 ### How Tags Are Stored

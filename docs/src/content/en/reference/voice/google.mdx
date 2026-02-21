@@ -12,108 +12,108 @@ The Google Voice implementation in Mastra provides both text-to-speech (TTS) and
 ## Usage Example
 
 ```typescript
-import { GoogleVoice } from "@mastra/voice-google";
+import { GoogleVoice } from '@mastra/voice-google'
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
-const voice = new GoogleVoice();
+const voice = new GoogleVoice()
 
 // Text-to-Speech
-const audioStream = await voice.speak("Hello, world!", {
-  languageCode: "en-US",
+const audioStream = await voice.speak('Hello, world!', {
+  languageCode: 'en-US',
   audioConfig: {
-    audioEncoding: "LINEAR16",
+    audioEncoding: 'LINEAR16',
   },
-});
+})
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream, {
   config: {
-    encoding: "LINEAR16",
-    languageCode: "en-US",
+    encoding: 'LINEAR16',
+    languageCode: 'en-US',
   },
-});
+})
 
 // Get available voices for a specific language
-const voices = await voice.getSpeakers({ languageCode: "en-US" });
+const voices = await voice.getSpeakers({ languageCode: 'en-US' })
 ```
 
 ## Constructor Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "speechModel",
-      type: "GoogleModelConfig",
-      description: "Configuration for text-to-speech functionality",
-      isOptional: true,
-      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
-    },
-    {
-      name: "listeningModel",
-      type: "GoogleModelConfig",
-      description: "Configuration for speech-to-text functionality",
-      isOptional: true,
-      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID to use for text-to-speech",
-      isOptional: true,
-      defaultValue: "'en-US-Casual-K'",
-    },
-    {
-      name: "vertexAI",
-      type: "boolean",
-      description:
-        "Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "project",
-      type: "string",
-      description:
-        "Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "location",
-      type: "string",
-      description:
-        "Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
-      isOptional: true,
-      defaultValue: "'us-central1'",
-    },
-  ]}
+{
+name: "speechModel",
+type: "GoogleModelConfig",
+description: "Configuration for text-to-speech functionality",
+isOptional: true,
+defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+},
+{
+name: "listeningModel",
+type: "GoogleModelConfig",
+description: "Configuration for speech-to-text functionality",
+isOptional: true,
+defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID to use for text-to-speech",
+isOptional: true,
+defaultValue: "'en-US-Casual-K'",
+},
+{
+name: "vertexAI",
+type: "boolean",
+description:
+"Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "project",
+type: "string",
+description:
+"Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
+isOptional: true,
+},
+{
+name: "location",
+type: "string",
+description:
+"Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
+isOptional: true,
+defaultValue: "'us-central1'",
+},
+]}
 />
 
 ### GoogleModelConfig
 
 <PropertiesTable
   content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
-      isOptional: true,
-    },
-    {
-      name: "keyFilename",
-      type: "string",
-      description:
-        "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "credentials",
-      type: "object",
-      description:
-        "In-memory service account credentials object with client_email and private_key properties.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description:
+"Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+isOptional: true,
+},
+{
+name: "keyFilename",
+type: "string",
+description:
+"Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+isOptional: true,
+},
+{
+name: "credentials",
+type: "object",
+description:
+"In-memory service account credentials object with client_email and private_key properties.",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -124,41 +124,41 @@ Converts text to speech using Google Cloud Text-to-Speech service.
 
 <PropertiesTable
   content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description:
-        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Speech synthesis options",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Voice ID to use for this request",
-      isOptional: true,
-    },
-    {
-      name: "options.languageCode",
-      type: "string",
-      description:
-        "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
-      isOptional: true,
-    },
-    {
-      name: "options.audioConfig",
-      type: "ISynthesizeSpeechRequest['audioConfig']",
-      description:
-        "Audio configuration options from Google Cloud Text-to-Speech API",
-      isOptional: true,
-      defaultValue: "{ audioEncoding: 'LINEAR16' }",
-    },
-  ]}
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. If a stream is provided, it will be converted to text first.",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Speech synthesis options",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Voice ID to use for this request",
+isOptional: true,
+},
+{
+name: "options.languageCode",
+type: "string",
+description:
+"Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+isOptional: true,
+},
+{
+name: "options.audioConfig",
+type: "ISynthesizeSpeechRequest['audioConfig']",
+description:
+"Audio configuration options from Google Cloud Text-to-Speech API",
+isOptional: true,
+defaultValue: "{ audioEncoding: 'LINEAR16' }",
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -169,33 +169,33 @@ Converts speech to text using Google Cloud Speech-to-Text service.
 
 <PropertiesTable
   content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Recognition options",
-      isOptional: true,
-    },
-    {
-      name: "options.stream",
-      type: "boolean",
-      description: "Whether to use streaming recognition",
-      isOptional: true,
-    },
-    {
-      name: "options.config",
-      type: "IRecognitionConfig",
-      description:
-        "Recognition configuration from Google Cloud Speech-to-Text API",
-      isOptional: true,
-      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
-    },
-  ]}
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to transcribe",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Recognition options",
+isOptional: true,
+},
+{
+name: "options.stream",
+type: "boolean",
+description: "Whether to use streaming recognition",
+isOptional: true,
+},
+{
+name: "options.config",
+type: "IRecognitionConfig",
+description:
+"Recognition configuration from Google Cloud Speech-to-Text API",
+isOptional: true,
+defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+},
+]}
 />
 
 Returns: `Promise<string>`
@@ -206,19 +206,19 @@ Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
   content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "languageCodes",
-      type: "string[]",
-      description: "List of language codes supported by this voice",
-      isOptional: false,
-    },
-  ]}
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "languageCodes",
+type: "string[]",
+description: "List of language codes supported by this voice",
+isOptional: false,
+},
+]}
 />
 
 ### isUsingVertexAI()
@@ -249,14 +249,14 @@ Uses a Google Cloud API key for authentication. Suitable for development and sim
 
 ```typescript
 // Using environment variable (GOOGLE_API_KEY)
-const voice = new GoogleVoice();
+const voice = new GoogleVoice()
 
 // Using explicit API key
 const voice = new GoogleVoice({
-  speechModel: { apiKey: "your-api-key" },
-  listeningModel: { apiKey: "your-api-key" },
-  speaker: "en-US-Casual-K",
-});
+  speechModel: { apiKey: 'your-api-key' },
+  listeningModel: { apiKey: 'your-api-key' },
+  speaker: 'en-US-Casual-K',
+})
 ```
 
 ### Vertex AI Mode (Service Account)
@@ -264,6 +264,7 @@ const voice = new GoogleVoice({
 Uses Google Cloud project-based authentication with service accounts. Recommended for production and enterprise deployments.
 
 **Benefits:**
+
 - Better security (no API keys in code)
 - IAM-based access control
 - Project-level billing and quotas
@@ -277,53 +278,57 @@ Uses Google Cloud project-based authentication with service accounts. Recommende
 // Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT env vars
 const voice = new GoogleVoice({
   vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1", // Optional, defaults to 'us-central1'
-});
+  project: 'your-gcp-project',
+  location: 'us-central1', // Optional, defaults to 'us-central1'
+})
 
 // Using service account key file
 const voice = new GoogleVoice({
   vertexAI: true,
-  project: "your-gcp-project",
+  project: 'your-gcp-project',
   speechModel: {
-    keyFilename: "/path/to/service-account.json",
+    keyFilename: '/path/to/service-account.json',
   },
   listeningModel: {
-    keyFilename: "/path/to/service-account.json",
+    keyFilename: '/path/to/service-account.json',
   },
-});
+})
 
 // Using in-memory credentials
 const voice = new GoogleVoice({
   vertexAI: true,
-  project: "your-gcp-project",
+  project: 'your-gcp-project',
   speechModel: {
     credentials: {
-      client_email: "service-account@project.iam.gserviceaccount.com",
-      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+      client_email: 'service-account@project.iam.gserviceaccount.com',
+      private_key: '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
     },
   },
-});
+})
 ```
 
-**Required Permissions:**
+#### Required Permissions
 
-**IAM Roles:**
+#### IAM Roles
 
 For Text-to-Speech:
+
 - `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
 - `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
 - `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
 
 For Speech-to-Text:
+
 - `roles/speech.client` - Speech-to-Text Client
 
-**OAuth Scopes:**
+#### OAuth Scopes
 
 For synchronous Text-to-Speech synthesis:
+
 - `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
 
 For long-audio Text-to-Speech operations:
+
 - `locations.longAudioSynthesize` - Create long-audio synthesis operations
 - `operations.get` - Get operation status
 - `operations.list` - List operations
@@ -331,14 +336,14 @@ For long-audio Text-to-Speech operations:
 ## Important Notes
 
 1. **Authentication**: Either a Google Cloud API key (standard mode) or service account credentials (Vertex AI mode) is required.
-2. **Environment Variables**:
+1. **Environment Variables**:
    - `GOOGLE_API_KEY` - API key for standard mode
    - `GOOGLE_CLOUD_PROJECT` - Project ID for Vertex AI mode
    - `GOOGLE_CLOUD_LOCATION` - Location for Vertex AI mode (defaults to 'us-central1')
    - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key file
-3. The default voice is set to `'en-US-Casual-K'`.
-4. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
-5. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
-6. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
-7. Available voices can be filtered by language code using the `getSpeakers()` method.
-8. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.
+1. The default voice is set to `'en-US-Casual-K'`.
+1. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+1. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+1. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+1. Available voices can be filtered by language code using the `getSpeakers()` method.
+1. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.

@@ -21,10 +21,10 @@ In this guide, you'll build a documentation manager that maintains your project'
 The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory. In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 // highlight-start
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 // highlight-end
 
 // highlight-start
@@ -32,13 +32,13 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
-});
+})
 // highlight-end
 
 export const mastra = new Mastra({
   // highlight-next-line
   workspace,
-});
+})
 ```
 
 At the root of your project, create a new folder called `workspace`. This is where all documentation files will be stored and managed by the agent.
@@ -81,10 +81,10 @@ npm install example-package
 ## Quick Example
 
 ```typescript
-import { Example } from 'example-package';
+import { Example } from 'example-package'
 
-const example = new Example();
-example.run();
+const example = new Example()
+example.run()
 ```
 ````
 
@@ -93,7 +93,7 @@ example.run();
 Now it's time to create the documentation manager agent. This agent will have instructions for creating and updating markdown files in the workspace. Create a new file `src/mastra/agents/docs-manager.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/docs-manager.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const docsManager = new Agent({
   id: 'docs-manager',
@@ -117,29 +117,29 @@ When updating existing docs:
 Use kebab-case naming for files (getting-started.md).
 Always explain what you're creating and why.`,
   model: 'openai/gpt-4o',
-});
+})
 ```
 
 Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Mastra } from '@mastra/core'
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 // highlight-next-line
-import { docsManager } from './agents/docs-manager';
+import { docsManager } from './agents/docs-manager'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
-});
+})
 
 export const mastra = new Mastra({
   workspace,
   // highlight-next-line
   agents: { docsManager },
-});
+})
 ```
 
 ## Test the docs manager
@@ -185,20 +185,20 @@ export const authConfig = {
   provider: 'oauth',
   clientId: process.env.AUTH_CLIENT_ID,
   secret: process.env.AUTH_SECRET,
-};
+}
 ```
 
 ## Basic Example
 
 ```typescript
-import { createAuth } from '@example/auth';
-import { authConfig } from './auth.config';
+import { createAuth } from '@example/auth'
+import { authConfig } from './auth.config'
 
-const auth = createAuth(authConfig);
+const auth = createAuth(authConfig)
 
 app.get('/protected', auth.requireAuth(), (req, res) => {
-  res.json({ user: req.user });
-});
+  res.json({ user: req.user })
+})
 ```
 ````
 

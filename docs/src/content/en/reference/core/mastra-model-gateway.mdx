@@ -12,13 +12,13 @@ Abstract base class for implementing custom model gateways. Gateways handle prov
 ## Class Overview
 
 ```typescript
-import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5'
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5'
 
 class MyCustomGateway extends MastraModelGateway {
-  readonly id = 'custom';
-  readonly name = 'My Custom Gateway';
+  readonly id = 'custom'
+  readonly name = 'My Custom Gateway'
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -28,17 +28,17 @@ class MyCustomGateway extends MastraModelGateway {
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
       },
-    };
+    }
   }
 
   buildUrl(modelId: string, envVars?: Record<string, string>): string {
-    return 'https://api.my-provider.com/v1';
+    return 'https://api.my-provider.com/v1'
   }
 
   async getApiKey(modelId: string): Promise<string> {
-    const apiKey = process.env.MY_API_KEY;
-    if (!apiKey) throw new Error('MY_API_KEY not set');
-    return apiKey;
+    const apiKey = process.env.MY_API_KEY
+    if (!apiKey) throw new Error('MY_API_KEY not set')
+    return apiKey
   }
 
   async resolveLanguageModel({
@@ -46,16 +46,16 @@ class MyCustomGateway extends MastraModelGateway {
     providerId,
     apiKey,
   }: {
-    modelId: string;
-    providerId: string;
-    apiKey: string;
+    modelId: string
+    providerId: string
+    apiKey: string
   }): Promise<LanguageModelV2> {
-    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`)
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
-    }).chatModel(modelId);
+    }).chatModel(modelId)
   }
 }
 ```
@@ -64,17 +64,17 @@ class MyCustomGateway extends MastraModelGateway {
 
 <PropertiesTable
   content={[
-    {
-      name: 'id',
-      type: 'string',
-      description: 'Unique identifier for the gateway. This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic"). Exception: models.dev is a provider registry and doesn\'t use a prefix.',
-    },
-    {
-      name: 'name',
-      type: 'string',
-      description: 'Human-readable name for the gateway.',
-    },
-  ]}
+{
+name: 'id',
+type: 'string',
+description: 'Unique identifier for the gateway. This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic"). Exception: models.dev is a provider registry and doesn\'t use a prefix.',
+},
+{
+name: 'name',
+type: 'string',
+description: 'Human-readable name for the gateway.',
+},
+]}
 />
 
 ## Required Methods
@@ -86,47 +86,48 @@ Fetches provider configurations from the gateway.
 **Returns:** `Promise<Record<string, ProviderConfig>>`
 
 **ProviderConfig Structure:**
+
 <PropertiesTable
   content={[
-    {
-      name: 'name',
-      type: 'string',
-      description: 'Display name of the provider',
-    },
-    {
-      name: 'models',
-      type: 'string[]',
-      description: 'Array of available model IDs',
-    },
-    {
-      name: 'apiKeyEnvVar',
-      type: 'string | string[]',
-      description: 'Environment variable(s) for API key',
-    },
-    {
-      name: 'gateway',
-      type: 'string',
-      description: 'Gateway identifier',
-    },
-    {
-      name: 'url',
-      type: 'string',
-      isOptional: true,
-      description: 'Optional base API URL',
-    },
-    {
-      name: 'apiKeyHeader',
-      type: 'string',
-      isOptional: true,
-      description: 'Optional custom auth header name',
-    },
-    {
-      name: 'docUrl',
-      type: 'string',
-      isOptional: true,
-      description: 'Optional documentation URL',
-    },
-  ]}
+{
+name: 'name',
+type: 'string',
+description: 'Display name of the provider',
+},
+{
+name: 'models',
+type: 'string[]',
+description: 'Array of available model IDs',
+},
+{
+name: 'apiKeyEnvVar',
+type: 'string | string[]',
+description: 'Environment variable(s) for API key',
+},
+{
+name: 'gateway',
+type: 'string',
+description: 'Gateway identifier',
+},
+{
+name: 'url',
+type: 'string',
+isOptional: true,
+description: 'Optional base API URL',
+},
+{
+name: 'apiKeyHeader',
+type: 'string',
+isOptional: true,
+description: 'Optional custom auth header name',
+},
+{
+name: 'docUrl',
+type: 'string',
+isOptional: true,
+description: 'Optional documentation URL',
+},
+]}
 />
 
 ### buildUrl()
@@ -134,20 +135,21 @@ Fetches provider configurations from the gateway.
 Builds the API URL for a specific model/provider combination.
 
 **Parameters:**
+
 <PropertiesTable
   content={[
-    {
-      name: 'modelId',
-      type: 'string',
-      description: 'Full model ID (e.g., "custom/my-provider/model-1")',
-    },
-    {
-      name: 'envVars',
-      type: 'Record<string, string>',
-      isOptional: true,
-      description: 'Optional environment variables',
-    },
-  ]}
+{
+name: 'modelId',
+type: 'string',
+description: 'Full model ID (e.g., "custom/my-provider/model-1")',
+},
+{
+name: 'envVars',
+type: 'Record<string, string>',
+isOptional: true,
+description: 'Optional environment variables',
+},
+]}
 />
 
 **Returns:** `string | undefined | Promise<string | undefined>`
@@ -157,14 +159,15 @@ Builds the API URL for a specific model/provider combination.
 Retrieves the API key for authentication.
 
 **Parameters:**
+
 <PropertiesTable
   content={[
-    {
-      name: 'modelId',
-      type: 'string',
-      description: 'Full model ID',
-    },
-  ]}
+{
+name: 'modelId',
+type: 'string',
+description: 'Full model ID',
+},
+]}
 />
 
 **Returns:** `Promise<string>`
@@ -174,24 +177,25 @@ Retrieves the API key for authentication.
 Creates a language model instance.
 
 **Parameters:**
+
 <PropertiesTable
   content={[
-    {
-      name: 'modelId',
-      type: 'string',
-      description: 'The model ID',
-    },
-    {
-      name: 'providerId',
-      type: 'string',
-      description: 'The provider ID',
-    },
-    {
-      name: 'apiKey',
-      type: 'string',
-      description: 'The API key for authentication',
-    },
-  ]}
+{
+name: 'modelId',
+type: 'string',
+description: 'The model ID',
+},
+{
+name: 'providerId',
+type: 'string',
+description: 'The provider ID',
+},
+{
+name: 'apiKey',
+type: 'string',
+description: 'The API key for authentication',
+},
+]}
 />
 
 **Returns:** `Promise<LanguageModelV2> | LanguageModelV2`
@@ -213,6 +217,7 @@ For true gateways, the gateway ID is used as a prefix and models are accessed us
 ```
 
 Examples:
+
 - Gateway with `id = 'custom'`: `'custom/my-provider/model-1'`
 
 ## Built-in Implementations

@@ -22,8 +22,8 @@ npm install @mastra/laminar@beta
 ### Prerequisites
 
 1. **Laminar Project**: Create/select a project in Laminar
-2. **Project API Key**: Copy from Laminar Project Settings
-3. **Environment Variables**: Set your credentials
+1. **Project API Key**: Copy from Laminar Project Settings
+1. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
 # Required
@@ -39,20 +39,20 @@ LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LaminarExporter } from "@mastra/laminar";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LaminarExporter } from '@mastra/laminar'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       laminar: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new LaminarExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -60,27 +60,27 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LaminarExporter } from "@mastra/laminar";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LaminarExporter } from '@mastra/laminar'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       laminar: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new LaminarExporter({
             apiKey: process.env.LMNR_PROJECT_API_KEY!,
             baseUrl: process.env.LMNR_BASE_URL, // Optional
             endpoint: process.env.LAMINAR_ENDPOINT, // Optional
-            realtime: process.env.NODE_ENV === "development", // Optional
+            realtime: process.env.NODE_ENV === 'development', // Optional
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ## Related

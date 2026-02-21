@@ -18,7 +18,7 @@ npm install @mastra/elasticsearch@latest
 
 ## Usage
 
-```typescript
+```typescript prettier:false
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
 const store = new ElasticSearchVector({
@@ -57,17 +57,17 @@ const results = await store.query({
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this vector store instance",
-    },
-    {
-      name: "url",
-      type: "string",
-      description: "ElasticSearch connection URL (e.g., 'http://localhost:9200')",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this vector store instance",
+},
+{
+name: "url",
+type: "string",
+description: "ElasticSearch connection URL (e.g., 'http://localhost:9200')",
+},
+]}
 />
 
 ## Methods
@@ -78,24 +78,24 @@ Creates a new index with the specified configuration.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
@@ -104,29 +104,29 @@ Adds or updates vectors and their metadata in the index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to insert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
@@ -135,37 +135,37 @@ Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to search in",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors for",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vector data in results",
+},
+]}
 />
 
 ### describeIndex()
@@ -174,21 +174,21 @@ Gets information about an index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -198,12 +198,12 @@ Deletes an index and all its data.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### listIndexes()
@@ -218,41 +218,41 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "ID of the vector to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "ID of the vector to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "object",
+description: "Update data containing vector and/or metadata",
+},
+{
+name: "update.vector",
+type: "number[]",
+isOptional: true,
+description: "New vector data",
+},
+{
+name: "update.metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata",
+},
+]}
 />
 
 ### deleteVector()
@@ -261,17 +261,17 @@ Deletes a single vector by its ID.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 ### deleteVectors()
@@ -280,24 +280,24 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ## Response Types
@@ -306,10 +306,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 

@@ -1,0 +1,6 @@
+extends: existence
+message: "Avoid '%s' in instructions. Be direct — use imperative tense or rephrase."
+level: suggestion
+ignorecase: true
+tokens:
+  - 'you should'

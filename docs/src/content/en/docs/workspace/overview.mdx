@@ -31,7 +31,7 @@ You can create a workspace with any combination of the supported features. The a
 Create a workspace by instantiating the `Workspace` class with your desired features:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
@@ -41,7 +41,7 @@ const workspace = new Workspace({
     workingDirectory: './workspace',
   }),
   skills: ['/skills'],
-});
+})
 ```
 
 The `skills` array specifies paths to directories containing skill definitions, see [Skills](/docs/workspace/skills).
@@ -51,16 +51,16 @@ The `skills` array specifies paths to directories containing skill definitions, 
 Set a workspace on the Mastra instance. All agents inherit this workspace unless they define their own:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Mastra } from '@mastra/core'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
-});
+})
 
 const mastra = new Mastra({
   workspace,
-});
+})
 ```
 
 ### Agent-scoped workspace
@@ -68,18 +68,18 @@ const mastra = new Mastra({
 Assign a workspace directly to an agent to override the global workspace:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
-});
+})
 
 export const myAgent = new Agent({
   id: 'my-agent',
   model: 'openai/gpt-4o',
   workspace,
-});
+})
 ```
 
 ## Configuration patterns
@@ -94,7 +94,7 @@ For local development, pair a `LocalFilesystem` and `LocalSandbox` pointed at th
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-});
+})
 ```
 
 The agent receives both file tools and `execute_command`. This is the simplest full-featured setup.
@@ -117,7 +117,7 @@ const workspace = new Workspace({
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 Under the hood, `mounts` creates a [CompositeFilesystem](/docs/workspace/filesystem#mounts-and-compositefilesystem) that routes file tool operations to the correct provider based on path prefix. Commands in the sandbox access the mounted paths directly (e.g., `ls /data`).
@@ -142,7 +142,7 @@ const workspace = new Workspace({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   }),
-});
+})
 ```
 
 The agent receives file tools (`read_file`, `write_file`, `list_directory`, etc.) that operate directly against the storage provider.
@@ -154,7 +154,7 @@ Use a single `sandbox` when agents only need to execute commands. No file tools 
 ```typescript
 const workspace = new Workspace({
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 The agent receives the `execute_command` tool.
@@ -162,7 +162,7 @@ The agent receives the `execute_command` tool.
 ### Which pattern should I use?
 
 | Scenario | Pattern |
-|---|---|
+| - | - |
 | Local development with files and commands | `filesystem` + `sandbox` (both local, same directory) |
 | Cloud storage accessible inside a cloud sandbox | `mounts` + `sandbox` |
 | Multiple cloud providers in one sandbox | `mounts` + `sandbox` (one mount per provider) |
@@ -174,7 +174,7 @@ The agent receives the `execute_command` tool.
 Configure tool behavior through the `tools` option on the workspace. This controls which tools are enabled and how they behave.
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
@@ -196,13 +196,13 @@ const workspace = new Workspace({
       requireApproval: true,
     },
   },
-});
+})
 ```
 
 ### Tool options
 
 | Option | Type | Description |
-|--------|------|-------------|
+| - | - | - |
 | `enabled` | `boolean` | Whether the tool is available (default: `true`) |
 | `requireApproval` | `boolean` | Whether the tool requires user approval before execution (default: `false`) |
 | `requireReadBeforeWrite` | `boolean` | For write tools: require reading the file first (default: `false`) |
@@ -220,15 +220,15 @@ When `requireReadBeforeWrite` is enabled on write tools, agents must read a file
 Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-});
+})
 
 // Optional: pre-create directories and sandbox before first use
-await workspace.init();
+await workspace.init()
 ```
 
 ### What init() does

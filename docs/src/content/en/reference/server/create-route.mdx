@@ -14,14 +14,14 @@ The `createRoute()` function creates type-safe routes with Zod validation. When 
 ## Import
 
 ```typescript
-import { createRoute } from '@mastra/server/server-adapter';
+import { createRoute } from '@mastra/server/server-adapter'
 ```
 
 ## Signature
 
 ```typescript
 function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
-  config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>
+  config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>,
 ): ServerRoute
 ```
 
@@ -29,91 +29,91 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
 
 <PropertiesTable
   content={[
-    {
-      name: "method",
-      type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
-      description: "HTTP method",
-      isOptional: false,
-    },
-    {
-      name: "path",
-      type: "string",
-      description: "Route path with optional params (e.g., `/api/items/:id`)",
-      isOptional: false,
-    },
-    {
-      name: "responseType",
-      type: "'json' | 'stream'",
-      description: "Response format. Internal routes may use additional types (`datastream-response`, `mcp-http`, `mcp-sse`).",
-      isOptional: false,
-    },
-    {
-      name: "handler",
-      type: "ServerRouteHandler",
-      description: "Route handler function",
-      isOptional: false,
-    },
-    {
-      name: "pathParamSchema",
-      type: "ZodSchema",
-      description: "Validates URL path parameters",
-      isOptional: true,
-    },
-    {
-      name: "queryParamSchema",
-      type: "ZodSchema",
-      description: "Validates query string parameters",
-      isOptional: true,
-    },
-    {
-      name: "bodySchema",
-      type: "ZodSchema",
-      description: "Validates request body",
-      isOptional: true,
-    },
-    {
-      name: "responseSchema",
-      type: "ZodSchema",
-      description: "Documents response shape for OpenAPI",
-      isOptional: true,
-    },
-    {
-      name: "streamFormat",
-      type: "'sse' | 'stream'",
-      description: "Stream format (when responseType is 'stream')",
-      isOptional: true,
-    },
-    {
-      name: "maxBodySize",
-      type: "number",
-      description: "Override default body size limit in bytes",
-      isOptional: true,
-    },
-    {
-      name: "summary",
-      type: "string",
-      description: "OpenAPI summary",
-      isOptional: true,
-    },
-    {
-      name: "description",
-      type: "string",
-      description: "OpenAPI description",
-      isOptional: true,
-    },
-    {
-      name: "tags",
-      type: "string[]",
-      description: "OpenAPI tags",
-      isOptional: true,
-    },
-    {
-      name: "deprecated",
-      type: "boolean",
-      description: "Mark route as deprecated",
-      isOptional: true,
-    },
-  ]}
+{
+name: "method",
+type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+description: "HTTP method",
+isOptional: false,
+},
+{
+name: "path",
+type: "string",
+description: "Route path with optional params (e.g., `/api/items/:id`)",
+isOptional: false,
+},
+{
+name: "responseType",
+type: "'json' | 'stream'",
+description: "Response format. Internal routes may use additional types (`datastream-response`, `mcp-http`, `mcp-sse`).",
+isOptional: false,
+},
+{
+name: "handler",
+type: "ServerRouteHandler",
+description: "Route handler function",
+isOptional: false,
+},
+{
+name: "pathParamSchema",
+type: "ZodSchema",
+description: "Validates URL path parameters",
+isOptional: true,
+},
+{
+name: "queryParamSchema",
+type: "ZodSchema",
+description: "Validates query string parameters",
+isOptional: true,
+},
+{
+name: "bodySchema",
+type: "ZodSchema",
+description: "Validates request body",
+isOptional: true,
+},
+{
+name: "responseSchema",
+type: "ZodSchema",
+description: "Documents response shape for OpenAPI",
+isOptional: true,
+},
+{
+name: "streamFormat",
+type: "'sse' | 'stream'",
+description: "Stream format (when responseType is 'stream')",
+isOptional: true,
+},
+{
+name: "maxBodySize",
+type: "number",
+description: "Override default body size limit in bytes",
+isOptional: true,
+},
+{
+name: "summary",
+type: "string",
+description: "OpenAPI summary",
+isOptional: true,
+},
+{
+name: "description",
+type: "string",
+description: "OpenAPI description",
+isOptional: true,
+},
+{
+name: "tags",
+type: "string[]",
+description: "OpenAPI tags",
+isOptional: true,
+},
+{
+name: "deprecated",
+type: "boolean",
+description: "Mark route as deprecated",
+isOptional: true,
+},
+]}
 />
 
 ## Handler parameters
@@ -121,18 +121,18 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
 The handler receives validated parameters plus runtime context:
 
 ```typescript
-handler: async (params) => {
+handler: async params => {
   // From schemas (typed from Zod)
-  params.id;              // From pathParamSchema
-  params.filter;          // From queryParamSchema
-  params.name;            // From bodySchema
+  params.id // From pathParamSchema
+  params.filter // From queryParamSchema
+  params.name // From bodySchema
 
   // Runtime context (always available)
-  params.mastra;          // Mastra instance
-  params.requestContext;  // Request-scoped context
-  params.tools;           // Available tools
-  params.abortSignal;     // Request cancellation signal
-  params.taskStore;       // A2A task storage
+  params.mastra // Mastra instance
+  params.requestContext // Request-scoped context
+  params.tools // Available tools
+  params.abortSignal // Request cancellation signal
+  params.taskStore // A2A task storage
 }
 ```
 
@@ -145,8 +145,8 @@ Returns a `ServerRoute` object that can be registered with an adapter.
 ### GET route with path params
 
 ```typescript
-import { createRoute } from '@mastra/server/server-adapter';
-import { z } from 'zod';
+import { createRoute } from '@mastra/server/server-adapter'
+import { z } from 'zod'
 
 const getAgent = createRoute({
   method: 'GET',
@@ -162,9 +162,9 @@ const getAgent = createRoute({
   summary: 'Get agent by ID',
   tags: ['Agents'],
   handler: async ({ agentId, mastra }) => {
-    return mastra.getAgent(agentId);
+    return mastra.getAgent(agentId)
   },
-});
+})
 ```
 
 ### POST route with body
@@ -185,9 +185,9 @@ const createItem = createRoute({
   }),
   handler: async ({ name, value, mastra }) => {
     // name and value are typed from bodySchema
-    return { id: 'new-id', name, value };
+    return { id: 'new-id', name, value }
   },
-});
+})
 ```
 
 ### Query params with coercion
@@ -204,9 +204,9 @@ const listItems = createRoute({
   }),
   handler: async ({ page, limit, enabled, mastra }) => {
     // page, limit, enabled are typed and coerced
-    return { items: [], page, limit };
+    return { items: [], page, limit }
   },
-});
+})
 ```
 
 ### Streaming route
@@ -224,10 +224,10 @@ const streamAgent = createRoute({
     messages: z.array(z.any()),
   }),
   handler: async ({ agentId, messages, mastra, abortSignal }) => {
-    const agent = mastra.getAgent(agentId);
-    return agent.stream(messages, { abortSignal });
+    const agent = mastra.getAgent(agentId)
+    return agent.stream(messages, { abortSignal })
   },
-});
+})
 ```
 
 ### Custom body size limit
@@ -242,9 +242,9 @@ const uploadRoute = createRoute({
     file: z.string(),
   }),
   handler: async ({ file }) => {
-    return { uploaded: true };
+    return { uploaded: true }
   },
-});
+})
 ```
 
 ## Schema patterns
@@ -252,9 +252,11 @@ const uploadRoute = createRoute({
 ### Passthrough for extensibility
 
 ```typescript
-const bodySchema = z.object({
-  required: z.string(),
-}).passthrough(); // Allow unknown fields
+const bodySchema = z
+  .object({
+    required: z.string(),
+  })
+  .passthrough() // Allow unknown fields
 ```
 
 ### Date coercion
@@ -263,18 +265,15 @@ const bodySchema = z.object({
 const querySchema = z.object({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
-});
+})
 ```
 
 ### Union types
 
 ```typescript
 const bodySchema = z.object({
-  messages: z.union([
-    z.array(z.any()),
-    z.string(),
-  ]),
-});
+  messages: z.union([z.array(z.any()), z.string()]),
+})
 ```
 
 ## Error handling
@@ -282,8 +281,8 @@ const bodySchema = z.object({
 Throw an error with a `status` property to return specific HTTP status codes from handlers. If using Hono, you can use `HTTPException` from `hono/http-exception`:
 
 ```typescript
-import { createRoute } from '@mastra/server/server-adapter';
-import { HTTPException } from 'hono/http-exception';
+import { createRoute } from '@mastra/server/server-adapter'
+import { HTTPException } from 'hono/http-exception'
 
 const getAgent = createRoute({
   method: 'GET',
@@ -291,32 +290,35 @@ const getAgent = createRoute({
   responseType: 'json',
   pathParamSchema: z.object({ agentId: z.string() }),
   handler: async ({ agentId, mastra }) => {
-    const agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgent(agentId)
     if (!agent) {
-      throw new HTTPException(404, { message: `Agent '${agentId}' not found` });
+      throw new HTTPException(404, { message: `Agent '${agentId}' not found` })
     }
-    return agent;
+    return agent
   },
-});
+})
 ```
 
 For Express or framework-agnostic code, throw an error with a `status` property:
 
 ```typescript
 class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message)
   }
 }
 
 // In handler:
-throw new HttpError(404, `Agent '${agentId}' not found`);
+throw new HttpError(404, `Agent '${agentId}' not found`)
 ```
 
 Common status codes:
 
 | Code | Meaning |
-|------|---------|
+| - | - |
 | 400 | Bad Request |
 | 401 | Unauthorized |
 | 403 | Forbidden |

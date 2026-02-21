@@ -13,62 +13,63 @@ The `addTools()` method equips a voice provider with tools (functions) that can 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 // Define tools
 const weatherTool = createTool({
-  id: "getWeather",
-  description: "Get the current weather for a location",
+  id: 'getWeather',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    location: z.string().describe("The city and state, e.g. San Francisco, CA"),
+    location: z.string().describe('The city and state, e.g. San Francisco, CA'),
   }),
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async inputData => {
     // Fetch weather data from an API
     const response = await fetch(
       `https://api.weather.com?location=${encodeURIComponent(inputData.location)}`,
-    );
-    const data = await response.json();
+    )
+    const data = await response.json()
     return {
       message: `The current temperature in ${inputData.location} is ${data.temperature}°F with ${data.conditions}.`,
-    };
+    }
   },
-});
+})
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: 'gpt-5.1-realtime',
     apiKey: process.env.OPENAI_API_KEY,
   },
-});
+})
 
 // Add tools to the voice provider
 voice.addTools({
   getWeather: weatherTool,
-});
+})
 
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 ```
 
 ## Parameters
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "tools",
-      type: "ToolsInput",
-      description:
-        "Object containing tool definitions that can be called by the voice model",
-      isOptional: false,
-    },
-  ]}
+{
+name: "tools",
+type: "ToolsInput",
+description:
+"Object containing tool definitions that can be called by the voice model",
+isOptional: false,
+},
+]}
 />
 
 ## Return Value

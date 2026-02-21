@@ -13,8 +13,8 @@ The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It v
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 export const mastra = new Mastra({
   server: {
@@ -23,7 +23,7 @@ export const mastra = new Mastra({
       audience: process.env.AUTH0_AUDIENCE,
     }),
   },
-});
+})
 ```
 
 > **Note:** You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, simply use `new MastraAuthAuth0()` without any arguments.
@@ -32,37 +32,37 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-    {
-      name: "domain",
-      type: "string",
-      description:
-        "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_DOMAIN",
-    },
-    {
-      name: "audience",
-      type: "string",
-      description:
-        "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_AUDIENCE",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-      defaultValue: '"auth0"',
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: Auth0User) => Promise<boolean> | boolean",
-      description:
-        "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "domain",
+type: "string",
+description:
+"Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_DOMAIN",
+},
+{
+name: "audience",
+type: "string",
+description:
+"Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_AUDIENCE",
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"auth0"',
+},
+{
+name: "authorizeUser",
+type: "(user: Auth0User) => Promise<boolean> | boolean",
+description:
+"Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
+isOptional: true,
+},
+]}
 />
 
 ## Environment Variables
@@ -71,21 +71,21 @@ The following environment variables are automatically used when constructor opti
 
 <PropertiesTable
   content={[
-    {
-      name: "AUTH0_DOMAIN",
-      type: "string",
-      description:
-        "Your Auth0 domain. Can be found in your Auth0 Dashboard under Applications > Settings.",
-      isOptional: true,
-    },
-    {
-      name: "AUTH0_AUDIENCE",
-      type: "string",
-      description:
-        "Your Auth0 API identifier. This is the identifier you set when creating an API in your Auth0 Dashboard.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "AUTH0_DOMAIN",
+type: "string",
+description:
+"Your Auth0 domain. Can be found in your Auth0 Dashboard under Applications > Settings.",
+isOptional: true,
+},
+{
+name: "AUTH0_AUDIENCE",
+type: "string",
+description:
+"Your Auth0 API identifier. This is the identifier you set when creating an API in your Auth0 Dashboard.",
+isOptional: true,
+},
+]}
 />
 
 ## Default Authorization Behavior
@@ -93,10 +93,10 @@ The following environment variables are automatically used when constructor opti
 By default, `MastraAuthAuth0` validates Auth0 JWT tokens and allows access to all authenticated users:
 
 1. **Token Verification**: The JWT token is verified using Auth0's public keys (JWKS)
-2. **Signature Validation**: Ensures the token was signed by your Auth0 tenant
-3. **Expiration Check**: Verifies the token has not expired
-4. **Audience Validation**: Confirms the token was issued for your specific API (audience)
-5. **Issuer Validation**: Ensures the token was issued by your Auth0 domain
+1. **Signature Validation**: Ensures the token was signed by your Auth0 tenant
+1. **Expiration Check**: Verifies the token has not expired
+1. **Audience Validation**: Confirms the token was issued for your specific API (audience)
+1. **Issuer Validation**: Ensures the token was issued by your Auth0 domain
 
 If all validations pass, the user is considered authorized. To implement custom authorization logic (e.g., role-based access control), provide a custom `authorizeUser` function.
 

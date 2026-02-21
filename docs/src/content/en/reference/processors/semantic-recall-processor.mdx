@@ -13,188 +13,185 @@ The `SemanticRecall` is a **hybrid processor** that enables semantic search over
 ## Usage example
 
 ```typescript
-import { SemanticRecall } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
+import { SemanticRecall } from '@mastra/core/processors'
+import { openai } from '@ai-sdk/openai'
 
 const processor = new SemanticRecall({
   storage: memoryStorage,
   vector: vectorStore,
-  embedder: openai.embedding("text-embedding-3-small"),
+  embedder: openai.embedding('text-embedding-3-small'),
   topK: 5,
   messageRange: 2,
-  scope: "resource",
-});
+  scope: 'resource',
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "SemanticRecallOptions",
-      description: "Configuration options for the semantic recall processor",
-      isOptional: false,
-    },
-  ]}
+{
+name: "options",
+type: "SemanticRecallOptions",
+description: "Configuration options for the semantic recall processor",
+isOptional: false,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MemoryStorage",
-      description: "Storage instance for retrieving messages",
-      isOptional: false,
-    },
-    {
-      name: "vector",
-      type: "MastraVector",
-      description: "Vector store for semantic search",
-      isOptional: false,
-    },
-    {
-      name: "embedder",
-      type: "MastraEmbeddingModel<string>",
-      description: "Embedder for generating query embeddings",
-      isOptional: false,
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "Number of most similar messages to retrieve",
-      isOptional: true,
-      default: "4",
-    },
-    {
-      name: "messageRange",
-      type: "number | { before: number; after: number }",
-      description: "Number of context messages to include before/after each match. Can be a single number (same for both) or an object with separate values",
-      isOptional: true,
-      default: "1",
-    },
-    {
-      name: "scope",
-      type: "'thread' | 'resource'",
-      description: "Scope of semantic search. 'thread' searches within the current thread only. 'resource' searches across all threads for the resource",
-      isOptional: true,
-      default: "'resource'",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description: "Minimum similarity score threshold (0-1). Messages below this threshold are filtered out",
-      isOptional: true,
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description: "Index name for the vector store. If not provided, auto-generated based on embedder model",
-      isOptional: true,
-    },
-    {
-      name: "logger",
-      type: "IMastraLogger",
-      description: "Optional logger instance for structured logging",
-      isOptional: true,
-    },
-  ]}
+{
+name: "storage",
+type: "MemoryStorage",
+description: "Storage instance for retrieving messages",
+isOptional: false,
+},
+{
+name: "vector",
+type: "MastraVector",
+description: "Vector store for semantic search",
+isOptional: false,
+},
+{
+name: "embedder",
+type: "MastraEmbeddingModel<string>",
+description: "Embedder for generating query embeddings",
+isOptional: false,
+},
+{
+name: "topK",
+type: "number",
+description: "Number of most similar messages to retrieve",
+isOptional: true,
+default: "4",
+},
+{
+name: "messageRange",
+type: "number | { before: number; after: number }",
+description: "Number of context messages to include before/after each match. Can be a single number (same for both) or an object with separate values",
+isOptional: true,
+default: "1",
+},
+{
+name: "scope",
+type: "'thread' | 'resource'",
+description: "Scope of semantic search. 'thread' searches within the current thread only. 'resource' searches across all threads for the resource",
+isOptional: true,
+default: "'resource'",
+},
+{
+name: "threshold",
+type: "number",
+description: "Minimum similarity score threshold (0-1). Messages below this threshold are filtered out",
+isOptional: true,
+},
+{
+name: "indexName",
+type: "string",
+description: "Index name for the vector store. If not provided, auto-generated based on embedder model",
+isOptional: true,
+},
+{
+name: "logger",
+type: "IMastraLogger",
+description: "Optional logger instance for structured logging",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'semantic-recall'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Processor display name set to 'SemanticRecall'",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-      description: "Performs semantic search on historical messages and adds relevant context to the message list",
-      isOptional: false,
-    },
-    {
-      name: "processOutputResult",
-      type: "(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-      description: "Creates embeddings for new messages to enable future semantic search",
-      isOptional: false,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Processor identifier set to 'semantic-recall'",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Processor display name set to 'SemanticRecall'",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+description: "Performs semantic search on historical messages and adds relevant context to the message list",
+isOptional: false,
+},
+{
+name: "processOutputResult",
+type: "(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+description: "Creates embeddings for new messages to enable future semantic search",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/semantic-memory-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { SemanticRecall, MessageHistory } from "@mastra/core/processors";
-import { PostgresStorage } from "@mastra/pg";
-import { PgVector } from "@mastra/pg";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { SemanticRecall, MessageHistory } from '@mastra/core/processors'
+import { PostgresStorage } from '@mastra/pg'
+import { PgVector } from '@mastra/pg'
+import { openai } from '@ai-sdk/openai'
 
 const storage = new PostgresStorage({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 const vector = new PgVector({
   id: 'pg-vector',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 const semanticRecall = new SemanticRecall({
   storage,
   vector,
-  embedder: openai.embedding("text-embedding-3-small"),
+  embedder: openai.embedding('text-embedding-3-small'),
   topK: 5,
   messageRange: { before: 2, after: 1 },
-  scope: "resource",
+  scope: 'resource',
   threshold: 0.7,
-});
+})
 
 export const agent = new Agent({
-  name: "semantic-memory-agent",
-  instructions: "You are a helpful assistant with semantic memory recall",
-  model: "openai:gpt-4o",
-  inputProcessors: [
-    semanticRecall,
-    new MessageHistory({ storage, lastMessages: 50 }),
-  ],
-  outputProcessors: [
-    semanticRecall,
-    new MessageHistory({ storage }),
-  ],
-});
+  name: 'semantic-memory-agent',
+  instructions: 'You are a helpful assistant with semantic memory recall',
+  model: 'openai:gpt-4o',
+  inputProcessors: [semanticRecall, new MessageHistory({ storage, lastMessages: 50 })],
+  outputProcessors: [semanticRecall, new MessageHistory({ storage })],
+})
 ```
 
 ## Behavior
 
 ### Input processing
+
 1. Extracts the user query from the last user message
-2. Generates embeddings for the query
-3. Performs vector search to find semantically similar messages
-4. Retrieves matched messages along with surrounding context (based on `messageRange`)
-5. For `scope: 'resource'`, formats cross-thread messages as a system message with timestamps
-6. Adds recalled messages with `source: 'memory'` tag
+1. Generates embeddings for the query
+1. Performs vector search to find semantically similar messages
+1. Retrieves matched messages along with surrounding context (based on `messageRange`)
+1. For `scope: 'resource'`, formats cross-thread messages as a system message with timestamps
+1. Adds recalled messages with `source: 'memory'` tag
 
 ### Output processing
+
 1. Extracts text content from new user and assistant messages
-2. Generates embeddings for each message
-3. Stores embeddings in the vector store with metadata (message ID, thread ID, resource ID, role, content, timestamp)
-4. Uses LRU caching for embeddings to avoid redundant API calls
+1. Generates embeddings for each message
+1. Stores embeddings in the vector store with metadata (message ID, thread ID, resource ID, role, content, timestamp)
+1. Uses LRU caching for embeddings to avoid redundant API calls
 
 ### Cross-thread recall
+
 When `scope` is set to `'resource'`, the processor can recall messages from other threads. These cross-thread messages are formatted as a system message with timestamps and conversation labels to provide context about when and where the conversation occurred.
 
 ## Related

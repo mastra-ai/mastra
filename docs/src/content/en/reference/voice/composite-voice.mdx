@@ -17,31 +17,31 @@ CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
 <PropertiesTable
   content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration object for the composite voice service",
-      isOptional: false,
-    },
-    {
-      name: "config.input",
-      type: "MastraVoice | TranscriptionModel",
-      description: "Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.",
-      isOptional: true,
-    },
-    {
-      name: "config.output",
-      type: "MastraVoice | SpeechModel",
-      description: "Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.",
-      isOptional: true,
-    },
-    {
-      name: "config.realtime",
-      type: "MastraVoice",
-      description: "Voice provider to use for real-time speech-to-speech operations",
-      isOptional: true,
-    },
-  ]}
+{
+name: "config",
+type: "object",
+description: "Configuration object for the composite voice service",
+isOptional: false,
+},
+{
+name: "config.input",
+type: "MastraVoice | TranscriptionModel",
+description: "Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.",
+isOptional: true,
+},
+{
+name: "config.output",
+type: "MastraVoice | SpeechModel",
+description: "Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.",
+isOptional: true,
+},
+{
+name: "config.realtime",
+type: "MastraVoice",
+description: "Voice provider to use for real-time speech-to-speech operations",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -52,19 +52,19 @@ Converts text to speech using the configured speaking provider.
 
 <PropertiesTable
   content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Provider-specific options passed to the speaking provider",
-      isOptional: true,
-    },
-  ]}
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text to convert to speech",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Provider-specific options passed to the speaking provider",
+isOptional: true,
+},
+]}
 />
 
 Notes:
@@ -79,19 +79,19 @@ Converts speech to text using the configured listening provider.
 
 <PropertiesTable
   content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to convert to text",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Provider-specific options passed to the listening provider",
-      isOptional: true,
-    },
-  ]}
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to convert to text",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Provider-specific options passed to the listening provider",
+isOptional: true,
+},
+]}
 />
 
 Notes:
@@ -106,20 +106,20 @@ Returns a list of available voices from the speaking provider, where each node c
 
 <PropertiesTable
   content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "key",
-      type: "value",
-      description:
-        "Additional voice properties that vary by provider (e.g., name, language)",
-      isOptional: true,
-    },
-  ]}
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "key",
+type: "value",
+description:
+"Additional voice properties that vary by provider (e.g., name, language)",
+isOptional: true,
+},
+]}
 />
 
 Notes:
@@ -134,25 +134,25 @@ Notes:
 ### Using Mastra Voice Providers
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from '@mastra/core/voice'
+import { OpenAIVoice } from '@mastra/voice-openai'
+import { PlayAIVoice } from '@mastra/voice-playai'
 
 // Create voice providers
-const openai = new OpenAIVoice();
-const playai = new PlayAIVoice();
+const openai = new OpenAIVoice()
+const playai = new PlayAIVoice()
 
 // Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
 const voice = new CompositeVoice({
   input: openai,
   output: playai,
-});
+})
 
 // Convert speech to text using OpenAI
-const text = await voice.listen(audioStream);
+const text = await voice.listen(audioStream)
 
 // Convert text to speech using PlayAI
-const audio = await voice.speak("Hello, world!");
+const audio = await voice.speak('Hello, world!')
 ```
 
 ### Using AI SDK Model Providers
@@ -160,19 +160,19 @@ const audio = await voice.speak("Hello, world!");
 You can pass AI SDK transcription and speech models directly to CompositeVoice:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { openai } from "@ai-sdk/openai";
-import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { CompositeVoice } from '@mastra/core/voice'
+import { openai } from '@ai-sdk/openai'
+import { elevenlabs } from '@ai-sdk/elevenlabs'
 
 // Use AI SDK models directly - they will be auto-wrapped
 const voice = new CompositeVoice({
-  input: openai.transcription('whisper-1'),      // AI SDK transcription
-  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
-});
+  input: openai.transcription('whisper-1'), // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech
+})
 
 // Works the same way as with Mastra providers
-const text = await voice.listen(audioStream);
-const audio = await voice.speak("Hello from AI SDK!");
+const text = await voice.listen(audioStream)
+const audio = await voice.speak('Hello from AI SDK!')
 ```
 
 ### Mix and Match
@@ -180,12 +180,12 @@ const audio = await voice.speak("Hello from AI SDK!");
 You can combine Mastra providers with AI SDK models:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { PlayAIVoice } from "@mastra/voice-playai";
-import { groq } from "@ai-sdk/groq";
+import { CompositeVoice } from '@mastra/core/voice'
+import { PlayAIVoice } from '@mastra/voice-playai'
+import { groq } from '@ai-sdk/groq'
 
 const voice = new CompositeVoice({
-  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
-  output: new PlayAIVoice(),                       // Mastra for TTS
-});
+  input: groq.transcription('whisper-large-v3'), // AI SDK for STT
+  output: new PlayAIVoice(), // Mastra for TTS
+})
 ```

@@ -14,24 +14,24 @@ It provides a production-ready service with a convenient API to store, search, a
 
 <PropertiesTable
   content={[
-    {
-      name: "url",
-      type: "string",
-      description:
-        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Optional Qdrant API key",
-    },
-    {
-      name: "https",
-      type: "boolean",
-      description:
-        "Whether to use TLS when setting up the connection. Recommended.",
-    },
-  ]}
+{
+name: "url",
+type: "string",
+description:
+"REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+},
+{
+name: "apiKey",
+type: "string",
+description: "Optional Qdrant API key",
+},
+{
+name: "https",
+type: "boolean",
+description:
+"Whether to use TLS when setting up the connection. Recommended.",
+},
+]}
 />
 
 ## Methods
@@ -40,30 +40,30 @@ It provides a production-ready service with a convenient API to store, search, a
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model). Required for single-vector collections.",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-    {
-      name: "namedVectors",
-      type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
-      isOptional: true,
-      description: "Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model). Required for single-vector collections.",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+{
+name: "namedVectors",
+type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
+isOptional: true,
+description: "Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.",
+},
+]}
 />
 
 #### Creating a Named Vectors Collection
@@ -71,48 +71,48 @@ It provides a production-ready service with a convenient API to store, search, a
 ```typescript
 // Create a collection with multiple named vector spaces
 await store.createIndex({
-  indexName: "multi_modal",
+  indexName: 'multi_modal',
   dimension: 768, // fallback
   namedVectors: {
-    text: { size: 768, distance: "cosine" },
-    image: { size: 512, distance: "euclidean" },
+    text: { size: 768, distance: 'cosine' },
+    image: { size: 512, distance: 'euclidean' },
   },
-});
+})
 ```
 
 ### upsert()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-    {
-      name: "vectorName",
-      type: "string",
-      isOptional: true,
-      description: "Name of the vector space to upsert into when using named vectors.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+{
+name: "vectorName",
+type: "string",
+isOptional: true,
+description: "Name of the vector space to upsert into when using named vectors.",
+},
+]}
 />
 
 #### Upserting into Named Vector Spaces
@@ -120,62 +120,62 @@ await store.createIndex({
 ```typescript
 // Upsert into the "text" vector space
 await store.upsert({
-  indexName: "multi_modal",
+  indexName: 'multi_modal',
   vectors: textEmbeddings,
   metadata: textMetadata,
-  vectorName: "text",
-});
+  vectorName: 'text',
+})
 
 // Upsert into the "image" vector space
 await store.upsert({
-  indexName: "multi_modal",
+  indexName: 'multi_modal',
   vectors: imageEmbeddings,
   metadata: imageMetadata,
-  vectorName: "image",
-});
+  vectorName: 'image',
+})
 ```
 
 ### query()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-    {
-      name: "using",
-      type: "string",
-      isOptional: true,
-      description: "Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+{
+name: "using",
+type: "string",
+isOptional: true,
+description: "Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.",
+},
+]}
 />
 
 #### Named Vectors
@@ -184,11 +184,11 @@ Qdrant supports [named vectors](https://qdrant.tech/documentation/concepts/vecto
 
 ```typescript
 const results = await store.query({
-  indexName: "my_index",
+  indexName: 'my_index',
   queryVector: embedding,
   topK: 10,
-  using: "title_embedding", // Query against a specific named vector
-});
+  using: 'title_embedding', // Query against a specific named vector
+})
 ```
 
 ### listIndexes()
@@ -199,21 +199,21 @@ Returns an array of index names as strings.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -221,12 +221,12 @@ interface IndexStats {
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### updateVector()
@@ -235,29 +235,29 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to update",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "ID of the vector to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to update",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "ID of the vector to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+description: "Object containing the vector and/or metadata to update",
+},
+]}
 />
 
 Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
@@ -266,17 +266,17 @@ Updates a vector and/or its metadata in the specified index. If both vector and 
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index from which to delete the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index from which to delete the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 Deletes a vector from the specified index by its ID.
@@ -287,24 +287,24 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ### createPayloadIndex()
@@ -313,44 +313,44 @@ Creates a payload (metadata) index on a collection field to enable efficient fil
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to create the payload index on",
-    },
-    {
-      name: "fieldName",
-      type: "string",
-      description: "Name of the payload field to index",
-    },
-    {
-      name: "fieldSchema",
-      type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
-      description: "The schema type for the payload field",
-    },
-    {
-      name: "wait",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description: "Whether to wait for the operation to complete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to create the payload index on",
+},
+{
+name: "fieldName",
+type: "string",
+description: "Name of the payload field to index",
+},
+{
+name: "fieldSchema",
+type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
+description: "The schema type for the payload field",
+},
+{
+name: "wait",
+type: "boolean",
+isOptional: true,
+defaultValue: "true",
+description: "Whether to wait for the operation to complete",
+},
+]}
 />
 
 ```typescript
 // Create a keyword index for filtering by source
 await store.createPayloadIndex({
-  indexName: "my_index",
-  fieldName: "source",
-  fieldSchema: "keyword",
-});
+  indexName: 'my_index',
+  fieldName: 'source',
+  fieldSchema: 'keyword',
+})
 
 const results = await store.query({
-  indexName: "my_index",
+  indexName: 'my_index',
   queryVector: queryVector,
-  filter: { source: "document-a" },
-});
+  filter: { source: 'document-a' },
+})
 ```
 
 ### deletePayloadIndex()
@@ -359,24 +359,24 @@ Removes a payload index from a collection field.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to delete the payload index from",
-    },
-    {
-      name: "fieldName",
-      type: "string",
-      description: "Name of the payload field index to delete",
-    },
-    {
-      name: "wait",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description: "Whether to wait for the operation to complete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to delete the payload index from",
+},
+{
+name: "fieldName",
+type: "string",
+description: "Name of the payload field index to delete",
+},
+{
+name: "wait",
+type: "boolean",
+isOptional: true,
+defaultValue: "true",
+description: "Whether to wait for the operation to complete",
+},
+]}
 />
 
 ## Response Types
@@ -385,10 +385,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -399,13 +399,13 @@ The store throws typed errors that can be caught:
 ```typescript
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // Additional error context
+    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details) // Additional error context
   }
 }
 ```

@@ -31,7 +31,7 @@ npm install @mastra/pg@latest @mastra/libsql@latest
 Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
 | Domain | Description |
-|--------|-------------|
+| - | - |
 | `memory` | Conversation persistence for agents. Stores threads (conversation sessions), messages, resources (user identities), and working memory (persistent context across conversations). |
 | `workflows` | Workflow execution state. When workflows suspend for human input, external events, or scheduled resumption, their state is persisted here to enable resumption after server restarts. |
 | `scores` | Evaluation results from Mastra's evals system. Scores and metrics are persisted here for analysis and comparison over time. |
@@ -45,21 +45,21 @@ Mastra organizes storage into five specialized domains, each handling a specific
 Import domain classes directly from each store package and compose them:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { WorkflowsPG, ScoresPG } from "@mastra/pg";
-import { MemoryLibSQL } from "@mastra/libsql";
-import { Mastra } from "@mastra/core";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { MemoryLibSQL } from '@mastra/libsql'
+import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
-    id: "composite",
+    id: 'composite',
     domains: {
-      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
       workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
       scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
     },
   }),
-});
+})
 ```
 
 ### With a default storage
@@ -67,89 +67,89 @@ export const mastra = new Mastra({
 Use `default` to specify a fallback storage, then override specific domains:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { PostgresStore } from "@mastra/pg";
-import { MemoryLibSQL } from "@mastra/libsql";
-import { Mastra } from "@mastra/core";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { MemoryLibSQL } from '@mastra/libsql'
+import { Mastra } from '@mastra/core'
 
 const pgStore = new PostgresStore({
-  id: "pg",
+  id: 'pg',
   connectionString: process.env.DATABASE_URL,
-});
+})
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
-    id: "composite",
+    id: 'composite',
     default: pgStore,
     domains: {
-      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
     },
   }),
-});
+})
 ```
 
 ## Options
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this storage instance.",
-      isOptional: false,
-    },
-    {
-      name: "default",
-      type: "MastraCompositeStore",
-      description:
-        "Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
-      isOptional: true,
-    },
-    {
-      name: "domains",
-      type: "object",
-      description:
-        "Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.",
-      isOptional: true,
-    },
-    {
-      name: "domains.memory",
-      type: "MemoryStorage",
-      description: "Storage for threads, messages, and resources.",
-      isOptional: true,
-    },
-    {
-      name: "domains.workflows",
-      type: "WorkflowsStorage",
-      description: "Storage for workflow snapshots.",
-      isOptional: true,
-    },
-    {
-      name: "domains.scores",
-      type: "ScoresStorage",
-      description: "Storage for evaluation scores.",
-      isOptional: true,
-    },
-    {
-      name: "domains.observability",
-      type: "ObservabilityStorage",
-      description: "Storage for traces and spans.",
-      isOptional: true,
-    },
-    {
-      name: "domains.agents",
-      type: "AgentsStorage",
-      description: "Storage for stored agent configurations.",
-      isOptional: true,
-    },
-    {
-      name: "disableInit",
-      type: "boolean",
-      description:
-        "When true, automatic initialization is disabled. You must call init() explicitly.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this storage instance.",
+isOptional: false,
+},
+{
+name: "default",
+type: "MastraCompositeStore",
+description:
+"Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
+isOptional: true,
+},
+{
+name: "domains",
+type: "object",
+description:
+"Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.",
+isOptional: true,
+},
+{
+name: "domains.memory",
+type: "MemoryStorage",
+description: "Storage for threads, messages, and resources.",
+isOptional: true,
+},
+{
+name: "domains.workflows",
+type: "WorkflowsStorage",
+description: "Storage for workflow snapshots.",
+isOptional: true,
+},
+{
+name: "domains.scores",
+type: "ScoresStorage",
+description: "Storage for evaluation scores.",
+isOptional: true,
+},
+{
+name: "domains.observability",
+type: "ObservabilityStorage",
+description: "Storage for traces and spans.",
+isOptional: true,
+},
+{
+name: "domains.agents",
+type: "AgentsStorage",
+description: "Storage for stored agent configurations.",
+isOptional: true,
+},
+{
+name: "disableInit",
+type: "boolean",
+description:
+"When true, automatic initialization is disabled. You must call init() explicitly.",
+isOptional: true,
+},
+]}
 />
 
 ## Initialization
@@ -157,42 +157,42 @@ export const mastra = new Mastra({
 `MastraCompositeStore` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
-import { Mastra } from "@mastra/core";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
 
 const storage = new MastraCompositeStore({
-  id: "composite",
+  id: 'composite',
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
     workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
     scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
   },
-});
+})
 
 export const mastra = new Mastra({
   storage, // init() called automatically
-});
+})
 ```
 
 If using storage directly, call `init()` explicitly:
 
 ```typescript
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryPG } from "@mastra/pg";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG } from '@mastra/pg'
 
 const storage = new MastraCompositeStore({
-  id: "composite",
+  id: 'composite',
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
   },
-});
+})
 
-await storage.init();
+await storage.init()
 
 // Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore("memory");
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 ## Use cases
@@ -202,22 +202,22 @@ const thread = await memoryStore?.getThreadById({ threadId: "..." });
 Use a local database for development while keeping production data in a managed service:
 
 ```typescript
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
-import { MemoryLibSQL } from "@mastra/libsql";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { MemoryLibSQL } from '@mastra/libsql'
 
 const storage = new MastraCompositeStore({
-  id: "composite",
+  id: 'composite',
   domains: {
     // Use local SQLite for development, PostgreSQL for production
     memory:
-      process.env.NODE_ENV === "development"
-        ? new MemoryLibSQL({ url: "file:./dev.db" })
+      process.env.NODE_ENV === 'development'
+        ? new MemoryLibSQL({ url: 'file:./dev.db' })
         : new MemoryPG({ connectionString: process.env.DATABASE_URL }),
     workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
     scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
   },
-});
+})
 ```
 
 ### Specialized storage for observability
@@ -227,12 +227,12 @@ Observability data can quickly overwhelm general-purpose databases in production
 **ClickHouse** is recommended for production observability because it's optimized for high-volume, write-heavy analytics workloads. Use composite storage to route observability to ClickHouse while keeping other data in your primary database:
 
 ```typescript
-import { MastraCompositeStore } from "@mastra/core/storage";
-import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
-import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
 
 const storage = new MastraCompositeStore({
-  id: "composite",
+  id: 'composite',
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
     workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
@@ -243,7 +243,7 @@ const storage = new MastraCompositeStore({
       password: process.env.CLICKHOUSE_PASSWORD,
     }),
   },
-});
+})
 ```
 
 :::info

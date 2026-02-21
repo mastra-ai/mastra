@@ -2,7 +2,6 @@
 title: "Publishing an MCP Server | MCP"
 description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
 packages:
-  - "@mastra/core"
   - "@mastra/mcp"
 ---
 
@@ -24,65 +23,55 @@ pnpm add @mastra/mcp @mastra/core tsup
 ## Setting up an MCP Server
 
 <Steps>
+  <StepItem>
+    Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
+  </StepItem>
 
-<StepItem>
+  <StepItem>
+    Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
 
-Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
+    ```typescript title="src/mastra/stdio.ts"
+    #!/usr/bin/env node
+    import { MCPServer } from '@mastra/mcp'
+    import { weatherTool } from './tools'
 
-</StepItem>
+    const server = new MCPServer({
+      name: 'my-mcp-server',
+      version: '1.0.0',
+      tools: { weatherTool },
+    })
 
-<StepItem>
+    server.startStdio().catch(error => {
+      console.error('Error running MCP server:', error)
+      process.exit(1)
+    })
+    ```
+  </StepItem>
 
-Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
+  <StepItem>
+    Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server with both ESM and CJS outputs.
 
-```typescript title="src/mastra/stdio.ts"
-#!/usr/bin/env node
-import { MCPServer } from "@mastra/mcp";
-import { weatherTool } from "./tools";
+    ```json title="package.json"
+    {
+      "bin": "dist/stdio.mjs",
+      "scripts": {
+        "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
+      }
+    }
+    ```
 
-const server = new MCPServer({
-  name: "my-mcp-server",
-  version: "1.0.0",
-  tools: { weatherTool },
-});
+    The build command generates both ESM (`.mjs`) and CJS (`.cjs`) outputs for maximum compatibility. The shebang (`#!/usr/bin/env node`) is prepended to the ESM artifact to make it directly executable, and the `bin` entry points to this file.
+  </StepItem>
 
-server.startStdio().catch((error) => {
-  console.error("Error running MCP server:", error);
-  process.exit(1);
-});
-```
+  <StepItem>
+    Run the build command:
 
-</StepItem>
+    ```bash
+    pnpm run build:mcp
+    ```
 
-<StepItem>
-
-Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server with both ESM and CJS outputs.
-
-```json title="package.json"
-{
-  "bin": "dist/stdio.mjs",
-  "scripts": {
-    "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
-  }
-}
-```
-
-The build command generates both ESM (`.mjs`) and CJS (`.cjs`) outputs for maximum compatibility. The shebang (`#!/usr/bin/env node`) is prepended to the ESM artifact to make it directly executable, and the `bin` entry points to this file.
-
-</StepItem>
-
-<StepItem>
-
-Run the build command:
-
-```bash
-pnpm run build:mcp
-```
-
-This will compile your server code into both ESM and CJS formats and make the ESM output file executable. On Unix-like systems, the `chmod +x` step makes the file directly executable. Windows users may need to use WSL or handle execution through Node.js directly.
-
-</StepItem>
-
+    This will compile your server code into both ESM and CJS formats and make the ESM output file executable. On Unix-like systems, the `chmod +x` step makes the file directly executable. Windows users may need to use WSL or handle execution through Node.js directly.
+  </StepItem>
 </Steps>
 
 ## Publishing to NPM
@@ -90,31 +79,23 @@ This will compile your server code into both ESM and CJS formats and make the ES
 To make your MCP server available for others (or yourself) to use via `npx` or as a dependency, you can publish it to NPM.
 
 <Steps>
+  <StepItem>
+    Ensure you have an NPM account and are logged in (`npm login`).
+  </StepItem>
 
-<StepItem>
+  <StepItem>
+    Make sure your package name in `package.json` is unique and available.
+  </StepItem>
 
-Ensure you have an NPM account and are logged in (`npm login`).
+  <StepItem>
+    Run the publish command from your project root after building:
 
-</StepItem>
+    ```bash
+    npm publish --access public
+    ```
 
-<StepItem>
-
-Make sure your package name in `package.json` is unique and available.
-
-</StepItem>
-
-<StepItem>
-
-Run the publish command from your project root after building:
-
-```bash
-npm publish --access public
-```
-
-For more details on publishing packages, refer to the [NPM documentation](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages).
-
-</StepItem>
-
+    For more details on publishing packages, refer to the [NPM documentation](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages).
+  </StepItem>
 </Steps>
 
 ## Using a published MCP Server
@@ -122,21 +103,21 @@ For more details on publishing packages, refer to the [NPM documentation](https:
 Once published, your MCP server can be used by an `MCPClient` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
 
 ```typescript
-import { MCPClient } from "@mastra/mcp";
+import { MCPClient } from '@mastra/mcp'
 
 const mcp = new MCPClient({
   servers: {
     // Give this MCP server instance a name
     yourServerName: {
-      command: "npx",
-      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
+      command: 'npx',
+      args: ['-y', '@your-org-name/your-package-name@latest'], // Replace with your package name
     },
   },
-});
+})
 
 // You can then get tools or toolsets from this configuration to use in your agent
-const tools = await mcp.listTools();
-const toolsets = await mcp.listToolsets();
+const tools = await mcp.listTools()
+const toolsets = await mcp.listToolsets()
 ```
 
 Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.

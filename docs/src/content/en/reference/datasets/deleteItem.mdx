@@ -14,35 +14,37 @@ Deletes a single item from the dataset by ID.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-await dataset.deleteItem({ itemId: "item-id" });
+await dataset.deleteItem({ itemId: 'item-id' })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "itemId",
-      type: "string",
-      description: "ID of the item to delete.",
-    },
-  ]}
+{
+name: "itemId",
+type: "string",
+description: "ID of the item to delete.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<void>",
-      description: "Resolves when the item is deleted.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<void>",
+description: "Resolves when the item is deleted.",
+},
+]}
 />

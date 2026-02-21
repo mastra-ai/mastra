@@ -14,27 +14,29 @@ Retrieves an existing dataset by ID. Throws a `MastraError` if the dataset does 
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Now use the dataset
-const details = await dataset.getDetails();
-console.log(details.name);
+const details = await dataset.getDetails()
+console.log(details.name)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the dataset.",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the dataset.",
+},
+]}
 />
 
 ## Returns
@@ -43,10 +45,10 @@ Throws `MastraError` if the dataset is not found.
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<Dataset>",
-      description: "A Dataset instance.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<Dataset>",
+description: "A Dataset instance.",
+},
+]}
 />

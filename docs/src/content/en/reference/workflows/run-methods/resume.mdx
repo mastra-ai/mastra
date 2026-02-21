@@ -12,14 +12,14 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
-const result = await run.start({ inputData: { value: "initial data" } });
+const result = await run.start({ inputData: { value: 'initial data' } })
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResults = await run.resume({
-    resumeData: { value: "resume data" },
-  });
+    resumeData: { value: 'resume data' },
+  })
 }
 ```
 
@@ -27,164 +27,164 @@ if (result.status === "suspended") {
 
 <PropertiesTable
   content={[
-    {
-      name: "resumeData",
-      type: "z.infer<TResumeSchema>",
-      description: "Data for resuming the suspended step",
-      isOptional: true,
-    },
-    {
-      name: "step",
-      type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
-      description:
-        "The step(s) to resume execution from. Can be a Step instance, array of Steps, step ID string, or array of step ID strings",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context data to use when resuming",
-      isOptional: true,
-    },
-    {
-      name: "retryCount",
-      type: "number",
-      description: "Optional retry count for nested workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "currentSpan",
-              type: "Span",
-              isOptional: true,
-              description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "requestContextKeys",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "traceId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "parentSpanId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tags",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "outputOptions",
-      type: "OutputOptions",
-      isOptional: true,
-      description: "Options for output configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "includeState",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Whether to include the workflow run state in the result.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "resumeData",
+type: "z.infer<TResumeSchema>",
+description: "Data for resuming the suspended step",
+isOptional: true,
+},
+{
+name: "step",
+type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
+description:
+"The step(s) to resume execution from. Can be a Step instance, array of Steps, step ID string, or array of step ID strings",
+isOptional: true,
+},
+{
+name: "requestContext",
+type: "RequestContext",
+description: "Request Context data to use when resuming",
+isOptional: true,
+},
+{
+name: "retryCount",
+type: "number",
+description: "Optional retry count for nested workflow execution",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description:
+"Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+properties: [
+{
+parameters: [
+{
+name: "currentSpan",
+type: "Span",
+isOptional: true,
+description:
+"Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+},
+],
+},
+],
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for Tracing configuration.",
+properties: [
+{
+parameters: [
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+},
+],
+},
+{
+parameters: [
+{
+name: "requestContextKeys",
+type: "string[]",
+isOptional: true,
+description:
+"Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+},
+],
+},
+{
+parameters: [
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+},
+],
+},
+{
+parameters: [
+{
+name: "parentSpanId",
+type: "string",
+isOptional: true,
+description:
+"Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+},
+],
+},
+{
+parameters: [
+{
+name: "tags",
+type: "string[]",
+isOptional: true,
+description:
+"Tags to apply to this trace. String labels for categorizing and filtering traces.",
+},
+],
+},
+],
+},
+{
+name: "outputOptions",
+type: "OutputOptions",
+isOptional: true,
+description: "Options for output configuration.",
+properties: [
+{
+parameters: [
+{
+name: "includeState",
+type: "boolean",
+isOptional: true,
+description:
+"Whether to include the workflow run state in the result.",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description:
-        "A promise that resolves to the workflow execution result containing step outputs and status",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description:
+"A promise that resolves to the workflow execution result containing step outputs and status",
+},
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResults = await run.resume({
     step: result.suspended[0],
-    resumeData: { value: "resume data" },
-  });
+    resumeData: { value: 'resume data' },
+  })
 }
 ```
 

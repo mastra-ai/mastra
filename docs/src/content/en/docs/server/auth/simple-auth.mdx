@@ -21,21 +21,21 @@ The `SimpleAuth` class provides token-based authentication using a simple token-
 SimpleAuth is included in `@mastra/core`, no additional packages required.
 
 ```typescript
-import { SimpleAuth } from '@mastra/core/server';
+import { SimpleAuth } from '@mastra/core/server'
 ```
 
 ## Usage Example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { SimpleAuth } from '@mastra/core/server';
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
 
 // Define your user type
 type User = {
-  id: string;
-  name: string;
-  role: 'admin' | 'user';
-};
+  id: string
+  name: string
+  role: 'admin' | 'user'
+}
 
 export const mastra = new Mastra({
   server: {
@@ -54,13 +54,13 @@ export const mastra = new Mastra({
       },
     }),
   },
-});
+})
 ```
 
 ## Configuration Options
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| - | - | - | - |
 | `tokens` | `Record<string, TUser>` | Yes | Map of tokens to user objects |
 | `headers` | `string \| string[]` | No | Additional headers to check for tokens |
 | `name` | `string` | No | Provider name for logging |
@@ -71,6 +71,7 @@ export const mastra = new Mastra({
 ### Default Headers
 
 SimpleAuth checks these headers by default:
+
 - `Authorization` (with or without `Bearer` prefix)
 - `X-Playground-Access`
 
@@ -78,9 +79,11 @@ Add custom headers using the `headers` option:
 
 ```typescript
 new SimpleAuth({
-  tokens: { /* ... */ },
+  tokens: {
+    /* ... */
+  },
   headers: ['X-API-Key', 'X-Custom-Auth'],
-});
+})
 ```
 
 ## Making Authenticated Requests
@@ -116,11 +119,11 @@ new SimpleAuth<User>({
   authorizeUser: (user, request) => {
     // Only admins can access /admin routes
     if (request.url.includes('/admin')) {
-      return user.role === 'admin';
+      return user.role === 'admin'
     }
-    return true;
+    return true
   },
-});
+})
 ```
 
 ## Environment Variables
@@ -128,24 +131,24 @@ new SimpleAuth<User>({
 For production-like setups, load tokens from environment variables:
 
 ```typescript
-const tokens: Record<string, User> = {};
+const tokens: Record<string, User> = {}
 
 // Load from environment
-const adminToken = process.env.ADMIN_API_KEY;
+const adminToken = process.env.ADMIN_API_KEY
 if (adminToken) {
-  tokens[adminToken] = { id: 'admin', name: 'Admin', role: 'admin' };
+  tokens[adminToken] = { id: 'admin', name: 'Admin', role: 'admin' }
 }
 
-const userToken = process.env.USER_API_KEY;
+const userToken = process.env.USER_API_KEY
 if (userToken) {
-  tokens[userToken] = { id: 'user', name: 'User', role: 'user' };
+  tokens[userToken] = { id: 'user', name: 'User', role: 'user' }
 }
 
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({ tokens }),
   },
-});
+})
 ```
 
 ## With MastraClient
@@ -153,17 +156,17 @@ export const mastra = new Mastra({
 Configure the client with your token:
 
 ```typescript
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
   baseUrl: 'http://localhost:4111',
   headers: {
     Authorization: 'Bearer sk-admin-token-123',
   },
-});
+})
 
-const agent = client.getAgent('myAgent');
-const response = await agent.generate('Hello');
+const agent = client.getAgent('myAgent')
+const response = await agent.generate('Hello')
 ```
 
 ## Limitations

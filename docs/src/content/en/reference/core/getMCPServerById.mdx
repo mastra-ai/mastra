@@ -17,53 +17,55 @@ const myServer = new MCPServer({
   id: 'my-mcp-server',
   name: 'My Server',
   version: '1.0.0',
-  tools: { /* ... */ },
-});
+  tools: {
+    /* ... */
+  },
+})
 
 export const mastra = new Mastra({
   mcpServers: {
-    customKey: myServer,  // 'customKey' is the registry key
+    customKey: myServer, // 'customKey' is the registry key
   },
-});
+})
 
 // Retrieve by intrinsic ID
-const server = mastra.getMCPServerById('my-mcp-server');
+const server = mastra.getMCPServerById('my-mcp-server')
 
 // Alternatively, retrieve by registry key
-const serverByKey = mastra.getMCPServer('customKey');
+const serverByKey = mastra.getMCPServer('customKey')
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "serverId",
-      type: "string",
-      description:
-        "The intrinsic id property of the MCP server (set when the server was instantiated).",
-    },
-    {
-      name: "version",
-      type: "string",
-      description:
-        "Optional. If provided, returns the server only if its version matches.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "serverId",
+type: "string",
+description:
+"The intrinsic id property of the MCP server (set when the server was instantiated).",
+},
+{
+name: "version",
+type: "string",
+description:
+"Optional. If provided, returns the server only if its version matches.",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "server",
-      type: "MCPServerBase | undefined",
-      description:
-        "The MCP server instance with the specified id (and version, if provided), or undefined if not found.",
-    },
-  ]}
+{
+name: "server",
+type: "MCPServerBase | undefined",
+description:
+"The MCP server instance with the specified id (and version, if provided), or undefined if not found.",
+},
+]}
 />
 
 ## Notes

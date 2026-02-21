@@ -27,9 +27,9 @@ For straightforward semantic search without relationship traversal, use [standar
 GraphRAG combines vector similarity with knowledge graph traversal:
 
 1. Initial vector search retrieves relevant chunks based on semantic similarity
-2. A knowledge graph is constructed from the retrieved chunks
-3. The graph is traversed to find connected information
-4. Results include both directly relevant chunks and related content
+1. A knowledge graph is constructed from the retrieved chunks
+1. The graph is traversed to find connected information
+1. Results include both directly relevant chunks and related content
 
 This process helps surface information that might not be semantically similar to the query but is contextually relevant through connections.
 
@@ -38,17 +38,17 @@ This process helps surface information that might not be semantically similar to
 The Graph Query Tool provides agents with the ability to perform graph-based retrieval:
 
 ```ts
-import { createGraphRAGTool } from "@mastra/rag";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createGraphRAGTool } from '@mastra/rag'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const graphQueryTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   graphOptions: {
     threshold: 0.7,
   },
-});
+})
 ```
 
 ### Configuration options
@@ -60,14 +60,14 @@ The `graphOptions` parameter controls how the knowledge graph is built and trave
 
 ```ts
 const graphQueryTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
   },
-});
+})
 ```
 
 ## Using GraphRAG with agents
@@ -75,19 +75,19 @@ const graphQueryTool = createGraphRAGTool({
 Integrate the graph query tool with an agent to enable graph-based retrieval:
 
 ```ts
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "GraphRAG Agent",
+  id: 'rag-agent',
+  name: 'GraphRAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 When answering questions, use the graph query tool to find relevant information and relationships.
 Base your answers on the context provided by the tool, and clearly state if the context doesn't contain enough information.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   tools: {
     graphQueryTool,
   },
-});
+})
 ```
 
 ## Document processing and storage
@@ -95,37 +95,37 @@ Base your answers on the context provided by the tool, and clearly state if the 
 Before using graph-based retrieval, process documents into chunks and store their embeddings:
 
 ```ts
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { MDocument } from '@mastra/rag'
+import { embedMany } from 'ai'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 // Create and chunk document
-const doc = MDocument.fromText("Your document content here...");
+const doc = MDocument.fromText('Your document content here...')
 
 const chunks = await doc.chunk({
-  strategy: "recursive",
+  strategy: 'recursive',
   size: 512,
   overlap: 50,
-  separator: "\n",
-});
+  separator: '\n',
+})
 
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+})
 
 // Store in vector database
-const vectorStore = mastra.getVector("pgVector");
+const vectorStore = mastra.getVector('pgVector')
 await vectorStore.createIndex({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   dimension: 1536,
-});
+})
 await vectorStore.upsert({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
+  metadata: chunks?.map(chunk => ({ text: chunk.text })),
+})
 ```
 
 ## Querying with GraphRAG
@@ -133,18 +133,18 @@ await vectorStore.upsert({
 Once configured, the agent can perform graph-based queries:
 
 ```ts
-const query = "What are the effects of infrastructure changes on local businesses?";
-const response = await ragAgent.generate(query);
-console.log(response.text);
+const query = 'What are the effects of infrastructure changes on local businesses?'
+const response = await ragAgent.generate(query)
+console.log(response.text)
 ```
 
 The agent uses the graph query tool to:
 
 1. Convert the query to an embedding
-2. Find semantically similar chunks in the vector store
-3. Build a knowledge graph from related chunks
-4. Traverse the graph to find connected information
-5. Return comprehensive context for generating the response
+1. Find semantically similar chunks in the vector store
+1. Build a knowledge graph from related chunks
+1. Traverse the graph to find connected information
+1. Return comprehensive context for generating the response
 
 ## Choosing the right threshold
 
@@ -159,23 +159,23 @@ Start with 0.7 and adjust based on your specific use case:
 ```ts
 // Strict connections for precise answers
 const strictGraphTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   graphOptions: {
     threshold: 0.85,
   },
-});
+})
 
 // Broader connections for exploratory queries
 const broadGraphTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   graphOptions: {
     threshold: 0.5,
   },
-});
+})
 ```
 
 ## Combining with other retrieval methods
@@ -183,34 +183,34 @@ const broadGraphTool = createGraphRAGTool({
 GraphRAG can be used alongside other retrieval approaches:
 
 ```ts
-import { createVectorQueryTool } from "@mastra/rag";
+import { createVectorQueryTool } from '@mastra/rag'
 
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+})
 
 const graphQueryTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   graphOptions: {
     threshold: 0.7,
   },
-});
+})
 
 const agent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
+  id: 'rag-agent',
+  name: 'RAG Agent',
   instructions: `Use vector search for simple fact-finding queries.
 Use graph search when you need to understand relationships or find connected information.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   tools: {
     vectorQueryTool,
     graphQueryTool,
   },
-});
+})
 ```
 
 This gives the agent flexibility to choose the appropriate retrieval method based on the query.
