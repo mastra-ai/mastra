@@ -276,6 +276,71 @@ describe('OpenAIReasoningSchemaCompatLayer - Passthrough Setting', () => {
   });
 });
 
+describe('OpenAIReasoningSchemaCompatLayer - ZodNull Handling (MCP server compat)', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'o1',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should handle z.null() property without throwing', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processZodType(schema)).not.toThrow();
+  });
+
+  it('should handle z.null() via processToAISDKSchema and validate null', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    const aiSchema = layer.processToAISDKSchema(schema);
+    expect(aiSchema).toHaveProperty('jsonSchema');
+    expect(aiSchema).toHaveProperty('validate');
+
+    const validResult = aiSchema.validate!({ name: 'test', result: null });
+    expect(validResult.success).toBe(true);
+
+    const invalidResult = aiSchema.validate!({ name: 'test', result: 'not null' });
+    expect(invalidResult.success).toBe(false);
+  });
+
+  it('should handle optional z.null() and transform null to undefined', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null().optional(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    const aiSchema = layer.processToAISDKSchema(schema);
+    expect(aiSchema).toHaveProperty('validate');
+
+    const validResult = aiSchema.validate!({ name: 'x', result: null });
+    expect(validResult.success).toBe(true);
+    if (validResult.success) {
+      expect(validResult.value).toEqual({ name: 'x', result: undefined });
+    }
+  });
+
+  it('should handle z.null() with description and preserve it', () => {
+    const schema = z.object({
+      name: z.string(),
+      result: z.null().describe('Always null'),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    const aiSchema = layer.processToAISDKSchema(schema);
+    const resultProp = (aiSchema.jsonSchema as any).properties?.result;
+    expect(resultProp?.description).toBe('Always null');
+  });
+});
+
 describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',

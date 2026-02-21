@@ -619,6 +619,72 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
   });
 
+  describe('processZodType - Null Types (MCP server compat)', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle z.null() property without throwing', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      // This should NOT throw "does not support zod type: ZodNull"
+      const jsonSchema = layer.toJSONSchema(schema);
+      expect(jsonSchema).toBeDefined();
+      expect(jsonSchema.properties).toBeDefined();
+    });
+
+    it('should handle z.null() property via processToAISDKSchema and validate null', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const aiSchema = layer.processToAISDKSchema(schema);
+      expect(aiSchema).toHaveProperty('jsonSchema');
+      expect(aiSchema).toHaveProperty('validate');
+
+      const validResult = aiSchema.validate!({ name: 'test', result: null });
+      expect(validResult.success).toBe(true);
+
+      const invalidResult = aiSchema.validate!({ name: 'test', result: 'not null' });
+      expect(invalidResult.success).toBe(false);
+    });
+
+    it('should handle optional z.null() property without throwing', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null().optional(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const aiSchema = layer.processToAISDKSchema(schema);
+      expect(aiSchema).toHaveProperty('jsonSchema');
+
+      const validResult = aiSchema.validate!({ name: 'test' });
+      expect(validResult.success).toBe(true);
+    });
+
+    it('should handle z.null() with description and preserve it', () => {
+      const schema = z.object({
+        name: z.string(),
+        result: z.null().describe('Always null'),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const jsonSchema = layer.toJSONSchema(schema);
+      expect(jsonSchema.properties).toBeDefined();
+      const resultProp = (jsonSchema.properties as Record<string, any>).result;
+      expect(resultProp.description).toBe('Always null');
+    });
+  });
+
   describe('Snapshot Tests - Full JSON Schema Output', () => {
     it('should match snapshot for claude-3-5-sonnet with complete schema', () => {
       const modelInfo: ModelInformation = {
