@@ -4,21 +4,9 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import {
-  Container,
-  TUI,
-  ProcessTerminal,
-} from '@mariozechner/pi-tui';
-import type {
-  CombinedAutocompleteProvider,
-  Text,
-} from '@mariozechner/pi-tui';
-import type {
-  Harness,
-  HarnessMessage,
-  TokenUsage,
-  TaskItem,
-} from '@mastra/core/harness';
+import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
+import type { Harness, HarnessMessage, TokenUsage, TaskItem } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';

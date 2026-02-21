@@ -4,13 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  CombinedAutocompleteProvider,
-  Container,
-  Spacer,
-  Text,
-  visibleWidth,
-} from '@mariozechner/pi-tui';
+import { CombinedAutocompleteProvider, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type {
   HarnessEvent,
@@ -194,13 +188,13 @@ export class MastraTUI {
         return;
       }
 
-      const modes = this.state.harness.getModes();
+      const modes = this.state.harness.listModes();
       if (modes.length <= 1) return;
       const currentId = this.state.harness.getCurrentModeId();
       const currentIndex = modes.findIndex(m => m.id === currentId);
       const nextIndex = (currentIndex + 1) % modes.length;
       const nextMode = modes[nextIndex]!;
-      await this.state.harness.switchMode(nextMode.id);
+      await this.state.harness.switchMode({ modeId: nextMode.id });
       // The mode_changed event handler will show the info message
       this.updateStatusLine();
     });
@@ -236,7 +230,7 @@ export class MastraTUI {
         });
         this.state.ui.requestRender();
 
-        this.state.harness.followUp(text).catch(error => {
+        this.state.harness.followUp({ content: text }).catch(error => {
           this.showError(error instanceof Error ? error.message : 'Follow-up failed');
         });
       }
@@ -321,7 +315,7 @@ export class MastraTUI {
           // Clear follow-up tracking since steer replaces the current response
           this.state.followUpComponents = [];
           this.state.pendingSlashCommands = [];
-          this.state.harness.steer(userInput).catch(error => {
+          this.state.harness.steer({ content: userInput }).catch(error => {
             this.showError(error instanceof Error ? error.message : 'Steer failed');
           });
         } else {
@@ -339,7 +333,7 @@ export class MastraTUI {
    * Errors are handled via harness events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    this.state.harness.sendMessage(content, images ? { images } : undefined).catch(error => {
+    this.state.harness.sendMessage({ content, images: images ? images : undefined }).catch(error => {
       this.showError(error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -486,11 +480,11 @@ export class MastraTUI {
     const mostRecent = sortedThreads[0]!;
     // Auto-resume the most recent thread for this directory
     try {
-      await this.state.harness.switchThread(mostRecent.id);
+      await this.state.harness.switchThread({ threadId: mostRecent.id });
       // Retroactively tag untagged legacy threads so the birthtime check
       // above can eventually be removed.
       if (!mostRecent.metadata?.projectPath) {
-        await this.state.harness.persistThreadSetting('projectPath', currentPath);
+        await this.state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
       }
     } catch (error) {
       if (error instanceof ThreadLockError) {
@@ -536,7 +530,7 @@ export class MastraTUI {
     const instructions = [
       `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
       `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
-      `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${this.state.harness.getModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
+      `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${this.state.harness.listModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
     ].join('\n');
 
     this.state.ui.addChild(new Spacer(1));
@@ -594,7 +588,7 @@ ${instructions}`,
     // --- Mode badge ---
     let modeBadge = '';
     let modeBadgeWidth = 0;
-    const modes = this.state.harness.getModes();
+    const modes = this.state.harness.listModes();
     const currentMode = modes.length > 1 ? this.state.harness.getCurrentMode() : undefined;
     // Use OM color when observing/reflecting, otherwise mode color
     const mainModeColor = currentMode?.color;
@@ -943,7 +937,7 @@ ${instructions}`,
     ];
 
     // Only show /mode if there's more than one mode
-    const modes = this.state.harness.getModes();
+    const modes = this.state.harness.listModes();
     if (modes.length > 1) {
       slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
     }
@@ -1375,7 +1369,8 @@ ${instructions}`,
     const obsThreshold = this.state.harness.getObservationThreshold();
     const refThreshold = this.state.harness.getReflectionThreshold();
     this.state.omProgress.threshold = obsThreshold;
-    this.state.omProgress.thresholdPercent = obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
+    this.state.omProgress.thresholdPercent =
+      obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
     this.state.omProgress.reflectionThreshold = refThreshold;
     this.state.omProgress.reflectionThresholdPercent =
       refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
@@ -1517,7 +1512,9 @@ ${instructions}`,
     // Update observation tokens to show the total being reflected
     this.state.omProgress.observationTokens = tokensToReflect;
     this.state.omProgress.reflectionThresholdPercent =
-      this.state.omProgress.reflectionThreshold > 0 ? (tokensToReflect / this.state.omProgress.reflectionThreshold) * 100 : 0;
+      this.state.omProgress.reflectionThreshold > 0
+        ? (tokensToReflect / this.state.omProgress.reflectionThreshold) * 100
+        : 0;
     // Show in-progress marker in chat
     this.state.activeOMMarker = new OMMarkerComponent({
       type: 'om_observation_start',
@@ -1542,7 +1539,9 @@ ${instructions}`,
     // Observations were compressed — update token count
     this.state.omProgress.observationTokens = compressedTokens;
     this.state.omProgress.reflectionThresholdPercent =
-      this.state.omProgress.reflectionThreshold > 0 ? (compressedTokens / this.state.omProgress.reflectionThreshold) * 100 : 0;
+      this.state.omProgress.reflectionThreshold > 0
+        ? (compressedTokens / this.state.omProgress.reflectionThreshold) * 100
+        : 0;
     // Remove in-progress marker — the output box replaces it
     if (this.state.activeOMMarker) {
       const idx = this.state.chatContainer.children.indexOf(this.state.activeOMMarker);
@@ -1688,7 +1687,11 @@ ${instructions}`,
       this.state.lastAskUserComponent = undefined;
       this.state.lastSubmitPlanComponent = undefined;
       if (!this.state.streamingComponent) {
-        this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+        this.state.streamingComponent = new AssistantMessageComponent(
+          undefined,
+          this.state.hideThinkingBlock,
+          getMarkdownTheme(),
+        );
         this.addChildBeforeFollowUps(this.state.streamingComponent);
         this.state.streamingMessage = message;
         const trailingParts = this.getTrailingContentParts(message);
@@ -1875,15 +1878,15 @@ ${instructions}`,
         this.state.ui.hideOverlay();
         this.state.pendingApprovalDismiss = null;
         if (action.type === 'approve') {
-          this.state.harness.resolveToolApprovalDecision('approve');
+          this.state.harness.respondToToolApproval({ decision: 'approve' });
         } else if (action.type === 'always_allow_category') {
-          this.state.harness.resolveToolApprovalDecision('always_allow_category');
+          this.state.harness.respondToToolApproval({ decision: 'always_allow_category' });
         } else if (action.type === 'yolo') {
           this.state.harness.setState({ yolo: true } as any);
-          this.state.harness.resolveToolApprovalDecision('approve');
+          this.state.harness.respondToToolApproval({ decision: 'approve' });
           this.updateStatusLine();
         } else {
-          this.state.harness.resolveToolApprovalDecision('decline');
+          this.state.harness.respondToToolApproval({ decision: 'decline' });
         }
       },
     });
@@ -1892,7 +1895,7 @@ ${instructions}`,
     this.state.pendingApprovalDismiss = () => {
       this.state.ui.hideOverlay();
       this.state.pendingApprovalDismiss = null;
-      this.state.harness.resolveToolApprovalDecision('decline');
+      this.state.harness.respondToToolApproval({ decision: 'decline' });
     };
 
     // Show the dialog as an overlay
@@ -1933,7 +1936,11 @@ ${instructions}`,
       this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
 
       this.state.ui.requestRender();
@@ -2005,7 +2012,11 @@ ${instructions}`,
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
       // (even though task_write doesn't render a tool component inline, we still need
       // to split the streaming component so getTrailingContentParts doesn't overwrite it)
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
       this.state.ui.requestRender();
     } else if (toolName !== 'subagent') {
@@ -2022,7 +2033,11 @@ ${instructions}`,
       this.state.allToolComponents.push(component);
 
       // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-      this.state.streamingComponent = new AssistantMessageComponent(undefined, this.state.hideThinkingBlock, getMarkdownTheme());
+      this.state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        this.state.hideThinkingBlock,
+        getMarkdownTheme(),
+      );
       this.addChildBeforeFollowUps(this.state.streamingComponent);
 
       this.state.ui.requestRender();
@@ -2111,12 +2126,12 @@ ${instructions}`,
             options,
             onSubmit: answer => {
               this.state.activeInlineQuestion = undefined;
-              this.state.harness.respondToQuestion(questionId, answer);
+              this.state.harness.respondToQuestion({ questionId, answer });
               resolve();
             },
             onCancel: () => {
               this.state.activeInlineQuestion = undefined;
-              this.state.harness.respondToQuestion(questionId, '(skipped)');
+              this.state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
               resolve();
             },
           },
@@ -2179,12 +2194,12 @@ ${instructions}`,
           options,
           onSubmit: answer => {
             this.state.ui.hideOverlay();
-            this.state.harness.respondToQuestion(questionId, answer);
+            this.state.harness.respondToQuestion({ questionId, answer });
             resolve();
           },
           onCancel: () => {
             this.state.ui.hideOverlay();
-            this.state.harness.respondToQuestion(questionId, '(skipped)');
+            this.state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
             resolve();
           },
         });
@@ -2211,12 +2226,12 @@ ${instructions}`,
           ],
           onSubmit: answer => {
             this.state.activeInlineQuestion = undefined;
-            this.state.harness.respondToQuestion(questionId, answer);
+            this.state.harness.respondToQuestion({ questionId, answer });
             resolve();
           },
           onCancel: () => {
             this.state.activeInlineQuestion = undefined;
-            this.state.harness.respondToQuestion(questionId, 'No');
+            this.state.harness.respondToQuestion({ questionId, answer: 'No' });
             resolve();
           },
           formatResult: answer => {
@@ -2264,8 +2279,9 @@ ${instructions}`,
               },
             });
             // Wait for plan approval to complete (switches mode, aborts stream)
-            await this.state.harness.respondToPlanApproval(planId, {
-              action: 'approved',
+            await this.state.harness.respondToPlanApproval({
+              planId,
+              response: { action: 'approved' },
             });
             this.updateStatusLine();
 
@@ -2287,9 +2303,9 @@ ${instructions}`,
           },
           onReject: async (feedback?: string) => {
             this.state.activeInlinePlanApproval = undefined;
-            this.state.harness.respondToPlanApproval(planId, {
-              action: 'rejected',
-              feedback,
+            this.state.harness.respondToPlanApproval({
+              planId,
+              response: { action: 'rejected', feedback },
             });
             resolve();
           },
@@ -2571,7 +2587,7 @@ ${instructions}`,
         currentThreadId: currentId,
         currentResourceId,
         getMessagePreview: async (threadId: string) => {
-          const firstUserMessage = await this.state.harness.getFirstUserMessageForThread(threadId);
+          const firstUserMessage = await this.state.harness.getFirstUserMessageForThread({ threadId });
           if (firstUserMessage) {
             const text = this.extractTextContent(firstUserMessage);
             return this.truncatePreview(text);
@@ -2588,10 +2604,10 @@ ${instructions}`,
 
           // If thread is from a different resource, switch resource first
           if (thread.resourceId !== currentResourceId) {
-            this.state.harness.setResourceId(thread.resourceId);
+            this.state.harness.setResourceId({ resourceId: thread.resourceId });
           }
           try {
-            await this.state.harness.switchThread(thread.id);
+            await this.state.harness.switchThread({ threadId: thread.id });
           } catch (error) {
             if (error instanceof ThreadLockError) {
               this.showThreadLockPrompt(thread.title || thread.id, error.ownerPid);
@@ -2660,7 +2676,7 @@ ${instructions}`,
           onSubmit: async answer => {
             this.state.activeInlineQuestion = undefined;
             if (answer.toLowerCase().startsWith('y')) {
-              await this.state.harness.persistThreadSetting('projectPath', projectPath);
+              await this.state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
             }
             resolve();
           },
@@ -2851,7 +2867,7 @@ ${instructions}`,
     }
     const updated = [...currentPaths, resolved];
     this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.state.harness.persistThreadSetting('sandboxAllowedPaths', updated);
+    await this.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
     this.showInfo(`Added to sandbox: ${resolved}`);
   }
 
@@ -2864,7 +2880,7 @@ ${instructions}`,
     }
     const updated = currentPaths.filter(p => p !== match);
     this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.state.harness.persistThreadSetting('sandboxAllowedPaths', updated);
+    await this.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
     this.showInfo(`Removed from sandbox: ${match}`);
   }
 
@@ -2932,7 +2948,7 @@ ${instructions}`,
    * Flow: Mode → Scope → Model
    */
   private async showModelScopeSelector(): Promise<void> {
-    const modes = this.state.harness.getModes();
+    const modes = this.state.harness.listModes();
     const currentMode = this.state.harness.getCurrentMode();
 
     // Sort modes with active mode first
@@ -3037,7 +3053,7 @@ ${instructions}`,
    * Show the model list for a specific mode and scope.
    */
   private async showModelListForScope(scope: 'global' | 'thread', modeId: string, modeName: string): Promise<void> {
-    const availableModels = await this.state.harness.getAvailableModels();
+    const availableModels = await this.state.harness.listAvailableModels();
 
     if (availableModels.length === 0) {
       this.showInfo('No models available. Check your Mastra configuration.');
@@ -3055,7 +3071,7 @@ ${instructions}`,
         title: `Select model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
           this.state.ui.hideOverlay();
-          await this.state.harness.switchModel(model.id, scope, modeId);
+          await this.state.harness.switchModel({ modelId: model.id, scope, modeId });
           this.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
           this.updateStatusLine();
           resolve();
@@ -3191,7 +3207,7 @@ ${instructions}`,
     agentType: string,
     agentTypeLabel: string,
   ): Promise<void> {
-    const availableModels = await this.state.harness.getAvailableModels();
+    const availableModels = await this.state.harness.listAvailableModels();
 
     if (availableModels.length === 0) {
       this.showInfo('No models available. Check your Mastra configuration.');
@@ -3199,7 +3215,7 @@ ${instructions}`,
     }
 
     // Get current subagent model if set
-    const currentSubagentModel = await this.state.harness.getSubagentModelId(agentType);
+    const currentSubagentModel = await this.state.harness.getSubagentModelId({ agentType });
     const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
     return new Promise(resolve => {
@@ -3210,7 +3226,7 @@ ${instructions}`,
         title: `Select subagent model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
           this.state.ui.hideOverlay();
-          await this.state.harness.setSubagentModelId(model.id, agentType);
+          await this.state.harness.setSubagentModelId({ modelId: model.id, agentType });
           if (scope === 'global') {
             if (this.state.authStorage) {
               this.state.authStorage.setSubagentModelId(model.id, agentType);
@@ -3244,7 +3260,7 @@ ${instructions}`,
 
   private async showOMSettings(): Promise<void> {
     // Get available models for the model submenus
-    const availableModels = await this.state.harness.getAvailableModels();
+    const availableModels = await this.state.harness.listAvailableModels();
     const modelOptions = availableModels.map(m => ({
       id: m.id,
       label: m.id,
@@ -3262,17 +3278,18 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.state.harness.switchObserverModel(modelId);
+            await this.state.harness.switchObserverModel({ modelId });
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.state.harness.switchReflectorModel(modelId);
+            await this.state.harness.switchReflectorModel({ modelId });
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
             this.state.harness.setState({ observationThreshold: value } as any);
             this.state.omProgress.threshold = value;
-            this.state.omProgress.thresholdPercent = value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
+            this.state.omProgress.thresholdPercent =
+              value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onReflectionThresholdChange: value => {
@@ -3382,7 +3399,7 @@ ${instructions}`,
         onEscapeAsCancelChange: async enabled => {
           this.state.editor.escapeEnabled = enabled;
           await this.state.harness.setState({ escapeAsCancel: enabled });
-          await this.state.harness.persistThreadSetting('escapeAsCancel', enabled);
+          await this.state.harness.setThreadSetting({ key: 'escapeAsCancel', value: enabled });
         },
         onClose: () => {
           this.state.ui.hideOverlay();
@@ -3512,7 +3529,7 @@ ${instructions}`,
           // Auto-switch to the provider's default model
           const defaultModel = this.state.authStorage?.getDefaultModelForProvider(providerId as any);
           if (defaultModel) {
-            await this.state.harness.switchModel(defaultModel);
+            await this.state.harness.switchModel({ modelId: defaultModel });
             this.updateStatusLine();
             this.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
@@ -3619,13 +3636,13 @@ ${instructions}`,
       }
 
       case 'mode': {
-        const modes = this.state.harness.getModes();
+        const modes = this.state.harness.listModes();
         if (modes.length <= 1) {
           this.showInfo('Only one mode available');
           return true;
         }
         if (args[0]) {
-          await this.state.harness.switchMode(args[0]);
+          await this.state.harness.switchMode({ modeId: args[0] });
         } else {
           const currentMode = this.state.harness.getCurrentMode();
           const modeList = modes
@@ -3682,7 +3699,7 @@ ${modeList}`);
             this.showInfo(`Invalid policy: ${policy}. Must be one of: ${validPolicies.join(', ')}`);
             return true;
           }
-          this.state.harness.setPermissionCategory(category, policy);
+          this.state.harness.setPermissionForCategory({ category, policy });
           this.showInfo(`Set ${category} policy to: ${policy}`);
           return true;
         }
@@ -3730,7 +3747,7 @@ ${modeList}`);
           this.showInfo('No active thread. Send a message first.');
           return true;
         }
-        await this.state.harness.renameThread(title);
+        await this.state.harness.renameThread({ title });
         this.showInfo(`Thread renamed to: ${title}`);
         return true;
       }
@@ -3755,7 +3772,7 @@ ${modeList}`);
           ];
           this.showInfo(lines.join('\n'));
         } else if (sub === 'reset') {
-          this.state.harness.setResourceId(defaultId);
+          this.state.harness.setResourceId({ resourceId: defaultId });
           this.state.pendingNewThread = true;
           this.state.chatContainer.clear();
           this.state.pendingTools.clear();
@@ -3766,7 +3783,7 @@ ${modeList}`);
           this.showInfo(`Resource ID reset to: ${defaultId}`);
         } else {
           const newId = args.join(' ').trim();
-          this.state.harness.setResourceId(newId);
+          this.state.harness.setResourceId({ resourceId: newId });
           this.state.pendingNewThread = true;
           this.state.chatContainer.clear();
           this.state.pendingTools.clear();
@@ -3784,7 +3801,7 @@ ${modeList}`);
         process.exit(0);
 
       case 'help': {
-        const modes = this.state.harness.getModes();
+        const modes = this.state.harness.listModes();
         const modeHelp = modes.length > 1 ? '\n/mode     - Switch or list modes' : '';
 
         // Build custom commands help
@@ -4054,7 +4071,7 @@ Keyboard shortcuts:
     this.state.ui.requestRender();
 
     // Send to the agent
-    this.state.harness.sendMessage(prompt).catch(error => {
+    this.state.harness.sendMessage({ content: prompt }).catch(error => {
       this.showError(error instanceof Error ? error.message : 'Review failed');
     });
   }
@@ -4077,7 +4094,7 @@ Keyboard shortcuts:
         // Wrap in <slash-command> tags so the assistant sees the full
         // content but addUserMessage won't double-render it.
         const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
-        await this.state.harness.sendMessage(wrapped);
+        await this.state.harness.sendMessage({ content: wrapped });
       } else {
         this.showInfo(`Executed //${command.name} (no output)`);
       }
@@ -4150,7 +4167,7 @@ Keyboard shortcuts:
     this.state.toolInputBuffers.clear();
     this.state.allToolComponents = [];
 
-    const messages = await this.state.harness.getMessages({ limit: 40 });
+    const messages = await this.state.harness.listMessages({ limit: 40 });
 
     for (const message of messages) {
       if (message.role === 'user') {
@@ -4358,7 +4375,11 @@ Keyboard shortcuts:
             ...message,
             content: accumulatedContent,
           };
-          const textComponent = new AssistantMessageComponent(textMessage, this.state.hideThinkingBlock, getMarkdownTheme());
+          const textComponent = new AssistantMessageComponent(
+            textMessage,
+            this.state.hideThinkingBlock,
+            getMarkdownTheme(),
+          );
           this.state.chatContainer.addChild(textComponent);
         }
       }

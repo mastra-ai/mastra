@@ -165,7 +165,7 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   modelAuthChecker?: ModelAuthChecker;
 
   /**
-   * Provides per-model use counts for `getAvailableModels()` sorting/display.
+   * Provides per-model use counts for `listAvailableModels()` sorting/display.
    * Lets the app layer track and report how often each model has been used.
    */
   modelUseCountProvider?: ModelUseCountProvider;
@@ -280,7 +280,7 @@ export interface AvailableModel {
 
 /**
  * Custom auth checker for model providers.
- * Called by `getCurrentModelAuthStatus()` and `getAvailableModels()` to determine
+ * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
  * whether a provider has valid authentication beyond just env var checks
  * (e.g., OAuth tokens, stored credentials).
  *
@@ -290,7 +290,7 @@ export interface AvailableModel {
 export type ModelAuthChecker = (provider: string) => boolean | undefined;
 
 /**
- * Provides per-model use counts for sorting in `getAvailableModels()`.
+ * Provides per-model use counts for sorting in `listAvailableModels()`.
  * Return a map of model ID → use count.
  */
 export type ModelUseCountProvider = () => Record<string, number>;
@@ -585,14 +585,14 @@ export interface HarnessRequestContext<TState extends HarnessStateSchema = Harne
   emitEvent?: (event: HarnessEvent) => void;
 
   /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (questionId: string, resolve: (answer: string) => void) => void;
+  registerQuestion?: (params: { questionId: string; resolve: (answer: string) => void }) => void;
 
   /** Register a pending plan approval resolver (used by submit_plan tools) */
-  registerPlanApproval?: (
-    planId: string,
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void,
-  ) => void;
+  registerPlanApproval?: (params: {
+    planId: string;
+    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
+  }) => void;
 
   /** Get the configured subagent model ID for a specific agent type */
-  getSubagentModelId?: (agentType?: string) => string | null;
+  getSubagentModelId?: (params?: { agentType?: string }) => string | null;
 }
