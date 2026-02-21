@@ -53,9 +53,12 @@ export const askUserTool = createTool({
         const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
         signal?.addEventListener('abort', onAbort, { once: true });
 
-        harnessCtx.registerQuestion!(questionId, answer => {
-          signal?.removeEventListener('abort', onAbort);
-          resolve(answer);
+        harnessCtx.registerQuestion!({
+          questionId,
+          resolve: answer => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve(answer);
+          },
         });
 
         harnessCtx.emitEvent!({
@@ -112,9 +115,12 @@ export const submitPlanTool = createTool({
         const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
         signal?.addEventListener('abort', onAbort, { once: true });
 
-        harnessCtx.registerPlanApproval!(planId, res => {
-          signal?.removeEventListener('abort', onAbort);
-          resolve(res);
+        harnessCtx.registerPlanApproval!({
+          planId,
+          resolve: res => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve(res);
+          },
         });
 
         harnessCtx.emitEvent!({
@@ -382,7 +388,7 @@ Use this tool when:
       }
 
       // Resolve model: explicit arg → harness setting → subagent default → fallback
-      const harnessModelId = harnessCtx?.getSubagentModelId?.(agentType) ?? undefined;
+      const harnessModelId = harnessCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
       const resolvedModelId = modelId ?? harnessModelId ?? definition.defaultModelId ?? fallbackModelId;
       if (!resolvedModelId) {
         return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
