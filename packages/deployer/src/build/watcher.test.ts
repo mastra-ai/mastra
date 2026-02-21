@@ -5,17 +5,6 @@ import { getInputOptions } from './watcher';
 vi.mock('./bundler', () => ({
   getInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
 }));
-vi.mock('node:fs/promises', () => ({
-  readFile: vi.fn().mockResolvedValue(''),
-}));
-vi.mock('./analyze', () => ({
-  analyzeBundle: vi.fn().mockResolvedValue({
-    dependencies: new Map([
-      ['@mastra/core', { exports: ['Mastra'], rootPath: '/workspace/packages/core', isWorkspace: true }],
-      ['lodash', { exports: ['map'], rootPath: '/node_modules/lodash', isWorkspace: false }],
-    ]),
-  }),
-}));
 vi.mock('../bundler/workspaceDependencies', () => ({
   getWorkspaceInformation: vi.fn().mockResolvedValue({
     workspaceMap: new Map([
@@ -38,6 +27,32 @@ describe('watcher', () => {
   });
 
   describe('getInputOptions', () => {
+    it('should skip bundle analysis in dev mode (#12843)', async () => {
+      const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+      await getInputOptions('test-entry.js', 'node');
+      expect(bundlerGetInputOptions).toHaveBeenCalled();
+    });
+
+    it('should pass empty dependencies to bundler', async () => {
+      const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+      await getInputOptions('test-entry.js', 'node');
+
+      expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          dependencies: new Map(),
+          externalDependencies: new Map(),
+          workspaceMap: expect.any(Map),
+        }),
+        'node',
+        undefined,
+        expect.objectContaining({
+          isDev: true,
+        }),
+      );
+    });
+
     it('should pass NODE_ENV to bundler when provided', async () => {
       // Arrange
       const env = { 'process.env.NODE_ENV': JSON.stringify('test') };

@@ -1,16 +1,14 @@
-import { dirname, posix } from 'node:path';
-import { noopLogger } from '@mastra/core/logger';
+import { dirname } from 'node:path';
 import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
-import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { BundlerOptions } from './types';
-import { getPackageName, slash } from './utils';
+import { slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
@@ -30,31 +28,10 @@ export async function getInputOptions(
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
-  const analyzeEntryResult = await analyzeBundle(
-    [entryFile],
-    entryFile,
-    {
-      outputDir: posix.join(process.cwd(), '.mastra', '.build'),
-      projectRoot: workspaceRoot || process.cwd(),
-      platform,
-      isDev: true,
-      bundlerOptions,
-    },
-    noopLogger,
-  );
-
-  const deps = /* @__PURE__ */ new Map();
-  for (const [dep, metadata] of analyzeEntryResult.dependencies.entries()) {
-    const pkgName = getPackageName(dep);
-    if (pkgName && workspaceMap.has(pkgName)) {
-      deps.set(dep, metadata);
-    }
-  }
-
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
-      dependencies: deps,
+      dependencies: new Map(),
       externalDependencies: new Map(),
       workspaceMap,
     },
