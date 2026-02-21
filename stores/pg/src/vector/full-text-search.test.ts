@@ -279,6 +279,7 @@ describe('PgVector Full-Text Search (Issue #10453)', () => {
     it('should parse FTS language from GIN index definition on fresh instance', async () => {
       // Simulate a fresh PgVector instance that has no in-memory cache
       const freshDB = new PgVector({ connectionString, id: 'pg-fts-fresh' });
+      let freshDB2: PgVector | undefined;
       const spanishIndex = 'test_fts_spanish';
 
       try {
@@ -289,7 +290,7 @@ describe('PgVector Full-Text Search (Issue #10453)', () => {
         });
 
         // Create a second fresh instance to force describeIndex to parse from DB
-        const freshDB2 = new PgVector({ connectionString, id: 'pg-fts-fresh2' });
+        freshDB2 = new PgVector({ connectionString, id: 'pg-fts-fresh2' });
 
         // describeIndex should detect FTS and parse 'spanish' from the GIN index
         const stats = await freshDB2.describeIndex({ indexName: spanishIndex });
@@ -312,8 +313,12 @@ describe('PgVector Full-Text Search (Issue #10453)', () => {
         });
 
         expect(results.length).toBeGreaterThanOrEqual(1);
-        await freshDB2.disconnect();
       } finally {
+        try {
+          await freshDB2?.disconnect();
+        } catch {
+          // ignore
+        }
         try {
           await freshDB.deleteIndex({ indexName: spanishIndex });
         } catch {

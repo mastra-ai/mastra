@@ -18,8 +18,7 @@ export interface QueryResult {
   vector?: number[];
   /**
    * The document content, if available.
-   * Note: Currently only supported by Chroma vector store.
-   * For other vector stores, documents should be stored in metadata.
+   * Supported by Chroma and PgVector (when full-text search is enabled).
    */
   document?: string;
 }
