@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed Groq provider not receiving schema compatibility transformations, which caused HTTP 400 errors when AI models omitted optional parameters from workspace tool calls (e.g. list_files). Groq now correctly gets the same optional-to-nullable schema handling as OpenAI. ([#13303](https://github.com/mastra-ai/mastra/pull/13303))
+
 ## 1.1.1
 
 ### Patch Changes
