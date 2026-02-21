@@ -3605,7 +3605,7 @@ importers:
         specifier: ^0.474.0
         version: 0.474.0(react@19.2.3)
       papaparse:
-        specifier: ^5.4.1
+        specifier: ^5.5.3
         version: 5.5.3
       prettier:
         specifier: ^3.6.2
@@ -3702,7 +3702,7 @@ importers:
         specifier: 22.19.7
         version: 22.19.7
       '@types/papaparse':
-        specifier: ^5.3.15
+        specifier: ^5.5.2
         version: 5.5.2
       '@types/react':
         specifier: ^19.1.9
