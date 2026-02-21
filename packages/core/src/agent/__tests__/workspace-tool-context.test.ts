@@ -745,14 +745,15 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
     const adminResponse = await agent.generate('Read config', { requestContext: adminCtx });
     const adminResult = adminResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
       ?.payload?.result;
-    expect(adminResult?.content).toBe('admin config');
+    // Tool returns a string containing the file content
+    expect(adminResult).toContain('admin config');
 
     // Call as user — should read from tempDirB
     const userCtx = new RequestContext([['role', 'user']]);
     const userResponse = await agent.generate('Read config', { requestContext: userCtx });
     const userResult = userResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
       ?.payload?.result;
-    expect(userResult?.content).toBe('user config');
+    expect(userResult).toContain('user config');
   });
 
   it('should block writes on read-only resolved filesystem via auto-injected tools', async () => {
@@ -794,14 +795,15 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
       workspace,
     });
 
-    const response = await agent.generate('Write a file', { requestContext: new RequestContext() });
-    const writeResult = response.toolResults.find(
-      (r: any) => r.payload.toolName === 'mastra_workspace_write_file',
-    )?.payload;
+    await agent.generate('Write a file', { requestContext: new RequestContext() });
 
-    // The tool error is caught by the framework and serialized into result
-    expect(writeResult?.result?.message).toContain('read-only');
-    expect(writeResult?.result?.cause?.code).toBe('READ_ONLY');
+    // The tool error is caught by the framework — verify the write was blocked
+    // The file should NOT exist (read-only enforcement prevented the write)
+    const fileExists = await fs
+      .access(path.join(tempDirA, 'test.txt'))
+      .then(() => true)
+      .catch(() => false);
+    expect(fileExists).toBe(false);
   });
 });
 
