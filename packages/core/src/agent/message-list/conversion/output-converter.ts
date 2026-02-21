@@ -74,6 +74,14 @@ export function sanitizeV5UIMessages(
           if (hasNonEmptyParts) return false;
         }
 
+        // Safety net for legacy stored data: filter out empty reasoning parts without providerMetadata (#12980)
+        // New data is fixed at the source (llm-execution-step.ts skips storing empty reasoning without providerMetadata),
+        // but existing DB records may still contain empty reasoning parts from before this fix.
+        // Preserve empty reasoning parts that have providerMetadata (e.g. OpenAI encrypted reasoning).
+        if (p.type === 'reasoning' && (!('text' in p) || !p.text) && !('providerMetadata' in p && p.providerMetadata)) {
+          return false;
+        }
+
         if (!AIV5.isToolUIPart(p)) return true;
 
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
