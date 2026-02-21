@@ -3,12 +3,18 @@
  *
  * Per-workspace manager that owns LSP server clients.
  * NOT a singleton — each Workspace instance creates its own LSPManager.
+ *
+ * Resolves the project root per-file by walking up from the file's directory
+ * to find project markers (tsconfig.json, package.json, go.mod, etc.).
+ * Falls back to the default root when walkup finds nothing.
  */
+
+import path from 'node:path';
 
 import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
-import { getServersForFile } from './servers';
+import { findProjectRoot, getServersForFile } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic } from './types';
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
@@ -40,18 +46,30 @@ export class LSPManager {
     this.config = config;
   }
 
-  /** Project root directory used as rootUri for LSP servers. */
+  /** Default project root (fallback when per-file walkup finds nothing). */
   get root(): string {
     return this._root;
   }
 
   /**
+   * Resolve the project root for a given file path.
+   * Walks up from the file's directory to find project markers.
+   * Falls back to the default root if nothing is found.
+   */
+  private resolveRoot(filePath: string): string {
+    const fileDir = path.dirname(filePath);
+    return findProjectRoot(fileDir) ?? this._root;
+  }
+
+  /**
    * Get or create an LSP client for a file path.
+   * Resolves the project root per-file by walking up from the file's directory.
    * Returns null if no server is available.
    */
   async getClient(filePath: string): Promise<LSPClient | null> {
+    const projectRoot = this.resolveRoot(filePath);
     const servers = getServersForFile(filePath, this.config.disableServers);
-    const available = servers.filter(s => s.command(this._root) !== undefined);
+    const available = servers.filter(s => s.command(projectRoot) !== undefined);
     if (available.length === 0) return null;
 
     // Prefer well-known language servers
@@ -64,7 +82,7 @@ export class LSPManager {
           s.languageIds.includes('go'),
       ) ?? available[0]!;
 
-    const key = `${serverDef.name}:${this._root}`;
+    const key = `${serverDef.name}:${projectRoot}`;
 
     // Existing client
     if (this.clients.has(key)) {
@@ -81,7 +99,7 @@ export class LSPManager {
     const initTimeout = this.config.initTimeout ?? 15000;
     let timedOut = false;
     const initPromise = (async () => {
-      const client = new LSPClient(serverDef, this._root, this.processManager);
+      const client = new LSPClient(serverDef, projectRoot, this.processManager);
       await client.initialize(initTimeout);
       if (timedOut) {
         // Timeout already fired — don't leak the client

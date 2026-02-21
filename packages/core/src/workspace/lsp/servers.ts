@@ -7,8 +7,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { getLanguageId } from './language';
@@ -26,6 +27,64 @@ function whichSync(binary: string): boolean {
 }
 
 /**
+ * Try to resolve a module from the given directory, then fall back to process.cwd().
+ * Returns the createRequire instance that succeeded, or null.
+ */
+function resolveRequire(root: string, moduleId: string): { require: NodeRequire; resolved: string } | null {
+  // Try from root first
+  try {
+    const req = createRequire(pathToFileURL(join(root, 'package.json')));
+    return { require: req, resolved: req.resolve(moduleId) };
+  } catch {
+    // fall through
+  }
+  // Try from cwd as fallback
+  try {
+    const req = createRequire(pathToFileURL(join(process.cwd(), 'package.json')));
+    return { require: req, resolved: req.resolve(moduleId) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find the project root by walking up from a starting directory.
+ * Looks for tsconfig.json or package.json (closest match wins, good for monorepos).
+ * Falls back to any workspace marker (.git, go.mod, Cargo.toml, etc.).
+ * Returns null if nothing is found.
+ */
+export function findProjectRoot(startDir: string): string | null {
+  let current = startDir;
+  const fsRoot = parse(current).root;
+
+  // First pass: find closest tsconfig.json or package.json
+  while (current !== fsRoot) {
+    if (existsSync(join(current, 'tsconfig.json')) || existsSync(join(current, 'package.json'))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  // Second pass: any workspace marker
+  const markers = ['pyproject.toml', 'go.mod', 'Cargo.toml', 'composer.json', '.git'];
+  current = startDir;
+  while (current !== fsRoot) {
+    for (const marker of markers) {
+      if (existsSync(join(current, marker))) {
+        return current;
+      }
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  return null;
+}
+
+/**
  * Built-in LSP server definitions.
  */
 export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
@@ -34,40 +93,22 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     name: 'TypeScript Language Server',
     languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     command: (root: string) => {
-      // Resolve TypeScript from the project directory
-      const requireFromRoot = createRequire(pathToFileURL(join(root, 'package.json')));
-      let tsserver: string | undefined;
-      try {
-        tsserver = requireFromRoot.resolve('typescript/lib/tsserver.js');
-      } catch {
-        tsserver = undefined;
-      }
-      if (!tsserver) return undefined;
+      const ts = resolveRequire(root, 'typescript/lib/tsserver.js');
+      if (!ts) return undefined;
 
-      // Resolve typescript-language-server binary from the project root
-      let tslsBin: string | undefined;
-      try {
-        tslsBin = requireFromRoot.resolve('typescript-language-server/lib/cli.mjs');
-        // requireFromRoot gives us the module path — we need the bin wrapper
-        tslsBin = join(root, 'node_modules', '.bin', 'typescript-language-server');
-      } catch {
-        tslsBin = undefined;
-      }
-      if (!tslsBin) return undefined;
-      return `${tslsBin} --stdio`;
+      // Find typescript-language-server binary: root node_modules, then cwd node_modules
+      const localBin = join(root, 'node_modules', '.bin', 'typescript-language-server');
+      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server');
+      if (existsSync(localBin)) return `${localBin} --stdio`;
+      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
+      return undefined;
     },
     initialization: (root: string) => {
-      const requireFromRoot = createRequire(pathToFileURL(join(root, 'package.json')));
-      let tsserver: string | undefined;
-      try {
-        tsserver = requireFromRoot.resolve('typescript/lib/tsserver.js');
-      } catch {
-        tsserver = undefined;
-      }
-      if (!tsserver) return undefined;
+      const ts = resolveRequire(root, 'typescript/lib/tsserver.js');
+      if (!ts) return undefined;
       return {
         tsserver: {
-          path: tsserver,
+          path: ts.resolved,
           logVerbosity: 'off',
         },
       };
@@ -79,13 +120,11 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     name: 'ESLint Language Server',
     languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     command: (root: string) => {
-      const requireFromRoot = createRequire(pathToFileURL(join(root, 'package.json')));
-      try {
-        requireFromRoot.resolve('vscode-eslint-language-server');
-        return `${join(root, 'node_modules', '.bin', 'vscode-eslint-language-server')} --stdio`;
-      } catch {
-        return undefined;
-      }
+      const localBin = join(root, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'vscode-eslint-language-server');
+      if (existsSync(localBin)) return `${localBin} --stdio`;
+      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
+      return undefined;
     },
   },
 
@@ -94,13 +133,11 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     name: 'Python Language Server (Pyright)',
     languageIds: ['python'],
     command: (root: string) => {
-      const requireFromRoot = createRequire(pathToFileURL(join(root, 'package.json')));
-      try {
-        requireFromRoot.resolve('pyright');
-        return `${join(root, 'node_modules', '.bin', 'pyright-langserver')} --stdio`;
-      } catch {
-        return whichSync('pyright-langserver') ? 'pyright-langserver --stdio' : undefined;
-      }
+      const localBin = join(root, 'node_modules', '.bin', 'pyright-langserver');
+      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'pyright-langserver');
+      if (existsSync(localBin)) return `${localBin} --stdio`;
+      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
+      return whichSync('pyright-langserver') ? 'pyright-langserver --stdio' : undefined;
     },
   },
 

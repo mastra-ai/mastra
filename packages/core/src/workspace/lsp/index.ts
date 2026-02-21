@@ -6,5 +6,5 @@ export { LANGUAGE_EXTENSIONS, getLanguageId } from './language';
 
 // Runtime classes (Node.js only)
 export { isLSPAvailable, loadLSPDeps, LSPClient } from './client';
-export { BUILTIN_SERVERS, getServersForFile } from './servers';
+export { BUILTIN_SERVERS, findProjectRoot, getServersForFile } from './servers';
 export { LSPManager } from './manager';

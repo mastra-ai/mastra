@@ -85,7 +85,9 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     const lspManager = workspace.lsp;
     if (!lspManager) return '';
 
-    const absolutePath = path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
 
     const DIAG_TIMEOUT_MS = 10_000;
     const diagnostics: LSPDiagnostic[] = await Promise.race([

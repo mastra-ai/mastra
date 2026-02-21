@@ -39,7 +39,7 @@ import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
 import { callLifecycle } from './lifecycle';
-import { isLSPAvailable, LSPManager } from './lsp';
+import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
@@ -487,10 +487,8 @@ export class Workspace<
       const depsAvailable = isLSPAvailable();
       if (hasProcesses && depsAvailable) {
         const lspConfig = config.lsp === true ? {} : config.lsp;
-        const lspRoot = lspConfig.root ?? this._fs?.basePath ?? this._sandbox?.workingDirectory;
-        if (lspRoot) {
-          this._lsp = new LSPManager(this._sandbox!.processes!, lspRoot, lspConfig);
-        }
+        const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
+        this._lsp = new LSPManager(this._sandbox!.processes!, defaultRoot, lspConfig);
       }
     }
 

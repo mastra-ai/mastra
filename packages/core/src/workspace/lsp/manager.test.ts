@@ -35,6 +35,12 @@ vi.mock('./client', () => ({
 }));
 
 vi.mock('./servers', () => ({
+  findProjectRoot: vi.fn().mockImplementation((startDir: string) => {
+    // Simulate finding project roots at specific directories
+    if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+    if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    return null;
+  }),
   getServersForFile: vi.fn().mockImplementation(function getServersForFile(filePath: string) {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
       return [
@@ -71,7 +77,7 @@ describe('LSPManager', () => {
   });
 
   describe('root', () => {
-    it('exposes the root passed to the constructor', () => {
+    it('exposes the default root passed to the constructor', () => {
       expect(manager.root).toBe('/project');
     });
   });
@@ -87,10 +93,25 @@ describe('LSPManager', () => {
       expect(client).not.toBeNull();
     });
 
-    it('reuses client for same server + workspace', async () => {
+    it('reuses client for same server + project root', async () => {
       const client1 = await manager.getClient('/project/src/app.ts');
       const client2 = await manager.getClient('/project/src/other.ts');
       expect(client1).toBe(client2);
+    });
+
+    it('creates separate clients for files in different project roots', async () => {
+      const client1 = await manager.getClient('/project/src/app.ts');
+      const client2 = await manager.getClient('/other-project/src/app.ts');
+      expect(client1).not.toBe(client2);
+      expect(client1).not.toBeNull();
+      expect(client2).not.toBeNull();
+    });
+
+    it('falls back to default root when walkup finds nothing', async () => {
+      const { findProjectRoot } = await import('./servers');
+      const client = await manager.getClient('/unknown/path/app.ts');
+      expect(findProjectRoot).toHaveBeenCalledWith('/unknown/path');
+      expect(client).not.toBeNull();
     });
   });
 
