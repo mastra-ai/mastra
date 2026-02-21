@@ -2,6 +2,6 @@
 '@mastra/memory': minor
 ---
 
-Improved conversational continuity after async buffered observation activation. Background buffered observations now include continuation hints (suggestedResponse and currentTask), so the main agent maintains conversational context when the message window shrinks during activation.
+Improved conversational continuity when the message window shrinks during observation activation. The agent now preserves `suggestedResponse` and `currentTask` across async buffered observation activation, so it maintains conversational context instead of losing track of what it was doing.
 
-Also improved the Observer's extraction instructions to capture user messages near-verbatim (with discretion for very long messages), reduce repetitive observations with grouping, and updated the main agent's context instructions to treat the most recent user message as the highest-priority signal.
+Also improved the Observer's extraction to capture user messages near-verbatim and reduce repetitive observations, and updated the agent's context instructions to treat the most recent user message as the highest-priority signal.
