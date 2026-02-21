@@ -40,7 +40,13 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
-export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  UIMessageWithMetadata,
+  MessageList,
+} from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 
