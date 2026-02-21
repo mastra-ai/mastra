@@ -6137,3 +6137,217 @@ describe('Agent - network - metadata on forwarded messages (issue #13106)', () =
     }
   });
 });
+
+describe('Agent - network - onStepFinish and onError callbacks', () => {
+  it('should call onStepFinish callback during sub-agent execution', async () => {
+    const memory = new MockMemory();
+    const stepFinishCallbacks: any[] = [];
+
+    // Routing agent selects sub-agent, then marks complete
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'stepFinishSubAgent',
+      primitiveType: 'agent',
+      prompt: 'Say hello',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task complete',
+    });
+
+    let routingCallCount = 0;
+    const routingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Hello from sub-agent!' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Hello from sub-agent!' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'stepFinishSubAgent',
+      name: 'Step Finish Sub Agent',
+      description: 'A sub-agent for testing onStepFinish',
+      instructions: 'Say hello.',
+      model: subAgentModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'step-finish-network',
+      name: 'Step Finish Network',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingModel,
+      agents: { stepFinishSubAgent: subAgent },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Say hello', {
+      onStepFinish: event => {
+        stepFinishCallbacks.push(event);
+      },
+      memory: {
+        thread: 'step-finish-test-thread',
+        resource: 'step-finish-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Verify onStepFinish was called at least once
+    expect(stepFinishCallbacks.length).toBeGreaterThan(0);
+
+    // Verify the callback received step data with exact expected values
+    const lastStep = stepFinishCallbacks[stepFinishCallbacks.length - 1];
+    expect(lastStep.finishReason).toBe('stop');
+    expect(lastStep.usage).toMatchObject({
+      inputTokens: 5,
+      outputTokens: 10,
+      totalTokens: 15,
+    });
+  });
+
+  it('should call onError callback when sub-agent encounters an error', async () => {
+    const memory = new MockMemory();
+    const errorCallbacks: any[] = [];
+
+    // Routing agent selects the error-throwing sub-agent
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'errorSubAgent',
+      primitiveType: 'agent',
+      prompt: 'Do something',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task complete',
+    });
+
+    let routingCallCount = 0;
+    const routingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Sub-agent model that throws an error during streaming
+    const errorSubAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Sub-agent model error');
+      },
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'error', error: new Error('Sub-agent stream error') },
+          { type: 'finish', finishReason: 'error', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+        ]),
+      }),
+    });
+
+    const errorSubAgent = new Agent({
+      id: 'errorSubAgent',
+      name: 'Error Sub Agent',
+      description: 'A sub-agent that errors',
+      instructions: 'This agent will error.',
+      model: errorSubAgentModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'error-callback-network',
+      name: 'Error Callback Network',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingModel,
+      agents: { errorSubAgent },
+      memory,
+    });
+
+    try {
+      const anStream = await networkAgent.network('Do something', {
+        onError: ({ error }) => {
+          errorCallbacks.push({ error });
+        },
+        memory: {
+          thread: 'error-test-thread',
+          resource: 'error-test-resource',
+        },
+      });
+
+      // Consume the stream - may throw
+      for await (const _chunk of anStream) {
+        // Process stream
+      }
+    } catch {
+      // Expected - the stream may throw due to the error
+    }
+
+    // Verify onError was called
+    expect(errorCallbacks.length).toBeGreaterThan(0);
+
+    // Verify the callback received the expected error
+    const errorEvent = errorCallbacks[0];
+    expect(errorEvent.error).toBeInstanceOf(Error);
+    expect(errorEvent.error.message).toContain('Sub-agent stream error');
+  });
+});
