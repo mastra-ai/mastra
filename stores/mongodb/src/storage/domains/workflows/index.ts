@@ -35,6 +35,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     );
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }
@@ -101,35 +105,150 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     await collection.deleteMany({});
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date();
+
+      // Default snapshot structure for new entries
+      const defaultSnapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        status: 'pending',
+        value: {},
+        waitingPaths: {},
+        runId: runId,
+        requestContext: {},
+      };
+
+      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
+      // This ensures concurrent updates don't overwrite each other
+      const updatedDoc = await collection.findOneAndUpdate(
+        { workflow_name: workflowName, run_id: runId },
+        [
+          {
+            $set: {
+              workflow_name: workflowName,
+              run_id: runId,
+              // If snapshot doesn't exist, use default; otherwise merge
+              snapshot: {
+                $mergeObjects: [
+                  // Start with default snapshot if document is new
+                  { $ifNull: ['$snapshot', defaultSnapshot] },
+                  // Merge the new context entry
+                  {
+                    context: {
+                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
+                    },
+                  },
+                  // Merge the new request context
+                  {
+                    requestContext: {
+                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] }, requestContext],
+                    },
+                  },
+                ],
+              },
+              updatedAt: now,
+              // Only set createdAt if it doesn't exist
+              createdAt: { $ifNull: ['$createdAt', now] },
+            },
+          },
+        ],
+        { upsert: true, returnDocument: 'after' },
+      );
+
+      const snapshot =
+        typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
+      return snapshot?.context || {};
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+
+      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
+      // This ensures concurrent updates don't overwrite each other
+      const updatedDoc = await collection.findOneAndUpdate(
+        {
+          workflow_name: workflowName,
+          run_id: runId,
+          // Only update if snapshot exists and has context
+          'snapshot.context': { $exists: true },
+        },
+        [
+          {
+            $set: {
+              // Merge the new options into the existing snapshot
+              snapshot: {
+                $mergeObjects: ['$snapshot', opts],
+              },
+              updatedAt: new Date(),
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+
+      if (!updatedDoc) {
+        return undefined;
+      }
+
+      const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
+      return snapshot;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({

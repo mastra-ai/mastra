@@ -1197,6 +1197,18 @@ export class EventedWorkflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
+    const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
+    if (workflowsStore && !supportsConcurrentUpdates) {
+      throw new MastraError({
+        id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Atomic storage operations are not supported for this workflow store, please use a different storage or the default workflow engine',
+      });
+    }
+
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
@@ -1237,7 +1249,6 @@ export class EventedWorkflow<
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,

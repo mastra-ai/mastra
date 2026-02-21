@@ -55,6 +55,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {
@@ -146,35 +150,146 @@ export class WorkflowsPG extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        let snapshot: WorkflowRunState;
+        if (!existingSnapshotResult) {
+          // Create new snapshot if none exists
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId: runId,
+            requestContext: {},
+          } as WorkflowRunState;
+        } else {
+          // Parse existing snapshot
+          const existingSnapshot = existingSnapshotResult.snapshot;
+          snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        }
+
+        // Merge the new step result and request context
+        snapshot.context[stepId] = result;
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+        // Upsert the snapshot within the same transaction
+        const now = new Date();
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+        await t.none(
+          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (workflow_name, run_id) DO UPDATE
+           SET snapshot = $3, "updatedAt" = $5`,
+          [workflowName, runId, sanitizedSnapshot, now, now],
+        );
+
+        return snapshot.context;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        if (!existingSnapshotResult) {
+          return undefined;
+        }
+
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.snapshot;
+        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+        if (!snapshot || !snapshot?.context) {
+          throw new Error(`Snapshot not found for runId ${runId}`);
+        }
+
+        // Merge the new options with the existing snapshot
+        const updatedSnapshot = { ...snapshot, ...opts };
+
+        // Update the snapshot within the same transaction
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        await t.none(
+          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
+          [sanitizedSnapshot, new Date(), workflowName, runId],
+        );
+
+        return updatedSnapshot;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({

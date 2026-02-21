@@ -27,6 +27,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     this.#db = new D1DB(resolveD1Config(config));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // D1 doesn't support atomic read-modify-write operations needed for concurrent updates
+    // batch() executes all statements atomically but requires all statements upfront,
+    // so we can't use SELECT result to construct UPDATE in the same transaction
+    return false;
+  }
+
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
   }
@@ -35,35 +42,26 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults(_args: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error(
+      'updateWorkflowResults is not implemented for Cloudflare D1 storage. D1 does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowState(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    throw new Error(
+      'updateWorkflowState is not implemented for Cloudflare D1 storage. D1 does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({

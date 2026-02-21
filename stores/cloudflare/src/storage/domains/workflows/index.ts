@@ -24,6 +24,12 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // Cloudflare KV is eventually-consistent and doesn't support atomic read-modify-write
+    // operations or conditional writes needed for concurrent updates
+    return false;
+  }
+
   async init(): Promise<void> {
     // Cloudflare KV is schemaless, no table creation needed
   }
@@ -39,35 +45,26 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     }
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults(_args: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error(
+      'updateWorkflowResults is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowState(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    throw new Error(
+      'updateWorkflowState is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot(params: {
