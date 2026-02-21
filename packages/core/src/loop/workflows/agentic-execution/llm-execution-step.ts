@@ -63,213 +63,252 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>) {
   // Buffer text chunks per step so we can suppress them if the step contains tool calls.
   // This prevents tool result JSON from leaking into text-delta events.
-  const pendingTextChunks: any[] = [];
+  const pendingTextChunks: ChunkType<OUTPUT>[] = [];
   let stepHasToolCalls = false;
 
   try {
     for await (const chunk of outputStream._getBaseStream()) {
-    if (!chunk) {
-      continue;
-    }
-
-    if (chunk.type == 'object' || chunk.type == 'object-result') {
-      controller.enqueue(chunk);
-      continue;
-    }
-
-    // Streaming
-    if (
-      chunk.type !== 'text-delta' &&
-      chunk.type !== 'tool-call' &&
-      // not 100% sure about this being the right fix.
-      // basically for some llm providers they add response-metadata after each text-delta
-      // we then flush the chunks by calling messageList.add (a few lines down)
-      // this results in a bunch of weird separated text chunks on the message instead of combined chunks
-      // easiest solution here is to just not flush for response-metadata
-      // BUT does this cause other issues?
-      // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
-      // simple solution for now is to not flush text deltas on response-metadata
-      chunk.type !== 'response-metadata' &&
-      runState.state.isStreaming
-    ) {
-      if (runState.state.textDeltas.length) {
-        const textStartPayload = chunk.payload as TextStartPayload;
-        const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
-
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'text' as const,
-                text: runState.state.textDeltas.join(''),
-                ...(providerMetadata ? { providerMetadata } : {}),
-              },
-            ],
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
+      if (!chunk) {
+        continue;
       }
 
-      runState.setState({
-        isStreaming: false,
-        textDeltas: [],
-      });
-    }
-
-    // Only reset reasoning state for truly unexpected chunk types.
-    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
-    // so we must allow text-start to pass through without clearing reasoningDeltas.
-    if (
-      chunk.type !== 'reasoning-start' &&
-      chunk.type !== 'reasoning-delta' &&
-      chunk.type !== 'reasoning-end' &&
-      chunk.type !== 'redacted-reasoning' &&
-      chunk.type !== 'reasoning-signature' &&
-      chunk.type !== 'response-metadata' &&
-      chunk.type !== 'text-start' &&
-      runState.state.isReasoning
-    ) {
-      runState.setState({
-        isReasoning: false,
-        reasoningDeltas: [],
-      });
-    }
-
-    // Early-flush: when a safe (non-text, non-tool, non-metadata) chunk arrives,
-    // flush any pending text so it appears before the non-text content in the stream.
-    // This preserves original chunk ordering for text-only steps while still allowing
-    // tool-call steps to discard buffered text later.
-    if (
-      pendingTextChunks.length > 0 &&
-      !stepHasToolCalls &&
-      chunk.type !== 'text-start' &&
-      chunk.type !== 'text-delta' &&
-      chunk.type !== 'text-end' &&
-      chunk.type !== 'response-metadata' &&
-      chunk.type !== 'tool-call' &&
-      chunk.type !== 'tool-call-input-streaming-start' &&
-      chunk.type !== 'tool-call-delta' &&
-      chunk.type !== 'finish'
-    ) {
-      for (const buffered of pendingTextChunks) {
-        safeEnqueue(controller, buffered);
+      if (chunk.type == 'object' || chunk.type == 'object-result') {
+        controller.enqueue(chunk);
+        continue;
       }
-      pendingTextChunks.length = 0;
-    }
 
-    switch (chunk.type) {
-      case 'response-metadata':
+      // Streaming
+      if (
+        chunk.type !== 'text-delta' &&
+        chunk.type !== 'tool-call' &&
+        // not 100% sure about this being the right fix.
+        // basically for some llm providers they add response-metadata after each text-delta
+        // we then flush the chunks by calling messageList.add (a few lines down)
+        // this results in a bunch of weird separated text chunks on the message instead of combined chunks
+        // easiest solution here is to just not flush for response-metadata
+        // BUT does this cause other issues?
+        // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
+        // simple solution for now is to not flush text deltas on response-metadata
+        chunk.type !== 'response-metadata' &&
+        runState.state.isStreaming
+      ) {
+        if (runState.state.textDeltas.length) {
+          const textStartPayload = chunk.payload as TextStartPayload;
+          const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
+
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: runState.state.textDeltas.join(''),
+                  ...(providerMetadata ? { providerMetadata } : {}),
+                },
+              ],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+        }
+
         runState.setState({
-          responseMetadata: {
-            id: chunk.payload.id,
-            timestamp: chunk.payload.timestamp,
-            modelId: chunk.payload.modelId,
-            headers: chunk.payload.headers,
-          },
+          isStreaming: false,
+          textDeltas: [],
         });
-        break;
-
-      case 'text-start': {
-        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
-        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
-        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
-        // preserved so that when memory is replayed, OpenAI sees the required
-        // following item for the reasoning part.
-        if (chunk.payload.providerMetadata) {
-          runState.setState({
-            providerOptions: chunk.payload.providerMetadata,
-          });
-        }
-        pendingTextChunks.push(chunk);
-        break;
       }
 
-      case 'text-delta': {
-        const textDeltasFromState = runState.state.textDeltas;
-        textDeltasFromState.push(chunk.payload.text);
+      // Only reset reasoning state for truly unexpected chunk types.
+      // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
+      // so we must allow text-start to pass through without clearing reasoningDeltas.
+      if (
+        chunk.type !== 'reasoning-start' &&
+        chunk.type !== 'reasoning-delta' &&
+        chunk.type !== 'reasoning-end' &&
+        chunk.type !== 'redacted-reasoning' &&
+        chunk.type !== 'reasoning-signature' &&
+        chunk.type !== 'response-metadata' &&
+        chunk.type !== 'text-start' &&
+        runState.state.isReasoning
+      ) {
         runState.setState({
-          textDeltas: textDeltasFromState,
-          isStreaming: true,
-        });
-        pendingTextChunks.push(chunk);
-        break;
-      }
-
-      case 'text-end': {
-        // Clear providerOptions to prevent text's providerMetadata from leaking
-        // into subsequent parts (similar to reasoning-end clearing)
-        runState.setState({
-          providerOptions: undefined,
-        });
-        pendingTextChunks.push(chunk);
-        break;
-      }
-
-      case 'tool-call-input-streaming-start': {
-        if (!chunk.payload.providerExecuted) {
-          stepHasToolCalls = true;
-          pendingTextChunks.length = 0;
-        }
-
-        const tool =
-          tools?.[chunk.payload.toolName] ||
-          Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
-
-        if (tool && 'onInputStart' in tool) {
-          try {
-            await tool?.onInputStart?.({
-              toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model(),
-              abortSignal: options?.abortSignal,
-            });
-          } catch (error) {
-            logger?.error('Error calling onInputStart', error);
-          }
-        }
-
-        safeEnqueue(controller, chunk);
-
-        break;
-      }
-
-      case 'tool-call-delta': {
-        if (!chunk.payload.providerExecuted) {
-          stepHasToolCalls = true;
-          pendingTextChunks.length = 0;
-        }
-
-        const tool =
-          tools?.[chunk.payload.toolName || ''] ||
-          Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
-
-        if (tool && 'onInputDelta' in tool) {
-          try {
-            await tool?.onInputDelta?.({
-              inputTextDelta: chunk.payload.argsTextDelta,
-              toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model(),
-              abortSignal: options?.abortSignal,
-            });
-          } catch (error) {
-            logger?.error('Error calling onInputDelta', error);
-          }
-        }
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'reasoning-start': {
-        runState.setState({
-          isReasoning: true,
+          isReasoning: false,
           reasoningDeltas: [],
-          providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
+      }
 
-        if (Object.values(chunk.payload.providerMetadata || {}).find((v: any) => v?.redactedData)) {
+      // Early-flush: when a safe (non-text, non-tool, non-metadata) chunk arrives,
+      // flush any pending text so it appears before the non-text content in the stream.
+      // This preserves original chunk ordering for text-only steps while still allowing
+      // tool-call steps to discard buffered text later.
+      if (
+        pendingTextChunks.length > 0 &&
+        !stepHasToolCalls &&
+        chunk.type !== 'text-start' &&
+        chunk.type !== 'text-delta' &&
+        chunk.type !== 'text-end' &&
+        chunk.type !== 'response-metadata' &&
+        chunk.type !== 'tool-call' &&
+        chunk.type !== 'tool-call-input-streaming-start' &&
+        chunk.type !== 'tool-call-delta' &&
+        chunk.type !== 'finish'
+      ) {
+        for (const buffered of pendingTextChunks) {
+          safeEnqueue(controller, buffered);
+        }
+        pendingTextChunks.length = 0;
+      }
+
+      switch (chunk.type) {
+        case 'response-metadata':
+          runState.setState({
+            responseMetadata: {
+              id: chunk.payload.id,
+              timestamp: chunk.payload.timestamp,
+              modelId: chunk.payload.modelId,
+              headers: chunk.payload.headers,
+            },
+          });
+          break;
+
+        case 'text-start': {
+          // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
+          // This is needed because, for example, OpenAI reasoning models send separate itemIds for
+          // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
+          // preserved so that when memory is replayed, OpenAI sees the required
+          // following item for the reasoning part.
+          if (chunk.payload.providerMetadata) {
+            runState.setState({
+              providerOptions: chunk.payload.providerMetadata,
+            });
+          }
+          pendingTextChunks.push(chunk);
+          break;
+        }
+
+        case 'text-delta': {
+          const textDeltasFromState = runState.state.textDeltas;
+          textDeltasFromState.push(chunk.payload.text);
+          runState.setState({
+            textDeltas: textDeltasFromState,
+            isStreaming: true,
+          });
+          pendingTextChunks.push(chunk);
+          break;
+        }
+
+        case 'text-end': {
+          // Clear providerOptions to prevent text's providerMetadata from leaking
+          // into subsequent parts (similar to reasoning-end clearing)
+          runState.setState({
+            providerOptions: undefined,
+          });
+          pendingTextChunks.push(chunk);
+          break;
+        }
+
+        case 'tool-call-input-streaming-start': {
+          if (!chunk.payload.providerExecuted) {
+            stepHasToolCalls = true;
+            pendingTextChunks.length = 0;
+          }
+
+          const tool =
+            tools?.[chunk.payload.toolName] ||
+            Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
+
+          if (tool && 'onInputStart' in tool) {
+            try {
+              await tool?.onInputStart?.({
+                toolCallId: chunk.payload.toolCallId,
+                messages: messageList.get.input.aiV5.model(),
+                abortSignal: options?.abortSignal,
+              });
+            } catch (error) {
+              logger?.error('Error calling onInputStart', error);
+            }
+          }
+
+          safeEnqueue(controller, chunk);
+
+          break;
+        }
+
+        case 'tool-call-delta': {
+          if (!chunk.payload.providerExecuted) {
+            stepHasToolCalls = true;
+            pendingTextChunks.length = 0;
+          }
+
+          const tool =
+            tools?.[chunk.payload.toolName || ''] ||
+            Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
+
+          if (tool && 'onInputDelta' in tool) {
+            try {
+              await tool?.onInputDelta?.({
+                inputTextDelta: chunk.payload.argsTextDelta,
+                toolCallId: chunk.payload.toolCallId,
+                messages: messageList.get.input.aiV5.model(),
+                abortSignal: options?.abortSignal,
+              });
+            } catch (error) {
+              logger?.error('Error calling onInputDelta', error);
+            }
+          }
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
+        case 'reasoning-start': {
+          runState.setState({
+            isReasoning: true,
+            reasoningDeltas: [],
+            providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+          });
+
+          if (Object.values(chunk.payload.providerMetadata || {}).find((v: any) => v?.redactedData)) {
+            const message: MastraDBMessage = {
+              id: messageId,
+              role: 'assistant',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'reasoning' as const,
+                    reasoning: '',
+                    details: [{ type: 'redacted', data: '' }],
+                    providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                  },
+                ],
+              },
+              createdAt: new Date(),
+            };
+            messageList.add(message, 'response');
+            safeEnqueue(controller, chunk);
+            break;
+          }
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
+        case 'reasoning-delta': {
+          const reasoningDeltasFromState = runState.state.reasoningDeltas;
+          reasoningDeltasFromState.push(chunk.payload.text);
+          runState.setState({
+            isReasoning: true,
+            reasoningDeltas: reasoningDeltasFromState,
+            providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+          });
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
+        case 'reasoning-end': {
+          // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
+          // See: https://github.com/mastra-ai/mastra/issues/9005
           const message: MastraDBMessage = {
             id: messageId,
             role: 'assistant',
@@ -279,195 +318,156 @@ async function processOutputStream<OUTPUT = undefined>({
                 {
                   type: 'reasoning' as const,
                   reasoning: '',
-                  details: [{ type: 'redacted', data: '' }],
+                  details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
             },
             createdAt: new Date(),
           };
+
           messageList.add(message, 'response');
+
+          // Reset reasoning state - clear providerOptions to prevent reasoning metadata
+          // (like openai.itemId) from leaking into subsequent text parts
+          runState.setState({
+            isReasoning: false,
+            reasoningDeltas: [],
+            providerOptions: undefined,
+          });
+
           safeEnqueue(controller, chunk);
           break;
         }
-        safeEnqueue(controller, chunk);
-        break;
-      }
 
-      case 'reasoning-delta': {
-        const reasoningDeltasFromState = runState.state.reasoningDeltas;
-        reasoningDeltasFromState.push(chunk.payload.text);
-        runState.setState({
-          isReasoning: true,
-          reasoningDeltas: reasoningDeltasFromState,
-          providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-        });
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'reasoning-end': {
-        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
-        // See: https://github.com/mastra-ai/mastra/issues/9005
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-          },
-          createdAt: new Date(),
-        };
-
-        messageList.add(message, 'response');
-
-        // Reset reasoning state - clear providerOptions to prevent reasoning metadata
-        // (like openai.itemId) from leaking into subsequent text parts
-        runState.setState({
-          isReasoning: false,
-          reasoningDeltas: [],
-          providerOptions: undefined,
-        });
-
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
-      case 'file':
-        {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'file' as const,
-                  // @ts-expect-error - data type mismatch, see TODO
-                  data: chunk.payload.data, // TODO: incorrect string type
-                  mimeType: chunk.payload.mimeType,
-                },
-              ],
-            },
-            createdAt: new Date(),
-          };
-          messageList.add(message, 'response');
-          safeEnqueue(controller, chunk);
-        }
-        break;
-
-      case 'source':
-        {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'source',
-                  source: {
-                    sourceType: 'url',
-                    id: chunk.payload.id,
-                    url: chunk.payload.url || '',
-                    title: chunk.payload.title,
-                    providerMetadata: chunk.payload.providerMetadata,
+        case 'file':
+          {
+            const message: MastraDBMessage = {
+              id: messageId,
+              role: 'assistant' as const,
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'file' as const,
+                    // @ts-expect-error - data type mismatch, see TODO
+                    data: chunk.payload.data, // TODO: incorrect string type
+                    mimeType: chunk.payload.mimeType,
                   },
-                },
-              ],
-            },
-            createdAt: new Date(),
-          };
-          messageList.add(message, 'response');
-          safeEnqueue(controller, chunk);
-        }
-        break;
-
-      case 'finish':
-        // Flush buffered text only if this step had no tool calls.
-        // If tool calls were present, the text is likely leaked JSON and should be suppressed.
-        if (!stepHasToolCalls && pendingTextChunks.length > 0) {
-          for (const buffered of pendingTextChunks) {
-            safeEnqueue(controller, buffered);
+                ],
+              },
+              createdAt: new Date(),
+            };
+            messageList.add(message, 'response');
+            safeEnqueue(controller, chunk);
           }
-        }
-        pendingTextChunks.length = 0;
-        stepHasToolCalls = false;
-
-        runState.setState({
-          providerOptions: chunk.payload.metadata.providerMetadata,
-          stepResult: {
-            reason: chunk.payload.reason,
-            logprobs: chunk.payload.logprobs,
-            warnings: responseFromModel.warnings,
-            totalUsage: chunk.payload.totalUsage,
-            headers: responseFromModel.rawResponse?.headers,
-            messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
-            request: responseFromModel.request,
-          },
-        });
-        break;
-
-      case 'error':
-        if (isAbortError(chunk.payload.error) && options?.abortSignal?.aborted) {
           break;
-        }
 
-        runState.setState({
-          hasErrored: true,
-        });
+        case 'source':
+          {
+            const message: MastraDBMessage = {
+              id: messageId,
+              role: 'assistant' as const,
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'source',
+                    source: {
+                      sourceType: 'url',
+                      id: chunk.payload.id,
+                      url: chunk.payload.url || '',
+                      title: chunk.payload.title,
+                      providerMetadata: chunk.payload.providerMetadata,
+                    },
+                  },
+                ],
+              },
+              createdAt: new Date(),
+            };
+            messageList.add(message, 'response');
+            safeEnqueue(controller, chunk);
+          }
+          break;
 
-        runState.setState({
-          stepResult: {
-            isContinued: false,
-            reason: 'error',
-          },
-        });
-
-        const error = getErrorFromUnknown(chunk.payload.error, {
-          fallbackMessage: 'Unknown error in agent stream',
-        });
-        safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
-        await options?.onError?.({ error });
-        break;
-
-      default:
-        if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
-          stepHasToolCalls = true;
+        case 'finish':
+          // Flush buffered text only if this step had no tool calls.
+          // If tool calls were present, the text is likely leaked JSON and should be suppressed.
+          if (!stepHasToolCalls && pendingTextChunks.length > 0) {
+            for (const buffered of pendingTextChunks) {
+              safeEnqueue(controller, buffered);
+            }
+          }
           pendingTextChunks.length = 0;
-        }
-        safeEnqueue(controller, chunk);
-    }
+          stepHasToolCalls = false;
 
-    if (
-      [
-        'text-delta',
-        'reasoning-delta',
-        'source',
-        'tool-call',
-        'tool-call-input-streaming-start',
-        'tool-call-delta',
-        'raw',
-      ].includes(chunk.type)
-    ) {
-      if (chunk.type === 'raw' && !includeRawChunks) {
-        continue;
+          runState.setState({
+            providerOptions: chunk.payload.metadata.providerMetadata,
+            stepResult: {
+              reason: chunk.payload.reason,
+              logprobs: chunk.payload.logprobs,
+              warnings: responseFromModel.warnings,
+              totalUsage: chunk.payload.totalUsage,
+              headers: responseFromModel.rawResponse?.headers,
+              messageId,
+              isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+              request: responseFromModel.request,
+            },
+          });
+          break;
+
+        case 'error':
+          if (isAbortError(chunk.payload.error) && options?.abortSignal?.aborted) {
+            break;
+          }
+
+          runState.setState({
+            hasErrored: true,
+          });
+
+          runState.setState({
+            stepResult: {
+              isContinued: false,
+              reason: 'error',
+            },
+          });
+
+          const error = getErrorFromUnknown(chunk.payload.error, {
+            fallbackMessage: 'Unknown error in agent stream',
+          });
+          safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
+          await options?.onError?.({ error });
+          break;
+
+        default:
+          if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
+            stepHasToolCalls = true;
+            pendingTextChunks.length = 0;
+          }
+          safeEnqueue(controller, chunk);
       }
 
-      await options?.onChunk?.(chunk);
-    }
+      if (
+        [
+          'text-delta',
+          'reasoning-delta',
+          'source',
+          'tool-call',
+          'tool-call-input-streaming-start',
+          'tool-call-delta',
+          'raw',
+        ].includes(chunk.type)
+      ) {
+        if (chunk.type === 'raw' && !includeRawChunks) {
+          continue;
+        }
 
-    if (runState.state.hasErrored) {
-      break;
-    }
+        await options?.onChunk?.(chunk);
+      }
+
+      if (runState.state.hasErrored) {
+        break;
+      }
     }
   } finally {
     // Flush any remaining buffered text on early exit (e.g., abort/error before finish)
