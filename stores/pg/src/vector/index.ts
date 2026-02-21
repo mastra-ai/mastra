@@ -309,8 +309,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     try {
       // Validate topK parameter
       validateTopK('PG', topK);
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
+      if (queryVector !== undefined) {
+        if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+          throw new Error('queryVector must be an array of finite numbers');
+        }
+      } else if (!filter || Object.keys(filter).length === 0) {
+        throw new Error('Either queryVector or filter must be provided');
       }
     } catch (error) {
       const mastraError = new MastraError(
@@ -328,6 +332,51 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     }
 
+    // Metadata-only query: filter without vector similarity
+    if (queryVector === undefined) {
+      const client = await this.pool.connect();
+      try {
+        const translatedFilter = this.transformFilter(filter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+        const { tableName } = this.getTableName(indexName);
+
+        const query = `
+          SELECT
+            vector_id as id,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ${filterQuery}
+          ORDER BY vector_id
+          LIMIT $${filterValues.length + 1}`;
+        const result = await client.query(query, [...filterValues, topK]);
+
+        return result.rows.map(({ id, metadata, embedding }: { id: string; metadata: any; embedding?: string }) => ({
+          id,
+          score: 0,
+          metadata,
+          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+        }));
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: createVectorErrorId('PG', 'QUERY', 'FAILED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          error,
+        );
+        this.logger?.trackException(mastraError);
+        throw mastraError;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Vector similarity query
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');

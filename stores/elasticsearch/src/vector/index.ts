@@ -364,6 +364,16 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     topK = 10,
     includeVector = false,
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('ELASTICSEARCH', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Elasticsearch queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     // Validate topK parameter
     validateTopK('ELASTICSEARCH', topK);
 

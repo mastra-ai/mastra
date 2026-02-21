@@ -302,9 +302,10 @@ Higher M values or efConstruction values will increase memory requirements signi
       description: "Name of the index to query",
     },
     {
-      name: "vector",
+      name: "queryVector",
       type: "number[]",
-      description: "Query vector",
+      isOptional: true,
+      description: "Query vector for similarity search. When omitted, a metadata-only query is performed using the filter parameter. At least one of queryVector or filter must be provided.",
     },
     {
       name: "topK",

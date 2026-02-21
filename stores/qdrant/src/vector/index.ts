@@ -352,6 +352,16 @@ export class QdrantVector extends MastraVector {
     includeVector = false,
     using,
   }: QdrantQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Qdrant queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {
