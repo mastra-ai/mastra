@@ -48,11 +48,7 @@ async function showModelListForScope(
   });
 }
 
-async function showModelScopeThenList(
-  ctx: SlashCommandContext,
-  modeId: string,
-  modeName: string,
-): Promise<void> {
+async function showModelScopeThenList(ctx: SlashCommandContext, modeId: string, modeName: string): Promise<void> {
   const scopes = [
     {
       label: 'Thread default',

@@ -35,7 +35,10 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
       return `  ${skill.name}${desc}`;
     });
 
-    ctx.showInfo(`Skills (${skills.length}):\n${skillLines.join('\n')}\n\n` + 'Skills are automatically activated by the agent when relevant.');
+    ctx.showInfo(
+      `Skills (${skills.length}):\n${skillLines.join('\n')}\n\n` +
+        'Skills are automatically activated by the agent when relevant.',
+    );
   } catch (error) {
     ctx.showError(`Failed to list skills: ${error instanceof Error ? error.message : String(error)}`);
   }

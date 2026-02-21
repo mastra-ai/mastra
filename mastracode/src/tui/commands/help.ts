@@ -8,7 +8,9 @@ export function handleHelpCommand(ctx: SlashCommandContext): void {
   if (ctx.customSlashCommands.length > 0) {
     customCommandsHelp =
       '\n\nCustom commands (use // prefix):\n' +
-      ctx.customSlashCommands.map(cmd => `  //${cmd.name.padEnd(8)} - ${cmd.description || 'No description'}`).join('\n');
+      ctx.customSlashCommands
+        .map(cmd => `  //${cmd.name.padEnd(8)} - ${cmd.description || 'No description'}`)
+        .join('\n');
   }
 
   ctx.showInfo(`Available commands:

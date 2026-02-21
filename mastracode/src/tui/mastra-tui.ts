@@ -2581,8 +2581,6 @@ ${instructions}`,
     });
   }
 
-
-
   /**
    * Show an inline prompt when a thread is locked by another process.
    * User can create a new thread (y) or exit (n).
@@ -2620,8 +2618,6 @@ ${instructions}`,
     this.state.chatContainer.invalidate();
   }
 
-
-
   /**
    * Get the workspace, preferring harness-owned workspace over the direct option.
    */
@@ -2629,15 +2625,13 @@ ${instructions}`,
     return this.state.harness.getWorkspace() ?? this.state.workspace;
   }
 
-
-              // ===========================================================================
+  // ===========================================================================
   // Observational Memory Settings
   // ===========================================================================
 
   // ===========================================================================
   // Login Selector
   // ===========================================================================
-
 
   // ===========================================================================
   // Slash Commands
@@ -3169,7 +3163,7 @@ ${instructions}`,
         return null;
     }
   }
-    /**
+  /**
    * Run a shell command directly and display the output in the chat.
    * Triggered by the `!` prefix (e.g., `!ls -la`).
    */

@@ -31,8 +31,8 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
     });
     dialog.focused = true;
 
-    ctx.authStorage!
-      .login(providerId, {
+    ctx
+      .authStorage!.login(providerId, {
         onAuth: (info: { url: string; instructions?: string }) => {
           dialog.showAuth(info.url, info.instructions);
         },

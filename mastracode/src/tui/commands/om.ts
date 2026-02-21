@@ -30,8 +30,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onObservationThresholdChange: value => {
           ctx.state.harness.setState({ observationThreshold: value } as any);
           ctx.state.omProgress.threshold = value;
-          ctx.state.omProgress.thresholdPercent =
-            value > 0 ? (ctx.state.omProgress.pendingTokens / value) * 100 : 0;
+          ctx.state.omProgress.thresholdPercent = value > 0 ? (ctx.state.omProgress.pendingTokens / value) * 100 : 0;
           ctx.updateStatusLine();
         },
         onReflectionThresholdChange: value => {
