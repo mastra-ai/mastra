@@ -219,9 +219,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     args: Parameters<EmbeddingModelV2<VALUE>['doEmbed']>[0],
   ): Promise<Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>> {
     const result = await this.providerModel.doEmbed(args);
-    return {
-      ...result,
-      warnings: (result as any).warnings ?? [],
-    };
+    const warnings = (result as { warnings?: unknown[] }).warnings ?? [];
+    return { ...result, warnings };
   }
 }
