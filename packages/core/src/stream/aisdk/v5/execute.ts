@@ -2,6 +2,7 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { ensureAllPropertiesRequired } from '@mastra/schema-compat/zod-to-json';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -115,16 +116,25 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const providerOptionsToUse: SharedProviderOptions | undefined =
-    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
-      ? {
-          ...(providerOptions ?? {}),
-          openai: {
-            strictJsonSchema: true,
-            ...(providerOptions?.openai ?? {}),
-          },
-        }
-      : providerOptions;
+  const isOpenAIStrictMode =
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection;
+
+  const providerOptionsToUse: SharedProviderOptions | undefined = isOpenAIStrictMode
+    ? {
+        ...(providerOptions ?? {}),
+        openai: {
+          strictJsonSchema: true,
+          ...(providerOptions?.openai ?? {}),
+        },
+      }
+    : providerOptions;
+
+  // For OpenAI strict mode, ensure all properties are in the required array.
+  // OpenAI requires every key in properties to also be in required.
+  const responseFormatToUse =
+    isOpenAIStrictMode && responseFormat?.type === 'json' && responseFormat.schema
+      ? { ...responseFormat, schema: ensureAllPropertiesRequired(responseFormat.schema) }
+      : responseFormat;
 
   const stream = v5.initialize({
     runId,
@@ -149,7 +159,7 @@ export function execute<OUTPUT = undefined>({
               includeRawChunks,
               responseFormat:
                 structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
-                  ? responseFormat
+                  ? responseFormatToUse
                   : undefined,
               ...filteredModelSettings,
               headers,
