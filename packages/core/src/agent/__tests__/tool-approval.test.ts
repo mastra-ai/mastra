@@ -285,3 +285,140 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 }
 
 toolApprovalAndSuspensionTests('v2');
+
+describe('processor-added tool approval via resumeStream', () => {
+  it('should resolve a processor-added tool when resuming from a suspended workflow snapshot', async () => {
+    const mockExecute = vi.fn().mockImplementation(async (data: { name: string }) => {
+      return { name: data.name, email: `${data.name.toLowerCase().replace(' ', '.')}@test.com` };
+    });
+
+    // The tool is NOT on the agent — it's added by the processor in processInputStep
+    const processorAddedTool = createTool({
+      id: 'lookup-user',
+      description: 'Looks up a user by name',
+      inputSchema: z.object({ name: z.string() }),
+      requireApproval: true,
+      execute: mockExecute,
+    });
+
+    // A processor that adds the tool dynamically (like ToolSearchProcessor does)
+    const toolProcessor = {
+      id: 'test-tool-processor',
+      processInputStep: vi.fn().mockImplementation(async ({ tools }: { tools?: Record<string, unknown> }) => {
+        return {
+          tools: {
+            ...(tools ?? {}),
+            'lookup-user': processorAddedTool,
+          },
+        };
+      }),
+    };
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: LLM calls the processor-added tool → triggers approval suspension
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'lookup-user',
+                input: '{"name":"Caleb"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        } else {
+          // After resume + tool execution: LLM returns text response
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Found user Caleb' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+      },
+    });
+
+    const storage = new InMemoryStore();
+
+    const agent = new Agent({
+      id: 'processor-tool-agent',
+      name: 'Processor Tool Agent',
+      instructions: 'You are an agent that looks up users.',
+      model: mockModel,
+      // No tools on the agent — they come from the processor
+      inputProcessors: [toolProcessor],
+      memory: new MockMemory({ storage }),
+    });
+
+    const mastra = new Mastra({
+      agents: { 'processor-tool-agent': agent },
+      logger: false,
+      storage,
+    });
+
+    const agentInstance = mastra.getAgent('processor-tool-agent');
+    const memory = {
+      thread: randomUUID(),
+      resource: randomUUID(),
+    };
+
+    // First stream: LLM calls the processor-added tool, gets suspended for approval
+    const runId = randomUUID();
+    const stream = await agentInstance.stream('Look up user Caleb', { memory, runId });
+    let approvalToolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        approvalToolCallId = chunk.payload.toolCallId;
+      }
+    }
+    expect(approvalToolCallId).toBeTruthy();
+
+    // Resume the suspended workflow directly via resumeStream — this is the path
+    // where the workflow resumes from a persisted snapshot and toolCallStep runs
+    // WITHOUT re-running llmExecutionStep/processors first.
+    // This is where the bug manifests: _internal.stepTools is empty on resume,
+    // and the processor-added tool is not in the original closure tools.
+    const resumed = await agentInstance.resumeStream({ approved: true }, { runId, toolCallId: approvalToolCallId });
+
+    const chunks: any[] = [];
+    for await (const chunk of resumed.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // The processor-added tool should NOT produce a tool-error — it should be resolved and executed
+    const toolErrors = chunks.filter(c => c.type === 'tool-error');
+    expect(toolErrors).toHaveLength(0);
+
+    // The tool should have been executed successfully
+    expect(mockExecute).toHaveBeenCalled();
+
+    const toolResults = chunks.filter(c => c.type === 'tool-result');
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0].payload.toolName).toBe('lookup-user');
+    expect(toolResults[0].payload.result.name).toBe('Caleb');
+  }, 30000);
+});
