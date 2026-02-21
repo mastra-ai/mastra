@@ -3778,23 +3778,35 @@ ${suggestedResponse}
     resourceId: string | undefined,
     state: Record<string, unknown>,
   ): Promise<void> {
-    // Regenerate IDs for messages that were already saved with observation markers
-    // This prevents overwriting sealed messages in the DB
+    // Handle sealed messages:
+    // - Messages with observation markers: regenerate ID to preserve the sealed version in the DB
+    // - Messages without observation markers (e.g., sealed for async buffering): skip entirely,
+    //   they were already persisted by runAsyncBufferedObservation (fixes #13089)
+    const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       if (sealedIds.has(msg.id)) {
-        msg.id = crypto.randomUUID();
+        if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+          // Has observation markers — regenerate ID to avoid overwriting the sealed version
+          msg.id = crypto.randomUUID();
+          filteredMessages.push(msg);
+        }
+        // else: sealed for buffering only, already persisted — skip to avoid duplication
+      } else {
+        filteredMessages.push(msg);
       }
     }
 
-    await this.messageHistory.persistMessages({
-      messages: messagesToSave,
-      threadId,
-      resourceId,
-    });
+    if (filteredMessages.length > 0) {
+      await this.messageHistory.persistMessages({
+        messages: filteredMessages,
+        threadId,
+        resourceId,
+      });
+    }
 
     // After successful save, track IDs of messages that now have observation markers (sealed)
     // These IDs cannot be reused in future cycles
-    for (const msg of messagesToSave) {
+    for (const msg of filteredMessages) {
       if (this.findLastCompletedObservationBoundary(msg) !== -1) {
         sealedIds.add(msg.id);
       }

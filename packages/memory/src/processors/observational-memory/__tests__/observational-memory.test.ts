@@ -7569,3 +7569,225 @@ describe('Full Async Buffering Flow', () => {
     expect(newChunks.length).toBeGreaterThan(0);
   });
 });
+
+// =============================================================================
+// Per-step save: sealed message deduplication
+// =============================================================================
+describe('Per-step save deduplication', () => {
+  async function setupMultiStepScenario(opts: { messageTokens: number }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'dedup-thread';
+    const resourceId = 'dedup-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\nDate: Jan 1, 2025\n* Observed user request\n</observations>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: opts.messageTokens },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const runStep = async (stepNumber: number) => {
+      await om.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort,
+      });
+    };
+
+    const addToolResponse = (id: string, toolName: string, callId: string, ms: number) => {
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolName, toolCallId: callId, args: {}, result: {} },
+              },
+            ],
+          },
+          createdAt: new Date(`2025-01-01T10:00:0${ms}Z`),
+        } as any,
+        'response',
+      );
+    };
+
+    const finalize = async () => {
+      await om.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+      });
+    };
+
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    return { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps };
+  }
+
+  it('should save each user message exactly once across a multi-step turn', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize } = await setupMultiStepScenario({
+      messageTokens: 100000,
+    });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Help me with something' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    addToolResponse('resp-0', 'search', 'c1', 1);
+    await runStep(1);
+    addToolResponse('resp-1', 'lookup', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Done.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not duplicate sealed-for-buffering messages during per-step save', async () => {
+    // Low threshold triggers async buffering at step 0, which seals the user message.
+    // handlePerStepSave at step 1 must skip the already-persisted sealed message.
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Help me debug a distributed system issue involving multiple microservices communicating over gRPC.',
+            },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'The root cause is DNS resolution.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+  });
+});
