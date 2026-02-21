@@ -109,7 +109,7 @@
     "esbuild": "^0.25.10",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.3",
-    "hono": "^4.11.9",
+    "hono": "^4.11.10",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
     "resolve.exports": "^2.0.3",

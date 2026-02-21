@@ -31,7 +31,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "uuid": "^13.0.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
@@ -48,7 +48,7 @@
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
-    "hono": "^4.11.9",
+    "hono": "^4.11.10",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
