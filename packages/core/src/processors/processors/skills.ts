@@ -312,7 +312,11 @@ ${skillInstructions}`;
         'Read a reference file from an activated skill. Optionally specify line range to read a portion of the file.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        referencePath: z.string().describe('Path to the reference file (relative to references/ directory)'),
+        referencePath: z
+          .string()
+          .describe(
+            'Path to the reference file (relative to the skill root directory, e.g. "references/colors.md" or "docs/schema.md")',
+          ),
         startLine: z
           .number()
           .optional()
