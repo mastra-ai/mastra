@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fix stale OAuth credentials when resolving OpenAI Codex model by reloading auth storage before each model resolution
+Fixed stale OAuth credentials when resolving the OpenAI Codex model. Auth storage is now reloaded before each model resolution, preventing authentication failures after token refresh.

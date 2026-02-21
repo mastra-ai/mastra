@@ -2,8 +2,4 @@
 "@mastra/memory": patch
 ---
 
-Clean up observer prompts and update priority guidance
-
-- Remove unused condensed prompt experiment
-- Update priority guidance: user messages and task completions are always high priority (🔴)
-- Fix examples to reflect correct priority levels
+Improved Observational Memory priority handling. User messages and task completions are now always treated as high priority, ensuring the observer captures the most relevant context during conversations.

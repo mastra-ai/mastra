@@ -1,17 +1,11 @@
 ---
 '@mastra/core': minor
 '@mastra/editor': minor
-'@mastra/libsql': minor
-'@mastra/pg': minor
-'@mastra/mongodb': minor
-'@mastra/clickhouse': patch
-'@mastra/cloudflare': patch
 ---
 
-Added MCP server storage and editor support. MCP server configurations can now be persisted in storage (LibSQL, Postgres, MongoDB) and managed through the editor CMS. The editor's `mcpServer` namespace provides full CRUD operations and automatically hydrates stored configs into running `MCPServer` instances by resolving tool, agent, and workflow references from the Mastra registry.
+Added MCP server storage and editor support. MCP server configurations can now be persisted in storage and managed through the editor CMS. The editor's `mcpServer` namespace provides full CRUD operations and automatically hydrates stored configs into running `MCPServer` instances by resolving tool, agent, and workflow references from the Mastra registry.
 
 ```ts
-// Register tools with Mastra
 const editor = new MastraEditor();
 const mastra = new Mastra({
   tools: { getWeather: weatherTool, calculate: calculatorTool },
