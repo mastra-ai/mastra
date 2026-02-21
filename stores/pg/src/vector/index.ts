@@ -872,6 +872,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             RETURNING embedding::text
           `;
           await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {}), doc]);
+        } else if (indexInfo.hasFullTextSearch) {
+          const query = `
+            INSERT INTO ${tableName} (vector_id, embedding, metadata)
+            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
+              embedding = $2::${qualifiedVectorType},
+              metadata = $3::jsonb,
+              content = NULL
+            RETURNING embedding::text
+          `;
+          await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {})]);
         } else {
           const query = `
             INSERT INTO ${tableName} (vector_id, embedding, metadata)
