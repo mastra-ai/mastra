@@ -97,7 +97,7 @@ export interface PromptInjectionOptions {
   onDetection?: (event: {
     detectionResult: PromptInjectionResult;
     input: string;
-    strategyApplied: string;
+    strategyApplied: 'block' | 'warn' | 'filter' | 'rewrite';
   }) => void | Promise<void>;
 }
 

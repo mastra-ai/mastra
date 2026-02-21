@@ -150,7 +150,7 @@ export interface PIIDetectorOptions {
   onDetection?: (event: {
     detectionResult: PIIDetectionResult;
     input: string;
-    strategyApplied: string;
+    strategyApplied: 'block' | 'warn' | 'filter' | 'redact';
   }) => void | Promise<void>;
 }
 
