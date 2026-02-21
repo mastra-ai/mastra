@@ -3,7 +3,6 @@
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import { CombinedAutocompleteProvider, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
 import type {
@@ -17,7 +16,6 @@ import type {
 import type { Workspace } from '@mastra/core/workspace';
 import chalk from 'chalk';
 import { parse as parsePartialJson } from 'partial-json';
-import { getOAuthProviders } from '../auth/storage.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -25,29 +23,46 @@ import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import { processSlashCommand } from '../utils/slash-command-processor.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
+import {
+  handleHelpCommand,
+  handleCostCommand,
+  handleYoloCommand,
+  handleThinkCommand,
+  handlePermissionsCommand,
+  handleNameCommand,
+  handleExitCommand,
+  handleHooksCommand,
+  handleMcpCommand,
+  handleModeCommand,
+  handleSkillsCommand,
+  handleNewCommand,
+  handleResourceCommand,
+  handleDiffCommand,
+  handleThreadsCommand,
+  handleThreadTagDirCommand,
+  handleSandboxCommand as handleSandboxCmd,
+  handleModelsCommand,
+  handleSubagentsCommand,
+  handleOMCommand,
+  handleSettingsCommand,
+  handleLoginCommand,
+  handleReviewCommand as handleReviewCmd,
+} from './commands/index.js';
+import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
-import { DiffOutputComponent } from './components/diff-output.js';
-import { LoginDialogComponent } from './components/login-dialog.js';
-import { ModelSelectorComponent } from './components/model-selector.js';
-import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator, applyGradientSweep } from './components/obi-loader.js';
-
 import { OMMarkerComponent } from './components/om-marker.js';
 import type { OMMarkerData } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { defaultOMProgressState, formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
-import { OMSettingsComponent } from './components/om-settings.js';
 import { PlanApprovalInlineComponent, PlanResultComponent } from './components/plan-approval-inline.js';
-import { SettingsComponent } from './components/settings.js';
 import { ShellOutputComponent } from './components/shell-output.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TaskProgressComponent } from './components/task-progress.js';
-import { ThreadSelectorComponent } from './components/thread-selector.js';
-
 import { ToolApprovalDialogComponent } from './components/tool-approval-dialog.js';
 import type { ApprovalAction } from './components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
@@ -2566,136 +2581,6 @@ ${instructions}`,
     });
   }
 
-  // ===========================================================================
-  // Thread Selector
-  // ===========================================================================
-
-  private async showThreadSelector(): Promise<void> {
-    const threads = await this.state.harness.listThreads({ allResources: true });
-    const currentId = this.state.pendingNewThread ? null : this.state.harness.getCurrentThreadId();
-    const currentResourceId = this.state.harness.getResourceId();
-
-    if (threads.length === 0) {
-      this.showInfo('No threads yet. Send a message to create one.');
-      return;
-    }
-
-    return new Promise(resolve => {
-      const selector = new ThreadSelectorComponent({
-        tui: this.state.ui,
-        threads,
-        currentThreadId: currentId,
-        currentResourceId,
-        getMessagePreview: async (threadId: string) => {
-          const firstUserMessage = await this.state.harness.getFirstUserMessageForThread({ threadId });
-          if (firstUserMessage) {
-            const text = this.extractTextContent(firstUserMessage);
-            return this.truncatePreview(text);
-          }
-          return null;
-        },
-        onSelect: async thread => {
-          this.state.ui.hideOverlay();
-
-          if (thread.id === currentId) {
-            resolve();
-            return;
-          }
-
-          // If thread is from a different resource, switch resource first
-          if (thread.resourceId !== currentResourceId) {
-            this.state.harness.setResourceId({ resourceId: thread.resourceId });
-          }
-          try {
-            await this.state.harness.switchThread({ threadId: thread.id });
-          } catch (error) {
-            if (error instanceof ThreadLockError) {
-              this.showThreadLockPrompt(thread.title || thread.id, error.ownerPid);
-              resolve();
-              return;
-            }
-            throw error;
-          }
-          this.state.pendingNewThread = false;
-
-          // Clear chat and render existing messages
-          this.state.chatContainer.clear();
-          this.state.allToolComponents = [];
-          this.state.pendingTools.clear();
-          this.state.toolInputBuffers.clear();
-          await this.renderExistingMessages();
-          this.updateStatusLine();
-
-          this.showInfo(`Switched to: ${thread.title || thread.id}`);
-          resolve();
-        },
-        onCancel: () => {
-          this.state.ui.hideOverlay();
-          resolve();
-        },
-      });
-
-      this.state.ui.showOverlay(selector, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
-      selector.focused = true;
-    });
-  }
-
-  // ===========================================================================
-  // Thread Tagging
-  // ===========================================================================
-
-  private async tagThreadWithDir(): Promise<void> {
-    const threadId = this.state.harness.getCurrentThreadId();
-    if (!threadId && this.state.pendingNewThread) {
-      this.showInfo('No active thread yet — send a message first.');
-      return;
-    }
-    if (!threadId) {
-      this.showInfo('No active thread.');
-      return;
-    }
-
-    const projectPath = (this.state.harness.getState() as any)?.projectPath as string | undefined;
-    if (!projectPath) {
-      this.showInfo('Could not detect current project path.');
-      return;
-    }
-
-    const dirName = projectPath.split('/').pop() || projectPath;
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: `Tag this thread with directory "${dirName}"?\n  ${fg('dim', projectPath)}`,
-          options: [{ label: 'Yes' }, { label: 'No' }],
-          formatResult: answer => (answer === 'Yes' ? `Tagged thread with: ${dirName}` : `Thread not tagged`),
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            if (answer.toLowerCase().startsWith('y')) {
-              await this.state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
   /**
    * Show an inline prompt when a thread is locked by another process.
    * User can create a new thread (y) or exit (n).
@@ -2733,161 +2618,6 @@ ${instructions}`,
     this.state.chatContainer.invalidate();
   }
 
-  // ===========================================================================
-  // Sandbox Management
-  // ===========================================================================
-
-  private async handleSandboxCommand(args: string[]): Promise<void> {
-    const state = this.state.harness.getState() as {
-      sandboxAllowedPaths?: string[];
-    };
-    const currentPaths = state.sandboxAllowedPaths ?? [];
-
-    // If called with args, handle directly (e.g. /sandbox add /some/path)
-    const subcommand = args[0]?.toLowerCase();
-    if (subcommand === 'add' && args.length > 1) {
-      await this.sandboxAddPath(args.slice(1).join(' ').trim());
-      return;
-    }
-    if (subcommand === 'remove' && args.length > 1) {
-      await this.sandboxRemovePath(args.slice(1).join(' ').trim(), currentPaths);
-      return;
-    }
-
-    // Interactive mode — show inline selector
-    const options: Array<{ label: string; description?: string }> = [
-      { label: 'Add path', description: 'Allow access to another directory' },
-    ];
-
-    for (const p of currentPaths) {
-      const short = p.split('/').pop() || p;
-      options.push({
-        label: `Remove: ${short}`,
-        description: p,
-      });
-    }
-
-    const pathsSummary = currentPaths.length
-      ? `${currentPaths.length} allowed path${currentPaths.length > 1 ? 's' : ''}`
-      : 'no extra paths';
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: `Sandbox settings (${pathsSummary})`,
-          options,
-          formatResult: answer => {
-            if (answer === 'Add path') return 'Adding sandbox path…';
-            if (answer.startsWith('Remove: ')) {
-              const short = answer.replace('Remove: ', '');
-              return `Removed: ${short}`;
-            }
-            return answer;
-          },
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            if (answer === 'Add path') {
-              resolve();
-              await this.showSandboxAddPrompt();
-            } else if (answer.startsWith('Remove: ')) {
-              const short = answer.replace('Remove: ', '');
-              const fullPath = currentPaths.find(p => (p.split('/').pop() || p) === short);
-              if (fullPath) {
-                await this.sandboxRemovePath(fullPath, currentPaths);
-              }
-              resolve();
-            } else {
-              resolve();
-            }
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  private async showSandboxAddPrompt(): Promise<void> {
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: 'Enter path to allow',
-          formatResult: answer => {
-            const resolved = path.resolve(answer);
-            return `Added: ${resolved}`;
-          },
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            await this.sandboxAddPath(answer);
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  private async sandboxAddPath(rawPath: string): Promise<void> {
-    const state = this.state.harness.getState() as {
-      sandboxAllowedPaths?: string[];
-    };
-    const currentPaths = state.sandboxAllowedPaths ?? [];
-    const resolved = path.resolve(rawPath);
-
-    if (currentPaths.includes(resolved)) {
-      this.showInfo(`Path already allowed: ${resolved}`);
-      return;
-    }
-    try {
-      await fs.promises.access(resolved);
-    } catch {
-      this.showError(`Path does not exist: ${resolved}`);
-      return;
-    }
-    const updated = [...currentPaths, resolved];
-    this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
-    this.showInfo(`Added to sandbox: ${resolved}`);
-  }
-
-  private async sandboxRemovePath(rawPath: string, currentPaths: string[]): Promise<void> {
-    const resolved = path.resolve(rawPath);
-    const match = currentPaths.find(p => p === resolved || p === rawPath);
-    if (!match) {
-      this.showError(`Path not in allowed list: ${resolved}`);
-      return;
-    }
-    const updated = currentPaths.filter(p => p !== match);
-    this.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-    await this.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
-    this.showInfo(`Removed from sandbox: ${match}`);
-  }
-
-  // ===========================================================================
-  // Skills List
-  // ===========================================================================
-
   /**
    * Get the workspace, preferring harness-owned workspace over the direct option.
    */
@@ -2895,686 +2625,36 @@ ${instructions}`,
     return this.state.harness.getWorkspace() ?? this.state.workspace;
   }
 
-  private async showSkillsList(): Promise<void> {
-    const workspace = this.getResolvedWorkspace();
-    if (!workspace?.skills) {
-      this.showInfo(
-        'No skills configured.\n\n' +
-          'Add skills to any of these locations:\n' +
-          '  .mastracode/skills/   (project-local)\n' +
-          '  .claude/skills/       (project-local)\n' +
-          '  ~/.mastracode/skills/ (global)\n' +
-          '  ~/.claude/skills/     (global)\n\n' +
-          'Each skill is a folder with a SKILL.md file.\n' +
-          'Install skills: npx add-skill <github-url>',
-      );
-      return;
-    }
-
-    try {
-      const skills = await workspace.skills!.list();
-
-      if (skills.length === 0) {
-        this.showInfo(
-          'No skills found in configured directories.\n\n' +
-            'Each skill needs a SKILL.md file with YAML frontmatter.\n' +
-            'Install skills: npx add-skill <github-url>',
-        );
-        return;
-      }
-
-      const skillLines = skills.map(skill => {
-        const desc = skill.description
-          ? ` - ${skill.description.length > 60 ? skill.description.slice(0, 57) + '...' : skill.description}`
-          : '';
-        return `  ${skill.name}${desc}`;
-      });
-
-      this.showInfo(
-        `Skills (${skills.length}):\n${skillLines.join('\n')}\n\n` +
-          'Skills are automatically activated by the agent when relevant.',
-      );
-    } catch (error) {
-      this.showError(`Failed to list skills: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  // ===========================================================================
-  // Model Selector
-  // ===========================================================================
-
-  /**
-   * Show mode selector first, then scope (global/thread), then model list.
-   * Flow: Mode → Scope → Model
-   */
-  private async showModelScopeSelector(): Promise<void> {
-    const modes = this.state.harness.listModes();
-    const currentMode = this.state.harness.getCurrentMode();
-
-    // Sort modes with active mode first
-    const sortedModes = [...modes].sort((a, b) => {
-      if (a.id === currentMode?.id) return -1;
-      if (b.id === currentMode?.id) return 1;
-      return 0;
-    });
-
-    const modeOptions = sortedModes.map(mode => ({
-      label: mode.name + (mode.id === currentMode?.id ? ' (active)' : ''),
-      modeId: mode.id,
-      modeName: mode.name,
-    }));
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: 'Select mode',
-          options: modeOptions.map(m => ({ label: m.label })),
-          formatResult: answer => {
-            const mode = modeOptions.find(m => m.label === answer);
-            return `Mode: ${mode?.modeName ?? answer}`;
-          },
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            const selected = modeOptions.find(m => m.label === answer);
-            if (selected?.modeId && selected?.modeName) {
-              await this.showModelScopeThenList(selected.modeId, selected.modeName);
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  /**
-   * Show scope selector (global/thread) for a specific mode, then model list.
-   */
-  private async showModelScopeThenList(modeId: string, modeName: string): Promise<void> {
-    const scopes = [
-      {
-        label: 'Thread default',
-        description: `Default for ${modeName} mode in this thread`,
-        scope: 'thread' as const,
-      },
-      {
-        label: 'Global default',
-        description: `Default for ${modeName} mode in all threads`,
-        scope: 'global' as const,
-      },
-    ];
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: `Select scope for ${modeName}`,
-          options: scopes.map(s => ({
-            label: s.label,
-            description: s.description,
-          })),
-          formatResult: answer => `${modeName} · ${answer}`,
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            const selected = scopes.find(s => s.label === answer);
-            if (selected) {
-              await this.showModelListForScope(selected.scope, modeId, modeName);
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  /**
-   * Show the model list for a specific mode and scope.
-   */
-  private async showModelListForScope(scope: 'global' | 'thread', modeId: string, modeName: string): Promise<void> {
-    const availableModels = await this.state.harness.listAvailableModels();
-
-    if (availableModels.length === 0) {
-      this.showInfo('No models available. Check your Mastra configuration.');
-      return;
-    }
-
-    const currentModelId = this.state.harness.getCurrentModelId();
-    const scopeLabel = scope === 'global' ? `${modeName} · Global` : `${modeName} · Thread`;
-
-    return new Promise(resolve => {
-      const selector = new ModelSelectorComponent({
-        tui: this.state.ui,
-        models: availableModels,
-        currentModelId,
-        title: `Select model (${scopeLabel})`,
-        onSelect: async (model: ModelItem) => {
-          this.state.ui.hideOverlay();
-          await this.state.harness.switchModel({ modelId: model.id, scope, modeId });
-          this.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
-          this.updateStatusLine();
-          resolve();
-        },
-        onCancel: () => {
-          this.state.ui.hideOverlay();
-          resolve();
-        },
-      });
-
-      this.state.ui.showOverlay(selector, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
-      selector.focused = true;
-    });
-  }
-
-  /**
-   * Show agent type selector first, then scope (global/thread), then model list.
-   * Flow: Agent Type → Scope → Model
-   */
-  private async showSubagentModelSelector(): Promise<void> {
-    const agentTypes = [
-      {
-        id: 'explore',
-        label: 'Explore',
-        description: 'Read-only codebase exploration',
-      },
-      {
-        id: 'plan',
-        label: 'Plan',
-        description: 'Read-only analysis and planning',
-      },
-      {
-        id: 'execute',
-        label: 'Execute',
-        description: 'Task execution with write access',
-      },
-    ];
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: 'Select subagent type',
-          options: agentTypes.map(t => ({
-            label: t.label,
-            description: t.description,
-          })),
-          formatResult: answer => `Subagent: ${answer}`,
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            const selected = agentTypes.find(t => t.label === answer);
-            if (selected) {
-              await this.showSubagentScopeThenList(selected.id, selected.label);
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  /**
-   * Show scope selector (global/thread) for a specific agent type, then model list.
-   */
-  private async showSubagentScopeThenList(agentType: string, agentTypeLabel: string): Promise<void> {
-    const scopes = [
-      {
-        label: 'Thread default',
-        description: `Default for ${agentTypeLabel} subagents in this thread`,
-        scope: 'thread' as const,
-      },
-      {
-        label: 'Global default',
-        description: `Default for ${agentTypeLabel} subagents in all threads`,
-        scope: 'global' as const,
-      },
-    ];
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: `Select scope for ${agentTypeLabel} subagents`,
-          options: scopes.map(s => ({
-            label: s.label,
-            description: s.description,
-          })),
-          formatResult: answer => `${agentTypeLabel} · ${answer}`,
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            const selected = scopes.find(s => s.label === answer);
-            if (selected) {
-              await this.showSubagentModelListForScope(selected.scope, agentType, agentTypeLabel);
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  /**
-   * Show the model list for subagent type and scope selection.
-   */
-  private async showSubagentModelListForScope(
-    scope: 'global' | 'thread',
-    agentType: string,
-    agentTypeLabel: string,
-  ): Promise<void> {
-    const availableModels = await this.state.harness.listAvailableModels();
-
-    if (availableModels.length === 0) {
-      this.showInfo('No models available. Check your Mastra configuration.');
-      return;
-    }
-
-    // Get current subagent model if set
-    const currentSubagentModel = await this.state.harness.getSubagentModelId({ agentType });
-    const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
-
-    return new Promise(resolve => {
-      const selector = new ModelSelectorComponent({
-        tui: this.state.ui,
-        models: availableModels,
-        currentModelId: currentSubagentModel ?? undefined,
-        title: `Select subagent model (${scopeLabel})`,
-        onSelect: async (model: ModelItem) => {
-          this.state.ui.hideOverlay();
-          await this.state.harness.setSubagentModelId({ modelId: model.id, agentType });
-          if (scope === 'global') {
-            if (this.state.authStorage) {
-              this.state.authStorage.setSubagentModelId(model.id, agentType);
-              this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
-            } else {
-              this.showError('Cannot persist global preference: auth storage not configured');
-            }
-          } else {
-            this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
-          }
-          resolve();
-        },
-        onCancel: () => {
-          this.state.ui.hideOverlay();
-          resolve();
-        },
-      });
-
-      this.state.ui.showOverlay(selector, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
-      selector.focused = true;
-    });
-  }
-
   // ===========================================================================
   // Observational Memory Settings
   // ===========================================================================
 
-  private async showOMSettings(): Promise<void> {
-    // Get available models for the model submenus
-    const availableModels = await this.state.harness.listAvailableModels();
-    const modelOptions = availableModels.map(m => ({
-      id: m.id,
-      label: m.id,
-    }));
-
-    const config = {
-      observerModelId: this.state.harness.getObserverModelId(),
-      reflectorModelId: this.state.harness.getReflectorModelId(),
-      observationThreshold: this.state.harness.getObservationThreshold(),
-      reflectionThreshold: this.state.harness.getReflectionThreshold(),
-    };
-
-    return new Promise<void>(resolve => {
-      const settings = new OMSettingsComponent(
-        config,
-        {
-          onObserverModelChange: async modelId => {
-            await this.state.harness.switchObserverModel({ modelId });
-            this.showInfo(`Observer model → ${modelId}`);
-          },
-          onReflectorModelChange: async modelId => {
-            await this.state.harness.switchReflectorModel({ modelId });
-            this.showInfo(`Reflector model → ${modelId}`);
-          },
-          onObservationThresholdChange: value => {
-            this.state.harness.setState({ observationThreshold: value } as any);
-            this.state.omProgress.threshold = value;
-            this.state.omProgress.thresholdPercent =
-              value > 0 ? (this.state.omProgress.pendingTokens / value) * 100 : 0;
-            this.updateStatusLine();
-          },
-          onReflectionThresholdChange: value => {
-            this.state.harness.setState({ reflectionThreshold: value } as any);
-            this.state.omProgress.reflectionThreshold = value;
-            this.state.omProgress.reflectionThresholdPercent =
-              value > 0 ? (this.state.omProgress.observationTokens / value) * 100 : 0;
-            this.updateStatusLine();
-          },
-          onClose: () => {
-            this.state.ui.hideOverlay();
-            this.updateStatusLine();
-            resolve();
-          },
-        },
-        modelOptions,
-        this.state.ui,
-      );
-
-      this.state.ui.showOverlay(settings, {
-        width: '80%',
-        maxHeight: '70%',
-        anchor: 'center',
-      });
-      settings.focused = true;
-    });
-  }
-  // ===========================================================================
-  // General Settings
-  // ===========================================================================
-  private async showPermissions(): Promise<void> {
-    const { TOOL_CATEGORIES, getToolsForCategory } = await import('../permissions.js');
-    const rules = this.state.harness.getPermissionRules();
-    const grants = this.state.harness.getSessionGrants();
-    const isYolo = (this.state.harness.getState() as any).yolo === true;
-
-    const lines: string[] = [];
-    lines.push('Tool Approval Permissions');
-    lines.push('─'.repeat(40));
-
-    if (isYolo) {
-      lines.push('');
-      lines.push('⚡ YOLO mode is ON — all tools are auto-approved');
-      lines.push('  Use /yolo to toggle off');
-    }
-
-    lines.push('');
-    lines.push('Category Policies:');
-    for (const [cat, meta] of Object.entries(TOOL_CATEGORIES)) {
-      const policy = rules.categories[cat as keyof typeof rules.categories] || 'ask';
-      const sessionGranted = grants.categories.includes(cat as any);
-      const tools = getToolsForCategory(cat as any);
-      const status = sessionGranted ? `${policy} (session: always allow)` : policy;
-      lines.push(`  ${meta.label.padEnd(12)} ${status.padEnd(16)} tools: ${tools.join(', ')}`);
-    }
-
-    if (Object.keys(rules.tools).length > 0) {
-      lines.push('');
-      lines.push('Per-tool Overrides:');
-      for (const [tool, policy] of Object.entries(rules.tools)) {
-        lines.push(`  ${tool.padEnd(24)} ${policy}`);
-      }
-    }
-
-    if (grants.categories.length > 0 || grants.tools.length > 0) {
-      lines.push('');
-      lines.push('Session Grants (reset on restart):');
-      if (grants.categories.length > 0) {
-        lines.push(`  Categories: ${grants.categories.join(', ')}`);
-      }
-      if (grants.tools.length > 0) {
-        lines.push(`  Tools: ${grants.tools.join(', ')}`);
-      }
-    }
-
-    lines.push('');
-    lines.push('Commands:');
-    lines.push('  /permissions set <category> <allow|ask|deny>');
-    lines.push('  /yolo — toggle auto-approve all tools');
-
-    this.showInfo(lines.join('\n'));
-  }
-
-  private async showSettings(): Promise<void> {
-    const state = this.state.harness.getState() as any;
-    const config = {
-      notifications: (state?.notifications ?? 'off') as NotificationMode,
-      yolo: state?.yolo === true,
-      thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
-      escapeAsCancel: this.state.editor.escapeEnabled,
-    };
-
-    return new Promise<void>(resolve => {
-      const settings = new SettingsComponent(config, {
-        onNotificationsChange: async mode => {
-          await this.state.harness.setState({ notifications: mode });
-          this.showInfo(`Notifications: ${mode}`);
-        },
-        onYoloChange: enabled => {
-          this.state.harness.setState({ yolo: enabled } as any);
-          this.updateStatusLine();
-        },
-        onThinkingLevelChange: async level => {
-          await this.state.harness.setState({ thinkingLevel: level } as any);
-          this.updateStatusLine();
-        },
-        onEscapeAsCancelChange: async enabled => {
-          this.state.editor.escapeEnabled = enabled;
-          await this.state.harness.setState({ escapeAsCancel: enabled });
-          await this.state.harness.setThreadSetting({ key: 'escapeAsCancel', value: enabled });
-        },
-        onClose: () => {
-          this.state.ui.hideOverlay();
-          resolve();
-        },
-      });
-
-      this.state.ui.showOverlay(settings, {
-        width: '60%',
-        maxHeight: '50%',
-        anchor: 'center',
-      });
-      settings.focused = true;
-    });
-  }
   // ===========================================================================
   // Login Selector
   // ===========================================================================
 
-  private async showLoginSelector(mode: 'login' | 'logout'): Promise<void> {
-    const allProviders = getOAuthProviders();
-    const loggedInIds = allProviders.filter(p => this.state.authStorage?.isLoggedIn(p.id)).map(p => p.id);
-
-    if (mode === 'logout') {
-      if (loggedInIds.length === 0) {
-        this.showInfo('No OAuth providers logged in. Use /login first.');
-        return;
-      }
-    }
-
-    const providers = mode === 'logout' ? allProviders.filter(p => loggedInIds.includes(p.id)) : allProviders;
-
-    if (providers.length === 0) {
-      this.showInfo('No OAuth providers available.');
-      return;
-    }
-
-    const action = mode === 'login' ? 'Log in to' : 'Log out from';
-
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question: `${action} which provider?`,
-          options: providers.map(p => ({
-            label: p.name,
-            description: loggedInIds.includes(p.id) ? '(logged in)' : '',
-          })),
-          formatResult: answer => (mode === 'login' ? `Logging in to ${answer}…` : `Logged out from ${answer}`),
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            const provider = providers.find(p => p.name === answer);
-            if (provider) {
-              if (mode === 'login') {
-                await this.performLogin(provider.id);
-              } else {
-                if (this.state.authStorage) {
-                  this.state.authStorage.logout(provider.id);
-                  this.showInfo(`Logged out from ${provider.name}`);
-                } else {
-                  this.showError('Auth storage not configured');
-                }
-              }
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
-    });
-  }
-
-  private async performLogin(providerId: string): Promise<void> {
-    const provider = getOAuthProviders().find(p => p.id === providerId);
-    const providerName = provider?.name || providerId;
-
-    if (!this.state.authStorage) {
-      this.showError('Auth storage not configured');
-      return;
-    }
-
-    return new Promise(resolve => {
-      const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
-        this.state.ui.hideOverlay();
-        if (success) {
-          this.showInfo(`Successfully logged in to ${providerName}`);
-        } else if (message) {
-          this.showInfo(message);
-        }
-        resolve();
-      });
-
-      // Show as overlay - same size as model selector
-      this.state.ui.showOverlay(dialog, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
-      dialog.focused = true;
-
-      this.state.authStorage
-        .login(providerId, {
-          onAuth: (info: { url: string; instructions?: string }) => {
-            dialog.showAuth(info.url, info.instructions);
-          },
-          onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-            return dialog.showPrompt(prompt.message, prompt.placeholder);
-          },
-          onProgress: (message: string) => {
-            dialog.showProgress(message);
-          },
-          signal: dialog.signal,
-        })
-        .then(async () => {
-          this.state.ui.hideOverlay();
-
-          // Auto-switch to the provider's default model
-          const defaultModel = this.state.authStorage?.getDefaultModelForProvider(providerId as any);
-          if (defaultModel) {
-            await this.state.harness.switchModel({ modelId: defaultModel });
-            this.updateStatusLine();
-            this.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
-          } else {
-            this.showInfo(`Successfully logged in to ${providerName}`);
-          }
-
-          resolve();
-        })
-        .catch((error: Error) => {
-          this.state.ui.hideOverlay();
-          if (error.message !== 'Login cancelled') {
-            this.showError(`Failed to login: ${error.message}`);
-          }
-          resolve();
-        });
-    });
-  }
-
-  // ===========================================================================
-  // Cost Tracking
-  // ===========================================================================
-
-  private async showCostBreakdown(): Promise<void> {
-    // Format the breakdown
-    const formatNumber = (n: number) => n.toLocaleString();
-
-    // Get OM token usage if available
-    let omTokensText = '';
-    if (this.state.omProgress.observationTokens > 0) {
-      omTokensText = `
-  Memory:     ${formatNumber(this.state.omProgress.observationTokens)} tokens`;
-    }
-
-    this.showInfo(`Token Usage (Current Thread):
-  Input:      ${formatNumber(this.state.tokenUsage.promptTokens)} tokens
-  Output:     ${formatNumber(this.state.tokenUsage.completionTokens)} tokens${omTokensText}
-  ─────────────────────────────────────────
-  Total:      ${formatNumber(this.state.tokenUsage.totalTokens)} tokens
-  
-  Note: For cost estimates, check your provider's pricing page.`);
-  }
-
   // ===========================================================================
   // Slash Commands
   // ===========================================================================
+
+  private buildCommandContext(): SlashCommandContext {
+    return {
+      state: this.state,
+      harness: this.state.harness,
+      hookManager: this.state.hookManager,
+      mcpManager: this.state.mcpManager,
+      authStorage: this.state.authStorage,
+      customSlashCommands: this.state.customSlashCommands,
+      showInfo: msg => this.showInfo(msg),
+      showError: msg => this.showError(msg),
+      updateStatusLine: () => this.updateStatusLine(),
+      resetStatusLineState: () => this.resetStatusLineState(),
+      stop: () => this.stop(),
+      getResolvedWorkspace: () => this.getResolvedWorkspace(),
+      addUserMessage: msg => this.addUserMessage(msg),
+      renderExistingMessages: () => this.renderExistingMessages(),
+    };
+  }
 
   private async handleSlashCommand(input: string): Promise<boolean> {
     const trimmedInput = input.trim();
@@ -3594,408 +2674,83 @@ ${instructions}`,
 
     const [command, ...args] = withoutSlashes.split(' ');
 
+    // Build command context lazily for extracted handlers
+    const ctx = () => this.buildCommandContext();
+
     switch (command) {
-      case 'new': {
-        // Defer thread creation until first message
-        this.state.pendingNewThread = true;
-        this.state.chatContainer.clear();
-        this.state.pendingTools.clear();
-        this.state.toolInputBuffers.clear();
-        this.state.allToolComponents = [];
-        this.state.modifiedFiles.clear();
-        this.state.pendingFileTools.clear();
-        if (this.state.taskProgress) {
-          this.state.taskProgress.updateTasks([]);
-        }
-        this.state.previousTasks = [];
-        this.state.taskWriteInsertIndex = -1;
-        this.resetStatusLineState();
-        this.state.ui.requestRender();
-        this.showInfo('Ready for new conversation');
+      case 'new':
+        handleNewCommand(ctx());
         return true;
-      }
-
-      case 'threads': {
-        await this.showThreadSelector();
+      case 'threads':
+        await handleThreadsCommand(ctx());
         return true;
-      }
-
-      case 'skills': {
-        await this.showSkillsList();
+      case 'skills':
+        await handleSkillsCommand(ctx());
         return true;
-      }
-
-      case 'thread:tag-dir': {
-        await this.tagThreadWithDir();
+      case 'thread:tag-dir':
+        await handleThreadTagDirCommand(ctx());
         return true;
-      }
-
-      case 'sandbox': {
-        await this.handleSandboxCommand(args);
+      case 'sandbox':
+        await handleSandboxCmd(ctx(), args);
         return true;
-      }
-
-      case 'mode': {
-        const modes = this.state.harness.listModes();
-        if (modes.length <= 1) {
-          this.showInfo('Only one mode available');
-          return true;
-        }
-        if (args[0]) {
-          await this.state.harness.switchMode({ modeId: args[0] });
-        } else {
-          const currentMode = this.state.harness.getCurrentMode();
-          const modeList = modes
-            .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.id}${m.name ? ` - ${m.name}` : ''}`)
-            .join('\n');
-          this.showInfo(`Modes:
-${modeList}`);
-        }
+      case 'mode':
+        await handleModeCommand(ctx(), args);
         return true;
-      }
-
-      case 'models': {
-        await this.showModelScopeSelector();
+      case 'models':
+        await handleModelsCommand(ctx());
         return true;
-      }
-
-      case 'subagents': {
-        await this.showSubagentModelSelector();
+      case 'subagents':
+        await handleSubagentsCommand(ctx());
         return true;
-      }
-
-      case 'om': {
-        await this.showOMSettings();
+      case 'om':
+        await handleOMCommand(ctx());
         return true;
-      }
-      case 'think': {
-        const currentLevel = ((this.state.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
-        const levels = [
-          { label: 'Off', id: 'off' },
-          { label: 'Minimal', id: 'minimal' },
-          { label: 'Low', id: 'low' },
-          { label: 'Medium', id: 'medium' },
-          { label: 'High', id: 'high' },
-        ];
-        const currentIdx = levels.findIndex(l => l.id === currentLevel);
-        const nextIdx = (currentIdx + 1) % levels.length;
-        const next = levels[nextIdx]!;
-        await this.state.harness.setState({ thinkingLevel: next.id } as any);
-        this.showInfo(`Thinking: ${next.label}`);
-        this.updateStatusLine();
+      case 'think':
+        await handleThinkCommand(ctx());
         return true;
-      }
-      case 'permissions': {
-        if (args[0] === 'set' && args.length >= 3) {
-          const category = args[1] as any;
-          const policy = args[2] as any;
-          const validCategories = ['read', 'edit', 'execute', 'mcp'];
-          const validPolicies = ['allow', 'ask', 'deny'];
-          if (!validCategories.includes(category)) {
-            this.showInfo(`Invalid category: ${category}. Must be one of: ${validCategories.join(', ')}`);
-            return true;
-          }
-          if (!validPolicies.includes(policy)) {
-            this.showInfo(`Invalid policy: ${policy}. Must be one of: ${validPolicies.join(', ')}`);
-            return true;
-          }
-          this.state.harness.setPermissionForCategory({ category, policy });
-          this.showInfo(`Set ${category} policy to: ${policy}`);
-          return true;
-        }
-        await this.showPermissions();
+      case 'permissions':
+        await handlePermissionsCommand(ctx(), args);
         return true;
-      }
-      case 'yolo': {
-        const current = (this.state.harness.getState() as any).yolo === true;
-        this.state.harness.setState({ yolo: !current } as any);
-        this.showInfo(!current ? 'YOLO mode ON — tools auto-approved' : 'YOLO mode OFF — tools require approval');
-        this.updateStatusLine();
+      case 'yolo':
+        handleYoloCommand(ctx());
         return true;
-      }
-      case 'settings': {
-        await this.showSettings();
+      case 'settings':
+        await handleSettingsCommand(ctx());
         return true;
-      }
-
-      case 'login': {
-        await this.showLoginSelector('login');
+      case 'login':
+        await handleLoginCommand(ctx(), 'login');
         return true;
-      }
-
-      case 'logout': {
-        await this.showLoginSelector('logout');
+      case 'logout':
+        await handleLoginCommand(ctx(), 'logout');
         return true;
-      }
-      case 'cost': {
-        await this.showCostBreakdown();
+      case 'cost':
+        handleCostCommand(ctx());
         return true;
-      }
-
-      case 'diff': {
-        await this.showDiff(args[0]);
+      case 'diff':
+        await handleDiffCommand(ctx(), args[0]);
         return true;
-      }
-
-      case 'name': {
-        const title = args.join(' ').trim();
-        if (!title) {
-          this.showInfo('Usage: /name <title>');
-          return true;
-        }
-        if (!this.state.harness.getCurrentThreadId()) {
-          this.showInfo('No active thread. Send a message first.');
-          return true;
-        }
-        await this.state.harness.renameThread({ title });
-        this.showInfo(`Thread renamed to: ${title}`);
+      case 'name':
+        await handleNameCommand(ctx(), args);
         return true;
-      }
-      case 'resource': {
-        const sub = args[0]?.trim();
-        const current = this.state.harness.getResourceId();
-        const defaultId = this.state.harness.getDefaultResourceId();
-
-        if (!sub) {
-          // Show current resource ID and list known ones
-          const knownIds = await this.state.harness.getKnownResourceIds();
-          const isOverridden = current !== defaultId;
-          const lines = [
-            `Current: ${current}${isOverridden ? ` (auto-detected: ${defaultId})` : ''}`,
-            '',
-            'Known resource IDs:',
-            ...knownIds.map(id => `  ${id === current ? '* ' : '  '}${id}`),
-            '',
-            'Usage:',
-            '  /resource <id>    - Switch to a resource ID',
-            '  /resource reset   - Reset to auto-detected ID',
-          ];
-          this.showInfo(lines.join('\n'));
-        } else if (sub === 'reset') {
-          this.state.harness.setResourceId({ resourceId: defaultId });
-          this.state.pendingNewThread = true;
-          this.state.chatContainer.clear();
-          this.state.pendingTools.clear();
-          this.state.toolInputBuffers.clear();
-          this.state.allToolComponents = [];
-          this.resetStatusLineState();
-          this.state.ui.requestRender();
-          this.showInfo(`Resource ID reset to: ${defaultId}`);
-        } else {
-          const newId = args.join(' ').trim();
-          this.state.harness.setResourceId({ resourceId: newId });
-          this.state.pendingNewThread = true;
-          this.state.chatContainer.clear();
-          this.state.pendingTools.clear();
-          this.state.toolInputBuffers.clear();
-          this.state.allToolComponents = [];
-          this.resetStatusLineState();
-          this.state.ui.requestRender();
-          this.showInfo(`Switched to resource: ${newId}`);
-        }
+      case 'resource':
+        await handleResourceCommand(ctx(), args);
         return true;
-      }
-
       case 'exit':
-        this.stop();
-        process.exit(0);
-
-      case 'help': {
-        const modes = this.state.harness.listModes();
-        const modeHelp = modes.length > 1 ? '\n/mode     - Switch or list modes' : '';
-
-        // Build custom commands help
-        let customCommandsHelp = '';
-        if (this.state.customSlashCommands.length > 0) {
-          customCommandsHelp =
-            '\n\nCustom commands (use // prefix):\n' +
-            this.state.customSlashCommands
-              .map(cmd => `  //${cmd.name.padEnd(8)} - ${cmd.description || 'No description'}`)
-              .join('\n');
-        }
-
-        this.showInfo(`Available commands:
-  /new       - Start a new thread
-  /threads       - Switch between threads
-  /thread:tag-dir - Tag thread with current directory
-  /name          - Rename current thread
-  /resource      - Show/switch resource ID (tag for sharing)
-  /skills        - List available skills
-  /models    - Configure model (global/thread/mode)
-  /subagents - Configure subagent model defaults
-  /permissions - View/manage tool approval permissions
-  /settings - General settings (notifications, YOLO, thinking)
-  /om       - Configure Observational Memory
-  /review   - Review a GitHub pull request
-  /cost     - Show token usage and estimated costs
-  /diff     - Show modified files or git diff for a path
-  /sandbox  - Manage sandbox allowed paths
-  /hooks    - Show/reload configured hooks
-  /mcp      - Show/reload MCP server connections
-  /login    - Login with OAuth provider
-  /logout   - Logout from OAuth provider${modeHelp}
-  /exit     - Exit the TUI
-  /help     - Show this help${customCommandsHelp}
-
-Shell:
-  !<cmd>    - Run a shell command directly (e.g., !ls -la)
-
-Keyboard shortcuts:
-  Ctrl+C    - Interrupt agent / clear input
-  Ctrl+C×2  - Exit process (double-tap)
-  Ctrl+D    - Exit (when editor is empty)
-  Enter     - While working: steer (interrupt + redirect)
-  Ctrl+F    - While working: queue follow-up message
-  Shift+Tab - Cycle agent modes
-  Ctrl+T    - Toggle thinking blocks
-  Ctrl+E    - Expand/collapse tool outputs`);
+        handleExitCommand(ctx());
         return true;
-      }
-
-      case 'hooks': {
-        const hm = this.state.hookManager;
-        if (!hm) {
-          this.showInfo('Hooks system not initialized.');
-          return true;
-        }
-
-        const subcommand = args[0];
-        if (subcommand === 'reload') {
-          hm.reload();
-          this.showInfo('Hooks config reloaded.');
-          return true;
-        }
-
-        const paths = hm.getConfigPaths();
-
-        if (!hm.hasHooks()) {
-          this.showInfo(
-            `No hooks configured.\n\n` +
-              `Add hooks to:\n` +
-              `  ${paths.project} (project)\n` +
-              `  ${paths.global} (global)\n\n` +
-              `Example hooks.json:\n` +
-              `  {\n` +
-              `    "PreToolUse": [{\n` +
-              `      "type": "command",\n` +
-              `      "command": "echo 'tool called'",\n` +
-              `      "matcher": { "tool_name": "execute_command" }\n` +
-              `    }]\n` +
-              `  }`,
-          );
-          return true;
-        }
-
-        const hookConfig = hm.getConfig();
-        const lines: string[] = [`Hooks Configuration:`];
-        lines.push(`  Project: ${paths.project}`);
-        lines.push(`  Global:  ${paths.global}`);
-        lines.push('');
-
-        const eventNames = [
-          'PreToolUse',
-          'PostToolUse',
-          'Stop',
-          'UserPromptSubmit',
-          'SessionStart',
-          'SessionEnd',
-        ] as const;
-
-        for (const event of eventNames) {
-          const hooks = hookConfig[event];
-          if (hooks && hooks.length > 0) {
-            lines.push(`  ${event} (${hooks.length} hook${hooks.length > 1 ? 's' : ''}):`);
-            for (const hook of hooks) {
-              const matcherStr = hook.matcher?.tool_name ? ` [tool: ${hook.matcher.tool_name}]` : '';
-              const desc = hook.description ? ` - ${hook.description}` : '';
-              lines.push(`    ${hook.command}${matcherStr}${desc}`);
-            }
-          }
-        }
-
-        lines.push('');
-        lines.push(`  /hooks reload - Reload config from disk`);
-
-        this.showInfo(lines.join('\n'));
+      case 'help':
+        handleHelpCommand(ctx());
         return true;
-      }
-
-      case 'mcp': {
-        const mm = this.state.mcpManager;
-        if (!mm) {
-          this.showInfo('MCP system not initialized.');
-          return true;
-        }
-
-        const subcommand = args[0];
-        if (subcommand === 'reload') {
-          this.showInfo('MCP: Reconnecting to servers...');
-          try {
-            await mm.reload();
-            const statuses = mm.getServerStatuses();
-            const connected = statuses.filter(s => s.connected);
-            const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
-            this.showInfo(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
-          } catch (error) {
-            this.showError(`MCP reload failed: ${error instanceof Error ? error.message : String(error)}`);
-          }
-          return true;
-        }
-
-        const paths = mm.getConfigPaths();
-
-        if (!mm.hasServers()) {
-          this.showInfo(
-            `No MCP servers configured.\n\n` +
-              `Add servers to:\n` +
-              `  ${paths.project} (project)\n` +
-              `  ${paths.global} (global)\n` +
-              `  ${paths.claude} (Claude Code compat)\n\n` +
-              `Example mcp.json:\n` +
-              `  {\n` +
-              `    "mcpServers": {\n` +
-              `      "filesystem": {\n` +
-              `        "command": "npx",\n` +
-              `        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"],\n` +
-              `        "env": {}\n` +
-              `      }\n` +
-              `    }\n` +
-              `  }`,
-          );
-          return true;
-        }
-
-        const statuses = mm.getServerStatuses();
-        const lines: string[] = [`MCP Servers:`];
-        lines.push(`  Project: ${paths.project}`);
-        lines.push(`  Global:  ${paths.global}`);
-        lines.push(`  Claude:  ${paths.claude}`);
-        lines.push('');
-
-        for (const status of statuses) {
-          const icon = status.connected ? '\u2713' : '\u2717';
-          const state = status.connected ? 'connected' : `error: ${status.error}`;
-          lines.push(`  ${icon} ${status.name} (${state})`);
-          if (status.toolNames.length > 0) {
-            for (const toolName of status.toolNames) {
-              lines.push(`      - ${toolName}`);
-            }
-          }
-        }
-
-        lines.push('');
-        lines.push(`  /mcp reload - Disconnect and reconnect all servers`);
-
-        this.showInfo(lines.join('\n'));
+      case 'hooks':
+        handleHooksCommand(ctx(), args);
         return true;
-      }
-      case 'review': {
-        await this.handleReviewCommand(args);
+      case 'mcp':
+        await handleMcpCommand(ctx(), args);
         return true;
-      }
-
+      case 'review':
+        await handleReviewCmd(ctx(), args);
+        return true;
       default: {
-        // Fall back to custom commands for single-slash input
         const customCommand = this.state.customSlashCommands.find(cmd => cmd.name === command);
         if (customCommand) {
           await this.handleCustomSlashCommand(customCommand, args);
@@ -4005,75 +2760,6 @@ Keyboard shortcuts:
         return true;
       }
     }
-  }
-  /**
-   * Handle the /review command — send a PR review prompt to the agent.
-   * With no args: lists open PRs. With a PR number: reviews that PR.
-   */
-  private async handleReviewCommand(args: string[]): Promise<void> {
-    if (!this.state.harness.hasModelSelected()) {
-      this.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
-      return;
-    }
-
-    // Ensure thread exists
-    if (this.state.pendingNewThread) {
-      await this.state.harness.createThread();
-      this.state.pendingNewThread = false;
-      this.updateStatusLine();
-    }
-
-    const prNumber = args[0];
-    const focusArea = args.slice(1).join(' ');
-
-    let prompt: string;
-
-    if (!prNumber) {
-      // No PR specified — list open PRs and ask
-      prompt =
-        `List the open pull requests for this repository using \`gh pr list --limit 20\`. ` +
-        `Present them in a clear table with PR number, title, and author. ` +
-        `Then ask me which PR I'd like you to review.`;
-    } else {
-      // PR number given — do a thorough review
-      prompt =
-        `Do a thorough code review of PR #${prNumber}. Follow these steps:\n\n` +
-        `1. Run \`gh pr view ${prNumber}\` to get the PR description and metadata.\n` +
-        `2. Run \`gh pr diff ${prNumber}\` to get the full diff.\n` +
-        `3. Run \`gh pr checks ${prNumber}\` to check CI status.\n` +
-        `4. Read any relevant source files for full context on the changes.\n` +
-        `5. Provide a detailed code review covering:\n` +
-        `   - Overview of what the PR does\n` +
-        `   - Root cause analysis (if it's a fix)\n` +
-        `   - Code quality assessment\n` +
-        `   - Potential concerns or edge cases\n` +
-        `   - CI status\n` +
-        `   - Suggestions for improvement\n` +
-        `   - Final verdict (approve/request changes/comment)\n`;
-
-      if (focusArea) {
-        prompt += `\nPay special attention to: ${focusArea}\n`;
-      }
-    }
-
-    // Show what's happening
-    this.addUserMessage({
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: prNumber ? `/review ${args.join(' ')}` : '/review',
-        },
-      ],
-      createdAt: new Date(),
-    });
-    this.state.ui.requestRender();
-
-    // Send to the agent
-    this.state.harness.sendMessage({ content: prompt }).catch(error => {
-      this.showError(error instanceof Error ? error.message : 'Review failed');
-    });
   }
 
   /**
@@ -4477,91 +3163,6 @@ Keyboard shortcuts:
         return null;
     }
   }
-  /**
-   * Show file changes tracked during this session.
-   * With no args: shows summary of all modified files.
-   * With a path: shows git diff for that specific file.
-   */
-  private async showDiff(filePath?: string): Promise<void> {
-    if (filePath) {
-      // Show git diff for a specific file
-      try {
-        const { execa } = await import('execa');
-        const result = await execa('git', ['diff', filePath], {
-          cwd: process.cwd(),
-          reject: false,
-        });
-
-        if (!result.stdout.trim()) {
-          // Try staged diff
-          const staged = await execa('git', ['diff', '--cached', filePath], {
-            cwd: process.cwd(),
-            reject: false,
-          });
-          if (!staged.stdout.trim()) {
-            this.showInfo(`No changes detected for: ${filePath}`);
-            return;
-          }
-          const component = new DiffOutputComponent(`git diff --cached ${filePath}`, staged.stdout);
-          this.state.chatContainer.addChild(component);
-          this.state.ui.requestRender();
-          return;
-        }
-
-        const component = new DiffOutputComponent(`git diff ${filePath}`, result.stdout);
-        this.state.chatContainer.addChild(component);
-        this.state.ui.requestRender();
-      } catch (error) {
-        this.showError(error instanceof Error ? error.message : 'Failed to get diff');
-      }
-      return;
-    }
-
-    // No path specified — show summary of all tracked modified files
-    if (this.state.modifiedFiles.size === 0) {
-      // Fall back to git diff --stat
-      try {
-        const { execa } = await import('execa');
-        const result = await execa('git', ['diff', '--stat'], {
-          cwd: process.cwd(),
-          reject: false,
-        });
-        const staged = await execa('git', ['diff', '--cached', '--stat'], {
-          cwd: process.cwd(),
-          reject: false,
-        });
-
-        const output = [result.stdout, staged.stdout].filter(Boolean).join('\n');
-        if (output.trim()) {
-          const component = new DiffOutputComponent('git diff --stat', output);
-          this.state.chatContainer.addChild(component);
-          this.state.ui.requestRender();
-        } else {
-          this.showInfo('No file changes detected in this session or working tree.');
-        }
-      } catch {
-        this.showInfo('No file changes tracked in this session.');
-      }
-      return;
-    }
-
-    const lines: string[] = [`Modified files (${this.state.modifiedFiles.size}):`];
-    for (const [filePath, info] of this.state.modifiedFiles) {
-      const opCounts = new Map<string, number>();
-      for (const op of info.operations) {
-        opCounts.set(op, (opCounts.get(op) || 0) + 1);
-      }
-      const ops = Array.from(opCounts.entries())
-        .map(([op, count]) => (count > 1 ? `${op}×${count}` : op))
-        .join(', ');
-      lines.push(`  ${fg('path', filePath)} ${fg('muted', `(${ops})`)}`);
-    }
-    lines.push('');
-    lines.push(fg('muted', 'Use /diff <path> to see the git diff for a specific file.'));
-
-    this.showInfo(lines.join('\n'));
-  }
-
   /**
    * Run a shell command directly and display the output in the chat.
    * Triggered by the `!` prefix (e.g., `!ls -la`).
