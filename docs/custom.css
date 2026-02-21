@@ -1348,3 +1348,251 @@ article p {
 .copilotKitCodeBlockToolbar {
   display: none !important;
 }
+
+/* ==================== LEARN SECTION ==================== */
+
+/* Override Infima link and list styles */
+.learn-link,
+.learn-link:hover {
+  text-decoration: none !important;
+}
+
+.learn-sidebar-item,
+.learn-sidebar-item:hover {
+  text-decoration: none !important;
+}
+
+/* Override Infima's a:hover color for sidebar items */
+a.learn-sidebar-item:hover {
+  color: var(--mastra-green-accent-3) !important;
+}
+[data-theme='dark'] a.learn-sidebar-item:hover {
+  color: var(--mastra-green-accent) !important;
+}
+
+.learn-sidebar ul,
+.learn-sidebar li {
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+}
+
+/* Meta text: lesson info bar above headline */
+.learn-meta-text {
+  color: var(--mastra-text-tertiary);
+}
+[data-theme='dark'] .learn-meta-text {
+  color: #b0b0b0;
+}
+
+/* Watched icon: shared between header checkbox and sidebar */
+.learn-watched-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  color: transparent;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.learn-watched-icon.is-watched {
+  background-color: var(--mastra-green-accent-3);
+  border-color: var(--mastra-green-accent-3);
+  color: white;
+}
+
+.learn-watched-icon.is-animate {
+  animation: learn-watched-pop 0.3s ease;
+}
+[data-theme='dark'] .learn-watched-icon.is-watched {
+  background-color: var(--mastra-green-accent-2);
+  border-color: var(--mastra-green-accent-2);
+}
+
+@keyframes learn-watched-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Unwatched icon: empty circle */
+.learn-sidebar-icon-unwatched {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  transition: border-color 0.3s ease;
+}
+[data-theme='dark'] .learn-sidebar-icon-unwatched {
+  border-color: #666;
+}
+
+/* In-progress icon: yellow border circle */
+.learn-sidebar-icon-in-progress {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid #eab308;
+  transition: border-color 0.3s ease;
+}
+
+/* Coming soon icon: dashed border circle */
+.learn-sidebar-icon-coming-soon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 1.5px dashed var(--mastra-text-muted);
+  opacity: 0.5;
+}
+[data-theme='dark'] .learn-sidebar-icon-coming-soon {
+  border-color: #666;
+  opacity: 0.7;
+}
+
+/* Status chip colors using design system greens */
+.learn-status-published {
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 10%, transparent);
+  color: var(--mastra-green-accent-3);
+}
+[data-theme='dark'] .learn-status-published {
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
+  color: var(--mastra-green-accent);
+}
+
+.learn-status-coming-soon {
+  background-color: color-mix(in srgb, #eab308 10%, transparent);
+  color: #a16207;
+}
+[data-theme='dark'] .learn-status-coming-soon {
+  background-color: color-mix(in srgb, #eab308 15%, transparent);
+  color: #facc15;
+}
+
+/* Progress bar completed segment */
+.learn-progress-completed {
+  background-color: var(--mastra-green-accent-3);
+  transition: width 0.5s ease-in-out;
+}
+[data-theme='dark'] .learn-progress-completed {
+  background-color: var(--mastra-green-accent-2);
+}
+
+/* Subscribed CTA box */
+.learn-subscribed {
+  border-color: color-mix(in srgb, var(--mastra-green-accent-3) 20%, transparent);
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 5%, transparent);
+}
+[data-theme='dark'] .learn-subscribed {
+  border-color: color-mix(in srgb, var(--mastra-green-accent) 20%, transparent);
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 5%, transparent);
+}
+
+/* Bullet point in coming soon preview */
+.learn-bullet {
+  color: var(--mastra-green-accent-3);
+}
+[data-theme='dark'] .learn-bullet {
+  color: var(--mastra-green-accent);
+}
+
+/* Sidebar link hover — unlayered to beat Infima's a:hover */
+.learn-link:hover {
+  color: var(--mastra-green-accent-3) !important;
+}
+[data-theme='dark'] .learn-link:hover {
+  color: var(--mastra-green-accent) !important;
+}
+
+/* Lesson prev/next nav: stacked on mobile, side-by-side on desktop */
+.learn-lesson-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block: 1.5rem;
+}
+
+/* Learn layout — unlayered to beat Tailwind @layer utilities (CSS Cascade Layers) */
+.learn-layout-flex {
+  display: flex;
+  min-height: calc(100vh - var(--ifm-navbar-height));
+}
+
+.learn-main {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-x: hidden;
+}
+
+.learn-article {
+  padding-inline: 1rem;
+}
+
+/* Sidebar: hidden on mobile, shown on desktop */
+.learn-sidebar-container {
+  display: none;
+}
+
+/* Desktop overrides */
+@media (min-width: 62.25rem) {
+  .learn-sidebar-container {
+    display: block;
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    height: calc(100vh - var(--ifm-navbar-height));
+    width: var(--doc-sidebar-width);
+    flex-shrink: 0;
+    border-right: 1px solid var(--sidebar-border);
+    background: var(--ifm-background-color);
+  }
+
+  .learn-lesson-nav {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Learn content area — match docs max-width and font size */
+.learn-main [class*='container'] article {
+  max-width: 48rem;
+}
+
+/* "new" badge on Learn tab */
+.learn-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 15%, transparent);
+  color: var(--mastra-green-accent-3);
+}
+
+[data-theme='dark'] .learn-tab-badge {
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
+  color: var(--mastra-green-accent);
+}

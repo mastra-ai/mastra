@@ -1,0 +1,56 @@
+Scaffold a Mastra project, run the default Weather agent, and get familiar with Studio. By the end you'll have a local dev environment set up for the rest of the course.
+
+## Three ways to start with Mastra
+
+1. **Integrate into an existing app**: add Mastra to your current stack. Mastra has guides for Next.js, React + Vite, SvelteKit, Astro, Nuxt, Express, and Hono
+2. **Scaffold a new project**: use `create-mastra` to generate a project with a working example agent you can run immediately
+3. **Start from a template**: use a pre-built template when you already have a specific use case in mind
+
+This course uses path 2. We scaffold first, iterate in Studio, then wire into an app once the agent behavior is solid.
+
+## Scaffold the project
+
+You'll need an API key from a supported model provider before running setup (OpenAI, Anthropic, Google, etc.).
+
+Run whichever package manager you use:
+
+```bash
+npm create mastra@latest
+```
+
+```bash
+pnpm create mastra
+```
+
+```bash
+yarn create mastra
+```
+
+During setup you'll be asked for a project name, source directory, model provider, and API key. You'll also choose between **Skills** (recommended) and the **MCP Docs Server**. Both are covered in a later lesson.
+
+## Start the dev server
+
+```bash
+cd theme-park-agent
+pnpm dev
+```
+
+The terminal prints a few URLs. One is for **Mastra Studio**, another exposes a **REST API** for your agent. The REST API is what you'll eventually call from your app. For now, open Studio at `http://localhost:4111`.
+
+## Studio areas
+
+Studio is where you develop and test. You'll bounce between these sections constantly:
+
+- **Agents**: chat with an agent directly. The fastest loop for testing prompts, tool calls, and multi-turn behavior
+- **Tools**: run tools in isolation. Use this to test or debug a tool without going through an agent conversation
+- **Workflows**: run workflows step-by-step and see execution paths
+- **Observability**: inspect traces after a run. Model calls, tool results, errors, and what the model received as input
+
+Traces are your primary debugging tool. Every time the output surprises you, that's where you look.
+
+## Go deeper
+
+- [Getting started](https://mastra.ai/docs/getting-started/start): all ways to start a Mastra project
+- [Mastra Studio](https://mastra.ai/docs/getting-started/studio): what Studio shows and how to use it
+- [Framework integration guides](https://mastra.ai/guides/getting-started/next-js): adding Mastra to an existing app
+- [Supported model providers](https://mastra.ai/models): OpenAI, Anthropic, Google, and more

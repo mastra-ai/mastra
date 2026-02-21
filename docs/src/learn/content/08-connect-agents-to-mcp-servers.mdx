@@ -1,0 +1,108 @@
+The Queue-Times API covers live wait times, but not park hours, crowd forecasts, or historical data. This lesson fills that gap by connecting the agent to an MCP server (Firecrawl), so it can pull structured information from park web pages without you building a custom scraper.
+
+## The gap in the Queue-Times API
+
+The Queue-Times API gives us live wait times and park IDs. What it doesn't give us: park hours, historical attendance patterns, crowd forecasts, or ride statistics. That data lives on park web pages, not in the JSON API.
+
+Instead of building a custom scraper, we can point the agent at an **MCP server** and consume its tools.
+
+## What MCP is
+
+MCP (Model Context Protocol) is an open standard for connecting agents to external tools and resources. An MCP server exposes a set of tools. Your agent calls them the same way it calls any other tool.
+
+In Mastra, you use an `MCPClient` to connect to one or more MCP servers, then register those tools on your agent.
+
+## Install the MCP package
+
+```bash
+pnpm add @mastra/mcp@latest
+```
+
+```bash
+npm install @mastra/mcp@latest
+```
+
+## Firecrawl MCP
+
+The MCP server used in this lesson is **Firecrawl**. It gives the agent tools like `firecrawl_scrape` and `firecrawl_extract` for pulling structured content from web pages. Firecrawl has a free tier but requires a sign-up and API key.
+
+`firecrawl_firecrawl_extract` is the tool to reach for first. You give it a URL and a description of what you want extracted, and it returns structured results rather than the full raw page. That keeps responses smaller, cheaper, and easier for the agent to reason over.
+
+`firecrawl_firecrawl_scrape` is the raw "grab the page" option. It works but returns more text than you usually need.
+
+## Connecting the MCP server
+
+You create an `MCPClient` with a `servers` config block. A server can be:
+- **Local**: invoked with a command like `npx`
+- **Remote**: accessed over HTTP with a URL
+
+The Firecrawl MCP server runs locally via `npx`. Add it to your editor's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "firecrawl-mcp": {
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+Once the client is configured, call `.listTools()` to retrieve all available tools from it. Tool names are namespaced by server name to prevent conflicts.
+
+## How the agent uses these tools
+
+After calling `.listTools()`, you spread the results into the agent's `tools` object alongside your custom tools. From the agent's perspective, MCP tools and local tools work the same way: same calling pattern, same trace visibility in Studio.
+
+## Update the instructions for park page data
+
+The agent needs to know when to use Firecrawl. Add a rule to the instructions block:
+
+```
+Park page info:
+  - Confirm parkId first.
+  - Park hours (today): use firecrawl_firecrawl_extract on https://queue-times.com/en-US/parks/{parkId}/queue_times
+  - Crowd forecast, ride stats, attendance: use firecrawl_firecrawl_extract on https://queue-times.com/en-US/parks/{parkId}
+```
+
+## Try these prompts in Studio
+
+Open the Theme Park agent and test the full chain:
+
+> What are today's park hours for Islands of Adventure?
+
+> What's the average wait time on this day of week?
+
+> What's the crowd forecast for the park this week?
+
+> What's the average crowd level in February for this park?
+
+The agent should resolve the park first (if it doesn't have a `parkId` yet), then call Firecrawl on the appropriate URL.
+
+## Adding weather too
+
+Weather is the third input that can change a park day plan. Add a `weatherTool` to the agent alongside the MCP tools using the same pattern. Update the instructions with a rule like:
+
+```
+Weather:
+  - Use weatherTool only if the user asks about weather, or if weather would clearly affect ride recommendations (heavy rain, extreme heat, lightning risk).
+  - When calling weatherTool, pass only the city name (e.g., "Orlando" not "Epic Universe, Orlando" or "Orlando, FL").
+  - If weather is relevant and no location is confirmed, ask for clarification.
+```
+
+Then try:
+
+> Just arrived at Epic Universe! What are the wait times for roller coasters?
+
+> What should I ride based on the current weather?
+
+## Go deeper
+
+- [MCP overview](https://mastra.ai/docs/mcp/overview): how MCPClient works and full configuration options
+- [MCPClient reference](https://mastra.ai/reference/tools/mcp-client): full API for configuring and querying MCP servers
+- [Model Context Protocol](https://modelcontextprotocol.io): the open standard
+- [MCP server registry](https://github.com/modelcontextprotocol/servers): community-built servers for popular APIs

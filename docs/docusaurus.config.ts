@@ -32,6 +32,7 @@ const config: Config = {
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
+    hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
     mastraWebsite: process.env.MASTRA_WEBSITE,
     // Analytics
     gaId: process.env.GA_ID,
@@ -42,6 +43,7 @@ const config: Config = {
   },
   plugins: [
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
+    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {
