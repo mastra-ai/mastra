@@ -26,6 +26,8 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
     }
 
     if (chunk.type === 'network-validation-end') {
+      if (chunk.payload.suppressFeedback) return newConversation;
+
       const feedback = formatCompletionFeedback(
         {
           complete: chunk.payload.passed,

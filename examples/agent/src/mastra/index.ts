@@ -24,6 +24,7 @@ import {
   agentWithAdvancedModeration,
   agentWithBranchingModeration,
   agentWithSequentialModeration,
+  supervisorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -77,6 +78,7 @@ const config = {
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+    supervisorAgent,
   },
   processors: {
     moderationProcessor,

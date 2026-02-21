@@ -371,7 +371,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          messages: messageList.get.input.aiV5.model(),
+          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
+          // the full conversation context and can make better decisions. Each sub-agent invocation
+          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
+          messages: messageList.get.all.aiV5.model(),
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),

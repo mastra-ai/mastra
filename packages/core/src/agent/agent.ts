@@ -46,6 +46,7 @@ import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 
+import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -68,6 +69,9 @@ import type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
+  DelegationConfig,
+  DelegationStartContext,
+  DelegationCompleteContext,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -2264,6 +2268,7 @@ export class Agent<
     tracingContext,
     methodType,
     autoResumeSuspendedTools,
+    delegation,
   }: {
     runId?: string;
     threadId?: string;
@@ -2272,6 +2277,7 @@ export class Agent<
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
+    delegation?: DelegationConfig;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
@@ -2306,12 +2312,187 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            console.dir({ inputData }, { depth: null });
+            const startTime = Date.now();
+            const toolCallId = context?.agent?.toolCallId || randomUUID();
+
+            // Get messages from context - available at tool execution time
+            const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
+
+            // Derive iteration from the number of assistant messages (rough approximation)
+            // Each iteration typically produces an assistant message
+            const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
+
+            // Build delegation start context
+            const delegationStartContext: DelegationStartContext = {
+              primitiveId: agent.id,
+              primitiveType: 'agent',
+              prompt: inputData.prompt,
+              params: {
+                threadId: inputData.threadId || undefined,
+                resourceId: inputData.resourceId || undefined,
+                instructions: inputData.instructions || undefined,
+                maxSteps: inputData.maxSteps || undefined,
+              },
+              iteration: derivedIteration,
+              runId: runId || randomUUID(),
+              threadId,
+              resourceId,
+              parentAgentId: this.id,
+              parentAgentName: this.name,
+              toolCallId,
+              messages: contextMessages,
+            };
+
+            // Generate sub-agent thread and resource IDs early (before any rejection)
+            // These are needed for both successful execution and rejection cases
+            const slugify = await import(`@sindresorhus/slugify`);
+            const subAgentThreadId = inputData.threadId
+              ? `${inputData.threadId}-${randomUUID()}`
+              : context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) || randomUUID();
+
+            const subAgentResourceId = inputData.resourceId
+              ? `${inputData.resourceId}-${agentName}`
+              : context?.mastra?.generateId({
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) || `${slugify.default(this.id)}-${agentName}`;
+
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
             // returns so the parent's processors (OM, working memory, etc.) still
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
+
+            if (
+              (methodType === 'generate' ||
+                methodType === 'generateLegacy' ||
+                methodType === 'stream' ||
+                methodType === 'streamLegacy') &&
+              supportedLanguageModelSpecifications.includes(modelVersion)
+            ) {
+              if (!agent.hasOwnMemory() && this.#memory) {
+                agent.__setMemory(this.#memory);
+              }
+            }
+
+            // Call onDelegationStart hook if provided
+            let effectivePrompt = inputData.prompt;
+            let effectiveInstructions = inputData.instructions;
+            let effectiveMaxSteps = inputData.maxSteps;
+            if (delegation?.onDelegationStart) {
+              try {
+                const startResult = await delegation.onDelegationStart(delegationStartContext);
+                if (startResult) {
+                  // Check if delegation should be rejected
+                  if (startResult.proceed === false) {
+                    const rejectionMessage =
+                      startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
+                    this.logger.debug(
+                      `[Agent:${this.name}] - Delegation to ${agentName} rejected: ${rejectionMessage}`,
+                    );
+
+                    if (
+                      (methodType === 'stream' || methodType === 'streamLegacy') &&
+                      supportedLanguageModelSpecifications.includes(modelVersion)
+                    ) {
+                      await context.writer?.write({
+                        type: 'text-delta',
+                        payload: {
+                          id: randomUUID(),
+                          text: `[Delegation Rejected] ${rejectionMessage}`,
+                        },
+                        runId,
+                        from: ChunkFrom.AGENT,
+                      });
+                    }
+
+                    // Save rejection messages to sub-agent's memory so the UI can display them
+                    const memory = await agent.getMemory({ requestContext });
+                    if (memory) {
+                      try {
+                        // Create user message with the original prompt
+                        const userMessage: MastraDBMessage = {
+                          id: this.#mastra?.generateId() || randomUUID(),
+                          role: 'user',
+                          type: 'text',
+                          createdAt: new Date(),
+                          threadId: subAgentThreadId,
+                          resourceId: subAgentResourceId,
+                          content: {
+                            format: 2,
+                            parts: [
+                              {
+                                type: 'text',
+                                text: effectivePrompt,
+                              },
+                            ],
+                          },
+                        };
+
+                        // Create assistant message with the rejection
+                        const assistantMessage: MastraDBMessage = {
+                          id: this.#mastra?.generateId() || randomUUID(),
+                          role: 'assistant',
+                          type: 'text',
+                          createdAt: new Date(new Date().getTime() + 1),
+                          threadId: subAgentThreadId,
+                          resourceId: subAgentResourceId,
+                          content: {
+                            format: 2,
+                            parts: [
+                              {
+                                type: 'text',
+                                text: `[Delegation Rejected] ${rejectionMessage}`,
+                              },
+                            ],
+                          },
+                        };
+
+                        await memory.createThread({
+                          resourceId: subAgentResourceId,
+                          threadId: subAgentThreadId,
+                        });
+
+                        await memory.saveMessages({
+                          messages: [userMessage, assistantMessage],
+                        });
+                      } catch (memoryError) {
+                        this.logger.error(
+                          `[Agent:${this.name}] - Failed to save rejection to sub-agent memory: ${memoryError}`,
+                        );
+                      }
+                    }
+
+                    return {
+                      text: `[Delegation Rejected] ${rejectionMessage}`,
+                      subAgentThreadId,
+                      subAgentResourceId,
+                    };
+                  }
+                  // Apply modifications
+                  if (startResult.modifiedPrompt !== undefined) {
+                    effectivePrompt = startResult.modifiedPrompt;
+                  }
+                  if (startResult.modifiedInstructions !== undefined) {
+                    effectiveInstructions = startResult.modifiedInstructions;
+                  }
+                  if (startResult.modifiedMaxSteps !== undefined) {
+                    effectiveMaxSteps = startResult.modifiedMaxSteps;
+                  }
+                }
+              } catch (hookError) {
+                this.logger.error(`[Agent:${this.name}] - onDelegationStart hook error: ${hookError}`);
+                // Continue with original values on hook error
+              }
+            }
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2322,62 +2503,117 @@ export class Agent<
               });
 
               let result: any;
-              const slugify = await import(`@sindresorhus/slugify`);
-              const subAgentThreadId =
-                inputData.threadId ||
-                context?.mastra?.generateId({
-                  idType: 'thread',
-                  source: 'agent',
-                  entityId: agentName,
-                  resourceId,
-                }) ||
-                randomUUID();
-              const subAgentResourceId =
-                inputData.resourceId ||
-                context?.mastra?.generateId({
-                  idType: 'generic',
-                  source: 'agent',
-                  entityId: agentName,
-                }) ||
-                `${slugify.default(this.id)}-${agentName}`;
-
               const suspendedToolRunId = (inputData as any).suspendedToolRunId;
 
               const { resumeData, suspend } = context?.agent ?? {};
+
+              // Apply contextFilter callback (runs after onDelegationStart so effectivePrompt
+              // reflects any hook modifications). Falls back to full context on error.
+              let filteredContextMessages = contextMessages;
+              if (delegation?.contextFilter) {
+                try {
+                  filteredContextMessages = await delegation.contextFilter({
+                    messages: contextMessages,
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    threadId,
+                    resourceId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    toolCallId,
+                  });
+                } catch (filterError) {
+                  this.logger.error(`[Agent:${this.name}] - contextFilter error: ${filterError}`);
+                  // Fall back to unfiltered context on error
+                }
+              }
+
+              const messagesForSubAgent: MessageListInput = [
+                ...filteredContextMessages,
+                { role: 'user' as const, content: effectivePrompt },
+              ];
+
+              const subAgentPromptCreatedAt = new Date();
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                if (!agent.hasOwnMemory() && this.#memory) {
-                  agent.__setMemory(this.#memory);
-                }
-
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                      ...(resourceId && threadId
-                        ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
-                        : {}),
-                    })
-                  : await agent.generate(inputData.prompt, {
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: { lastMessages: false },
+                            },
+                          }
+                        : {}),
+                    })
+                  : await agent.generate(messagesForSubAgent, {
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: { lastMessages: false },
                             },
                           }
                         : {}),
                     });
+
+                const agentResponseMessages = generateResult.response.dbMessages ?? [];
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    // Create user message with the original prompt
+                    const userMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'user',
+                      type: 'text',
+                      createdAt: subAgentPromptCreatedAt,
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: effectivePrompt,
+                          },
+                        ],
+                      },
+                    };
+
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: [userMessage, ...agentResponseMessages],
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
 
                 if (generateResult.finishReason === 'suspended') {
                   return suspend?.(generateResult.suspendPayload, {
@@ -2389,7 +2625,7 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(inputData.prompt, {
+                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -2398,42 +2634,47 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                if (!agent.hasOwnMemory() && this.#memory) {
-                  agent.__setMemory(this.#memory);
-                }
-
                 const streamResult = resumeData
                   ? await agent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
                             },
                           }
                         : {}),
                     })
-                  : await agent.stream(inputData.prompt, {
+                  : await agent.stream(messagesForSubAgent, {
                       requestContext,
                       tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
                             },
                           }
                         : {}),
                     });
 
                 let fullText = '';
+                let requireToolApproval;
+                let suspendedPayload;
+                let resumeSchema;
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
@@ -2441,34 +2682,43 @@ export class Agent<
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
                       if (chunk.type === 'data-tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        // return suspend?.(
+                        //   {},
+                        //   { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        // );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'data-tool-call-suspended') {
-                        return suspend?.(chunk.data.suspendPayload, {
-                          resumeSchema: chunk.data.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        // return suspend?.(chunk.data.suspendPayload, {
+                        //   resumeSchema: chunk.data.resumeSchema,
+                        //   runId: streamResult.runId,
+                        //   isAgentSuspend: true,
+                        // });
+
+                        suspendedPayload = chunk.data.suspendPayload;
+                        resumeSchema = chunk.data.resumeSchema;
                       }
                     } else {
                       await context.writer.write(chunk);
                       if (chunk.type === 'tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        // return suspend?.(
+                        //   {},
+                        //   { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        // );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'tool-call-suspended') {
-                        return suspend?.(chunk.payload.suspendPayload, {
-                          resumeSchema: chunk.payload.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        // return suspend?.(chunk.payload.suspendPayload, {
+                        //   resumeSchema: chunk.payload.resumeSchema,
+                        //   runId: streamResult.runId,
+                        //   isAgentSuspend: true,
+                        // });
+                        suspendedPayload = chunk.payload.suspendPayload;
+                        resumeSchema = chunk.payload.resumeSchema;
                       }
                     }
                   }
@@ -2478,9 +2728,58 @@ export class Agent<
                   }
                 }
 
+                const agentResponseMessages = streamResult.messageList.get.response.db();
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    // Create user message with the original prompt
+                    const userMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'user',
+                      type: 'text',
+                      createdAt: subAgentPromptCreatedAt,
+                      threadId: subAgentThreadId,
+                      resourceId: subAgentResourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'text',
+                            text: effectivePrompt,
+                          },
+                        ],
+                      },
+                    };
+
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: [userMessage, ...agentResponseMessages],
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
+
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
-                const streamResult = await agent.streamLegacy(inputData.prompt, {
+                const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -2505,6 +2804,47 @@ export class Agent<
                 result = { text: fullText };
               }
 
+              // Call onDelegationComplete hook if provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  let bailed = false;
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result,
+                    duration: Date.now() - startTime,
+                    success: true,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: contextMessages,
+                    bail: () => {
+                      bailed = true;
+                    },
+                  };
+
+                  const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  // If bailed, add a marker to the result and signal via requestContext
+                  if (bailed) {
+                    result._bailed = true;
+                    requestContext.set('__mastra_delegationBailed', true);
+                  }
+
+                  // Handle feedback if provided
+                  if (completeResult?.feedback) {
+                    result._delegationFeedback = completeResult.feedback;
+                  }
+                  if (completeResult?.stopProcessing) {
+                    result._stopProcessing = true;
+                  }
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error: ${hookError}`);
+                }
+              }
               // Restore the parent agent's MastraMemory after sub-agent execution
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -2512,10 +2852,44 @@ export class Agent<
 
               return result;
             } catch (err) {
+              let bailed = false;
+              // Call onDelegationComplete with error if hook is provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result: { text: '' },
+                    duration: Date.now() - startTime,
+                    success: false,
+                    error: err instanceof Error ? err : new Error(String(err)),
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: contextMessages,
+                    bail: () => {
+                      bailed = true;
+                    },
+                  };
+
+                  await delegation.onDelegationComplete(delegationCompleteContext);
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error on failure: ${hookError}`);
+                }
+              }
+
+              // Wrap error in MastraError
               // Restore even on error so the parent's retry/fallback logic
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
+              if (bailed) {
+                requestContext.set('__mastra_delegationBailed', true);
               }
 
               const mastraError = new MastraError(
@@ -2525,7 +2899,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    subAgentName: agentName,
+                    subAgentName: agent.name,
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
@@ -2795,6 +3169,7 @@ export class Agent<
     methodType,
     memoryConfig,
     autoResumeSuspendedTools,
+    delegation,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2807,6 +3182,7 @@ export class Agent<
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
+    delegation?: DelegationConfig;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2867,6 +3243,7 @@ export class Agent<
       methodType,
       tracingContext,
       autoResumeSuspendedTools,
+      delegation,
     });
 
     const workflowTools = await this.listWorkflowTools({

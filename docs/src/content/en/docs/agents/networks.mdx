@@ -9,6 +9,20 @@ packages:
 
 # Agent Networks
 
+:::warning[Supervisor Pattern Recommended]
+
+**The supervisor pattern using `agent.stream()` or `agent.generate()` is now the recommended approach for coordinating multiple agents.** It provides the same multi-agent coordination capabilities as `.network()` with significant improvements:
+
+- **Better control** - Iteration hooks, delegation hooks, and completion scoring give you fine-grained control over execution
+- **Simpler API** - Uses familiar `stream()` and `generate()` methods instead of a separate `.network()` API
+- **More flexible** - Stop execution early, modify delegations, filter context, and provide feedback to guide the agent
+- **Type-safe** - Full TypeScript support for all hooks and callbacks
+- **Easier debugging** - Monitor progress with `onIterationComplete`, track delegations with `onDelegationStart`/`onDelegationComplete`
+
+See [Supervisor Pattern Comparison](#supervisor-pattern-comparison) below for migration details.
+
+:::
+
 Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (subagents, workflows, or tools) to call, in what order, and with what data.
 
 ## When to use networks
@@ -290,6 +304,403 @@ for await (const partial of stream.objectStream) {
 // Get the final typed result
 const final = await stream.object;
 ```
+
+## Supervisor Pattern Features
+
+When using the supervisor pattern with `.stream()` or `.generate()`, several advanced features enhance multi-agent coordination beyond what `.network()` provides.
+
+### Memory isolation with full context forwarding
+
+The supervisor pattern implements **memory isolation** - sub-agents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
+
+**How it works:**
+
+1. **Full context forwarded** - When the supervisor delegates to a sub-agent, the sub-agent receives ALL messages from the supervisor's conversation (user messages, assistant responses, completion feedback, tool results)
+2. **Scoped memory saves** - Only the delegation prompt and the sub-agent's response are saved to the sub-agent's memory
+3. **Fresh thread per invocation** - Each delegation uses a unique thread ID, ensuring clean separation
+
+**Example:**
+
+```typescript
+// Supervisor conversation history:
+// User: "My name is Alice"
+// Assistant: "Nice to meet you, Alice"
+// User: "I live in Paris"
+// Assistant: "How lovely!"
+// User: "What is my name and where do I live?"
+
+const stream = await supervisorAgent.stream(
+  "What is my name and where do I live?"
+);
+
+// When supervisor delegates to a sub-agent:
+// ✅ Sub-agent receives all 5 messages above (full context)
+// ✅ Sub-agent can reference "Alice" and "Paris" in its response
+// ✅ Only the delegation prompt + response saved to sub-agent memory
+// ✅ Sub-agent memory stays clean, not polluted with supervisor history
+```
+
+This ensures sub-agents have the context they need to make informed decisions without cluttering their memory with the entire supervisor conversation.
+
+### Tool approval propagation
+
+Tool approvals properly propagate through the supervisor delegation chain. When a sub-agent uses a tool with `requireApproval: true` or calls `suspend()`, the approval request surfaces to the supervisor level where it can be handled.
+
+**Example:**
+
+```typescript
+import { createTool } from '@mastra/core/tools';
+
+// Sub-agent with approval-required tool
+const sensitiveDataTool = createTool({
+  id: 'get-user-data',
+  requireApproval: true,
+  execute: async (input) => {
+    return await database.getUserData(input.userId);
+  },
+});
+
+const dataAgent = new Agent({
+  id: 'data-agent',
+  name: 'Data Agent',
+  tools: { sensitiveDataTool },
+});
+
+const supervisorAgent = new Agent({
+  id: 'supervisor',
+  agents: { dataAgent },
+  memory: new Memory(),
+});
+
+// When supervisor delegates to dataAgent and tool requires approval
+const stream = await supervisorAgent.stream("Get data for user 123");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Tool requires approval:', chunk.payload.toolName);
+
+    // Approve the tool call
+    const resumeStream = await supervisorAgent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: chunk.payload.toolCallId,
+    });
+
+    for await (const resumeChunk of resumeStream.textStream) {
+      process.stdout.write(resumeChunk);
+    }
+  }
+}
+```
+
+The approval request bubbles up through the delegation chain, allowing you to handle it at the supervisor level regardless of how deep the delegation goes.
+
+### Completion feedback visibility
+
+When using completion scorers (for task validation), the completion feedback is automatically included in the conversation context passed to sub-agents on subsequent iterations. This allows sub-agents to see what validation failed and adjust their responses accordingly.
+
+**Example:**
+
+```typescript
+import { createScorer } from '@mastra/core/evals';
+
+const taskCompleteScorer = createScorer({
+  id: 'task-complete',
+  name: 'Task Completeness',
+}).generateScore(async (context) => {
+  const text = context.currentText;
+  return text.includes('recommendation') ? 1 : 0;
+});
+
+const stream = await supervisorAgent.stream(
+  "Research AI trends",
+  {
+    maxSteps: 10,
+    completion: {
+      scorers: [taskCompleteScorer],
+      strategy: 'all',
+    },
+  }
+);
+
+// First iteration: Sub-agent responds without recommendations
+// Completion check runs: FAIL (missing recommendations)
+// Completion feedback added to messages: "Task not complete. Missing: recommendation"
+
+// Second iteration: Sub-agent receives:
+//   - Original user message
+//   - Previous response
+//   - Completion feedback (visible!)
+//   - Can now provide recommendations to pass validation
+```
+
+This creates a feedback loop where sub-agents can learn from validation failures and improve their responses.
+
+### The critical role of clear instructions
+
+**Proper prompting and clear instructions are essential for effective supervisor pattern coordination.** The LLM uses your instructions and sub-agent descriptions to make critical delegation decisions.
+
+#### What the supervisor agent needs
+
+Your supervisor agent's `instructions` should clearly specify:
+
+1. **Available resources** - What agents, workflows, and tools are available
+2. **When to use each** - Clear criteria for delegation decisions
+3. **How to coordinate** - Order of operations, dependencies between tasks
+4. **Success criteria** - When to stop iterating and return results
+
+**❌ Vague instructions:**
+
+```typescript
+const supervisorAgent = new Agent({
+  instructions: "You coordinate agents to help users.",
+  agents: { researchAgent, writingAgent },
+});
+```
+
+**✅ Clear, specific instructions:**
+
+```typescript
+const supervisorAgent = new Agent({
+  instructions: `You coordinate research and writing tasks using specialized agents.
+
+Available resources:
+- researchAgent: Gathers factual data and sources (returns bullet points)
+- writingAgent: Transforms research into well-structured articles (returns full paragraphs)
+- searchTool: Performs web searches for current information
+
+Delegation strategy:
+1. For questions requiring current data: Use searchTool first
+2. For research requests: Delegate to researchAgent
+3. For writing requests: Delegate to writingAgent (provide research context)
+4. For complex requests: Delegate to researchAgent first, then writingAgent
+
+Success criteria:
+- All user questions are fully answered
+- Response is well-formatted and complete
+- Sources are cited when applicable
+- If information is incomplete or uncertain, continue iterating
+
+Only respond to the user when you're confident the task is complete.`,
+  agents: { researchAgent, writingAgent },
+  tools: { searchTool },
+});
+```
+
+#### What sub-agents need
+
+Each sub-agent should have a clear `description` that helps the supervisor understand when and how to use it:
+
+**❌ Vague description:**
+
+```typescript
+const researchAgent = new Agent({
+  id: 'research-agent',
+  description: 'Helps with research',
+});
+```
+
+**✅ Clear, specific description:**
+
+```typescript
+const researchAgent = new Agent({
+  id: 'research-agent',
+  description: `Specializes in gathering factual information and data on any topic.
+    Returns concise bullet-point summaries with key facts and sources.
+    Does not write full articles or narrative content.
+    Best for initial research before writing or analysis.`,
+});
+```
+
+Clear descriptions improve:
+- **Delegation accuracy** - Supervisor chooses the right agent for each subtask
+- **Prompt quality** - Supervisor provides appropriate context to each agent
+- **Task completion** - Agents understand their role and deliver expected output
+- **Coordination efficiency** - Fewer iterations needed to complete complex tasks
+
+## Supervisor Pattern Comparison
+
+The supervisor pattern provides a modern, more powerful alternative to `.network()` for multi-agent coordination. Instead of a separate API, it uses the familiar `stream()` and `generate()` methods with enhanced options for controlling delegation.
+
+### Key Improvements
+
+| Feature | `.network()` | Supervisor Pattern (`.stream()` / `.generate()`) |
+|---------|--------------|--------------------------------------------------|
+| **API** | Separate `.network()` method | Uses existing `stream()` / `generate()` methods |
+| **Progress Monitoring** | Limited event streaming | `onIterationComplete` hook with full context |
+| **Delegation Control** | No control over delegations | `onDelegationStart` to modify/reject delegations |
+| **Error Handling** | Basic error events | `onDelegationComplete` with bail mechanism |
+| **Context Filtering** | All context passed to sub-agents | `contextFilter` to control what context is shared |
+| **Memory Isolation** | No control | Full context forwarded, scoped memory saves |
+| **Tool Approval** | Not propagated to sub-agents | Full propagation through delegation chain |
+| **Completion Feedback** | Not visible to sub-agents | Visible in sub-agent context for self-correction |
+| **Task Completion** | Manual detection only | `completion` scorers with automatic validation |
+| **Early Stopping** | Not available | Return `{ continue: false }` from iteration hook |
+| **Feedback Loop** | Not available | Provide feedback to guide next iteration |
+| **TypeScript Support** | Basic types | Full type safety for all hooks and callbacks |
+
+### Migration Example
+
+**Before (using `.network()`):**
+
+```typescript
+const routingAgent = new Agent({
+  id: "routing-agent",
+  name: "Routing Agent",
+  instructions: "You are a network of researchers and writers...",
+  model: "openai/gpt-5.1",
+  agents: { researchAgent, writingAgent },
+  workflows: { cityWorkflow },
+  tools: { weatherTool },
+  memory,
+});
+
+// Limited control over execution
+const result = await routingAgent.network(
+  "Research AI in education"
+);
+
+for await (const chunk of result) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+**After (using supervisor pattern):**
+
+```typescript
+// Same agent setup - but with clear, detailed instructions
+const supervisorAgent = new Agent({
+  id: "supervisor-agent",
+  name: "Research Supervisor",
+  // Clear instructions help the supervisor make better delegation decisions
+  instructions: `You coordinate research and writing tasks using specialized agents.
+
+Available resources:
+- researchAgent: Gathers factual data in bullet-point form
+- writingAgent: Transforms research into well-structured articles
+- cityWorkflow: Handles city-specific research workflows
+- weatherTool: Retrieves current weather data
+
+Delegation strategy:
+1. For research requests: Delegate to researchAgent first
+2. For writing requests: Delegate to writingAgent (provide research if available)
+3. For city-specific tasks: Use cityWorkflow
+4. For weather queries: Use weatherTool directly
+
+Always ensure responses are complete before finishing.`,
+  model: "openai/gpt-5.1",
+  agents: { researchAgent, writingAgent },
+  workflows: { cityWorkflow },
+  tools: { weatherTool },
+  memory,
+});
+
+// Full control with hooks and completion scoring
+const stream = await supervisorAgent.stream(
+  "Research AI in education",
+  {
+    maxSteps: 10,
+
+    // Monitor progress after each iteration
+    onIterationComplete: async (context) => {
+      console.log(`Iteration ${context.iteration}: ${context.finishReason}`);
+
+      // Provide feedback to guide the agent
+      if (!context.text.includes('recommendations')) {
+        return {
+          continue: true,
+          feedback: 'Please include specific recommendations.',
+        };
+      }
+
+      return { continue: true };
+    },
+
+    // Control sub-agent delegations
+    delegation: {
+      onDelegationStart: async (context) => {
+        console.log(`Delegating to: ${context.primitiveId}`);
+
+        // Add extra instructions for specific agents
+        if (context.primitiveId === 'research-agent') {
+          return {
+            proceed: true,
+            modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
+          };
+        }
+
+        return { proceed: true };
+      },
+
+      onDelegationComplete: async (context) => {
+        console.log(`Completed: ${context.primitiveId}`);
+
+        // Bail out on errors
+        if (context.error) {
+          context.bail();
+        }
+      },
+
+      // Filter what context is passed to sub-agents
+      contextFilter: ({ messages, primitiveId, prompt }) => {
+        // Filter out sensitive messages and limit to last 10
+        return messages
+          .filter(msg => {
+            const content = typeof msg.content === 'string'
+              ? msg.content
+              : JSON.stringify(msg.content);
+            // Remove sensitive data
+            return !content.includes('confidential');
+          })
+          .slice(-10); // Only pass last 10 messages
+      },
+    },
+
+    // Automatic completion validation
+    completion: {
+      scorers: [taskCompleteScorer],
+      strategy: 'all',
+      onComplete: (result) => {
+        console.log('Task complete:', result.complete);
+      },
+    },
+  }
+);
+
+// Process the stream
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+```
+
+### When to Migrate
+
+**Migrate now if you:**
+- Need better control over sub-agent execution
+- Want to monitor and debug multi-agent coordination
+- Need to filter context passed to sub-agents
+- Prefer type-safe hooks and callbacks
+
+**Migrate as soon as possible:**
+`.network()` is deprecated and will be removed in a future release. Existing code will continue to work until then, but no new features will be added to it.
+
+### Migration Checklist
+
+- [ ] Update agent configuration (same structure, no changes needed)
+- [ ] **Review and improve supervisor agent `instructions` for clarity and specificity**
+- [ ] **Add clear `description` fields to all sub-agents**
+- [ ] Replace `.network()` calls with `.stream()` or `.generate()`
+- [ ] Add `maxSteps` option to limit iterations
+- [ ] (Optional) Add `onIterationComplete` for progress monitoring
+- [ ] (Optional) Add `delegation` hooks for sub-agent control
+- [ ] (Optional) Add `completion` scorers for automatic validation
+- [ ] (Optional) Add `contextFilter` to control context sharing
+- [ ] Update event handling from network events to stream chunks
+- [ ] **Test delegation behavior with various prompts to refine instructions**
+- [ ] Test thoroughly with your specific use cases
+
+See the [stream() reference](/reference/streaming/agents/stream#supervisor-pattern-with-delegation-and-completion) for complete API documentation.
 
 ## Related
 

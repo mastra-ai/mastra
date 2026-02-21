@@ -40,7 +40,7 @@ export const ErrorAwareText = () => {
     );
   }
 
-  if (metadata?.mode === 'network' && metadata?.completionResult) {
+  if (metadata?.completionResult) {
     return (
       <div className="mb-2 space-y-2">
         <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">

@@ -10,6 +10,26 @@ export type {
   AgentExecutionOptionsBase,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
+  // Delegation hook types
+  DelegationStartContext,
+  DelegationStartResult,
+  OnDelegationStartHandler,
+  DelegationCompleteContext,
+  DelegationCompleteResult,
+  OnDelegationCompleteHandler,
+  DelegationConfig,
+  ContextFilterContext,
+  // Iteration hook types
+  IterationCompleteContext,
+  IterationCompleteResult,
+  OnIterationCompleteHandler,
+  // Completion types
+  StreamCompletionConfig,
+  CompletionConfig,
+  CompletionRunResult,
+  // Network options
+  NetworkOptions,
+  NetworkRoutingConfig,
 } from './agent.types';
 
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';

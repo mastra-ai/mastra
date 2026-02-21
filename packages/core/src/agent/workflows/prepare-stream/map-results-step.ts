@@ -253,6 +253,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
+      // Completion scoring for supervisor patterns
+      completion: options.completion,
+      // Iteration hook for supervisor patterns
+      onIterationComplete: options.onIterationComplete,
       processorStates: memoryData.processorStates,
     };
 

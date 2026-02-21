@@ -142,7 +142,7 @@ export class MastraLLMVNext extends MastraBase {
     resumeContext,
     runId,
     stopWhen = stepCountIs(5),
-    maxSteps,
+    maxSteps = 5, //default to 5 steps
     tools = {} as Tools,
     modelSettings,
     toolChoice = 'auto',
@@ -169,6 +169,8 @@ export class MastraLLMVNext extends MastraBase {
     maxProcessorRetries,
     processorStates,
     activeTools,
+    completion,
+    onIterationComplete,
     workspace,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
@@ -243,6 +245,8 @@ export class MastraLLMVNext extends MastraBase {
         maxProcessorRetries,
         processorStates,
         activeTools,
+        completion,
+        onIterationComplete,
         workspace,
         options: {
           ...options,
@@ -352,6 +356,7 @@ export class MastraLLMVNext extends MastraBase {
             });
           },
         },
+        maxSteps,
       };
 
       return loop(loopOptions);
