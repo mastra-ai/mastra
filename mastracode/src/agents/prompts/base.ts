@@ -10,6 +10,7 @@ export interface PromptContext {
   platform: string;
   date: string;
   mode: string;
+  modelId?: string;
   activePlan?: { title: string; plan: string; approvedAt: string } | null;
 }
 
@@ -140,7 +141,7 @@ You have access to the following tools. Use the RIGHT tool for the job:
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: Mastra Code <noreply@mastra.ai>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: Mastra Code${ctx.modelId ? ` (${ctx.modelId})` : ''} <noreply@mastra.ai>\` in the message body.
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan.
