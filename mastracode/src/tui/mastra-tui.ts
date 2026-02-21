@@ -2,16 +2,12 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
-import fs from 'node:fs';
-import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Component, SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEvent, HarnessMessage, HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import { Spacer } from '@mariozechner/pi-tui';
+import type { Component } from '@mariozechner/pi-tui';
+import type { HarnessEvent, TaskItem } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
-import { parseError } from '../utils/errors.js';
-import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import { processSlashCommand } from '../utils/slash-command-processor.js';
-import { ThreadLockError } from '../utils/thread-lock.js';
 import {
   handleHelpCommand,
   handleCostCommand,
@@ -40,9 +36,10 @@ import {
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { defaultOMProgressState } from './components/om-progress.js';
-import { ShellOutputComponent } from './components/shell-output.js';
+
 import { SlashCommandComponent } from './components/slash-command.js';
-import { TaskProgressComponent } from './components/task-progress.js';
+
+import { showError, showInfo, showFormattedError, notify } from './display.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -79,18 +76,28 @@ import {
   handleToolEnd,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
-import { sendNotification } from './notify.js';
-import type { NotificationMode, NotificationReason } from './notify.js';
+
 import {
   addUserMessage,
   renderCompletedTasksInline,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
+import {
+  setupKeyboardShortcuts,
+  buildLayout,
+  setupAutocomplete,
+  loadCustomSlashCommands,
+  setupKeyHandlers,
+  subscribeToHarness,
+  updateTerminalTitle,
+  promptForThreadSelection,
+  renderExistingTasks,
+} from './setup.js';
+import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import { fg, bold } from './theme.js';
 
 // =============================================================================
 // Types
@@ -134,132 +141,9 @@ export class MastraTUI {
       this.state.ui.requestRender();
     };
 
-    this.setupKeyboardShortcuts();
-  }
-
-  /**
-   * Setup keyboard shortcuts for the custom editor.
-   */
-  private setupKeyboardShortcuts(): void {
-    // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
-    this.state.editor.onAction('clear', () => {
-      const now = Date.now();
-      if (now - this.state.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
-        // Double Ctrl+C → exit
-        this.stop();
-        process.exit(0);
-      }
-      this.state.lastCtrlCTime = now;
-
-      if (this.state.pendingApprovalDismiss) {
-        // Dismiss active approval dialog and abort
-        this.state.pendingApprovalDismiss();
-        this.state.activeInlinePlanApproval = undefined;
-        this.state.activeInlineQuestion = undefined;
-        this.state.userInitiatedAbort = true;
-        this.state.harness.abort();
-      } else if (this.state.harness.isRunning()) {
-        // Clean up active inline components on abort
-        this.state.activeInlinePlanApproval = undefined;
-        this.state.activeInlineQuestion = undefined;
-        this.state.userInitiatedAbort = true;
-        this.state.harness.abort();
-      } else {
-        const current = this.state.editor.getText();
-        if (current.length > 0) {
-          this.state.lastClearedText = current;
-        }
-        this.state.editor.setText('');
-        this.state.ui.requestRender();
-      }
-    });
-
-    // Ctrl+Z - undo last clear (restore editor text)
-    this.state.editor.onAction('undo', () => {
-      if (this.state.lastClearedText && this.state.editor.getText().length === 0) {
-        this.state.editor.setText(this.state.lastClearedText);
-        this.state.lastClearedText = '';
-        this.state.ui.requestRender();
-      }
-    });
-
-    // Ctrl+D - exit when editor is empty
-    this.state.editor.onCtrlD = () => {
-      this.stop();
-      process.exit(0);
-    };
-
-    // Ctrl+T - toggle thinking blocks visibility
-    this.state.editor.onAction('toggleThinking', () => {
-      this.state.hideThinkingBlock = !this.state.hideThinkingBlock;
-      this.state.ui.requestRender();
-    });
-    // Ctrl+E - expand/collapse tool outputs
-    this.state.editor.onAction('expandTools', () => {
-      this.state.toolOutputExpanded = !this.state.toolOutputExpanded;
-      for (const tool of this.state.allToolComponents) {
-        tool.setExpanded(this.state.toolOutputExpanded);
-      }
-      for (const sc of this.state.allSlashCommandComponents) {
-        sc.setExpanded(this.state.toolOutputExpanded);
-      }
-      this.state.ui.requestRender();
-    });
-
-    // Shift+Tab - cycle harness modes
-    this.state.editor.onAction('cycleMode', async () => {
-      // Block mode switching while plan approval is active
-      if (this.state.activeInlinePlanApproval) {
-        this.showInfo('Resolve the plan approval first');
-        return;
-      }
-
-      const modes = this.state.harness.listModes();
-      if (modes.length <= 1) return;
-      const currentId = this.state.harness.getCurrentModeId();
-      const currentIndex = modes.findIndex(m => m.id === currentId);
-      const nextIndex = (currentIndex + 1) % modes.length;
-      const nextMode = modes[nextIndex]!;
-      await this.state.harness.switchMode({ modeId: nextMode.id });
-      // The mode_changed event handler will show the info message
-      updateStatusLine(this.state);
-    });
-    // Ctrl+Y - toggle YOLO mode
-    this.state.editor.onAction('toggleYolo', () => {
-      const current = (this.state.harness.getState() as any).yolo === true;
-      this.state.harness.setState({ yolo: !current } as any);
-      updateStatusLine(this.state);
-      this.showInfo(current ? 'YOLO mode off' : 'YOLO mode on');
-    });
-
-    // Ctrl+F - queue follow-up message while streaming
-    this.state.editor.onAction('followUp', () => {
-      const text = this.state.editor.getText().trim();
-      if (!text) return;
-      if (!this.state.harness.isRunning()) return; // Only relevant while streaming
-
-      // Clear editor
-      this.state.editor.setText('');
-      this.state.ui.requestRender();
-
-      if (text.startsWith('/')) {
-        // Queue slash command for processing after the agent completes
-        this.state.pendingSlashCommands.push(text);
-        this.showInfo(`Slash command queued: ${text}`);
-      } else {
-        // Queue as a regular follow-up message
-        addUserMessage(this.state, {
-          id: `user-${Date.now()}`,
-          role: 'user',
-          content: [{ type: 'text', text }],
-          createdAt: new Date(),
-        });
-        this.state.ui.requestRender();
-
-        this.state.harness.followUp({ content: text }).catch(error => {
-          this.showError(error instanceof Error ? error.message : 'Follow-up failed');
-        });
-      }
+    setupKeyboardShortcuts(this.state, {
+      stop: () => this.stop(),
+      doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
   }
 
@@ -299,7 +183,7 @@ export class MastraTUI {
 
         // Handle shell passthrough (! prefix)
         if (userInput.startsWith('!')) {
-          await this.handleShellPassthrough(userInput.slice(1).trim());
+          await handleShellPassthrough(this.state, userInput.slice(1).trim());
           continue;
         }
 
@@ -312,7 +196,7 @@ export class MastraTUI {
 
         // Check if a model is selected
         if (!this.state.harness.hasModelSelected()) {
-          this.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
+          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
 
@@ -342,14 +226,14 @@ export class MastraTUI {
           this.state.followUpComponents = [];
           this.state.pendingSlashCommands = [];
           this.state.harness.steer({ content: userInput }).catch(error => {
-            this.showError(error instanceof Error ? error.message : 'Steer failed');
+            showError(this.state, error instanceof Error ? error.message : 'Steer failed');
           });
         } else {
           // Normal send — fire and forget; events handle the rest
           this.fireMessage(userInput, images);
         }
       } catch (error) {
-        this.showError(error instanceof Error ? error.message : 'Unknown error');
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
     }
   }
@@ -360,7 +244,7 @@ export class MastraTUI {
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     this.state.harness.sendMessage({ content, images: images ? images : undefined }).catch(error => {
-      this.showError(error instanceof Error ? error.message : 'Unknown error');
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
 
@@ -391,28 +275,28 @@ export class MastraTUI {
     await this.state.harness.init();
 
     // Check for existing threads and prompt for resume
-    await this.promptForThreadSelection();
+    await promptForThreadSelection(this.state);
 
     // Load initial token usage from harness (persisted from previous session)
     this.state.tokenUsage = this.state.harness.getTokenUsage();
 
     // Load custom slash commands
-    await this.loadCustomSlashCommands();
+    await loadCustomSlashCommands(this.state);
 
     // Setup autocomplete
-    this.setupAutocomplete();
+    setupAutocomplete(this.state);
 
     // Build UI layout
-    this.buildLayout();
+    buildLayout(this.state, () => this.refreshModelAuthStatus());
 
     // Setup key handlers
-    this.setupKeyHandlers();
-
-    // Setup editor submit handler
-    this.setupEditorSubmitHandler();
+    setupKeyHandlers(this.state, {
+      stop: () => this.stop(),
+      doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
+    });
 
     // Subscribe to harness events
-    this.subscribeToHarness();
+    subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
     const escState = this.state.harness.getState() as any;
     if (escState?.escapeAsCancel === false) {
@@ -431,11 +315,11 @@ export class MastraTUI {
     this.state.isInitialized = true;
 
     // Set terminal title
-    this.updateTerminalTitle();
+    updateTerminalTitle(this.state);
     // Render existing messages
     await renderExistingMessages(this.state);
     // Render existing tasks if any
-    await this.renderExistingTasks();
+    await renderExistingTasks(this.state);
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.state.pendingLockConflict) {
@@ -444,289 +328,9 @@ export class MastraTUI {
     }
   }
 
-  /**
-   * Render existing tasks from the harness state on startup
-   */
-  private async renderExistingTasks(): Promise<void> {
-    try {
-      // Access the harness state using the public method
-      const state = this.state.harness.getState() as { tasks?: TaskItem[] };
-      const tasks = state.tasks || [];
-
-      if (tasks.length > 0 && this.state.taskProgress) {
-        // Update the existing task progress component
-        this.state.taskProgress.updateTasks(tasks);
-        this.state.ui.requestRender();
-      }
-    } catch {
-      // Silently ignore task rendering errors
-    }
-  }
-  /**
-   * Prompt user to continue existing thread or start new one.
-   * This runs before the TUI is fully initialized.
-   * Threads are scoped to the current resourceId by listThreads(),
-   * then further filtered by projectPath to avoid resuming threads
-   * from other worktrees of the same repo.
-   */
-  private async promptForThreadSelection(): Promise<void> {
-    const allThreads = await this.state.harness.listThreads();
-
-    // Filter to threads matching the current working directory.
-    // This prevents worktrees (which share the same resourceId) from
-    // resuming each other's threads.
-    const currentPath = this.state.projectInfo.rootPath;
-    // TEMPORARY: Threads created before auto-tagging don't have projectPath
-    // metadata. To avoid resuming another worktree's untagged threads, we
-    // compare against the directory's birthtime — if the thread predates the
-    // directory it can't belong here. Once all legacy threads have been
-    // retroactively tagged (see below), this check can be removed.
-    let dirCreatedAt: Date | undefined;
-    try {
-      const stat = fs.statSync(currentPath);
-      dirCreatedAt = stat.birthtime;
-    } catch {
-      // fall through – treat all untagged threads as candidates
-    }
-    const threads = allThreads.filter(t => {
-      const threadPath = t.metadata?.projectPath as string | undefined;
-      if (threadPath) return threadPath === currentPath;
-      if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
-      return true;
-    });
-
-    if (threads.length === 0) {
-      // No existing threads for this path - defer creation until first message
-      this.state.pendingNewThread = true;
-      return;
-    }
-
-    // Sort by most recent
-    const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    const mostRecent = sortedThreads[0]!;
-    // Auto-resume the most recent thread for this directory
-    try {
-      await this.state.harness.switchThread({ threadId: mostRecent.id });
-      // Retroactively tag untagged legacy threads so the birthtime check
-      // above can eventually be removed.
-      if (!mostRecent.metadata?.projectPath) {
-        await this.state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
-      }
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        // Defer the lock conflict prompt until after the TUI is started
-        this.state.pendingNewThread = true;
-        this.state.pendingLockConflict = {
-          threadTitle: mostRecent.title || mostRecent.id,
-          ownerPid: error.ownerPid,
-        };
-        return;
-      }
-      throw error;
-    }
-  }
-  /**
-   * Extract text content from a harness message.
-   */
-  private extractTextContent(message: HarnessMessage): string {
-    return message.content
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-      .map(c => c.text)
-      .join(' ')
-      .trim();
-  }
-
-  /**
-   * Truncate text for preview display.
-   */
-  private truncatePreview(text: string, maxLength = 50): string {
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength - 3) + '...';
-  }
-
-  private buildLayout(): void {
-    // Add header
-    const appName = this.state.options.appName || 'Mastra Code';
-    const version = this.state.options.version || '0.1.0';
-
-    const logo = fg('accent', '◆') + ' ' + bold(fg('accent', appName)) + fg('dim', ` v${version}`);
-
-    const keyStyle = (k: string) => fg('accent', k);
-    const sep = fg('dim', ' · ');
-    const instructions = [
-      `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
-      `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
-      `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${this.state.harness.listModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
-    ].join('\n');
-
-    this.state.ui.addChild(new Spacer(1));
-    this.state.ui.addChild(
-      new Text(
-        `${logo}
-${instructions}`,
-        1,
-        0,
-      ),
-    );
-    this.state.ui.addChild(new Spacer(1));
-
-    // Add main containers
-    this.state.ui.addChild(this.state.chatContainer);
-    // Task progress (between chat and editor, visible only when tasks exist)
-    this.state.taskProgress = new TaskProgressComponent();
-    this.state.ui.addChild(this.state.taskProgress);
-    this.state.ui.addChild(this.state.editorContainer);
-    this.state.editorContainer.addChild(this.state.editor);
-
-    // Add footer with two-line status
-    this.state.statusLine = new Text('', 0, 0);
-    this.state.memoryStatusLine = new Text('', 0, 0);
-    this.state.footer.addChild(this.state.statusLine);
-    this.state.footer.addChild(this.state.memoryStatusLine);
-    this.state.ui.addChild(this.state.footer);
-    updateStatusLine(this.state);
-    this.refreshModelAuthStatus();
-
-    // Set focus to editor
-    this.state.ui.setFocus(this.state.editor);
-  }
-
   private async refreshModelAuthStatus(): Promise<void> {
     this.state.modelAuthStatus = await this.state.harness.getCurrentModelAuthStatus();
     updateStatusLine(this.state);
-  }
-
-  private setupAutocomplete(): void {
-    const slashCommands: SlashCommand[] = [
-      { name: 'new', description: 'Start a new thread' },
-      { name: 'threads', description: 'Switch between threads' },
-      { name: 'models', description: 'Configure model (global/thread/mode)' },
-      { name: 'subagents', description: 'Configure subagent model defaults' },
-      { name: 'om', description: 'Configure Observational Memory models' },
-      { name: 'think', description: 'Set thinking level (Anthropic)' },
-      { name: 'login', description: 'Login with OAuth provider' },
-      { name: 'skills', description: 'List available skills' },
-      { name: 'cost', description: 'Show token usage and estimated costs' },
-      { name: 'diff', description: 'Show modified files or git diff' },
-      { name: 'name', description: 'Rename current thread' },
-      {
-        name: 'resource',
-        description: 'Show/switch resource ID (tag for sharing)',
-      },
-      { name: 'logout', description: 'Logout from OAuth provider' },
-      { name: 'hooks', description: 'Show/reload configured hooks' },
-      { name: 'mcp', description: 'Show/reload MCP server connections' },
-      {
-        name: 'thread:tag-dir',
-        description: 'Tag current thread with this directory',
-      },
-      {
-        name: 'sandbox',
-        description: 'Manage allowed paths (add/remove directories)',
-      },
-      {
-        name: 'permissions',
-        description: 'View/manage tool approval permissions',
-      },
-      {
-        name: 'settings',
-        description: 'General settings (notifications, YOLO, thinking)',
-      },
-      {
-        name: 'yolo',
-        description: 'Toggle YOLO mode (auto-approve all tools)',
-      },
-      { name: 'review', description: 'Review a GitHub pull request' },
-      { name: 'exit', description: 'Exit the TUI' },
-      { name: 'help', description: 'Show available commands' },
-    ];
-
-    // Only show /mode if there's more than one mode
-    const modes = this.state.harness.listModes();
-    if (modes.length > 1) {
-      slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
-    }
-
-    // Add custom slash commands to the list
-    for (const customCmd of this.state.customSlashCommands) {
-      // Prefix with extra / to distinguish from built-in commands (//command-name)
-      slashCommands.push({
-        name: `/${customCmd.name}`,
-        description: customCmd.description || `Custom: ${customCmd.name}`,
-      });
-    }
-
-    this.state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd());
-    this.state.editor.setAutocompleteProvider(this.state.autocompleteProvider);
-  }
-  /**
-   * Load custom slash commands from all sources:
-   * - Global: ~/.opencode/command, ~/.claude/commands, and ~/.mastracode/commands
-   * - Local: .opencode/command, .claude/commands, and .mastracode/commands
-   */
-  private async loadCustomSlashCommands(): Promise<void> {
-    try {
-      // Load from all sources (global and local)
-      const globalCommands = await loadCustomCommands();
-      const localCommands = await loadCustomCommands(process.cwd());
-
-      // Merge commands, with local taking precedence over global for same names
-      const commandMap = new Map<string, SlashCommandMetadata>();
-
-      // Add global commands first
-      for (const cmd of globalCommands) {
-        commandMap.set(cmd.name, cmd);
-      }
-
-      // Add local commands (will override global if same name)
-      for (const cmd of localCommands) {
-        commandMap.set(cmd.name, cmd);
-      }
-
-      this.state.customSlashCommands = Array.from(commandMap.values());
-    } catch {
-      this.state.customSlashCommands = [];
-    }
-  }
-
-  private setupKeyHandlers(): void {
-    // Handle Ctrl+C via process signal (backup for when editor doesn't capture it)
-    process.on('SIGINT', () => {
-      const now = Date.now();
-      if (now - this.state.lastCtrlCTime < MastraTUI.DOUBLE_CTRL_C_MS) {
-        this.stop();
-        process.exit(0);
-      }
-      this.state.lastCtrlCTime = now;
-      if (this.state.pendingApprovalDismiss) {
-        this.state.pendingApprovalDismiss();
-      }
-      this.state.userInitiatedAbort = true;
-      this.state.harness.abort();
-    });
-
-    // Use onDebug callback for Shift+Ctrl+D
-    this.state.ui.onDebug = () => {
-      // Toggle debug mode or show debug info
-      // Currently unused - could add debug panel in future
-    };
-  }
-
-  private setupEditorSubmitHandler(): void {
-    // The editor's onSubmit is handled via getUserInput promise
-  }
-
-  private subscribeToHarness(): void {
-    const listener: HarnessEventListener = async event => {
-      await this.handleEvent(event);
-    };
-    this.state.unsubscribe = this.state.harness.subscribe(listener);
-  }
-
-  private updateTerminalTitle(): void {
-    const appName = this.state.options.appName || 'Mastra Code';
-    const cwd = process.cwd().split('/').pop() || '';
-    this.state.ui.terminal.setTitle(`${appName} - ${cwd}`);
   }
 
   // ===========================================================================
@@ -1136,8 +740,8 @@ ${instructions}`,
       mcpManager: this.state.mcpManager,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,
-      showInfo: msg => this.showInfo(msg),
-      showError: msg => this.showError(msg),
+      showInfo: msg => showInfo(this.state, msg),
+      showError: msg => showError(this.state, msg),
       updateStatusLine: () => updateStatusLine(this.state),
       resetStatusLineState: () => this.resetStatusLineState(),
       stop: () => this.stop(),
@@ -1150,12 +754,12 @@ ${instructions}`,
   private buildEventContext(): EventHandlerContext {
     return {
       state: this.state,
-      showInfo: msg => this.showInfo(msg),
-      showError: msg => this.showError(msg),
-      showFormattedError: event => this.showFormattedError(event),
+      showInfo: msg => showInfo(this.state, msg),
+      showError: msg => showError(this.state, msg),
+      showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
       resetStatusLineState: () => this.resetStatusLineState(),
-      notify: (reason, message) => this.notify(reason, message),
+      notify: (reason, message) => notify(this.state, reason, message),
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
@@ -1270,7 +874,7 @@ ${instructions}`,
           await this.handleCustomSlashCommand(customCommand, args);
           return true;
         }
-        this.showError(`Unknown command: ${command}`);
+        showError(this.state, `Unknown command: ${command}`);
         return true;
       }
     }
@@ -1296,147 +900,13 @@ ${instructions}`,
         const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
         await this.state.harness.sendMessage({ content: wrapped });
       } else {
-        this.showInfo(`Executed //${command.name} (no output)`);
+        showInfo(this.state, `Executed //${command.name} (no output)`);
       }
     } catch (error) {
-      this.showError(`Error executing //${command.name}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  // ===========================================================================
-  // UI Helpers
-  // ===========================================================================
-
-  private showError(message: string): void {
-    this.state.chatContainer.addChild(new Spacer(1));
-    this.state.chatContainer.addChild(new Text(fg('error', `Error: ${message}`), 1, 0));
-    this.state.ui.requestRender();
-  }
-
-  /**
-   * Show a formatted error with helpful context based on error type.
-   */
-  showFormattedError(
-    event:
-      | {
-          error: Error;
-          errorType?: string;
-          retryable?: boolean;
-          retryDelay?: number;
-        }
-      | Error,
-  ): void {
-    const error = 'error' in event ? event.error : event;
-    const parsed = parseError(error);
-
-    this.state.chatContainer.addChild(new Spacer(1));
-
-    // Check if this is a tool validation error
-    const errorMessage = error.message || String(error);
-    const isValidationError =
-      errorMessage.toLowerCase().includes('validation failed') ||
-      errorMessage.toLowerCase().includes('required parameter') ||
-      errorMessage.includes('Required');
-
-    if (isValidationError) {
-      // Show a simplified message for validation errors
-      this.state.chatContainer.addChild(new Text(fg('error', 'Tool validation error - see details above'), 1, 0));
-      this.state.chatContainer.addChild(
-        new Text(fg('muted', '  Check the tool execution box for specific parameter requirements'), 1, 0),
+      showError(
+        this.state,
+        `Error executing //${command.name}: ${error instanceof Error ? error.message : String(error)}`,
       );
-    } else {
-      // Show the main error message
-      let errorText = `Error: ${parsed.message}`;
-
-      // Add retry info if applicable
-      const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-      const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
-      if (retryable && retryDelay) {
-        const seconds = Math.ceil(retryDelay / 1000);
-        errorText += fg('muted', ` (retry in ${seconds}s)`);
-      }
-
-      this.state.chatContainer.addChild(new Text(fg('error', errorText), 1, 0));
-
-      // Add helpful hints based on error type
-      const hint = this.getErrorHint(parsed.type);
-      if (hint) {
-        this.state.chatContainer.addChild(new Text(fg('muted', `  Hint: ${hint}`), 1, 0));
-      }
     }
-
-    this.state.ui.requestRender();
-  }
-
-  /**
-   * Get a helpful hint based on error type.
-   */
-  private getErrorHint(errorType: string): string | null {
-    switch (errorType) {
-      case 'auth':
-        return 'Use /login to authenticate with a provider';
-      case 'model_not_found':
-        return 'Use /models to select a different model';
-      case 'context_length':
-        return 'Use /new to start a fresh conversation';
-      case 'rate_limit':
-        return 'Wait a moment and try again';
-      case 'network':
-        return 'Check your internet connection';
-      default:
-        return null;
-    }
-  }
-  /**
-   * Run a shell command directly and display the output in the chat.
-   * Triggered by the `!` prefix (e.g., `!ls -la`).
-   */
-  private async handleShellPassthrough(command: string): Promise<void> {
-    if (!command) {
-      this.showInfo('Usage: !<command> (e.g., !ls -la)');
-      return;
-    }
-
-    try {
-      const { execa } = await import('execa');
-      const result = await execa(command, {
-        shell: true,
-        cwd: process.cwd(),
-        reject: false,
-        timeout: 30_000,
-        env: {
-          ...process.env,
-          FORCE_COLOR: '1',
-        },
-      });
-
-      const component = new ShellOutputComponent(
-        command,
-        result.stdout ?? '',
-        result.stderr ?? '',
-        result.exitCode ?? 0,
-      );
-      this.state.chatContainer.addChild(component);
-      this.state.ui.requestRender();
-    } catch (error) {
-      this.showError(error instanceof Error ? error.message : 'Shell command failed');
-    }
-  }
-  /**
-   * Send a notification alert (bell / system / hooks) based on user settings.
-   */
-  private notify(reason: NotificationReason, message?: string): void {
-    const mode = ((this.state.harness.getState() as any)?.notifications ?? 'off') as NotificationMode;
-    sendNotification(reason, {
-      mode,
-      message,
-      hookManager: this.state.hookManager,
-    });
-  }
-
-  private showInfo(message: string): void {
-    this.state.chatContainer.addChild(new Spacer(1));
-    this.state.chatContainer.addChild(new Text(fg('muted', message), 1, 0));
-    this.state.ui.requestRender();
   }
 }
