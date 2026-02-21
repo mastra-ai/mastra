@@ -745,6 +745,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
     const adminResponse = await agent.generate('Read config', { requestContext: adminCtx });
     const adminResult = adminResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
       ?.payload?.result;
+    // Tool returns a string containing the file content
     expect(adminResult).toContain('admin config');
 
     // Call as user — should read from tempDirB
@@ -796,11 +797,12 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
 
     await agent.generate('Write a file', { requestContext: new RequestContext() });
 
-    // Verify the file was NOT created — readOnly enforcement blocked the write
-    const fileExists = await fs.access(path.join(tempDirA, 'test.txt')).then(
-      () => true,
-      () => false,
-    );
+    // The tool error is caught by the framework — verify the write was blocked
+    // The file should NOT exist (read-only enforcement prevented the write)
+    const fileExists = await fs
+      .access(path.join(tempDirA, 'test.txt'))
+      .then(() => true)
+      .catch(() => false);
     expect(fileExists).toBe(false);
   });
 });
