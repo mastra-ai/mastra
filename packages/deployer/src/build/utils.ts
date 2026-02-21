@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { basename, join, relative } from 'node:path';
+import type { RollupNodeResolveOptions } from '@rollup/plugin-node-resolve';
 
 /** The detected JavaScript runtime environment */
 export type RuntimePlatform = 'node' | 'bun';
@@ -13,6 +14,29 @@ export type RuntimePlatform = 'node' | 'bun';
  * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
  */
 export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Get nodeResolve plugin options based on the target platform.
+ *
+ * For 'browser' platform (e.g., Cloudflare Workers), uses browser-compatible
+ * export conditions so packages like the Cloudflare SDK resolve to their
+ * web runtime instead of Node.js-specific code.
+ *
+ * For 'node' and 'neutral' (Bun) platforms, uses Node.js module resolution.
+ */
+export function getNodeResolveOptions(platform: BundlerPlatform): RollupNodeResolveOptions {
+  if (platform === 'browser') {
+    return {
+      preferBuiltins: false,
+      browser: true,
+      exportConditions: ['browser', 'worker', 'default'],
+    };
+  }
+  return {
+    preferBuiltins: true,
+    exportConditions: ['node'],
+  };
+}
 
 /**
  * Detect the current JavaScript runtime environment.
