@@ -31,21 +31,27 @@ export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
   private processManager: SandboxProcessManager;
+  private _root: string;
   private config: LSPConfig;
 
-  constructor(processManager: SandboxProcessManager, config: LSPConfig = {}) {
+  constructor(processManager: SandboxProcessManager, root: string, config: LSPConfig = {}) {
     this.processManager = processManager;
+    this._root = root;
     this.config = config;
+  }
+
+  /** Project root directory used as rootUri for LSP servers. */
+  get root(): string {
+    return this._root;
   }
 
   /**
    * Get or create an LSP client for a file path.
    * Returns null if no server is available.
    */
-  async getClient(filePath: string, workspaceRoot: string): Promise<LSPClient | null> {
-    const servers = getServersForFile(filePath, workspaceRoot, this.config.disableServers);
-    // Filter to servers whose binary is actually available
-    const available = servers.filter(s => s.command(workspaceRoot) !== undefined);
+  async getClient(filePath: string): Promise<LSPClient | null> {
+    const servers = getServersForFile(filePath, this.config.disableServers);
+    const available = servers.filter(s => s.command(this._root) !== undefined);
     if (available.length === 0) return null;
 
     // Prefer well-known language servers
@@ -58,7 +64,7 @@ export class LSPManager {
           s.languageIds.includes('go'),
       ) ?? available[0]!;
 
-    const key = `${serverDef.name}:${workspaceRoot}`;
+    const key = `${serverDef.name}:${this._root}`;
 
     // Existing client
     if (this.clients.has(key)) {
@@ -75,7 +81,7 @@ export class LSPManager {
     const initTimeout = this.config.initTimeout ?? 15000;
     let timedOut = false;
     const initPromise = (async () => {
-      const client = new LSPClient(serverDef, workspaceRoot, this.processManager);
+      const client = new LSPClient(serverDef, this._root, this.processManager);
       await client.initialize(initTimeout);
       if (timedOut) {
         // Timeout already fired — don't leak the client
@@ -109,9 +115,9 @@ export class LSPManager {
    * Convenience method: open file, send content, wait for diagnostics, return normalized results.
    * Returns an empty array on any failure (non-blocking).
    */
-  async getDiagnostics(filePath: string, content: string, workspaceRoot: string): Promise<LSPDiagnostic[]> {
+  async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[]> {
     try {
-      const client = await this.getClient(filePath, workspaceRoot);
+      const client = await this.getClient(filePath);
       if (!client) return [];
 
       const languageId = getLanguageId(filePath);

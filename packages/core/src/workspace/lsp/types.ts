@@ -13,6 +13,10 @@
  * Configuration for LSP diagnostics in a workspace.
  */
 export interface LSPConfig {
+  /** Project root directory (absolute path). Used as rootUri for LSP servers and cwd for spawning.
+   * If not provided, resolved from filesystem.basePath or sandbox.workingDirectory. */
+  root?: string;
+
   /** Timeout in ms for waiting for diagnostics after an edit (default: 5000) */
   diagnosticTimeout?: number;
 
@@ -52,7 +56,6 @@ export interface LSPServerDef {
   id: string;
   name: string;
   languageIds: string[];
-  root: (cwd: string) => string | null;
   command: (root: string) => string | undefined;
   initialization?: (root: string) => any;
 }

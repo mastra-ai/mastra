@@ -2,17 +2,15 @@
 '@mastra/core': minor
 ---
 
-Moved LSP diagnostics from `LocalFilesystem` to `Workspace`. LSP now uses `sandbox.processes` to spawn language servers, making it work with any sandbox backend (local, E2B, etc.) that has a process manager. Enable via `lsp: true` on `Workspace` instead of `LocalFilesystem`.
+Added LSP diagnostics to Workspace. LSP uses `sandbox.processes` to spawn language servers, making it work with any sandbox backend (local, E2B, etc.) that has a process manager.
 
-**Breaking change:** `lsp` option moved from `LocalFilesystem` to `Workspace`. `LSPManager` constructor now requires a `SandboxProcessManager` as its first argument. `LSPServerDef.spawn` replaced with `LSPServerDef.command` (returns a command string) and optional `LSPServerDef.initialization`.
-
-**LSP Diagnostics example:**
+The project root for LSP servers can be set explicitly via `lsp.root`, or auto-resolved from `filesystem.basePath` or `sandbox.workingDirectory`.
 
 ```ts
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: '/my/project' }),
   sandbox: new LocalSandbox(),
-  lsp: true, // enables LSP diagnostics
+  lsp: true, // or { root: '/my/project' } to set explicitly
 });
 // Edit tools now return diagnostics automatically:
 // "/src/app.ts: Replaced 1 occurrence of pattern

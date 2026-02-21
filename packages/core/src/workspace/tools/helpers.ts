@@ -4,10 +4,11 @@
  * Runtime assertions for extracting workspace resources from tool execution context.
  */
 
+import path from 'node:path';
+
 import type { ToolExecutionContext } from '../../tools/types';
 import { WorkspaceNotAvailableError, FilesystemNotAvailableError, SandboxNotAvailableError } from '../errors';
 import type { WorkspaceFilesystem } from '../filesystem';
-import { resolveWorkspacePath } from '../filesystem/fs-utils';
 import type { LSPDiagnostic, DiagnosticSeverity } from '../lsp/types';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
@@ -84,15 +85,11 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     const lspManager = workspace.lsp;
     if (!lspManager) return '';
 
-    // Resolve workspace-relative path to absolute for LSP
-    const basePath = (workspace.filesystem as any)?.basePath ?? workspace.sandbox?.workingDirectory;
-    if (!basePath) return '';
-
-    const absolutePath = resolveWorkspacePath(basePath, filePath);
+    const absolutePath = path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
 
     const DIAG_TIMEOUT_MS = 10_000;
     const diagnostics: LSPDiagnostic[] = await Promise.race([
-      lspManager.getDiagnostics(absolutePath, content, basePath),
+      lspManager.getDiagnostics(absolutePath, content),
       new Promise<LSPDiagnostic[]>((_, reject) =>
         setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS),
       ),

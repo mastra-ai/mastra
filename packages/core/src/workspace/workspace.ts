@@ -482,9 +482,16 @@ export class Workspace<
     }
 
     // Initialize LSP if configured and a process manager is available
-    if (config.lsp && this._sandbox?.processes && isLSPAvailable()) {
-      const lspConfig = config.lsp === true ? {} : config.lsp;
-      this._lsp = new LSPManager(this._sandbox.processes, lspConfig);
+    if (config.lsp) {
+      const hasProcesses = !!this._sandbox?.processes;
+      const depsAvailable = isLSPAvailable();
+      if (hasProcesses && depsAvailable) {
+        const lspConfig = config.lsp === true ? {} : config.lsp;
+        const lspRoot = lspConfig.root ?? this._fs?.basePath ?? this._sandbox?.workingDirectory;
+        if (lspRoot) {
+          this._lsp = new LSPManager(this._sandbox!.processes!, lspRoot, lspConfig);
+        }
+      }
     }
 
     // Validate at least one provider is given

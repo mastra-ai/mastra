@@ -137,7 +137,6 @@ export class LSPClient {
     if (!command) {
       throw new Error('Failed to resolve LSP server command');
     }
-
     this.handle = await this.processManager.spawn(command, { cwd: this.workspaceRoot });
 
     const initializationOptions = this.serverDef.initialization?.(this.workspaceRoot);

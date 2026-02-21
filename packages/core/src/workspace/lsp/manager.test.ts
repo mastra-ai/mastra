@@ -42,7 +42,6 @@ vi.mock('./servers', () => ({
           id: 'typescript',
           name: 'TypeScript Language Server',
           languageIds: ['typescript', 'typescriptreact'],
-          root: () => '/project',
           command: () => 'typescript-language-server --stdio',
         },
       ];
@@ -63,7 +62,7 @@ describe('LSPManager', () => {
   let manager: LSPManager;
 
   beforeEach(() => {
-    manager = new LSPManager(mockProcessManager);
+    manager = new LSPManager(mockProcessManager, '/project');
   });
 
   afterEach(async () => {
@@ -71,27 +70,33 @@ describe('LSPManager', () => {
     vi.clearAllMocks();
   });
 
+  describe('root', () => {
+    it('exposes the root passed to the constructor', () => {
+      expect(manager.root).toBe('/project');
+    });
+  });
+
   describe('getClient', () => {
     it('returns null for unsupported file types', async () => {
-      const client = await manager.getClient('/project/README.md', '/project');
+      const client = await manager.getClient('/project/README.md');
       expect(client).toBeNull();
     });
 
     it('returns a client for TypeScript files', async () => {
-      const client = await manager.getClient('/project/src/app.ts', '/project');
+      const client = await manager.getClient('/project/src/app.ts');
       expect(client).not.toBeNull();
     });
 
     it('reuses client for same server + workspace', async () => {
-      const client1 = await manager.getClient('/project/src/app.ts', '/project');
-      const client2 = await manager.getClient('/project/src/other.ts', '/project');
+      const client1 = await manager.getClient('/project/src/app.ts');
+      const client2 = await manager.getClient('/project/src/other.ts');
       expect(client1).toBe(client2);
     });
   });
 
   describe('getDiagnostics', () => {
     it('returns normalized diagnostics for TypeScript files', async () => {
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'const x: number = "hello"', '/project');
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'const x: number = "hello"');
 
       expect(diagnostics).toHaveLength(2);
       expect(diagnostics[0]).toEqual({
@@ -111,19 +116,19 @@ describe('LSPManager', () => {
     });
 
     it('returns empty array for unsupported files', async () => {
-      const diagnostics = await manager.getDiagnostics('/project/data.json', '{}', '/project');
+      const diagnostics = await manager.getDiagnostics('/project/data.json', '{}');
       expect(diagnostics).toEqual([]);
     });
   });
 
   describe('shutdownAll', () => {
     it('cleans up all clients', async () => {
-      await manager.getClient('/project/src/app.ts', '/project');
+      await manager.getClient('/project/src/app.ts');
 
       await manager.shutdownAll();
 
       // After shutdown, getting a new client should create a fresh one
-      const client = await manager.getClient('/project/src/app.ts', '/project');
+      const client = await manager.getClient('/project/src/app.ts');
       expect(client).not.toBeNull();
     });
   });
@@ -131,11 +136,11 @@ describe('LSPManager', () => {
   describe('config', () => {
     it('respects disableServers config', async () => {
       const { getServersForFile } = await import('./servers');
-      const restrictedManager = new LSPManager(mockProcessManager, { disableServers: ['eslint'] });
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { disableServers: ['eslint'] });
 
-      await restrictedManager.getClient('/project/src/app.ts', '/project');
+      await restrictedManager.getClient('/project/src/app.ts');
 
-      expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', '/project', ['eslint']);
+      expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', ['eslint']);
       await restrictedManager.shutdownAll();
     });
   });
