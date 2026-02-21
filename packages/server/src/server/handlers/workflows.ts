@@ -1,5 +1,5 @@
-import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { RequestContext } from '@mastra/core/di';
+import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -23,6 +23,7 @@ import {
   workflowRunsResponseSchema,
   workflowRunResultQuerySchema,
   workflowRunResultSchema,
+  observeWorkflowQuerySchema,
 } from '../schemas/workflows';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -376,17 +377,16 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = run.stream({ ...params, requestContext });
-      return result.fullStream.pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            if (serverCache) {
-              const cacheKey = runId;
-              serverCache.listPush(cacheKey, chunk).catch(() => {});
-            }
-            controller.enqueue(chunk);
-          },
-        }),
-      );
+
+      if (serverCache) {
+        const { transform } = createCachingTransformStream<ChunkType>({
+          cache: serverCache,
+          cacheKey: runId,
+        });
+        return result.fullStream.pipeThrough(transform);
+      }
+
+      return result.fullStream;
     } catch (error) {
       return handleError(error, 'Error streaming workflow');
     }
@@ -434,20 +434,17 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
 
-      const stream = _run.resumeStream({ ...params, requestContext }).fullStream.pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            if (serverCache) {
-              const cacheKey = runId;
-              serverCache.listPush(cacheKey, chunk).catch(() => {});
-            }
+      const resumeResult = _run.resumeStream({ ...params, requestContext });
 
-            controller.enqueue(chunk);
-          },
-        }),
-      );
+      if (serverCache) {
+        const { transform } = createCachingTransformStream<ChunkType>({
+          cache: serverCache,
+          cacheKey: runId,
+        });
+        return resumeResult.fullStream.pipeThrough(transform);
+      }
 
-      return stream;
+      return resumeResult.fullStream;
     } catch (error) {
       return handleError(error, 'Error resuming workflow');
     }
@@ -546,13 +543,14 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
   path: '/workflows/:workflowId/observe',
   responseType: 'stream',
   pathParamSchema: workflowIdPathParams,
-  queryParamSchema: runIdSchema,
+  queryParamSchema: observeWorkflowQuerySchema,
   responseSchema: streamResponseSchema,
   summary: 'Observe workflow stream',
-  description: 'Observes and streams updates from an already running workflow execution',
+  description:
+    'Observes and streams updates from an already running workflow execution. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, runId, requestContext }) => {
+  handler: async ({ mastra, workflowId, runId, offset, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
@@ -584,52 +582,15 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Server cache not found' });
       }
 
-      // Get cached chunks first
-      const cachedRunChunks = await serverCache.listFromTo(runId, 0);
+      // Get cached chunks from the specified index (or 0 if not specified)
+      const startIndex = offset ?? 0;
+      const cachedRunChunks = (await serverCache.listFromTo(runId, startIndex)) as ChunkType[];
+      const liveStream = _run.observeStream();
 
-      // Create a readable stream that first emits cached chunks, then the live stream
-      const combinedStream = new ReadableStream<ChunkType>({
-        start(controller) {
-          // First, emit all cached chunks
-          const emitCachedChunks = async () => {
-            for (const chunk of cachedRunChunks) {
-              controller.enqueue(chunk as ChunkType);
-            }
-          };
-
-          // Then, pipe the live stream
-          const liveStream = _run.observeStream();
-          const reader = liveStream.getReader();
-
-          const pump = async () => {
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                  controller.close();
-                  break;
-                }
-                controller.enqueue(value);
-              }
-            } catch (error) {
-              controller.error(error);
-            } finally {
-              reader.releaseLock();
-            }
-          };
-
-          // Start with cached chunks, then live stream
-          void emitCachedChunks()
-            .then(() => {
-              void pump();
-            })
-            .catch(error => {
-              controller.error(error);
-            });
-        },
+      return createReplayStream<ChunkType>({
+        history: cachedRunChunks,
+        liveSource: liveStream,
       });
-
-      return combinedStream;
     } catch (error) {
       return handleError(error, 'Error observing workflow stream');
     }
@@ -1029,17 +990,16 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
 
       const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
       const result = run.timeTravelStream({ ...params, requestContext });
-      return result.fullStream.pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            if (serverCache) {
-              const cacheKey = runId;
-              serverCache.listPush(cacheKey, chunk).catch(() => {});
-            }
-            controller.enqueue(chunk);
-          },
-        }),
-      );
+
+      if (serverCache) {
+        const { transform } = createCachingTransformStream<ChunkType>({
+          cache: serverCache,
+          cacheKey: runId,
+        });
+        return result.fullStream.pipeThrough(transform);
+      }
+
+      return result.fullStream;
     } catch (error) {
       return handleError(error, 'Error time traveling workflow stream');
     }
@@ -1188,20 +1148,18 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Server cache not found' });
       }
 
-      const transformStream = new TransformStream<StreamEvent, StreamEvent>();
+      // Get cached chunks and create replay stream
+      const cachedRunChunks = (await serverCache.listFromTo(runId, 0)) as StreamEvent[];
+      const result = _run.observeStreamLegacy();
 
-      const writer = transformStream.writable.getWriter();
-
-      const cachedRunChunks = await serverCache.listFromTo(runId, 0);
-
-      for (const chunk of cachedRunChunks) {
-        await writer.write(chunk as any);
+      if (!result.stream) {
+        throw new HTTPException(500, { message: 'Failed to create observe stream' });
       }
 
-      writer.releaseLock();
-
-      const result = _run.observeStreamLegacy();
-      return result.stream?.pipeThrough(transformStream);
+      return createReplayStream<StreamEvent>({
+        history: cachedRunChunks,
+        liveSource: result.stream,
+      });
     } catch (error) {
       return handleError(error, 'Error observing workflow stream');
     }

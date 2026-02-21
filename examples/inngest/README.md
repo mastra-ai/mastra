@@ -629,3 +629,55 @@ new OtelExporter({
 ```
 
 For more information, see the [Mastra Observability documentation](https://mastra.ai/docs/observability).
+
+## Durable Agents
+
+This example includes two **durable agents** - AI agent loops that survive server crashes via Inngest's durable execution. Each step (LLM call, tool execution) is checkpointed and resumes automatically.
+
+### Included Durable Agents
+
+1. **Research Agent** (`research-agent`) - Simple agent with a web search tool
+2. **File Manager Agent** (`file-manager-agent`) - Demonstrates tool approval for dangerous operations (delete-file requires approval)
+
+### Running
+
+Start both the Inngest dev server and Mastra:
+
+```sh
+# Terminal 1: Inngest dev server
+pnpm start:inngest:server
+
+# Terminal 2: Mastra dev server + studio
+pnpm mastra:dev
+```
+
+Then open Mastra Studio and interact with the durable agents like any other agent. You can also monitor runs in the Inngest dashboard at http://localhost:8288.
+
+### Creating a Durable Agent
+
+```ts
+import { createInngestAgent } from '@mastra/inngest';
+import { Agent } from '@mastra/core/agent';
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful assistant.',
+  tools: {
+    /* your tools */
+  },
+});
+
+// Wrap with durable execution
+export const durableAgent = createInngestAgent({
+  agent: myAgent,
+  inngest,
+});
+
+// Register in mastra config - workflows auto-register
+export const mastra = new Mastra({
+  agents: { durableAgent },
+});
+```
+
+For more details, see the [Inngest Durable Agents guide](https://mastra.ai/docs/guides/deployment/inngest).

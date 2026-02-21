@@ -7,6 +7,7 @@ import {
   GENERATE_AGENT_VNEXT_ROUTE,
   STREAM_GENERATE_ROUTE,
   STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
+  OBSERVE_AGENT_STREAM_ROUTE,
   GET_PROVIDERS_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
@@ -59,6 +60,11 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   GENERATE_AGENT_VNEXT_ROUTE,
   STREAM_GENERATE_ROUTE,
   STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
+
+  // ============================================================================
+  // Resumable Stream Routes
+  // ============================================================================
+  OBSERVE_AGENT_STREAM_ROUTE,
 
   // ============================================================================
   // Tool Routes

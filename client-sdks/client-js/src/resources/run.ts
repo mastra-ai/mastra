@@ -280,19 +280,33 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Observes workflow stream for a workflow run
-   * @returns Promise containing the workflow execution results
+   * Observe (reconnect to) an existing workflow stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a ReadableStream of workflow events
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a workflow stream from a specific position
+   * const stream = await run.observe({ offset: 42 });
+   *
+   * for await (const event of stream) {
+   *   console.log('Received:', event);
+   * }
+   * ```
    */
-  async observeStream() {
+  async observe(params?: { offset?: number }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
-    const response: Response = await this.request(
-      `/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        stream: true,
-      },
-    );
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
+    }
+
+    const response: Response = await this.request(`/workflows/${this.workflowId}/observe?${searchParams.toString()}`, {
+      method: 'POST',
+      stream: true,
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
@@ -304,6 +318,15 @@ export class Run extends BaseResource {
 
     // Pipe the response body through the transform stream
     return response.body.pipeThrough(this.createChunkTransformStream());
+  }
+
+  /**
+   * Observes workflow stream for a workflow run
+   * @deprecated Use `observe()` instead for better control over replay position
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStream() {
+    return this.observe();
   }
 
   /**

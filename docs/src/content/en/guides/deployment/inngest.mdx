@@ -671,3 +671,176 @@ When you configure a workflow with a `cron` property:
 You can monitor scheduled executions in the Inngest dashboard under **Functions** and **Runs** sections. The cron function will appear as a separate function alongside your main workflow function.
 
 For more information on cron scheduling, see the [Inngest cron documentation](https://www.inngest.com/docs/guides/scheduled-functions).
+
+## Durable Agents
+
+Durable agents wrap a Mastra Agent with Inngest's durable execution engine. The key benefit is that **the entire agentic loop is durable** - if your server crashes mid-way through a multi-step tool-calling conversation, Inngest automatically resumes exactly where it left off.
+
+### Why use durable agents?
+
+- **Crash recovery**: Server restarts mid-conversation? Inngest picks up where it left off
+- **Long-running operations**: Multi-step tool calling preserved across failures
+- **Built-in retries**: Automatic retry handling for transient failures
+- **Observability**: Full visibility into agent execution in the Inngest dashboard
+
+### Setup
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/inngest@latest inngest @inngest/realtime
+```
+
+### Creating a durable agent
+
+```ts title="src/mastra/agents/index.ts"
+import { Agent } from "@mastra/core/agent";
+import { createInngestAgent } from "@mastra/inngest";
+import { openai } from "@ai-sdk/openai";
+import { inngest } from "../inngest";
+
+// 1. Create a regular Mastra Agent
+const agent = new Agent({
+  id: "my-assistant",
+  name: "My Assistant",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o"),
+});
+
+// 2. Wrap it with Inngest durable execution
+export const durableAgent = createInngestAgent({ agent, inngest });
+```
+
+### Registering with Mastra
+
+When you add a durable agent to Mastra, the required workflow is automatically registered:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { serve } from "@mastra/inngest";
+import { inngest } from "./inngest";
+import { durableAgent } from "./agents";
+
+export const mastra = new Mastra({
+  agents: { 
+    myAssistant: durableAgent,  // Workflow auto-registered
+  },
+  server: {
+    apiRoutes: [
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) => serve({ mastra, inngest }),
+      },
+    ],
+  },
+});
+```
+
+### Basic usage
+
+Stream a response from the durable agent:
+
+```ts
+import { durableAgent } from "./agents";
+
+const { output, runId, cleanup } = await durableAgent.stream([
+  { role: "user", content: "Hello!" }
+]);
+
+// Get the full response text
+const text = await output.text;
+console.log(text);
+
+// Always clean up when done
+cleanup();
+```
+
+### Using callbacks
+
+Monitor the agent's progress with callbacks:
+
+```ts
+const { output, cleanup } = await durableAgent.stream(
+  [{ role: "user", content: "Analyze this data and create a report" }],
+  {
+    onChunk: (chunk) => {
+      // Stream text to the client
+      if ("textDelta" in chunk) {
+        process.stdout.write(chunk.textDelta);
+      }
+    },
+    onStepFinish: (step) => {
+      // Called after each LLM step (useful for multi-step tool calling)
+      console.log("Step completed:", step.stepNumber);
+    },
+    onFinish: (result) => {
+      // Called when the agent completes
+      console.log("Done! Tokens used:", result.usage);
+    },
+    onError: (error) => {
+      console.error("Error:", error);
+    },
+  }
+);
+```
+
+### Using with memory
+
+Durable agents support memory for persistent conversations:
+
+```ts
+const { output, cleanup } = await durableAgent.stream(
+  [{ role: "user", content: "Remember my name is Alice" }],
+  {
+    memory: {
+      thread: "conversation-123",
+      resource: "user-456",
+    },
+  }
+);
+```
+
+### Resuming suspended executions
+
+When an agent suspends (e.g., waiting for tool approval), you can resume it:
+
+```ts
+// Original execution suspends
+const { output, runId, cleanup } = await durableAgent.stream(
+  [{ role: "user", content: "Delete all files" }],
+  {
+    requireToolApproval: true,
+    onSuspended: (data) => {
+      console.log("Waiting for approval:", data.toolName);
+    },
+  }
+);
+
+// Later, resume with approval
+const resumed = await durableAgent.resume(
+  runId,
+  { approved: true },
+  {
+    onFinish: (result) => {
+      console.log("Resumed execution completed");
+    },
+  }
+);
+```
+
+### How it works
+
+When you call `createInngestAgent()`:
+
+1. A durable workflow is created internally (`durable-agentic-loop`)
+2. The `InngestAgent` object implements `DurableAgentLike`, which Mastra recognizes
+3. When added to Mastra, the underlying agent is registered so the workflow can access it
+4. The workflow is automatically registered with Mastra
+5. When `serve()` is called, the workflow is exposed to Inngest
+
+The workflow executes each step of the agentic loop durably - if execution is interrupted, Inngest resumes from the last completed step rather than starting over.
+
+### API reference
+
+For detailed API documentation, see the [createInngestAgent reference](/reference/workflows/createInngestAgent).

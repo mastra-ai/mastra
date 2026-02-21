@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import type { DurableAgentLike } from '../agent/types';
+import { isDurableAgentLike } from '../agent/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -115,10 +117,11 @@ export interface Config<
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
-   * Accepts both Mastra Agent instances and AI SDK v6 ToolLoopAgent instances.
-   * ToolLoopAgent instances are automatically converted to Mastra Agents.
+   * Accepts Mastra Agent instances, AI SDK v6 ToolLoopAgent instances,
+   * and durable agent wrappers (e.g., InngestAgent from createInngestAgent).
+   * ToolLoopAgent and durable agents are automatically handled during registration.
    */
-  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike };
+  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike | DurableAgentLike };
 
   /**
    * Storage provider for persisting data, conversation history, and workflow state.
@@ -203,6 +206,18 @@ export interface Config<
    * @default EventEmitterPubSub
    */
   pubsub?: PubSub;
+
+  /**
+   * Server cache for storing stream events and other temporary data.
+   * Used by durable agents for resumable streams - clients can disconnect
+   * and reconnect without missing events.
+   *
+   * When provided, durable agents created without their own cache will
+   * inherit this cache instance.
+   *
+   * @default InMemoryServerCache
+   */
+  cache?: MastraServerCache;
 
   /**
    * Scorers help assess the quality of agent responses and workflow outputs.
@@ -336,7 +351,7 @@ export class Mastra<
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
-  // This is only used internally for server handlers that require temporary persistence
+  // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
@@ -500,8 +515,8 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
-    // This is only used internally for server handlers that require temporary persistence
-    this.#serverCache = new InMemoryServerCache();
+    // Server cache for temporary persistence and durable agent resumable streams
+    this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
     // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
@@ -838,9 +853,13 @@ export class Mastra<
    * mastra.addAgent(newAgent); // Uses agent.id as key
    * // or
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
+   *
+   * // Durable agents (e.g., InngestAgent) are also supported:
+   * const durableAgent = createInngestAgent({ agent: newAgent, inngest });
+   * mastra.addAgent(durableAgent); // Auto-registers required workflows
    * ```
    */
-  public addAgent<A extends Agent | ToolLoopAgentLike>(
+  public addAgent<A extends Agent | ToolLoopAgentLike | DurableAgentLike>(
     agent: A,
     key?: string,
     options?: { source?: 'code' | 'stored' },
@@ -848,12 +867,55 @@ export class Mastra<
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
+
+    // Handle durable agent wrappers (e.g., InngestAgent)
+    // These wrap a regular Agent with execution engine-specific capabilities
+    if (isDurableAgentLike(agent)) {
+      const durableAgent = agent as DurableAgentLike;
+      const underlyingAgent = durableAgent.agent;
+      const agentKey = key || durableAgent.id;
+
+      // Check if already registered
+      const agents = this.#agents as Record<string, Agent<any>>;
+      if (agents[agentKey]) {
+        const logger = this.getLogger();
+        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+        return;
+      }
+
+      // Set the Mastra instance on the durable agent for observability
+      durableAgent.__setMastra?.(this);
+
+      // Initialize the underlying agent (needed for tools, memory, etc.)
+      underlyingAgent.__setLogger(this.#logger);
+      underlyingAgent.__registerMastra(this);
+      underlyingAgent.__registerPrimitives({
+        logger: this.getLogger(),
+        storage: this.getStorage(),
+        agents: agents,
+        tts: this.#tts,
+        vectors: this.#vectors,
+      });
+
+      // Store the durable wrapper in #agents (not the underlying agent)
+      // This ensures getAgentById returns the wrapper so .stream() uses durable execution
+      agents[agentKey] = durableAgent as unknown as Agent<any>;
+
+      // Register durable workflows if the wrapper provides them
+      const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
+      for (const workflow of durableWorkflows) {
+        this.addWorkflow(workflow, workflow.id);
+      }
+
+      return;
+    }
+
     let mastraAgent: Agent<any, any, any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
       mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
     } else {
-      mastraAgent = agent;
+      mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;

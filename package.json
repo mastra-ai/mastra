@@ -73,6 +73,10 @@
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:editor": "pnpm --filter ./packages/editor test",
     "test:evals": "pnpm --filter ./packages/evals test",
+    "test:durable": "pnpm test:durable:core && pnpm test:durable:inngest",
+    "test:durable:core": "pnpm --filter @mastra/core test src/agent/durable/",
+    "test:durable:inngest": "pnpm --filter @mastra/inngest test:suite",
+    "test:durable:inngest:unit": "pnpm --filter @mastra/inngest test:unit",
     "test:mastracode": "pnpm --filter ./mastracode test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
@@ -113,7 +117,8 @@
       "better-auth": "^1.4.18",
       "js-yaml": "^3.14.2",
       "glob@<=10.5.0": "10.5.0",
-      "body-parser@<=2.2.1": "2.2.2"
+      "body-parser@<=2.2.1": "2.2.2",
+      "inngest": "^3.50.0"
     }
   },
   "license": "Apache-2.0",

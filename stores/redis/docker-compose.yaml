@@ -1,0 +1,6 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6399:6379'
+    command: redis-server --appendonly yes

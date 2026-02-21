@@ -1644,6 +1644,72 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Observe (reconnect to) an existing agent stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.runId - The run ID to observe
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a streaming Response
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a stream from a specific position
+   * const response = await client.agents('my-agent').observe({
+   *   runId: 'run-123',
+   *   offset: 42, // Resume from event 42
+   * });
+   *
+   * await response.processDataStream({
+   *   onChunk: (chunk) => console.log('Received:', chunk),
+   * });
+   * ```
+   */
+  async observe(params: { runId: string; offset?: number }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/agents/${this.agentId}/observe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */

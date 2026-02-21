@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
@@ -40,6 +41,8 @@ import {
   enhanceInstructionsResponseSchema,
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
+  observeAgentBodySchema,
+  observeAgentResponseSchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
@@ -1246,6 +1249,77 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
+});
+
+export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/observe',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: observeAgentBodySchema,
+  responseSchema: observeAgentResponseSchema,
+  summary: 'Observe agent stream',
+  description:
+    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, runId, offset }) => {
+    try {
+      // Verify agent exists (for authorization/validation)
+      await getAgentFromSystem({ mastra, agentId });
+
+      // Get the pubsub from mastra
+      const pubsub = mastra.pubsub;
+
+      // Create a ReadableStream that subscribes to the agent stream topic
+      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const topic = AGENT_STREAM_TOPIC(runId);
+      let handleEvent: ((event: any) => void) | null = null;
+
+      const stream = new ReadableStream({
+        start(controller) {
+          handleEvent = (event: any) => {
+            const isTerminal = event.type === 'finish' || event.type === 'error';
+            try {
+              controller.enqueue(event);
+              if (isTerminal) {
+                controller.close();
+              }
+            } catch {
+              // Stream may be closed
+            }
+            // Unsubscribe outside try so cleanup runs even if enqueue/close throws
+            if (isTerminal && handleEvent) {
+              void pubsub.unsubscribe(topic, handleEvent);
+              handleEvent = null;
+            }
+          };
+
+          // Subscribe with replay support
+          const subscribePromise =
+            offset !== undefined
+              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
+              : pubsub.subscribeWithReplay(topic, handleEvent);
+
+          subscribePromise.catch(error => {
+            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+            controller.error(error);
+          });
+        },
+        cancel() {
+          if (handleEvent) {
+            void pubsub.unsubscribe(topic, handleEvent);
+            handleEvent = null;
+          }
+        },
+      });
+
+      return stream;
+    } catch (error) {
+      return handleError(error, 'error observing agent stream');
+    }
+  },
 });
 
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({
