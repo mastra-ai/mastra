@@ -109,7 +109,7 @@ describe('AnthropicSchemaCompatLayer', () => {
       });
 
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      expect(() => layer.processToAISDKSchema(schema)).not.toThrow();
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
     });
 
     it('should handle object schema with null field (MCP use case)', () => {
@@ -119,16 +119,28 @@ describe('AnthropicSchemaCompatLayer', () => {
       });
 
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      const aiSDKSchema = layer.processToAISDKSchema(schema);
-
-      expect(aiSDKSchema.jsonSchema).toMatchSnapshot();
+      expect(layer.toJSONSchema(schema)).toMatchSnapshot();
     });
 
     it('should handle standalone z.null() schema without throwing', () => {
       const schema = z.null();
 
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      expect(() => layer.processZodType(schema)).not.toThrow();
+      let result: ReturnType<typeof layer.processZodType>;
+      expect(() => {
+        result = layer.processZodType(schema);
+      }).not.toThrow();
+      // Verify the coercion: ZodNull → z.any().optional()
+      expect(result!).toBeInstanceOf(z.ZodOptional);
+    });
+
+    it('should handle z.null().optional() field without throwing', () => {
+      const schema = z.object({
+        value: z.null().optional(),
+      });
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+      expect(layer.toJSONSchema(schema)).toMatchSnapshot();
     });
   });
 
