@@ -1,3 +1,5 @@
+import type { IRBACProvider, EEUser } from '@mastra/core/auth';
+import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
 
 import { defaultAuthConfig } from './defaults';
@@ -120,6 +122,12 @@ export const isCustomRoutePublic = (
   return false;
 };
 
+// NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
+// !isCustomRoutePublic (default-deny). This is intentional — all registered server and
+// custom routes are auth-checked via registerRoute/checkRouteAuth regardless of this
+// function. The '/api/*' protected pattern exists as a user-facing override mechanism.
+// The old default-deny logic incorrectly blocked non-API paths (e.g. '/', '/agents')
+// which prevented the studio login page from loading in production.
 export const isProtectedPath = (
   path: string,
   method: string,
@@ -127,7 +135,7 @@ export const isProtectedPath = (
   customRouteAuthConfig?: Map<string, boolean>,
 ): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
-  return isAnyMatch(path, method, protectedAccess) || !isCustomRoutePublic(path, method, customRouteAuthConfig);
+  return isAnyMatch(path, method, protectedAccess) || isProtectedCustomRoute(path, method, customRouteAuthConfig);
 };
 
 export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
@@ -208,6 +216,144 @@ export const matchesOrIncludes = (values: string | string[], value: string): boo
   }
 
   return false;
+};
+
+// ── Core auth middleware ──
+// Framework-agnostic auth logic extracted from adapter middlewares.
+// Each adapter builds an AuthMiddlewareContext and delegates to coreAuthMiddleware.
+
+export interface AuthMiddlewareContext {
+  path: string;
+  method: string;
+  getHeader: (name: string) => string | undefined;
+  mastra: Mastra;
+  authConfig: MastraAuthConfig;
+  customRouteAuthConfig?: Map<string, boolean>;
+  requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
+  rawRequest: unknown;
+  token: string | null;
+  buildAuthorizeContext: () => unknown;
+}
+
+export type AuthResult = { action: 'next' } | { action: 'error'; status: number; body: Record<string, unknown> };
+
+const pass: AuthResult = { action: 'next' };
+
+/**
+ * Single auth middleware: authenticate → authorize.
+ * Skip checks (dev playground, unprotected path, public path) are evaluated once.
+ */
+export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
+  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+
+  // ── Skip checks (evaluated once) ──
+
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
+    return pass;
+  }
+
+  if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
+    return pass;
+  }
+
+  if (canAccessPublicly(path, method, authConfig)) {
+    return pass;
+  }
+
+  // ── Authentication ──
+
+  let user: unknown;
+
+  try {
+    if (typeof authConfig.authenticateToken === 'function') {
+      user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
+    } else {
+      throw new Error('No token verification method configured');
+    }
+
+    if (!user) {
+      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+    }
+
+    requestContext.set('user', user);
+
+    try {
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+      if (rbacProvider) {
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        requestContext.set('userPermissions', permissions);
+
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        requestContext.set('userRoles', roles);
+      }
+    } catch {
+      // RBAC not available or failed, continue without permissions
+    }
+  } catch (err) {
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
+    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+  }
+
+  // ── Authorization ──
+
+  if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
+    try {
+      const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
+
+      if (!isAuthorized) {
+        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+      }
+    } catch (err) {
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
+      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+    }
+  } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+    try {
+      const authorizeCtx = ctx.buildAuthorizeContext();
+      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+
+      if (!isAuthorized) {
+        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+      }
+    } catch (err) {
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
+      return { action: 'error', status: 500, body: { error: 'Authorization error' } };
+    }
+  } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
+
+    if (!isAuthorized) {
+      return { action: 'error', status: 403, body: { error: 'Access denied' } };
+    }
+  } else {
+    // No explicit authorization configured (authorizeUser, authorize, or rules)
+    // Check if RBAC is configured - if not, allow authenticated users through
+    // (auth-only mode = authenticated users get full access)
+    const rbacProvider = mastra.getServer()?.rbac;
+    if (rbacProvider) {
+      if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+        const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
+
+        if (!isAuthorized) {
+          return { action: 'error', status: 403, body: { error: 'Access denied' } };
+        }
+      } else {
+        return { action: 'error', status: 403, body: { error: 'Access denied' } };
+      }
+    }
+  }
+
+  return pass;
 };
 
 // Check authorization rules

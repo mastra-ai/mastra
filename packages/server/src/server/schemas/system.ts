@@ -7,6 +7,8 @@ export const mastraPackageSchema = z.object({
 
 export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
+  isDev: z.boolean(),
+  cmsEnabled: z.boolean(),
 });
 
 export type MastraPackage = z.infer<typeof mastraPackageSchema>;

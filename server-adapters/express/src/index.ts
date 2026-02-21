@@ -3,6 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { isProtectedCustomRoute } from '@mastra/server/auth';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
@@ -14,7 +15,46 @@ import {
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
+
+/**
+ * Convert Express request to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(req: Request): globalThis.Request {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: req.method,
+    headers,
+  });
+}
 
 // Extend Express types to include Mastra context
 declare global {
@@ -365,6 +405,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => req.query[name] as string | undefined,
           requestContext: res.locals.requestContext,
+          request: toWebRequest(req),
+          buildAuthorizeContext: () => toWebRequest(req),
         });
 
         if (authError) {
@@ -447,6 +489,25 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           routePrefix: prefix,
         };
 
+        // Check route permission requirement (EE feature)
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
+          }
+        }
+
         try {
           const result = await route.handler(handlerParams);
           await this.sendResponse(route, res, result, req, prefix);
@@ -483,6 +544,48 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      // Check if this request matches a protected custom route and run auth
+      const path = String(req.path || '/');
+      const method = String(req.method || 'GET');
+
+      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+        const serverRoute: ServerRoute = {
+          method: method as any,
+          path,
+          responseType: 'json',
+          handler: async () => {},
+        };
+
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path,
+          method,
+          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => req.query[name] as string | undefined,
+          requestContext: res.locals.requestContext,
+          request: toWebRequest(req),
+          buildAuthorizeContext: () => toWebRequest(req),
+        });
+
+        if (authError) {
+          return res.status(authError.status).json({ error: authError.error });
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
+          }
+        }
+      }
+
       const response = await this.handleCustomRouteRequest(
         `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
         req.method,
@@ -500,13 +603,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }

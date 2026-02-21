@@ -16,7 +16,21 @@ import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/hono] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
 
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
@@ -79,7 +93,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
         const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
+        const contentLength = c.req.header('content-length');
+        // Only parse if content-type is JSON and body is not empty
+        if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
             const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
@@ -360,6 +376,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           getHeader: name => c.req.header(name),
           getQuery: name => c.req.query(name),
           requestContext: c.get('requestContext'),
+          request: c.req.raw,
+          buildAuthorizeContext: () => c,
         });
 
         if (authError) {
@@ -452,7 +470,30 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
           routePrefix: prefix,
+          request: c.req.raw, // Standard Request object with headers/cookies
         };
+
+        // Check route permission requirement (EE feature)
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+            if (permissionError) {
+              return c.json(
+                {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                },
+                permissionError.status as any,
+              );
+            }
+          }
+        }
 
         try {
           const result = await route.handler(handlerParams);
@@ -517,6 +558,49 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       if (!handler) continue;
 
       const middlewares: MiddlewareHandler[] = [];
+
+      // Add per-route auth check middleware (same pattern as registerRoute)
+      const serverRoute: ServerRoute = {
+        method: route.method as any,
+        path: route.path,
+        responseType: 'json',
+        handler: async () => {},
+        requiresAuth: route.requiresAuth,
+      };
+
+      middlewares.push(async (c: Context, next) => {
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+          request: c.req.raw,
+          buildAuthorizeContext: () => c,
+        });
+
+        if (authError) {
+          return c.json({ error: authError.error }, authError.status as any);
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return c.json(
+                { error: permissionError.error, message: permissionError.message },
+                permissionError.status as any,
+              );
+            }
+          }
+        }
+
+        return next();
+      });
+
       if (route.middleware) {
         middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
       }
@@ -532,13 +616,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.use('*', authenticationMiddleware);
-    this.app.use('*', authorizationMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }
