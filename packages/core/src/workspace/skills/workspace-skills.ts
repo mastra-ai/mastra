@@ -304,7 +304,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
-    const refFilePath = this.#joinPath(skill.path, 'references', safeRefPath);
+    const refFilePath = this.#joinPath(skill.path, safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
       return null;
@@ -325,7 +325,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
-    const scriptFilePath = this.#joinPath(skill.path, 'scripts', safeScriptPath);
+    const scriptFilePath = this.#joinPath(skill.path, safeScriptPath);
 
     if (!(await this.#source.exists(scriptFilePath))) {
       return null;
@@ -346,7 +346,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
-    const assetFilePath = this.#joinPath(skill.path, 'assets', safeAssetPath);
+    const assetFilePath = this.#joinPath(skill.path, safeAssetPath);
 
     if (!(await this.#source.exists(assetFilePath))) {
       return null;
@@ -924,7 +924,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (includeReferences) {
         for (const refPath of skill.references) {
           if (results.length >= topK) break;
-          const content = await this.getReference(skill.name, refPath);
+          const content = await this.getReference(skill.name, `references/${refPath}`);
           if (content && content.toLowerCase().includes(queryLower)) {
             results.push({
               skillName: skill.name,
@@ -976,8 +976,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   #assertRelativePath(input: string, label: string): string {
     const normalized = input.replace(/\\/g, '/');
-    const segments = normalized.split('/').filter(Boolean);
-    if (normalized.startsWith('/') || segments.some(seg => seg === '.' || seg === '..')) {
+    const segments = normalized.split('/').filter(seg => Boolean(seg) && seg !== '.');
+    if (normalized.startsWith('/') || segments.some(seg => seg === '..')) {
       throw new Error(`Invalid ${label} path: ${input}`);
     }
     return segments.join('/');
