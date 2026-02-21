@@ -1644,6 +1644,58 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Resumes a suspended tool call with user-provided data.
+   * Used when a tool calls `suspend()` with a `suspendPayload` and `resumeSchema`.
+   */
+  async resumeToolSuspension(params: { runId: string; toolCallId?: string; resumeData: Record<string, any> }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(params, readableController!, 'resume-tool-suspension');
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */

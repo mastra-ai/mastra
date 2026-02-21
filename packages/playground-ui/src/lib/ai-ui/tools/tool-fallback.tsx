@@ -149,6 +149,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
       suspendPayload={suspendedToolMetadata?.suspendPayload}
+      suspendedToolMetadata={suspendedToolMetadata}
       isNetwork={isNetwork}
       toolCalled={toolCalled}
     />

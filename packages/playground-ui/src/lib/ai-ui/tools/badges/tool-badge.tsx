@@ -7,6 +7,7 @@ import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { MastraUIMessage } from '@mastra/react';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolSuspensionResume } from './tool-suspension-resume';
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
@@ -15,6 +16,13 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
+  suspendedToolMetadata?: {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    suspendPayload: any;
+    resumeSchema?: any;
+  };
   toolCalled?: boolean;
 }
 
@@ -27,6 +35,7 @@ export const ToolBadge = ({
   toolCallId,
   toolApprovalMetadata,
   suspendPayload,
+  suspendedToolMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
 }: ToolBadgeProps) => {
@@ -111,6 +120,14 @@ export const ToolBadge = ({
           isNetwork={isNetwork}
           isGenerateMode={metadata?.mode === 'generate'}
         />
+
+        {suspendedToolMetadata && (
+          <ToolSuspensionResume
+            toolCallId={toolCallId}
+            suspendedToolMetadata={suspendedToolMetadata}
+            toolCalled={toolCalled}
+          />
+        )}
       </div>
     </BadgeWrapper>
   );
