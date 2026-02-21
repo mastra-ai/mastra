@@ -24,6 +24,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults } = vi.hoisted(() =
     sandboxId: 'mock-sandbox-id',
     commands: {
       run: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+      list: vi.fn().mockResolvedValue([]),
     },
     files: {
       write: vi.fn().mockResolvedValue(undefined),

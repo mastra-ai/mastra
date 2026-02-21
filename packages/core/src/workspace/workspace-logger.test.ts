@@ -534,7 +534,10 @@ describe('Workspace Logger Integration', () => {
 
       expect(result.success).toBe(false);
       expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
-      expect(mockLogger.error).toHaveBeenCalledWith('[LocalSandbox] Command failed', expect.any(Object));
+      // With shell: true, the shell handles the missing command and returns
+      // a non-zero exit code (127) rather than throwing ENOENT, so the
+      // command completes normally (debug log) rather than erroring.
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Command completed', expect.any(Object));
 
       await sandbox._destroy();
     });
