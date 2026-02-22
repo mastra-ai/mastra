@@ -1,0 +1,57 @@
+---
+title: "Community Plugins | Community"
+description: Third-party plugins and integrations built by the Mastra community.
+---
+
+# Community Plugins
+
+These plugins are maintained by the Mastra community. They are not officially supported by the Mastra team, but they extend Mastra agents with additional capabilities.
+
+## Payments & Wallets
+
+### agentwallet-mastra-plugin
+
+**Non-custodial wallet + x402 payments + spend limits for Mastra agents.**
+
+Add complete on-chain payment capability to any Mastra agent in one line:
+
+```bash
+npm install agentwallet-mastra-plugin agentwallet-sdk
+```
+
+```typescript
+import { createAgentWalletTools } from 'agentwallet-mastra-plugin';
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'PayingAgent',
+  instructions: 'You can make payments using your wallet.',
+  model: openai('gpt-4o'),
+  tools: createAgentWalletTools({
+    privateKey: process.env.AGENT_PRIVATE_KEY!,
+    spendLimits: { perTxLimitUsdc: 10, dailyLimitUsdc: 100 },
+  }),
+});
+```
+
+**Includes 10 tools:**
+- `getWalletAddress` — agent's Base wallet address
+- `getWalletBalance` — USDC + ETH balances
+- `createWallet` — generate a new non-custodial wallet
+- `sendPayment` — send USDC to any address
+- `x402Pay` — automatic x402 HTTP payment handling
+- `bridgePayment` — USDC cross-chain via Circle CCTP V2
+- `getPortfolio` — full financial snapshot
+- `getTransactionHistory` — on-chain USDC transfers
+- `getSpendLimits` — inspect spend limit config
+- `checkSpendAllowance` — pre-flight spend check
+
+Non-custodial: private keys never leave your environment. Built on [agentwallet-sdk](https://www.npmjs.com/package/agentwallet-sdk).
+
+- [npm](https://www.npmjs.com/package/agentwallet-mastra-plugin)
+- [GitHub](https://github.com/up2itnow/mastra-plugin)
+- [Docs](https://ai-agent-economy.com)
+
+---
+
+> Want to add your plugin? Open a PR to add it to this page.
