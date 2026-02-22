@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed LSP diagnostics using wrong language identifier for TypeScript and JavaScript files
+LSP now shows correct diagnostics for TypeScript and JavaScript files
