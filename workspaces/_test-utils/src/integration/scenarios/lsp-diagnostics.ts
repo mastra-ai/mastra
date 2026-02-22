@@ -10,9 +10,13 @@
  * - A sandbox that can spawn processes (LocalSandbox or compatible)
  *
  * Tests are skipped gracefully when LSP is not available.
+ *
+ * Uses the workspace filesystem API to write test files so that walkUpAsync
+ * can find project markers (tsconfig.json) on any provider (local, S3, GCS).
+ * The TS language server receives file content via LSP protocol and doesn't
+ * need files on disk.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
@@ -30,12 +34,17 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'error.ts');
 
-        // Create a minimal TypeScript project in the test directory
-        mkdirSync(testDir, { recursive: true });
-        writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
+        // Write tsconfig.json via the workspace filesystem so walkUpAsync
+        // can find the project root on any provider (local, S3, GCS).
+        const fs = workspace.filesystem;
+        if (fs) {
+          await fs.writeFile(
+            join(testDir, 'tsconfig.json'),
+            JSON.stringify({ compilerOptions: { strict: true } }),
+          );
+        }
 
         const content = 'const x: number = "hello";';
-        writeFileSync(filePath, content);
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
@@ -57,11 +66,15 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'valid.ts');
 
-        mkdirSync(testDir, { recursive: true });
-        writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
+        const fs = workspace.filesystem;
+        if (fs) {
+          await fs.writeFile(
+            join(testDir, 'tsconfig.json'),
+            JSON.stringify({ compilerOptions: { strict: true } }),
+          );
+        }
 
         const content = 'const x: number = 42;';
-        writeFileSync(filePath, content);
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
@@ -81,11 +94,15 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'positions.ts');
 
-        mkdirSync(testDir, { recursive: true });
-        writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
+        const fs = workspace.filesystem;
+        if (fs) {
+          await fs.writeFile(
+            join(testDir, 'tsconfig.json'),
+            JSON.stringify({ compilerOptions: { strict: true } }),
+          );
+        }
 
         const content = 'const x: number = "hello";';
-        writeFileSync(filePath, content);
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
@@ -108,8 +125,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'readme.md');
 
-        mkdirSync(testDir, { recursive: true });
-        writeFileSync(filePath, '# Hello');
+        const fs = workspace.filesystem;
+        if (fs) {
+          await fs.writeFile(filePath, '# Hello');
+        }
 
         const diagnostics = await lsp.getDiagnostics(filePath, '# Hello');
 

@@ -16,7 +16,7 @@ import {
   createWorkspaceIntegrationTests,
   cleanupCompositeMounts,
 } from '@internal/workspace-test-utils';
-import { Workspace } from '@mastra/core/workspace';
+import { LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
@@ -232,23 +232,28 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Prefix Isolation', () => {
  * CompositeFilesystem Integration Tests
  *
  * These tests verify CompositeFilesystem behavior with two GCS mounts
- * (same provider, different prefixes). No sandbox needed.
+ * (same provider, different prefixes) plus LSP diagnostics via LocalSandbox.
+ *
+ * Sandbox-dependent file tests (fileSync, etc.) are off because LocalSandbox
+ * can't read GCS files directly. LSP works because content is sent via protocol.
  */
 if (canRunGCSTests) {
   createWorkspaceIntegrationTests({
     suiteName: 'GCS CompositeFilesystem Integration',
     testTimeout: 30000,
     testScenarios: {
-      // Sandbox scenarios off (no sandbox)
+      // Sandbox file tests off (LocalSandbox can't see GCS files)
       fileSync: false,
       concurrentOperations: false,
       largeFileHandling: false,
       writeReadConsistency: false,
-      // Composite API scenarios on
+      // Composite API scenarios
       mountRouting: true,
       crossMountApi: true,
       virtualDirectory: true,
       mountIsolation: true,
+      // LSP uses walkUpAsync with CompositeFilesystem.exists() for root resolution
+      lspDiagnostics: true,
     },
     createWorkspace: () => {
       const testBucket = process.env.TEST_GCS_BUCKET!;
@@ -257,6 +262,8 @@ if (canRunGCSTests) {
         : undefined;
       const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       return new Workspace({
+        sandbox: new LocalSandbox({ env: process.env }),
+        lsp: true,
         mounts: {
           '/mount-a': new GCSFilesystem({
             bucket: testBucket,
@@ -274,6 +281,53 @@ if (canRunGCSTests) {
       });
     },
     cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
+
+/**
+ * Direct GCS Filesystem + LSP Integration Tests
+ *
+ * Tests LSP diagnostics with GCS as the primary (non-mounted) filesystem.
+ * Validates that walkUpAsync works directly with GCSFilesystem.exists().
+ */
+if (canRunGCSTests) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'GCS Direct Filesystem LSP Integration',
+    testTimeout: 30000,
+    testScenarios: {
+      fileSync: false,
+      lspDiagnostics: true,
+    },
+    createWorkspace: () => {
+      const testBucket = process.env.TEST_GCS_BUCKET!;
+      const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+        ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+        : undefined;
+      const prefix = `lsp-direct-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Workspace({
+        filesystem: new GCSFilesystem({
+          bucket: testBucket,
+          credentials,
+          prefix,
+          endpoint: process.env.GCS_ENDPOINT,
+        }),
+        sandbox: new LocalSandbox({ env: process.env }),
+        lsp: true,
+      });
+    },
+    cleanupWorkspace: async workspace => {
+      const fs = workspace.filesystem;
+      if (!fs) return;
+      try {
+        const files = await fs.readdir('/');
+        for (const file of files) {
+          if (file.type === 'file') await fs.deleteFile(`/${file.name}`, { force: true });
+          else if (file.type === 'directory') await fs.rmdir(`/${file.name}`, { recursive: true });
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
   });
 }
 
