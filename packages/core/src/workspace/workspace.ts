@@ -33,6 +33,8 @@
 import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
+import { WORKSPACE_TOOLS } from './constants';
+import type { WorkspaceToolName } from './constants';
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
@@ -46,6 +48,7 @@ import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument }
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
+import { resolveToolConfig } from './tools/tools';
 import type { WorkspaceStatus } from './types';
 
 // =============================================================================
@@ -273,6 +276,35 @@ export interface WorkspaceConfig<
    * ```
    */
   tools?: WorkspaceToolsConfig;
+
+  /**
+   * Custom tool usage guidelines for agents.
+   *
+   * Can be:
+   * - A string to completely replace the default guidelines
+   * - A function that receives the generated guidelines and can modify/extend them
+   *
+   * @example Override completely
+   * ```typescript
+   * toolGuidelines: 'Only use workspace tools when absolutely necessary.'
+   * ```
+   *
+   * @example Extend default guidelines
+   * ```typescript
+   * toolGuidelines: (defaultGuidelines) => {
+   *   return defaultGuidelines + '\n\n### Custom Rules\n- Always backup before editing';
+   * }
+   * ```
+   *
+   * @example Filter/modify guidelines
+   * ```typescript
+   * toolGuidelines: (defaultGuidelines) => {
+   *   // Remove command execution guidelines
+   *   return defaultGuidelines.replace(/### Command Execution[\s\S]*?(?=###|$)/g, '');
+   * }
+   * ```
+   */
+  toolGuidelines?: string | ((defaultGuidelines: string) => string);
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -504,6 +536,14 @@ export class Workspace<
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * Get the tool guidelines configuration for this workspace.
+   * Can be a string to override defaults, or a function to customize them.
+   */
+  getToolGuidelinesConfig(): string | ((defaultGuidelines: string) => string) | undefined {
+    return this._config.toolGuidelines;
   }
 
   /**
@@ -830,6 +870,295 @@ export class Workspace<
         : undefined,
       instructions,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent Instructions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build comprehensive instructions for agents using this workspace.
+   *
+   * Returns empty string if:
+   * - No workspace tools are enabled (skills-only workspace)
+   * - All tools have been disabled via config
+   *
+   * Structure (when tools are available):
+   * 1. Base behavior guidelines (conditional based on what's enabled)
+   * 2. Workspace context (provider-specific)
+   * 3. Tool-specific guidelines (dynamic based on enabled tools)
+   *
+   * @returns Formatted instructions string for agent system prompt
+   */
+  getAgentInstructions(): string {
+    // Check if any workspace tools are actually enabled
+    const enabledTools = this.getEnabledTools();
+    if (enabledTools.length === 0) {
+      // Skills-only workspace or all tools disabled
+      return '';
+    }
+
+    const sections: string[] = [];
+
+    // Section 1: Base Behavior Guidelines (conditional)
+    const baseBehavior = this.buildBaseBehaviorSection(enabledTools);
+    if (baseBehavior) sections.push(baseBehavior);
+
+    // Section 2: Workspace Context
+    const context = this.buildContextSection();
+    if (context) sections.push(context);
+
+    // Section 3: Tool-Specific Guidelines
+    const toolGuidelines = this.buildToolGuidelinesSection(enabledTools);
+    if (toolGuidelines) sections.push(toolGuidelines);
+
+    // Apply user customization
+    const combined = sections.filter(Boolean).join('\n\n');
+    return this.applyUserCustomization(combined);
+  }
+
+  /**
+   * Get list of workspace tools that are actually enabled.
+   * Considers: provider availability, readOnly mode, and tools config.
+   */
+  getEnabledTools(): WorkspaceToolName[] {
+    const tools: WorkspaceToolName[] = [];
+    const config = this._config.tools;
+    const isReadOnly = this._fs?.readOnly ?? false;
+
+    // Filesystem tools
+    if (this._fs) {
+      if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      }
+      if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      }
+      if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+      }
+
+      if (!isReadOnly) {
+        if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+        }
+        if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+        }
+        if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+        }
+        if (this.isToolEnabled(config, WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+        }
+      }
+    }
+
+    // Search tools
+    if (this.canBM25 || this.canVector) {
+      if (this.isToolEnabled(config, WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      }
+      if (!isReadOnly && this.isToolEnabled(config, WORKSPACE_TOOLS.SEARCH.INDEX)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
+      }
+    }
+
+    // Sandbox tools
+    if (this._sandbox?.executeCommand) {
+      if (this.isToolEnabled(config, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+        tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      }
+    }
+
+    return tools;
+  }
+
+  /**
+   * Check if a specific tool is enabled in the config.
+   * Default is enabled unless explicitly disabled.
+   */
+  private isToolEnabled(config: WorkspaceToolsConfig | undefined, toolName: WorkspaceToolName): boolean {
+    const resolved = resolveToolConfig(config, toolName);
+    return resolved.enabled;
+  }
+
+  /**
+   * Build the base behavior guidelines section.
+   * Conditional based on which tools are enabled.
+   */
+  private buildBaseBehaviorSection(enabledTools: WorkspaceToolName[]): string {
+    const guidelines: string[] = ['## General Tool Behavior', ''];
+
+    // Always included (if we have any tools)
+    guidelines.push('- Call multiple independent workspace operations in parallel when possible');
+    guidelines.push('- Never use placeholder values for tool arguments');
+
+    // Check for filesystem tools
+    const hasListFiles = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+    const hasReadFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    const hasEditFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+    const hasWriteFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    const hasAnyFsTools = hasListFiles || hasReadFile || hasEditFile || hasWriteFile;
+
+    // Check for sandbox
+    const hasExecuteCommand = enabledTools.includes(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+
+    if (hasAnyFsTools) {
+      guidelines.push('- Filesystem tools use workspace paths (e.g., "/src/index.ts") not absolute system paths');
+
+      if (hasListFiles) {
+        guidelines.push('- Use list_files to discover file paths rather than guessing');
+      }
+
+      if (hasReadFile && (hasEditFile || hasWriteFile)) {
+        guidelines.push('- Read files before editing them to understand current content');
+      }
+
+      // Read-only workspace (has read tools but no write tools)
+      if (hasReadFile && !hasEditFile && !hasWriteFile) {
+        guidelines.push('- This workspace is read-only - write operations are not available');
+      }
+
+      // Both FS tools and sandbox
+      if (hasExecuteCommand) {
+        guidelines.push('- Prefer workspace file tools over shell commands (e.g., read_file over cat)');
+      }
+    }
+
+    // Sandbox-specific guidance
+    if (hasExecuteCommand) {
+      // Sandbox-only (no FS tools)
+      if (!hasAnyFsTools) {
+        guidelines.push('- File operations are only available via sandbox commands');
+      }
+      // Sandbox paths are relative to working directory or absolute within sandbox
+      guidelines.push('- Sandbox commands use paths relative to the sandbox working directory');
+      // Safety for destructive operations
+      guidelines.push(
+        '- Be cautious with destructive commands (rm -rf, git push --force, git reset --hard) - only run if explicitly requested',
+      );
+      // Git-specific safety
+      guidelines.push(
+        '- For git: prefer staging specific files over "git add -A", and only commit when explicitly asked',
+      );
+    }
+
+    return guidelines.join('\n');
+  }
+
+  /**
+   * Build the workspace context section.
+   * Includes provider-specific instructions.
+   */
+  private buildContextSection(): string {
+    const lines: string[] = [];
+
+    // Get instructions from providers
+    const fsInstructions = this._fs?.getInstructions?.();
+    const sandboxInstructions = this._sandbox?.getInstructions?.();
+
+    if (fsInstructions || sandboxInstructions) {
+      lines.push('## Workspace Context');
+      lines.push('');
+
+      if (fsInstructions) {
+        const readOnlySuffix = this._fs?.readOnly ? ' (read-only)' : '';
+        lines.push(`Filesystem: ${fsInstructions}${readOnlySuffix}`);
+      }
+
+      if (sandboxInstructions) {
+        lines.push(`Sandbox: ${sandboxInstructions}`);
+      }
+
+      // Add path relationship hint if both are available
+      if (this._fs && this._sandbox) {
+        const fsBasePath = this._fs.basePath;
+        const sandboxWorkingDir = this._sandbox.workingDirectory;
+
+        if (fsBasePath && sandboxWorkingDir && fsBasePath === sandboxWorkingDir) {
+          lines.push('');
+          lines.push(
+            'The sandbox working directory matches the filesystem root, so paths are consistent between workspace tools and sandbox commands.',
+          );
+        }
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Build cross-tool workflow guidelines.
+   * Focus on tool selection and multi-tool patterns, not tool-specific mechanics.
+   * Tool-specific details belong in tool descriptions.
+   */
+  private buildToolGuidelinesSection(enabledTools: WorkspaceToolName[]): string {
+    const lines: string[] = [];
+
+    const hasReadFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    const hasWriteFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    const hasEditFile = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+    const hasListFiles = enabledTools.includes(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+    const hasSearch = enabledTools.includes(WORKSPACE_TOOLS.SEARCH.SEARCH);
+    const hasExecuteCommand = enabledTools.includes(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+
+    const guidelines: string[] = [];
+
+    // Cross-tool preferences
+    if (hasEditFile && hasWriteFile) {
+      guidelines.push(
+        `- Prefer ${WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE} over ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} for modifying existing files`,
+      );
+    }
+
+    // Search workflow - important context for decision-making
+    if (hasSearch) {
+      guidelines.push(`- ${WORKSPACE_TOOLS.SEARCH.SEARCH} only searches indexed content, not all files`);
+      if (hasReadFile) {
+        guidelines.push(
+          `- Use search results to find relevant files, then ${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE} to examine them`,
+        );
+      }
+    }
+
+    // Prefer workspace tools over shell commands
+    if (hasExecuteCommand && (hasListFiles || hasReadFile)) {
+      if (hasListFiles) {
+        guidelines.push(`- Use ${WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES} instead of shell "ls" command`);
+      }
+      if (hasReadFile) {
+        guidelines.push(`- Use ${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE} instead of shell "cat" command`);
+      }
+    }
+
+    if (guidelines.length > 0) {
+      lines.push('## Cross-Tool Workflow');
+      lines.push('');
+      lines.push(...guidelines);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Apply user customization from toolGuidelines config.
+   */
+  private applyUserCustomization(instructions: string): string {
+    const config = this._config.toolGuidelines;
+
+    if (typeof config === 'string') {
+      // Complete override
+      return config;
+    }
+
+    if (typeof config === 'function') {
+      // User customization function
+      return config(instructions);
+    }
+
+    // No customization
+    return instructions;
   }
 
   // ---------------------------------------------------------------------------

@@ -607,6 +607,175 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
+  // Agent Instructions
+  // ===========================================================================
+  describe('getAgentInstructions', () => {
+    it('should return instructions with filesystem tools', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toContain('## General Tool Behavior');
+      expect(instructions).toContain('Filesystem tools use workspace paths');
+      expect(instructions).toContain('Use list_files to discover file paths');
+      // Tool-specific details (like read_file mechanics) are now in tool descriptions, not system instructions
+    });
+
+    it('should return instructions with sandbox tools', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toContain('## General Tool Behavior');
+      expect(instructions).toContain('File operations are only available via sandbox commands');
+      expect(instructions).toContain('Sandbox commands use paths relative to the sandbox working directory');
+    });
+
+    it('should return instructions with both filesystem and sandbox', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toContain('Prefer workspace file tools over shell commands');
+      expect(instructions).toContain('Filesystem:');
+      expect(instructions).toContain('Sandbox:');
+    });
+
+    it('should return empty string for skills-only workspace', () => {
+      // Skills-only workspace - no filesystem or sandbox
+      const workspace = new Workspace({
+        skills: ['/skills'],
+      });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toBe('');
+    });
+
+    it('should include read-only notice when filesystem is read-only', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir, readOnly: true });
+      const workspace = new Workspace({ filesystem });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toContain('read-only');
+      expect(instructions).not.toContain('write_file');
+      expect(instructions).not.toContain('edit_file');
+    });
+
+    it('should allow custom tool guidelines string override', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        toolGuidelines: 'Custom guidelines only',
+      });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toBe('Custom guidelines only');
+    });
+
+    it('should allow custom tool guidelines function', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        toolGuidelines: defaultGuidelines => defaultGuidelines + '\n\n## Custom\n- Custom rule',
+      });
+
+      const instructions = workspace.getAgentInstructions();
+
+      expect(instructions).toContain('## General Tool Behavior');
+      expect(instructions).toContain('## Custom');
+      expect(instructions).toContain('Custom rule');
+    });
+  });
+
+  // ===========================================================================
+  // Get Enabled Tools
+  // ===========================================================================
+  describe('getEnabledTools', () => {
+    it('should return filesystem tools when filesystem configured', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toContain('mastra_workspace_read_file');
+      expect(tools).toContain('mastra_workspace_list_files');
+      expect(tools).toContain('mastra_workspace_write_file');
+      expect(tools).toContain('mastra_workspace_edit_file');
+    });
+
+    it('should return sandbox tools when sandbox configured', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toContain('mastra_workspace_execute_command');
+      expect(tools).not.toContain('mastra_workspace_read_file');
+    });
+
+    it('should return empty array for skills-only workspace', () => {
+      const workspace = new Workspace({
+        skills: ['/skills'],
+      });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toEqual([]);
+    });
+
+    it('should exclude write tools for read-only filesystem', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir, readOnly: true });
+      const workspace = new Workspace({ filesystem });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toContain('mastra_workspace_read_file');
+      expect(tools).toContain('mastra_workspace_list_files');
+      expect(tools).not.toContain('mastra_workspace_write_file');
+      expect(tools).not.toContain('mastra_workspace_edit_file');
+      expect(tools).not.toContain('mastra_workspace_delete');
+      expect(tools).not.toContain('mastra_workspace_mkdir');
+    });
+
+    it('should respect tools config to disable specific tools', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        tools: {
+          mastra_workspace_write_file: { enabled: false },
+          mastra_workspace_delete: { enabled: false },
+        },
+      });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toContain('mastra_workspace_read_file');
+      expect(tools).not.toContain('mastra_workspace_write_file');
+      expect(tools).not.toContain('mastra_workspace_delete');
+    });
+
+    it('should include search tools when bm25 enabled', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      const tools = workspace.getEnabledTools();
+
+      expect(tools).toContain('mastra_workspace_search');
+      expect(tools).toContain('mastra_workspace_index');
+    });
+  });
+
+  // ===========================================================================
   // Error Classes
   // ===========================================================================
   describe('error classes', () => {
