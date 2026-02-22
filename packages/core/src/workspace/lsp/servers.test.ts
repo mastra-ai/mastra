@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BUILTIN_SERVERS, findProjectRoot, getServersForFile, walkUp } from './servers';
+import {
+  BUILTIN_SERVERS,
+  findProjectRoot,
+  findProjectRootAsync,
+  getServersForFile,
+  walkUp,
+  walkUpAsync,
+} from './servers';
 
 describe('walkUp', () => {
   let tempDir: string;
@@ -197,6 +204,91 @@ describe('getServersForFile', () => {
     const rsServers = getServersForFile('/project/main.rs');
     const rsServer = rsServers.find(s => s.id === 'rust');
     expect(rsServer?.markers).toEqual(['Cargo.toml']);
+  });
+});
+
+describe('walkUpAsync', () => {
+  /** Helper to create a mock filesystem from a set of existing paths */
+  function mockFs(existingPaths: Set<string>): { exists(path: string): Promise<boolean> } {
+    return {
+      exists: async (p: string) => existingPaths.has(p),
+    };
+  }
+
+  it('finds closest marker', async () => {
+    const fs = mockFs(new Set(['/workspace/a/package.json']));
+    expect(await walkUpAsync('/workspace/a/b/c', ['package.json'], fs)).toBe('/workspace/a');
+  });
+
+  it('finds marker in the starting directory itself', async () => {
+    const fs = mockFs(new Set(['/workspace/tsconfig.json']));
+    expect(await walkUpAsync('/workspace', ['tsconfig.json'], fs)).toBe('/workspace');
+  });
+
+  it('prefers closest match over parent', async () => {
+    const fs = mockFs(new Set(['/workspace/parent/package.json', '/workspace/parent/child/package.json']));
+    expect(await walkUpAsync('/workspace/parent/child/src', ['package.json'], fs)).toBe('/workspace/parent/child');
+  });
+
+  it('returns null when no marker found', async () => {
+    const fs = mockFs(new Set());
+    expect(await walkUpAsync('/workspace/a/b/c', ['nonexistent.json'], fs)).toBeNull();
+  });
+
+  it('checks multiple markers', async () => {
+    const fs = mockFs(new Set(['/workspace/project/go.mod']));
+    expect(await walkUpAsync('/workspace/project', ['package.json', 'go.mod'], fs)).toBe('/workspace/project');
+  });
+
+  it('stops at filesystem root without infinite loop', async () => {
+    const fs = mockFs(new Set());
+    const result = await walkUpAsync('/tmp', ['definitely-not-a-real-marker-file-xyz'], fs);
+    expect(result).toBeNull();
+  });
+
+  it('works with composite filesystem mount paths', async () => {
+    // Simulates CompositeFilesystem where /s3/src/tsconfig.json exists in S3 mount
+    const fs = mockFs(new Set(['/s3/src/tsconfig.json']));
+    expect(await walkUpAsync('/s3/src/lib', ['tsconfig.json'], fs)).toBe('/s3/src');
+  });
+
+  it('returns null when walking past mount boundary', async () => {
+    // Only paths within /s3/ mount exist; parent paths return false
+    const fs = mockFs(new Set(['/s3/src/index.ts']));
+    expect(await walkUpAsync('/s3/src', ['package.json', 'tsconfig.json'], fs)).toBeNull();
+  });
+});
+
+describe('findProjectRootAsync', () => {
+  function mockFs(existingPaths: Set<string>): { exists(path: string): Promise<boolean> } {
+    return {
+      exists: async (p: string) => existingPaths.has(p),
+    };
+  }
+
+  it('finds tsconfig.json', async () => {
+    const fs = mockFs(new Set(['/project/tsconfig.json']));
+    expect(await findProjectRootAsync('/project/src', fs)).toBe('/project');
+  });
+
+  it('finds package.json', async () => {
+    const fs = mockFs(new Set(['/project/package.json']));
+    expect(await findProjectRootAsync('/project/src', fs)).toBe('/project');
+  });
+
+  it('finds go.mod', async () => {
+    const fs = mockFs(new Set(['/go-project/go.mod']));
+    expect(await findProjectRootAsync('/go-project/pkg', fs)).toBe('/go-project');
+  });
+
+  it('finds Cargo.toml', async () => {
+    const fs = mockFs(new Set(['/rust-project/Cargo.toml']));
+    expect(await findProjectRootAsync('/rust-project/src', fs)).toBe('/rust-project');
+  });
+
+  it('returns null when nothing found', async () => {
+    const fs = mockFs(new Set());
+    expect(await findProjectRootAsync('/a/b/c', fs)).toBeNull();
   });
 });
 

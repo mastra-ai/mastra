@@ -69,6 +69,32 @@ export function walkUp(startDir: string, markers: string[]): string | null {
   return null;
 }
 
+/**
+ * Async version of walkUp that uses a filesystem's exists() method.
+ * Works with any filesystem (local, S3, GCS, composite) that implements exists().
+ */
+export async function walkUpAsync(
+  startDir: string,
+  markers: string[],
+  fs: { exists(path: string): Promise<boolean> },
+): Promise<string | null> {
+  let current = startDir;
+  const fsRoot = parse(current).root;
+
+  while (current !== fsRoot) {
+    for (const marker of markers) {
+      if (await fs.exists(join(current, marker))) {
+        return current;
+      }
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  return null;
+}
+
 /** Default markers used to find a project root when no server-specific markers are available. */
 const DEFAULT_MARKERS = [
   'tsconfig.json',
@@ -87,6 +113,17 @@ const DEFAULT_MARKERS = [
  */
 export function findProjectRoot(startDir: string): string | null {
   return walkUp(startDir, DEFAULT_MARKERS);
+}
+
+/**
+ * Async version of findProjectRoot that uses a filesystem's exists() method.
+ * Works with any filesystem (local, S3, GCS, composite) that implements exists().
+ */
+export async function findProjectRootAsync(
+  startDir: string,
+  fs: { exists(path: string): Promise<boolean> },
+): Promise<string | null> {
+  return walkUpAsync(startDir, DEFAULT_MARKERS, fs);
 }
 
 /**

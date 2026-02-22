@@ -488,7 +488,7 @@ export class Workspace<
       if (hasProcesses && depsAvailable) {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
-        this._lsp = new LSPManager(this._sandbox!.processes!, defaultRoot, lspConfig);
+        this._lsp = new LSPManager(this._sandbox!.processes!, defaultRoot, lspConfig, this._fs);
       }
     }
 

@@ -15,7 +15,7 @@ import path from 'node:path';
 import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
-import { getServersForFile, walkUp } from './servers';
+import { getServersForFile, walkUp, walkUpAsync } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic } from './types';
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
@@ -40,11 +40,18 @@ export class LSPManager {
   private processManager: SandboxProcessManager;
   private _root: string;
   private config: LSPConfig;
+  private filesystem?: { exists(path: string): Promise<boolean> };
 
-  constructor(processManager: SandboxProcessManager, root: string, config: LSPConfig = {}) {
+  constructor(
+    processManager: SandboxProcessManager,
+    root: string,
+    config: LSPConfig = {},
+    filesystem?: { exists(path: string): Promise<boolean> },
+  ) {
     this.processManager = processManager;
     this._root = root;
     this.config = config;
+    this.filesystem = filesystem;
   }
 
   /** Default project root (fallback when per-file walkup finds nothing). */
@@ -54,10 +61,14 @@ export class LSPManager {
 
   /**
    * Resolve the project root for a given file path using the server's markers.
-   * Falls back to the default root if nothing is found.
+   * Uses the workspace filesystem when available (supports remote filesystems),
+   * falls back to sync walkUp (local disk) otherwise.
    */
-  private resolveRoot(filePath: string, markers: string[]): string {
+  private async resolveRoot(filePath: string, markers: string[]): Promise<string> {
     const fileDir = path.dirname(filePath);
+    if (this.filesystem) {
+      return (await walkUpAsync(fileDir, markers, this.filesystem)) ?? this._root;
+    }
     return walkUp(fileDir, markers) ?? this._root;
   }
 
@@ -80,7 +91,7 @@ export class LSPManager {
           s.languageIds.includes('go'),
       ) ?? servers[0]!;
 
-    const projectRoot = this.resolveRoot(filePath, serverDef.markers);
+    const projectRoot = await this.resolveRoot(filePath, serverDef.markers);
 
     // Check if the server's command is available at this root
     if (serverDef.command(projectRoot) === undefined) return null;

@@ -45,6 +45,12 @@ vi.mock('./servers', () => ({
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
     return null;
   }),
+  walkUpAsync: vi.fn().mockImplementation(async (startDir: string, _markers: string[]) => {
+    if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+    if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
+    return null;
+  }),
   getServersForFile: vi.fn().mockImplementation(function getServersForFile(filePath: string) {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
       return [
@@ -277,6 +283,53 @@ describe('LSPManager', () => {
 
       expect(mockWaitForDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 3000);
       await configuredManager.shutdownAll();
+    });
+  });
+
+  describe('filesystem-based root resolution', () => {
+    const mockFilesystem = { exists: vi.fn().mockResolvedValue(true) };
+
+    it('uses walkUpAsync when filesystem is provided', async () => {
+      const { walkUpAsync } = await import('./servers');
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
+
+      await fsManager.getClient('/project/src/app.ts');
+
+      expect(walkUpAsync).toHaveBeenCalledWith('/project/src', ['tsconfig.json', 'package.json'], mockFilesystem);
+      await fsManager.shutdownAll();
+    });
+
+    it('falls back to sync walkUp when no filesystem provided', async () => {
+      const { walkUp, walkUpAsync } = await import('./servers');
+      const noFsManager = new LSPManager(mockProcessManager, '/fallback');
+
+      await noFsManager.getClient('/project/src/app.ts');
+
+      expect(walkUp).toHaveBeenCalledWith('/project/src', ['tsconfig.json', 'package.json']);
+      expect(walkUpAsync).not.toHaveBeenCalled();
+      await noFsManager.shutdownAll();
+    });
+
+    it('falls back to default root when walkUpAsync returns null', async () => {
+      const { walkUpAsync } = await import('./servers');
+      (walkUpAsync as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
+      const client = await fsManager.getClient('/unknown/path/app.ts');
+
+      // Should still get a client — resolves to /fallback
+      expect(client).not.toBeNull();
+      await fsManager.shutdownAll();
+    });
+
+    it('resolves root from remote filesystem path', async () => {
+      const { walkUpAsync } = await import('./servers');
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
+
+      await fsManager.getClient('/s3/src/app.ts');
+
+      expect(walkUpAsync).toHaveBeenCalledWith('/s3/src', ['tsconfig.json', 'package.json'], mockFilesystem);
+      await fsManager.shutdownAll();
     });
   });
 
