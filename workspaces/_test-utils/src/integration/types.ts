@@ -78,4 +78,9 @@ export interface IntegrationTestScenarios {
 
   /** Mount isolation - operations on one mount don't affect another */
   mountIsolation?: boolean;
+
+  // LSP scenarios (require sandbox with process manager + LSP deps)
+
+  /** LSP diagnostics - spawn language server, get real diagnostics */
+  lspDiagnostics?: boolean;
 }

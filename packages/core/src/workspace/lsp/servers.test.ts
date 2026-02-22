@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { findProjectRoot, getServersForFile, walkUp } from './servers';
+import { BUILTIN_SERVERS, findProjectRoot, getServersForFile, walkUp } from './servers';
 
 describe('walkUp', () => {
   let tempDir: string;
@@ -197,5 +197,109 @@ describe('getServersForFile', () => {
     const rsServers = getServersForFile('/project/main.rs');
     const rsServer = rsServers.find(s => s.id === 'rust');
     expect(rsServer?.markers).toEqual(['Cargo.toml']);
+  });
+});
+
+describe('BUILTIN_SERVERS command()', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-command-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('typescript', () => {
+    const tsCommand = BUILTIN_SERVERS.typescript!.command;
+
+    it('finds binary in root node_modules', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'typescript-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const result = tsCommand(tempDir);
+      expect(result).toBe(`${bin} --stdio`);
+    });
+
+    it('returns undefined when binary not found', () => {
+      // typescript module resolves via cwd fallback, but no binary anywhere
+      expect(tsCommand(tempDir)).toBeUndefined();
+    });
+  });
+
+  describe('typescript initialization()', () => {
+    const tsInit = BUILTIN_SERVERS.typescript!.initialization!;
+
+    it('returns tsserver config with resolved path', () => {
+      // resolveRequire falls back to cwd where typescript is installed
+      const result = tsInit(tempDir);
+      expect(result).toBeDefined();
+      expect(result.tsserver.path).toContain('tsserver.js');
+      expect(result.tsserver.logVerbosity).toBe('off');
+    });
+  });
+
+  describe('eslint', () => {
+    const eslintCommand = BUILTIN_SERVERS.eslint!.command;
+
+    it('finds binary in root node_modules', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      expect(eslintCommand(tempDir)).toBe(`${bin} --stdio`);
+    });
+
+    it('returns undefined when binary not found', () => {
+      expect(eslintCommand(tempDir)).toBeUndefined();
+    });
+  });
+
+  describe('python', () => {
+    const pyCommand = BUILTIN_SERVERS.python!.command;
+
+    it('finds binary in root node_modules', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'pyright-langserver');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      expect(pyCommand(tempDir)).toBe(`${bin} --stdio`);
+    });
+
+    it('returns undefined when no binary or PATH entry found', () => {
+      // Skip if pyright-langserver happens to be on PATH
+      const result = pyCommand(tempDir);
+      if (result === 'pyright-langserver --stdio') return; // on PATH, can't test this case
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('go', () => {
+    const goCommand = BUILTIN_SERVERS.go!.command;
+
+    it('returns correct command format', () => {
+      const result = goCommand(tempDir);
+      // Either gopls is on PATH and we get the command, or it's not and we get undefined
+      if (result) {
+        expect(result).toBe('gopls serve');
+      } else {
+        expect(result).toBeUndefined();
+      }
+    });
+  });
+
+  describe('rust', () => {
+    const rustCommand = BUILTIN_SERVERS.rust!.command;
+
+    it('returns correct command format', () => {
+      const result = rustCommand(tempDir);
+      if (result) {
+        expect(result).toBe('rust-analyzer --stdio');
+      } else {
+        expect(result).toBeUndefined();
+      }
+    });
   });
 });

@@ -4,6 +4,8 @@
  * Creates tests that verify filesystem and sandbox work together.
  */
 
+import { join } from 'node:path';
+
 import { CompositeFilesystem } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
 import { describe, beforeAll, beforeEach, afterAll } from 'vitest';
@@ -15,6 +17,7 @@ import { createCrossMountApiTests } from './scenarios/cross-mount-api';
 import { createCrossMountCopyTests } from './scenarios/cross-mount-copy';
 import { createFileSyncTests } from './scenarios/file-sync';
 import { createLargeFileHandlingTests } from './scenarios/large-file-handling';
+import { createLspDiagnosticsTests } from './scenarios/lsp-diagnostics';
 import { createMountIsolationTests } from './scenarios/mount-isolation';
 import { createMountRoutingTests } from './scenarios/mount-routing';
 import { createMultiMountTests } from './scenarios/multi-mount';
@@ -89,6 +92,14 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
       if (workspace.filesystem instanceof CompositeFilesystem) {
         const firstMount = workspace.filesystem.mountPaths[0]!;
         currentTestPath = `${firstMount}${basePath}`;
+      } else if (workspace.filesystem && 'basePath' in workspace.filesystem) {
+        // Filesystem has a basePath (e.g. LocalFilesystem) — use it so that
+        // both the filesystem API and sandbox commands reference the same
+        // absolute path on disk.  Without this, the generated path (e.g.
+        // /int-test-xxx) would be treated as a host-root path by the sandbox
+        // while the filesystem resolves it relative to basePath.
+        const fsBasePath = (workspace.filesystem as { basePath: string }).basePath;
+        currentTestPath = join(fsBasePath, basePath.slice(1));
       } else {
         currentTestPath = basePath;
       }
@@ -130,6 +141,11 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     if (testScenarios.writeReadConsistency === true) {
       createWriteReadConsistencyTests(getContext);
+    }
+
+    // LSP scenarios (require sandbox with process manager + LSP deps)
+    if (testScenarios.lspDiagnostics === true) {
+      createLspDiagnosticsTests(getContext);
     }
 
     // Composite-specific scenarios (require CompositeFilesystem with 2+ mounts)

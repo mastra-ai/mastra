@@ -19,14 +19,18 @@ const mockWaitForDiagnostics = vi.fn().mockResolvedValue([
 ]);
 
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
+const mockInitialize = vi.fn().mockResolvedValue(undefined);
+const mockNotifyOpen = vi.fn();
+const mockNotifyChange = vi.fn();
+const mockNotifyClose = vi.fn();
 
 // Mock the client module with a proper class
 vi.mock('./client', () => ({
   LSPClient: class MockLSPClient {
-    initialize = vi.fn().mockResolvedValue(undefined);
-    notifyOpen = vi.fn();
-    notifyChange = vi.fn();
-    notifyClose = vi.fn();
+    initialize = mockInitialize;
+    notifyOpen = mockNotifyOpen;
+    notifyChange = mockNotifyChange;
+    notifyClose = mockNotifyClose;
     waitForDiagnostics = mockWaitForDiagnostics;
     shutdown = mockShutdown;
   },
@@ -164,6 +168,181 @@ describe('LSPManager', () => {
 
       expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', ['eslint']);
       await restrictedManager.shutdownAll();
+    });
+  });
+
+  describe('concurrent getClient', () => {
+    it('deduplicates concurrent calls for the same file', async () => {
+      // Both calls should resolve to the same client, with initialize called only once
+      const [client1, client2] = await Promise.all([
+        manager.getClient('/project/src/app.ts'),
+        manager.getClient('/project/src/app.ts'),
+      ]);
+
+      expect(client1).toBe(client2);
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('deduplicates concurrent calls for different files in same project root', async () => {
+      const [client1, client2] = await Promise.all([
+        manager.getClient('/project/src/app.ts'),
+        manager.getClient('/project/src/other.ts'),
+      ]);
+
+      expect(client1).toBe(client2);
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('initialization timeout', () => {
+    it('returns null when initialization times out', async () => {
+      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+      // Make initialize hang longer than the timeout
+      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+
+      const client = await timeoutManager.getClient('/project/src/app.ts');
+
+      expect(client).toBeNull();
+      await timeoutManager.shutdownAll();
+    });
+
+    it('cleans up client after timeout', async () => {
+      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+
+      await timeoutManager.getClient('/project/src/app.ts');
+
+      // Subsequent call should attempt a fresh initialization
+      mockInitialize.mockResolvedValueOnce(undefined);
+      const client = await timeoutManager.getClient('/project/src/app.ts');
+      expect(client).not.toBeNull();
+      await timeoutManager.shutdownAll();
+    });
+
+    it('returns null when initialization throws', async () => {
+      mockInitialize.mockRejectedValueOnce(new Error('spawn failed'));
+
+      const client = await manager.getClient('/project/src/app.ts');
+
+      expect(client).toBeNull();
+    });
+  });
+
+  describe('getDiagnostics call ordering', () => {
+    it('calls notifyOpen, notifyChange, waitForDiagnostics, then notifyClose', async () => {
+      const callOrder: string[] = [];
+      mockNotifyOpen.mockImplementation(() => callOrder.push('open'));
+      mockNotifyChange.mockImplementation(() => callOrder.push('change'));
+      mockWaitForDiagnostics.mockImplementation(async () => {
+        callOrder.push('waitForDiagnostics');
+        return [];
+      });
+      mockNotifyClose.mockImplementation(() => callOrder.push('close'));
+
+      await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+
+      expect(callOrder).toEqual(['open', 'change', 'waitForDiagnostics', 'close']);
+    });
+
+    it('passes correct arguments to notifyOpen', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([]);
+
+      await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/project/src/app.ts', 'const x = 1', 'typescript');
+    });
+
+    it('passes version 1 to notifyChange', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([]);
+
+      await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+
+      expect(mockNotifyChange).toHaveBeenCalledWith('/project/src/app.ts', 'const x = 1', 1);
+    });
+
+    it('calls notifyClose even when waitForDiagnostics throws', async () => {
+      mockWaitForDiagnostics.mockRejectedValueOnce(new Error('diagnostics failed'));
+
+      const result = await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+
+      expect(mockNotifyClose).toHaveBeenCalledWith('/project/src/app.ts');
+      expect(result).toEqual([]);
+    });
+
+    it('uses configured diagnosticTimeout', async () => {
+      const configuredManager = new LSPManager(mockProcessManager, '/project', { diagnosticTimeout: 3000 });
+      mockWaitForDiagnostics.mockResolvedValueOnce([]);
+
+      await configuredManager.getDiagnostics('/project/src/app.ts', 'code');
+
+      expect(mockWaitForDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 3000);
+      await configuredManager.shutdownAll();
+    });
+  });
+
+  describe('severity mapping', () => {
+    it('maps severity 1 to error', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('error');
+    });
+
+    it('maps severity 2 to warning', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 2, message: 'warn', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('warning');
+    });
+
+    it('maps severity 3 to info', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 3, message: 'info', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('info');
+    });
+
+    it('maps severity 4 to hint', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 4, message: 'hint', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('hint');
+    });
+
+    it('maps unknown severity to warning', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 99, message: 'unknown', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('warning');
+    });
+
+    it('maps undefined severity to warning', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { message: 'no sev', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.severity).toBe('warning');
+    });
+
+    it('converts 0-indexed LSP positions to 1-indexed', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } },
+      ]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.line).toBe(1);
+      expect(diagnostics[0]!.character).toBe(1);
+    });
+
+    it('handles missing range gracefully', async () => {
+      mockWaitForDiagnostics.mockResolvedValueOnce([{ severity: 1, message: 'no range' }]);
+      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
+      expect(diagnostics[0]!.line).toBe(1);
+      expect(diagnostics[0]!.character).toBe(1);
     });
   });
 });
