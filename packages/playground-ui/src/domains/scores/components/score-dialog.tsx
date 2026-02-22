@@ -50,7 +50,7 @@ export function ScoreDialog({
   usageContext = 'scorerPage',
 }: ScoreDialogProps) {
   const { Link } = useLinkComponent();
-  const isCodeBased = isCodeBased;
+  const isCodeBased = isCodeBasedScorer(score);
 
   return (
     <SideDialog
