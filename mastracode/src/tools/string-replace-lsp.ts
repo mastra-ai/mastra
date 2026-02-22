@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { getLanguageId } from '../lsp/language.js';
 import { lspManager } from '../lsp/manager.js';
 import { findWorkspaceRoot } from '../lsp/workspace.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
@@ -55,7 +56,7 @@ Usage notes:
         if (client) {
           // Read the modified file content
           const contentNew = fs.readFileSync(absoluteFilePath, 'utf-8');
-          const languageId = path.extname(absoluteFilePath).slice(1);
+          const languageId = getLanguageId(absoluteFilePath) || path.extname(absoluteFilePath).slice(1);
 
           client.notifyOpen(absoluteFilePath, contentNew, languageId);
           client.notifyChange(absoluteFilePath, contentNew, 1);
