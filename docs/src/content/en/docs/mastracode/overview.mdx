@@ -5,43 +5,69 @@ packages:
   - "mastracode"
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Mastracode
 
-Mastracode is a terminal-based AI coding agent built on top of Mastra's [Harness](/reference/harness/harness-class), [Agent](/docs/agents/overview), and [Memory](/docs/memory/overview) primitives. It runs entirely in your terminal, connects to 70+ AI models, and provides a complete set of tools for reading, searching, editing, and executing code.
+Mastracode is a terminal-based AI coding agent built on Mastra's [Harness](/reference/harness/harness-class), [Agent](/docs/agents/overview), and [Memory](/docs/memory/overview) primitives. It runs in your terminal, connects to 70+ AI models, and provides tools for reading, searching, editing, and executing code.
 
-Mastracode organizes its capabilities around these key areas:
+Mastracode organizes its capabilities around these areas:
 
 - [**Modes**](/docs/mastracode/modes) — switch between Build, Plan, and Fast modes to match your workflow.
-- [**Tools**](/docs/mastracode/tools) — built-in tools for file viewing, editing, searching, running shell commands, and web search.
+- [**Tools**](/docs/mastracode/tools) — built-in tools for file viewing, editing, searching, shell commands, and web search.
 - [**Configuration**](/docs/mastracode/configuration) — project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
 - [**Customization**](/docs/mastracode/customization) — extend Mastracode programmatically with custom modes, tools, subagents, and storage.
 
-## Installation
+## When to use Mastracode
 
-Install Mastracode globally:
+- **Day-to-day coding** — ask questions about your codebase, make edits, run tests, and manage Git.
+- **Code exploration** — use Plan mode to analyze architecture and create implementation plans before writing code.
+- **Quick lookups** — switch to Fast mode for brief answers and small edits with minimal latency.
+- **Multi-model workflows** — compare responses across different AI providers by switching models mid-conversation.
+
+## Get started
+
+<Steps>
+
+<StepItem>
+
+Install Mastracode globally or run it with `npx`:
 
 ```sh filename="terminal"
 npm install -g mastracode
 ```
 
-Or run it directly with `npx`:
-
 ```sh filename="terminal"
 npx mastracode
 ```
 
-## Quick start
+</StepItem>
 
-1. Start Mastracode in your project directory:
+<StepItem>
+
+Start Mastracode in your project directory:
 
 ```sh filename="terminal"
 cd your-project
 mastracode
 ```
 
-2. Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
+</StepItem>
 
-3. Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
+<StepItem>
+
+Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
+
+</StepItem>
+
+<StepItem>
+
+Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
+
+</StepItem>
+
+</Steps>
 
 ## Slash commands
 
@@ -62,6 +88,8 @@ Mastracode provides built-in slash commands for managing sessions and settings:
 | `/help` | Show available commands |
 | `/exit` | Exit the TUI |
 
+You can also define custom slash commands as markdown files. See [Configuration](/docs/mastracode/configuration) for details.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
@@ -72,22 +100,9 @@ Mastracode provides built-in slash commands for managing sessions and settings:
 | `Ctrl+E` | Expand/collapse all tool outputs |
 | `Ctrl+F` | Send a follow-up message while the agent is running |
 
-## Custom slash commands
-
-Define reusable prompt templates as markdown files. Mastracode scans these directories for `.md` files:
-
-| Priority | Path | Scope |
-|---|---|---|
-| Highest | `.mastracode/commands/` | Project |
-| | `.claude/commands/` | Project (Claude Code compatible) |
-| | `~/.mastracode/commands/` | Global |
-| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
-
-Each command file can include YAML frontmatter with `name` and `description` fields. The filename (or directory structure) determines the command name — for example, `git/commit.md` becomes `/git:commit`.
-
 ## Architecture
 
-Mastracode is built on three main layers:
+Mastracode is built on four layers:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -116,13 +131,6 @@ Mastracode is built on three main layers:
 │  token usage tracking, observational memory     │
 └─────────────────────────────────────────────────┘
 ```
-
-## When to use Mastracode
-
-- **Day-to-day coding** — ask questions about your codebase, make edits, run tests, and manage Git.
-- **Code exploration** — use Plan mode to analyze architecture and create implementation plans before writing code.
-- **Quick lookups** — switch to Fast mode for brief answers and small edits with minimal latency.
-- **Multi-model workflows** — compare responses across different AI providers by switching models mid-conversation.
 
 ## Node.js requirement
 

@@ -1,100 +1,114 @@
 ---
 title: "Tools | Mastracode"
-description: "Reference for Mastracode's built-in tools — file viewing, editing, search, shell execution, web search, and more."
+description: "Learn about Mastracode's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
 packages:
   - "mastracode"
 ---
 
 # Tools
 
-Mastracode provides a set of built-in tools that the agent uses to interact with your codebase. Each tool is purpose-built for a specific task, and the agent selects the right tool based on what it needs to do.
+Mastracode provides built-in tools that the agent uses to interact with your codebase. Each tool is designed for a specific task, and the agent selects the right one based on what it needs to do.
 
 ## File tools
 
 ### `view`
 
-Read file contents with line numbers or list directory contents. The agent always uses this tool before editing a file.
+Read file contents with line numbers or list directory contents. The agent uses this tool before editing a file.
 
 - Displays line-numbered output (like `cat -n`) for easy reference.
 - For directories, lists files up to 2 levels deep, excluding hidden items.
 - Supports `view_range` to read specific line ranges in large files.
-- Output is truncated if the file exceeds the token limit.
+- Output is truncated if the file exceeds the token limit. Use `view_range` to read specific sections.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `path` | `string` | Path to the file or directory (relative to project root) |
-| `view_range` | `[number, number]` | Optional line range `[start, end]` to view a section of the file |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | `string` | Yes | Path to the file or directory (relative to project root) |
+| `view_range` | `[number, number]` | No | Line range `[start, end]` to view a section of the file |
 
 ### `string_replace_lsp`
 
 Edit a file by replacing an exact text match with new content. Returns Language Server Protocol (LSP) diagnostics showing any errors or warnings introduced by the edit.
 
-- Requires reading the file first with `view`.
+- The agent reads the file first with `view` before editing.
 - `old_str` must be an exact substring of the current file content.
 - Include enough surrounding context to uniquely identify the replacement location.
 - When `new_str` is omitted or empty, the matched text is deleted.
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `path` | `string` | Path to the file |
-| `old_str` | `string` | Exact text to find and replace |
-| `new_str` | `string` | Replacement text (omit to delete) |
-| `start_line` | `number` | Optional line number to narrow the search region |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | `string` | Yes | Path to the file |
+| `old_str` | `string` | Yes | Exact text to find and replace |
+| `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
+| `start_line` | `number` | No | Line number to narrow the search region |
 
 ### `ast_smart_edit`
 
-An AST-aware editing tool that uses structural analysis to make code modifications. Useful for refactoring operations that benefit from understanding code structure rather than raw text matching.
+Edit code using abstract syntax tree (AST) analysis for intelligent, structure-aware transformations. Powered by [ast-grep](https://ast-grep.github.io/), this tool understands code structure rather than treating files as raw text.
+
+Supported transformations:
+
+- **Pattern-based search and replace** — find and replace code using AST patterns with `$VARIABLE` placeholders (e.g., replace `console.log($ARG)` with `logger.debug($ARG)`).
+- **Add/remove imports** — intelligently insert or remove import statements.
+- **Rename functions** — rename function declarations and all call sites with scope awareness.
+- **Rename variables** — rename variable declarations and all references.
+- **Selector queries** — find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | `string` | Yes | File path relative to project root |
+| `pattern` | `string` | No | AST pattern to search for (supports `$VARIABLE` placeholders) |
+| `replacement` | `string` | No | Replacement pattern (can use captured `$VARIABLES`) |
+| `selector` | `string` | No | CSS-like selector for AST nodes |
+| `transform` | `string` | No | Transformation type: `add-import`, `remove-import`, `rename-function`, `rename-variable`, `extract-function`, `inline-variable` |
+| `targetName` | `string` | No | Name of the target element (for rename/remove operations) |
+| `newName` | `string` | No | New name (for rename operations) |
+| `importSpec` | `object` | No | Import specification for `add-import`: `{ module, names, isDefault? }` |
 
 ### `write_file`
 
 Create a new file or overwrite an existing file entirely.
 
-- Use this for creating new files.
+- Use for creating new files. For editing existing files, prefer `string_replace_lsp`.
+- Parent directories are created automatically if they don't exist.
 - If overwriting an existing file, the agent reads it first with `view`.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `path` | `string` | Path to the file |
-| `content` | `string` | Full file content to write |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | `string` | Yes | File path to write to (relative to project root) |
+| `content` | `string` | Yes | Full content to write to the file |
 
 ## Search tools
 
 ### `search_content`
 
-Search file contents using regular expressions (powered by ripgrep).
+Search file contents using regular expressions. Uses ripgrep when available, falling back to grep.
 
-- Supports regex patterns, file type filtering, and context lines.
-- Respects `.gitignore` automatically.
+- Supports full regex syntax (e.g., `"function\\s+\\w+"`, `"import.*from"`).
+- Respects `.gitignore` automatically in Git repositories.
 - Always preferred over running `grep` or `rg` via `execute_command`.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `pattern` | `string` | Regex pattern to search for |
-| `glob` | `string` | Optional glob pattern to filter files (e.g., `"**/*.ts"`) |
-| `type` | `string` | Optional file type filter (e.g., `"ts"`, `"py"`) |
-| `context` | `number` | Optional number of context lines around matches |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pattern` | `string` | Yes | Regex pattern to search for in file contents |
+| `path` | `string` | No | Directory or file to search in (relative to project root, defaults to project root) |
+| `glob` | `string` | No | Glob pattern to filter files (e.g., `"*.ts"`, `"*.{js,jsx}"`, `"test/**"`) |
+| `contextLines` | `number` | No | Number of lines to show before and after each match (default: 0) |
+| `maxResults` | `number` | No | Maximum number of matching lines to return (default: 100) |
+| `caseSensitive` | `boolean` | No | Whether the search is case-sensitive (default: true) |
 
 ### `find_files`
 
-Find files by name pattern using glob matching.
+Find files by name pattern using glob matching. Results are sorted by modification time (most recent first).
 
-- Respects `.gitignore` automatically.
+- Supports standard glob syntax: `*` (any characters), `**` (any path segments), `?` (single character), `{a,b}` (alternatives).
+- Respects `.gitignore` automatically in Git repositories.
 - Always preferred over running `find` or `ls` via `execute_command`.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `pattern` | `string` | Glob pattern (e.g., `"**/*.test.ts"`, `"**/config.{js,ts,json}"`) |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pattern` | `string` | Yes | Glob pattern (e.g., `"**/*.ts"`, `"src/**/*.test.*"`, `"**/package.json"`) |
+| `path` | `string` | No | Directory to search in (relative to project root, defaults to project root) |
 
 ## Shell execution
 
@@ -108,27 +122,48 @@ Execute a shell command in the project directory.
 - Pipe to `| tail -N` for commands with long output — full output streams to the user, but only the last N lines are returned to the agent.
 - The `CI=true` environment variable is set automatically to prevent interactive prompts.
 
-**Parameters:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `command` | `string` | Shell command to execute |
-| `cwd` | `string` | Optional working directory (defaults to project root) |
-| `timeout` | `number` | Optional timeout in seconds (defaults to 30) |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `command` | `string` | Yes | Shell command to execute |
+| `cwd` | `string` | No | Working directory (defaults to project root) |
+| `timeout` | `number` | No | Timeout in seconds (default: 30) |
 
 ### `request_sandbox_access`
 
-Request access to directories outside the project root. When the agent needs to read or write files in an external location, it uses this tool to ask the user for permission.
+Request access to directories outside the project root. The user is prompted to approve or deny the request.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | `string` | Yes | Absolute path to the directory needing access |
+| `reason` | `string` | Yes | Explanation of why access is needed |
 
 ## Web tools
 
 ### `web_search`
 
-Search the web for documentation, error messages, package APIs, and other information. Available when a Tavily API key is configured or when using Anthropic models (which include built-in web search).
+Search the web for documentation, error messages, package APIs, and other information.
+
+This tool is available through two providers:
+
+- **Tavily** — when the `TAVILY_API_KEY` environment variable is set.
+- **Anthropic web search** — built into Anthropic models, used as a fallback when no Tavily key is configured.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | `string` | Yes | The search query |
+| `searchDepth` | `"basic" \| "advanced"` | No | Search depth (default: `"basic"`) |
+| `maxResults` | `number` | No | Maximum number of results (default: 10) |
+| `includeImages` | `boolean` | No | Include related images (default: false) |
 
 ### `web_extract`
 
-Extract the full content of a web page. Useful for reading documentation pages, blog posts, or other URLs found during web search. Requires a Tavily API key.
+Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
+| `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
+| `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
 
 ## Task management
 
@@ -142,28 +177,23 @@ Create or update a structured task list for tracking progress on complex, multi-
 
 ### `task_check`
 
-Check the completion status of the current task list. The agent uses this before deciding it's done to verify all tasks are complete.
+Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete.
 
 ## Interactive tools
 
 ### `ask_user`
 
-Ask the user a structured question. Used when the agent needs clarification, wants to validate assumptions, or needs the user to make a decision.
-
-- Provides clear, specific questions with optional multiple-choice options.
-- Renders inline in the conversation flow.
+Ask the user a structured question. The agent uses this when it needs clarification, wants to validate assumptions, or needs the user to make a decision. Questions render inline in the conversation flow and support optional multiple-choice options.
 
 ### `submit_plan`
 
-Submit a structured implementation plan for user review and approval (Plan mode only). The plan appears inline, and the user can approve, reject, or request changes.
+Submit a structured implementation plan for user review and approval (Plan mode only). The plan renders inline, and the user can approve, reject, or request changes.
 
 ## MCP tools
 
-When MCP servers are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions.
+When [MCP servers](/docs/mastracode/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
 
 MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
-
-See [Configuration](/docs/mastracode/configuration) for how to set up MCP servers.
 
 ## Tool availability by mode
 
@@ -185,6 +215,8 @@ Not all tools are available in every mode:
 | `ask_user` | Yes | Yes | Yes |
 | `submit_plan` | No | Yes | No |
 
+In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
+
 ## Permission system
 
 Tools are grouped into four categories, each with a configurable approval policy:
@@ -198,10 +230,17 @@ Tools are grouped into four categories, each with a configurable approval policy
 
 When YOLO mode is enabled (the default), all categories are set to `allow`. When disabled, the agent prompts for approval based on the category policy.
 
-You can grant per-category or per-tool overrides through the settings, and session-level grants let you approve a category once for the rest of the session.
+You can configure per-category or per-tool overrides through `/settings`, and session-level grants let you approve a category once for the rest of the session.
+
+:::note
+
+Visit [Modes](/docs/mastracode/modes) for details on how modes affect tool access and approval behavior.
+
+:::
 
 ## Related
 
 - [Mastracode overview](/docs/mastracode/overview)
 - [Modes](/docs/mastracode/modes)
 - [Configuration](/docs/mastracode/configuration)
+- [createMastraCode() reference](/reference/mastracode/createMastraCode)

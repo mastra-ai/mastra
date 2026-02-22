@@ -7,9 +7,7 @@ packages:
 
 # `createMastraCode()`
 
-**Added in:** `mastracode@0.1.0`
-
-`createMastraCode()` is the main factory function that bootstraps the Mastracode coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the Harness that drives the TUI or any other frontend.
+`createMastraCode()` is the main factory function that bootstraps the Mastracode coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the [Harness](/reference/harness/harness-class) that drives the TUI or any other frontend.
 
 ## Usage example
 
@@ -115,7 +113,7 @@ await harness.sendMessage({ content: 'Explain the auth flow' })
     {
       name: "mcpManager",
       type: "McpManager | undefined",
-      description: "The MCP manager for connecting to external MCP servers. `undefined` when `disableMcp` is `true` or no servers are configured.",
+      description: "The MCP manager for connecting to external MCP servers. `undefined` when `disableMcp` is `true`.",
     },
     {
       name: "hookManager",
@@ -168,6 +166,12 @@ Storage configuration is resolved in priority order:
 3. Project config at `.mastracode/database.json`
 4. Global config at `~/.mastracode/database.json`
 5. Local SQLite database at the platform-specific app data directory
+
+:::note
+
+The returned `harness` object is a full [Harness](/reference/harness/harness-class) instance with methods for sending messages, switching modes and models, managing threads, and subscribing to events.
+
+:::
 
 ## Related
 

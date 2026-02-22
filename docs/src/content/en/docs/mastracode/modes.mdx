@@ -9,7 +9,7 @@ packages:
 
 Mastracode operates in one of three modes, each tailored to a different kind of task. Modes control which tools the agent has access to, how it approaches problems, and which default model it uses.
 
-Switch modes with the `/mode` slash command or by pressing the mode indicator in the status bar.
+Switch modes with the `/mode` slash command.
 
 ## Build mode
 
@@ -78,7 +78,7 @@ Use Fast mode for quick lookups, simple questions, and small edits where latency
 
 ## Default models
 
-Each mode has a default model that's automatically selected when you switch to it:
+Each mode has a default model that's selected when you switch to it:
 
 | Mode | Default model |
 |---|---|
@@ -86,7 +86,13 @@ Each mode has a default model that's automatically selected when you switch to i
 | Plan | `openai/gpt-5.2-codex` |
 | Fast | `cerebras/zai-glm-4.7` |
 
-You can override the model for any mode using the `/models` command. Per-mode model selections are persisted to the thread, so switching back to a mode restores the last model you used in that mode.
+Override the model for any mode using the `/models` command. Per-mode model selections persist to the thread, so switching back to a mode restores the last model you used in it.
+
+:::note
+
+Visit [createMastraCode() reference](/reference/mastracode/createMastraCode) for details on configuring custom modes and default models.
+
+:::
 
 ## Subagents
 
@@ -106,7 +112,7 @@ For Anthropic models that support extended thinking, you can control the thinkin
 
 ## YOLO mode
 
-YOLO mode auto-approves all tool calls without prompting. It's enabled by default but can be toggled through `/settings`. When disabled, Mastracode prompts for approval before executing write operations or shell commands, based on the permission system.
+YOLO mode auto-approves all tool calls without prompting. It's enabled by default and can be toggled through `/settings`. When disabled, Mastracode prompts for approval before executing write operations or shell commands, based on the [permission system](/docs/mastracode/tools#permission-system).
 
 ## Related
 

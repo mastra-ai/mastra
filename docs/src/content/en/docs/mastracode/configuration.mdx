@@ -1,13 +1,13 @@
 ---
 title: "Configuration | Mastracode"
-description: "Learn how to configure Mastracode with MCP servers, hooks, custom commands, skills, database settings, and environment variables."
+description: "Learn how to configure Mastracode with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
 packages:
   - "mastracode"
 ---
 
 # Configuration
 
-Mastracode is configured through a combination of project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
+Mastracode is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ OAuth credentials are stored in `auth.json` alongside the database in the [app d
 
 ### Model routing
 
-For providers not covered by OAuth, Mastracode uses Mastra's [model router](/models) which auto-detects API keys from environment variables. Set the appropriate environment variable for your provider:
+For providers not covered by OAuth, Mastracode uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
 
 ```sh filename="terminal"
 export OPENAI_API_KEY=sk-...
@@ -143,9 +143,36 @@ For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can res
 
 Global hooks run before project hooks. For the same event, all hooks execute in order.
 
+## Custom slash commands
+
+Define reusable prompt templates as markdown files. Mastracode scans these directories for `.md` files:
+
+| Priority | Path | Scope |
+|---|---|---|
+| Highest | `.mastracode/commands/` | Project |
+| | `.claude/commands/` | Project (Claude Code compatible) |
+| | `~/.mastracode/commands/` | Global |
+| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+
+Each command file can include YAML frontmatter with `name` and `description` fields:
+
+```yaml title=".mastracode/commands/review.md"
+---
+name: review
+description: Review the current diff for issues
+---
+
+Review my current git diff. Look for bugs, security issues,
+and violations of the project's coding standards.
+```
+
+The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`.
+
+Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
+
 ## Skills
 
-Skills are structured instruction files that the agent loads automatically based on trigger conditions. They allow you to provide domain-specific guidance without manually pasting instructions.
+Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
 
 Mastracode scans these directories for skills:
 
@@ -215,7 +242,7 @@ Connect to a remote Turso database for cross-device thread sharing:
 
 ## Observational memory
 
-Observational memory (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
+[Observational memory](/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
 
 ### OM scope
 

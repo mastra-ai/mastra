@@ -104,10 +104,11 @@ Extra tools are merged with the dynamic tool set and are available to the agent 
 
 ## Custom subagents
 
-Override the default Explore/Plan/Execute subagents:
+Override the default Explore/Plan/Execute subagents. Each subagent receives its own set of tools, scoping what it can do:
 
 ```typescript title="src/custom-subagents.ts"
 import { createMastraCode } from 'mastracode'
+import { createTool } from '@mastra/core/tools'
 
 const { harness } = createMastraCode({
   subagents: [
@@ -115,26 +116,13 @@ const { harness } = createMastraCode({
       id: 'explore',
       name: 'Explore',
       description: 'Read-only codebase exploration',
-      instructions: 'You are an expert code explorer...',
-      tools: {
-        view: viewTool,
-        search_content: grepTool,
-        find_files: globTool,
-      },
+      instructions: 'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
     },
     {
       id: 'test-writer',
       name: 'Test Writer',
       description: 'Write tests for the specified module',
-      instructions: 'You are a test-writing specialist...',
-      tools: {
-        view: viewTool,
-        search_content: grepTool,
-        find_files: globTool,
-        string_replace_lsp: stringReplaceTool,
-        write_file: writeFileTool,
-        execute_command: executeTool,
-      },
+      instructions: 'You are a test-writing specialist. Generate comprehensive tests for the given module.',
     },
   ],
 })
@@ -177,11 +165,11 @@ const { harness } = createMastraCode({
 })
 ```
 
-Heartbeat handlers run on a fixed interval and are started when `harness.init()` is called. They're stopped when `harness.destroy()` is called.
+Heartbeat handlers run on a fixed interval. They start when `harness.init()` is called and stop when `harness.destroy()` is called.
 
 ## Building a custom TUI
 
-Mastracode exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven entirely by the Harness event system:
+Mastracode exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the Harness event system:
 
 ```typescript title="src/custom-tui.ts"
 import { createMastraCode } from 'mastracode'
