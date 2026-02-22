@@ -30,7 +30,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
+import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 
@@ -193,13 +193,10 @@ export class LocalFilesystem extends MastraFilesystem {
       if (this._isWithinAnyRoot(normalized)) {
         absolutePath = normalized;
       } else {
-        const cleanedPath = inputPath.replace(/^\/+/, '');
-        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+        absolutePath = resolveWorkspacePath(this._basePath, inputPath);
       }
     } else {
-      // Relative path — resolve against basePath
-      const cleanedPath = inputPath.replace(/^\/+/, '');
-      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      absolutePath = resolveWorkspacePath(this._basePath, inputPath);
     }
 
     if (this._contained) {
@@ -685,7 +682,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up files on destroy by default
+    // LocalFilesystem doesn't delete files on destroy
   }
 
   getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths?: string[] }> {
