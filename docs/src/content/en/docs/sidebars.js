@@ -667,6 +667,40 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Mastracode',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastracode/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastracode/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'mastracode/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastracode/configuration',
+          label: 'Configuration',
+        },
+        {
+          type: 'doc',
+          id: 'mastracode/customization',
+          label: 'Customization',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Build with AI',
       collapsed: true,
       items: [

@@ -700,6 +700,21 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Mastracode',
+      collapsed: true,
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastracode/createMastraCode',
+          label: 'createMastraCode()',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Streaming',
       collapsed: true,
       items: [

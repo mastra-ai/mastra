@@ -1,0 +1,137 @@
+---
+title: "Mastracode overview | Mastracode"
+description: "Mastracode is a terminal-based AI coding agent built with Mastra. It provides multi-model support, persistent conversations, coding tools, and a polished TUI."
+packages:
+  - "mastracode"
+---
+
+# Mastracode
+
+Mastracode is a terminal-based AI coding agent built on top of Mastra's [Harness](/reference/harness/harness-class), [Agent](/docs/agents/overview), and [Memory](/docs/memory/overview) primitives. It runs entirely in your terminal, connects to 70+ AI models, and provides a complete set of tools for reading, searching, editing, and executing code.
+
+Mastracode organizes its capabilities around these key areas:
+
+- [**Modes**](/docs/mastracode/modes) — switch between Build, Plan, and Fast modes to match your workflow.
+- [**Tools**](/docs/mastracode/tools) — built-in tools for file viewing, editing, searching, running shell commands, and web search.
+- [**Configuration**](/docs/mastracode/configuration) — project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
+- [**Customization**](/docs/mastracode/customization) — extend Mastracode programmatically with custom modes, tools, subagents, and storage.
+
+## Installation
+
+Install Mastracode globally:
+
+```sh filename="terminal"
+npm install -g mastracode
+```
+
+Or run it directly with `npx`:
+
+```sh filename="terminal"
+npx mastracode
+```
+
+## Quick start
+
+1. Start Mastracode in your project directory:
+
+```sh filename="terminal"
+cd your-project
+mastracode
+```
+
+2. Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
+
+3. Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
+
+## Slash commands
+
+Mastracode provides built-in slash commands for managing sessions and settings:
+
+| Command | Description |
+|---|---|
+| `/new` | Start a new conversation thread |
+| `/threads` | List all threads for this project |
+| `/models` | Select a different AI model |
+| `/mode` | Switch between Build, Plan, and Fast modes |
+| `/cost` | Show token usage for the current conversation |
+| `/login` | Authenticate with OAuth providers |
+| `/logout` | Log out from a provider |
+| `/settings` | Open the settings panel |
+| `/sandbox` | Add external directories to the allowed path list |
+| `/diff` | Show files modified in the current session |
+| `/help` | Show available commands |
+| `/exit` | Exit the TUI |
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+C` | Interrupt current operation |
+| `Ctrl+D` | Exit (when editor is empty) |
+| `Ctrl+T` | Toggle thinking blocks visibility |
+| `Ctrl+E` | Expand/collapse all tool outputs |
+| `Ctrl+F` | Send a follow-up message while the agent is running |
+
+## Custom slash commands
+
+Define reusable prompt templates as markdown files. Mastracode scans these directories for `.md` files:
+
+| Priority | Path | Scope |
+|---|---|---|
+| Highest | `.mastracode/commands/` | Project |
+| | `.claude/commands/` | Project (Claude Code compatible) |
+| | `~/.mastracode/commands/` | Global |
+| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+
+Each command file can include YAML frontmatter with `name` and `description` fields. The filename (or directory structure) determines the command name — for example, `git/commit.md` becomes `/git:commit`.
+
+## Architecture
+
+Mastracode is built on three main layers:
+
+```
+┌─────────────────────────────────────────────────┐
+│                      TUI                        │
+│  Terminal interface (pi-tui components)          │
+└─────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────┐
+│                    Harness                       │
+│  Mode management, thread persistence,           │
+│  event system, state management                 │
+└─────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────┐
+│                  Mastra Agent                    │
+│  Dynamic model selection, tool execution,       │
+│  memory integration, subagents                  │
+└─────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────┐
+│                 LibSQL Storage                   │
+│  Thread persistence, message history,           │
+│  token usage tracking, observational memory     │
+└─────────────────────────────────────────────────┘
+```
+
+## When to use Mastracode
+
+- **Day-to-day coding** — ask questions about your codebase, make edits, run tests, and manage Git.
+- **Code exploration** — use Plan mode to analyze architecture and create implementation plans before writing code.
+- **Quick lookups** — switch to Fast mode for brief answers and small edits with minimal latency.
+- **Multi-model workflows** — compare responses across different AI providers by switching models mid-conversation.
+
+## Node.js requirement
+
+Mastracode requires Node.js 22.13.0 or later.
+
+## Next steps
+
+- [Modes](/docs/mastracode/modes)
+- [Tools](/docs/mastracode/tools)
+- [Configuration](/docs/mastracode/configuration)
+- [Customization](/docs/mastracode/customization)
+- [API reference](/reference/mastracode/createMastraCode)

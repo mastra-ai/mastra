@@ -1,0 +1,207 @@
+---
+title: "Tools | Mastracode"
+description: "Reference for Mastracode's built-in tools — file viewing, editing, search, shell execution, web search, and more."
+packages:
+  - "mastracode"
+---
+
+# Tools
+
+Mastracode provides a set of built-in tools that the agent uses to interact with your codebase. Each tool is purpose-built for a specific task, and the agent selects the right tool based on what it needs to do.
+
+## File tools
+
+### `view`
+
+Read file contents with line numbers or list directory contents. The agent always uses this tool before editing a file.
+
+- Displays line-numbered output (like `cat -n`) for easy reference.
+- For directories, lists files up to 2 levels deep, excluding hidden items.
+- Supports `view_range` to read specific line ranges in large files.
+- Output is truncated if the file exceeds the token limit.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `path` | `string` | Path to the file or directory (relative to project root) |
+| `view_range` | `[number, number]` | Optional line range `[start, end]` to view a section of the file |
+
+### `string_replace_lsp`
+
+Edit a file by replacing an exact text match with new content. Returns Language Server Protocol (LSP) diagnostics showing any errors or warnings introduced by the edit.
+
+- Requires reading the file first with `view`.
+- `old_str` must be an exact substring of the current file content.
+- Include enough surrounding context to uniquely identify the replacement location.
+- When `new_str` is omitted or empty, the matched text is deleted.
+- After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `path` | `string` | Path to the file |
+| `old_str` | `string` | Exact text to find and replace |
+| `new_str` | `string` | Replacement text (omit to delete) |
+| `start_line` | `number` | Optional line number to narrow the search region |
+
+### `ast_smart_edit`
+
+An AST-aware editing tool that uses structural analysis to make code modifications. Useful for refactoring operations that benefit from understanding code structure rather than raw text matching.
+
+### `write_file`
+
+Create a new file or overwrite an existing file entirely.
+
+- Use this for creating new files.
+- If overwriting an existing file, the agent reads it first with `view`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `path` | `string` | Path to the file |
+| `content` | `string` | Full file content to write |
+
+## Search tools
+
+### `search_content`
+
+Search file contents using regular expressions (powered by ripgrep).
+
+- Supports regex patterns, file type filtering, and context lines.
+- Respects `.gitignore` automatically.
+- Always preferred over running `grep` or `rg` via `execute_command`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `pattern` | `string` | Regex pattern to search for |
+| `glob` | `string` | Optional glob pattern to filter files (e.g., `"**/*.ts"`) |
+| `type` | `string` | Optional file type filter (e.g., `"ts"`, `"py"`) |
+| `context` | `number` | Optional number of context lines around matches |
+
+### `find_files`
+
+Find files by name pattern using glob matching.
+
+- Respects `.gitignore` automatically.
+- Always preferred over running `find` or `ls` via `execute_command`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `pattern` | `string` | Glob pattern (e.g., `"**/*.test.ts"`, `"**/config.{js,ts,json}"`) |
+
+## Shell execution
+
+### `execute_command`
+
+Execute a shell command in the project directory.
+
+- Use for Git commands, package managers (`npm`, `pnpm`), build tools, test runners, Docker, and other terminal operations.
+- Commands run with a 30-second default timeout. Use the `timeout` parameter for longer operations.
+- Output is stripped of ANSI codes and streamed to the TUI in real time.
+- Pipe to `| tail -N` for commands with long output — full output streams to the user, but only the last N lines are returned to the agent.
+- The `CI=true` environment variable is set automatically to prevent interactive prompts.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `command` | `string` | Shell command to execute |
+| `cwd` | `string` | Optional working directory (defaults to project root) |
+| `timeout` | `number` | Optional timeout in seconds (defaults to 30) |
+
+### `request_sandbox_access`
+
+Request access to directories outside the project root. When the agent needs to read or write files in an external location, it uses this tool to ask the user for permission.
+
+## Web tools
+
+### `web_search`
+
+Search the web for documentation, error messages, package APIs, and other information. Available when a Tavily API key is configured or when using Anthropic models (which include built-in web search).
+
+### `web_extract`
+
+Extract the full content of a web page. Useful for reading documentation pages, blog posts, or other URLs found during web search. Requires a Tavily API key.
+
+## Task management
+
+### `task_write`
+
+Create or update a structured task list for tracking progress on complex, multi-step work.
+
+- Each task has a `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
+- Pass the full task list each time — it replaces the previous list.
+- Only one task should be `in_progress` at a time.
+
+### `task_check`
+
+Check the completion status of the current task list. The agent uses this before deciding it's done to verify all tasks are complete.
+
+## Interactive tools
+
+### `ask_user`
+
+Ask the user a structured question. Used when the agent needs clarification, wants to validate assumptions, or needs the user to make a decision.
+
+- Provides clear, specific questions with optional multiple-choice options.
+- Renders inline in the conversation flow.
+
+### `submit_plan`
+
+Submit a structured implementation plan for user review and approval (Plan mode only). The plan appears inline, and the user can approve, reject, or request changes.
+
+## MCP tools
+
+When MCP servers are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions.
+
+MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
+
+See [Configuration](/docs/mastracode/configuration) for how to set up MCP servers.
+
+## Tool availability by mode
+
+Not all tools are available in every mode:
+
+| Tool | Build | Plan | Fast |
+|---|---|---|---|
+| `view` | Yes | Yes | Yes |
+| `search_content` | Yes | Yes | Yes |
+| `find_files` | Yes | Yes | Yes |
+| `execute_command` | Yes | Read-only | Yes |
+| `string_replace_lsp` | Yes | No | Yes |
+| `ast_smart_edit` | Yes | No | Yes |
+| `write_file` | Yes | No | Yes |
+| `web_search` | Yes | Yes | Yes |
+| `web_extract` | Yes | Yes | Yes |
+| `task_write` | Yes | Yes | Yes |
+| `task_check` | Yes | Yes | Yes |
+| `ask_user` | Yes | Yes | Yes |
+| `submit_plan` | No | Yes | No |
+
+## Permission system
+
+Tools are grouped into four categories, each with a configurable approval policy:
+
+| Category | Tools | Default policy |
+|---|---|---|
+| **Read** | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow` |
+| **Edit** | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent` | `ask` |
+| **Execute** | `execute_command` | `ask` |
+| **MCP** | All MCP server tools | `ask` |
+
+When YOLO mode is enabled (the default), all categories are set to `allow`. When disabled, the agent prompts for approval based on the category policy.
+
+You can grant per-category or per-tool overrides through the settings, and session-level grants let you approve a category once for the rest of the session.
+
+## Related
+
+- [Mastracode overview](/docs/mastracode/overview)
+- [Modes](/docs/mastracode/modes)
+- [Configuration](/docs/mastracode/configuration)
