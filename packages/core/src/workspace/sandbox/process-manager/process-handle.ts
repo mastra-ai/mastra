@@ -156,9 +156,23 @@ export abstract class ProcessHandle {
     if (!this._writer) {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
-          this.sendStdin(chunk.toString()).then(() => cb(), cb);
+          this.sendStdin(chunk.toString()).then(
+            () => cb(),
+            err => {
+              // Swallow EPIPE — the process has exited and stdin is gone.
+              // This commonly happens during LSP shutdown when buffered
+              // writes race with process termination.
+              if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
+                cb();
+                return;
+              }
+              cb(err);
+            },
+          );
         },
       });
+      // Prevent unhandled 'error' events from propagating as exceptions
+      this._writer.on('error', () => {});
     }
     return this._writer;
   }

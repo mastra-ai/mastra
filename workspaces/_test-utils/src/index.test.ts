@@ -12,7 +12,7 @@
  *
  * Note: Mounts with contained: false is not tested because CompositeFilesystem
  * passes `/`-prefixed paths (after stripping the mount prefix) to each mount's
- * filesystem, and contained: false treats those as absolute host paths.
+ * filesystem, and contained: false treats those as absolute host paths (COR-554).
  */
 
 import { mkdtempSync, mkdirSync } from 'node:fs';
@@ -35,12 +35,13 @@ createWorkspaceIntegrationTests({
     writeReadConsistency: true,
     concurrentOperations: true,
     largeFileHandling: true,
+    lspDiagnostics: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-contained-'));
     const filesystem = new LocalFilesystem({ basePath: tempDir, contained: true });
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
-    return new Workspace({ filesystem, sandbox });
+    return new Workspace({ filesystem, sandbox, lsp: true });
   },
 });
 
@@ -56,36 +57,48 @@ createWorkspaceIntegrationTests({
     writeReadConsistency: true,
     concurrentOperations: true,
     largeFileHandling: true,
+    lspDiagnostics: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-uncontained-'));
     const filesystem = new LocalFilesystem({ basePath: tempDir, contained: false });
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
-    return new Workspace({ filesystem, sandbox });
+    return new Workspace({ filesystem, sandbox, lsp: true });
   },
 });
 
 // =============================================================================
 // 3. Mounts with LocalFilesystem (contained: true) + LocalSandbox
 //
-// Only composite API-only scenarios are enabled. Sandbox-dependent scenarios
-// (fileSync, crossMountCopy) don't work with local mounts because there is
-// no FUSE bridge — sandbox commands use host paths while the filesystem API
-// resolves paths relative to each mount's basePath.
+// Mount paths use the actual disk paths (e.g. /tmp/.../mount-a) so that both
+// the CompositeFilesystem API and sandbox commands reference the same absolute
+// paths. This enables sandbox-dependent scenarios (fileSync, crossMountCopy).
+//
+// virtualDirectory is excluded because readdir('/') with deeply nested mount
+// paths returns intermediate path segments instead of mount names.
+//
+// readOnlyMount is excluded because LocalSandbox writes directly to disk,
+// bypassing the API-level readOnly flag. (readOnly is tested at the API level
+// in the filesystem conformance tests.)
 // =============================================================================
 
 createWorkspaceIntegrationTests({
   suiteName: 'Local Workspace with Mounts (contained: true)',
   testTimeout: 30000,
   testScenarios: {
-    fileSync: false,
+    fileSync: true,
+    writeReadConsistency: true,
+    concurrentOperations: true,
+    largeFileHandling: true,
+    multiMount: true,
+    crossMountCopy: true,
     mountRouting: true,
     crossMountApi: true,
-    virtualDirectory: true,
     mountIsolation: true,
+    lspDiagnostics: true,
   },
   createWorkspace: () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'ws-mounts-contained-'));
+    const tempDir = mkdtempSync(join(tmpdir(), 'ws-mounts-'));
     const mountADir = join(tempDir, 'mount-a');
     const mountBDir = join(tempDir, 'mount-b');
     mkdirSync(mountADir, { recursive: true });
@@ -94,9 +107,10 @@ createWorkspaceIntegrationTests({
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
     return new Workspace({
       sandbox,
+      lsp: true,
       mounts: {
-        '/mount-a': new LocalFilesystem({ basePath: mountADir, contained: true }),
-        '/mount-b': new LocalFilesystem({ basePath: mountBDir, contained: true }),
+        [mountADir]: new LocalFilesystem({ basePath: mountADir, contained: true }),
+        [mountBDir]: new LocalFilesystem({ basePath: mountBDir, contained: true }),
       },
     });
   },

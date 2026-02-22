@@ -64,6 +64,12 @@ class LocalProcessHandle extends ProcessHandle {
       });
     });
 
+    // Prevent unhandled EPIPE rejections when an external writer (e.g. a
+    // vscode-jsonrpc StreamMessageWriter) writes to stdin after the process
+    // has already exited.  Without this, the EPIPE propagates as an
+    // unhandled 'error' event on the stream.
+    proc.stdin?.on('error', () => {});
+
     proc.stdout?.on('data', (data: Buffer) => {
       this.emitStdout(data.toString());
     });
