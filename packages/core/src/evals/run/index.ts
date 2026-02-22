@@ -499,7 +499,7 @@ async function saveSingleScore({
         name: scorer?.name || scorerId,
         description: scorer?.description || '',
         type: scorer?.type || 'unknown',
-        hasJudge: !!scorer?.judge,
+        ...(scorer ? { hasJudge: !!scorer.judge } : {}),
       },
       entity: {
         id: target.id,
