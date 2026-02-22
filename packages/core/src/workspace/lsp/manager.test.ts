@@ -35,7 +35,7 @@ vi.mock('./client', () => ({
 }));
 
 vi.mock('./servers', () => ({
-  findProjectRoot: vi.fn().mockImplementation((startDir: string) => {
+  walkUp: vi.fn().mockImplementation((startDir: string, _markers: string[]) => {
     // Simulate finding project roots at specific directories
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
@@ -48,6 +48,7 @@ vi.mock('./servers', () => ({
           id: 'typescript',
           name: 'TypeScript Language Server',
           languageIds: ['typescript', 'typescriptreact'],
+          markers: ['tsconfig.json', 'package.json'],
           command: () => 'typescript-language-server --stdio',
         },
       ];
@@ -108,9 +109,9 @@ describe('LSPManager', () => {
     });
 
     it('falls back to default root when walkup finds nothing', async () => {
-      const { findProjectRoot } = await import('./servers');
+      const { walkUp } = await import('./servers');
       const client = await manager.getClient('/unknown/path/app.ts');
-      expect(findProjectRoot).toHaveBeenCalledWith('/unknown/path');
+      expect(walkUp).toHaveBeenCalledWith('/unknown/path', ['tsconfig.json', 'package.json']);
       expect(client).not.toBeNull();
     });
   });

@@ -5,8 +5,9 @@
  * NOT a singleton — each Workspace instance creates its own LSPManager.
  *
  * Resolves the project root per-file by walking up from the file's directory
- * to find project markers (tsconfig.json, package.json, go.mod, etc.).
- * Falls back to the default root when walkup finds nothing.
+ * using language-specific markers defined on each server (e.g. tsconfig.json
+ * for TypeScript, go.mod for Go). Falls back to the default root when
+ * walkup finds nothing.
  */
 
 import path from 'node:path';
@@ -14,7 +15,7 @@ import path from 'node:path';
 import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
-import { findProjectRoot, getServersForFile } from './servers';
+import { getServersForFile, walkUp } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic } from './types';
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
@@ -52,35 +53,37 @@ export class LSPManager {
   }
 
   /**
-   * Resolve the project root for a given file path.
-   * Walks up from the file's directory to find project markers.
+   * Resolve the project root for a given file path using the server's markers.
    * Falls back to the default root if nothing is found.
    */
-  private resolveRoot(filePath: string): string {
+  private resolveRoot(filePath: string, markers: string[]): string {
     const fileDir = path.dirname(filePath);
-    return findProjectRoot(fileDir) ?? this._root;
+    return walkUp(fileDir, markers) ?? this._root;
   }
 
   /**
    * Get or create an LSP client for a file path.
-   * Resolves the project root per-file by walking up from the file's directory.
+   * Resolves the project root per-file using the server's markers.
    * Returns null if no server is available.
    */
   async getClient(filePath: string): Promise<LSPClient | null> {
-    const projectRoot = this.resolveRoot(filePath);
     const servers = getServersForFile(filePath, this.config.disableServers);
-    const available = servers.filter(s => s.command(projectRoot) !== undefined);
-    if (available.length === 0) return null;
+    if (servers.length === 0) return null;
 
     // Prefer well-known language servers
     const serverDef =
-      available.find(
+      servers.find(
         s =>
           s.languageIds.includes('typescript') ||
           s.languageIds.includes('javascript') ||
           s.languageIds.includes('python') ||
           s.languageIds.includes('go'),
-      ) ?? available[0]!;
+      ) ?? servers[0]!;
+
+    const projectRoot = this.resolveRoot(filePath, serverDef.markers);
+
+    // Check if the server's command is available at this root
+    if (serverDef.command(projectRoot) === undefined) return null;
 
     const key = `${serverDef.name}:${projectRoot}`;
 

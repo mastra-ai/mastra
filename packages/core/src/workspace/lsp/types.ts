@@ -56,6 +56,8 @@ export interface LSPServerDef {
   id: string;
   name: string;
   languageIds: string[];
+  /** File/directory markers that identify the project root for this server. */
+  markers: string[];
   command: (root: string) => string | undefined;
   initialization?: (root: string) => any;
 }

@@ -48,28 +48,13 @@ function resolveRequire(root: string, moduleId: string): { require: NodeRequire;
 }
 
 /**
- * Find the project root by walking up from a starting directory.
- * Looks for tsconfig.json or package.json (closest match wins, good for monorepos).
- * Falls back to any workspace marker (.git, go.mod, Cargo.toml, etc.).
- * Returns null if nothing is found.
+ * Walk up from a starting directory looking for any of the given markers.
+ * Returns the first directory that contains a marker, or null.
  */
-export function findProjectRoot(startDir: string): string | null {
+export function walkUp(startDir: string, markers: string[]): string | null {
   let current = startDir;
   const fsRoot = parse(current).root;
 
-  // First pass: find closest tsconfig.json or package.json
-  while (current !== fsRoot) {
-    if (existsSync(join(current, 'tsconfig.json')) || existsSync(join(current, 'package.json'))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-
-  // Second pass: any workspace marker
-  const markers = ['pyproject.toml', 'go.mod', 'Cargo.toml', 'composer.json', '.git'];
-  current = startDir;
   while (current !== fsRoot) {
     for (const marker of markers) {
       if (existsSync(join(current, marker))) {
@@ -84,6 +69,26 @@ export function findProjectRoot(startDir: string): string | null {
   return null;
 }
 
+/** Default markers used to find a project root when no server-specific markers are available. */
+const DEFAULT_MARKERS = [
+  'tsconfig.json',
+  'package.json',
+  'pyproject.toml',
+  'go.mod',
+  'Cargo.toml',
+  'composer.json',
+  '.git',
+];
+
+/**
+ * Find a project root by walking up from a starting directory.
+ * Uses default markers (tsconfig.json, package.json, go.mod, etc.).
+ * Used by Workspace to resolve the default LSP root at construction time.
+ */
+export function findProjectRoot(startDir: string): string | null {
+  return walkUp(startDir, DEFAULT_MARKERS);
+}
+
 /**
  * Built-in LSP server definitions.
  */
@@ -92,6 +97,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     id: 'typescript',
     name: 'TypeScript Language Server',
     languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
+    markers: ['tsconfig.json', 'package.json'],
     command: (root: string) => {
       const ts = resolveRequire(root, 'typescript/lib/tsserver.js');
       if (!ts) return undefined;
@@ -119,6 +125,16 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     id: 'eslint',
     name: 'ESLint Language Server',
     languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
+    markers: [
+      'package.json',
+      '.eslintrc.js',
+      '.eslintrc.json',
+      '.eslintrc.yml',
+      '.eslintrc.yaml',
+      'eslint.config.js',
+      'eslint.config.mjs',
+      'eslint.config.ts',
+    ],
     command: (root: string) => {
       const localBin = join(root, 'node_modules', '.bin', 'vscode-eslint-language-server');
       const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'vscode-eslint-language-server');
@@ -132,6 +148,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     id: 'python',
     name: 'Python Language Server (Pyright)',
     languageIds: ['python'],
+    markers: ['pyproject.toml', 'setup.py', 'requirements.txt', 'setup.cfg'],
     command: (root: string) => {
       const localBin = join(root, 'node_modules', '.bin', 'pyright-langserver');
       const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'pyright-langserver');
@@ -145,6 +162,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     id: 'go',
     name: 'Go Language Server (gopls)',
     languageIds: ['go'],
+    markers: ['go.mod'],
     command: () => {
       return whichSync('gopls') ? 'gopls serve' : undefined;
     },
@@ -154,6 +172,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
     id: 'rust',
     name: 'Rust Language Server (rust-analyzer)',
     languageIds: ['rust'],
+    markers: ['Cargo.toml'],
     command: () => {
       return whichSync('rust-analyzer') ? 'rust-analyzer --stdio' : undefined;
     },
