@@ -6,12 +6,12 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { TodoItem } from './todo-progress.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
@@ -184,9 +184,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isViewCommand = this.toolName === 'view' || this.toolName === 'mastra_workspace_read_file';
     const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
     const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
-    const isTodoWrite = this.toolName === 'todo_write';
+    const isTaskWrite = this.toolName === 'task_write';
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isTodoWrite) {
+    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isTaskWrite) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
@@ -229,8 +229,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case 'mastra_workspace_list_files':
         this.renderListFilesEnhanced();
         break;
-      case 'todo_write':
-        this.renderTodoWriteEnhanced();
+      case 'task_write':
+        this.renderTaskWriteEnhanced();
         break;
       default:
         this.renderGenericToolEnhanced();
@@ -833,15 +833,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
   }
 
-  private renderTodoWriteEnhanced(): void {
-    const argsObj = this.args as { todos?: TodoItem[] } | undefined;
-    const todos = argsObj?.todos;
+  private renderTaskWriteEnhanced(): void {
+    const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
+    const tasks = argsObj?.tasks;
     const status = this.getStatusIndicator();
 
-    // Show a compact header — the pinned TodoProgressComponent handles live rendering
-    const count = todos?.length ?? 0;
+    // Show a compact header — the pinned TaskProgressComponent handles live rendering
+    const count = tasks?.length ?? 0;
     const countSuffix = count > 0 ? theme.fg('muted', ` (${count} tasks)`) : '';
-    const header = `${theme.bold(theme.fg('toolTitle', 'todo_write'))}${countSuffix}${status}`;
+    const header = `${theme.bold(theme.fg('toolTitle', 'task_write'))}${countSuffix}${status}`;
     this.contentBox.addChild(new Text(header, 0, 0));
 
     // Surface error details when the tool call fails

@@ -1,6 +1,7 @@
 /**
  * Subagent registry — maps subagent IDs to their definitions.
  */
+import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
 import {
   createViewTool,
   createExecuteCommandTool,
@@ -9,8 +10,6 @@ import {
   createWriteFileTool,
   createSubagentTool,
   stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
 } from '../../tools/index.js';
 import { resolveModel } from '../model.js';
 import { auditTestsSubagent } from './audit-tests.js';
@@ -63,8 +62,8 @@ export function getSubagentTools(projectPath: string) {
       write_file: writeFileTool,
       execute_command: executeCommandTool,
       // Task tracking (for execute)
-      todo_write: todoWriteTool,
-      todo_check: todoCheckTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     },
     resolveModel,
   });

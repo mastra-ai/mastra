@@ -3,9 +3,8 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload, FileJson } from 'lucide-react';
-import { format, isToday } from 'date-fns';
+import { isToday } from 'date-fns';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
@@ -90,7 +89,12 @@ export function DatasetItemsList({
   };
 
   const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
-    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) return;
+    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) {
+      // Drop most recent selection, keep oldest + add new one
+      const [first] = Array.from(selectedIds);
+      onSelectAll([first, id]);
+      return;
+    }
     onToggleSelection(id, shiftKey, allIds);
   };
 
@@ -104,7 +108,7 @@ export function DatasetItemsList({
         {columnsToRender?.map(col => (
           <>
             {col.name === 'checkbox' ? (
-              <ItemList.FlexCell key={col.name}>
+              <ItemList.Cell key={col.name}>
                 {!maxSelection && (
                   <Checkbox
                     checked={isIndeterminate ? 'indeterminate' : isAllSelected}
@@ -112,7 +116,7 @@ export function DatasetItemsList({
                     aria-label="Select all items"
                   />
                 )}
-              </ItemList.FlexCell>
+              </ItemList.Cell>
             ) : (
               <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
             )}
@@ -129,18 +133,19 @@ export function DatasetItemsList({
               const createdAtDate = new Date(item.createdAt);
               const isTodayDate = isToday(createdAtDate);
 
-              const entry = {
+              const listItem = {
                 id: item.id,
                 input: truncateValue(item.input, 60),
                 groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
                 metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                // date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                date: createdAtDate,
               };
 
               return (
-                <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                <ItemList.Row key={item.id} isSelected={selectedIds.has(item.id)}>
                   {isSelectionActive && (
-                    <ItemList.FlexCell className="w-12 pl-4">
+                    <ItemList.Cell className="w-12 pl-4">
                       <Checkbox
                         checked={selectedIds.has(item.id)}
                         onCheckedChange={() => {}}
@@ -150,18 +155,20 @@ export function DatasetItemsList({
                         }}
                         aria-label={`Select item ${item.id}`}
                       />
-                    </ItemList.FlexCell>
+                    </ItemList.Cell>
                   )}
                   <ItemList.RowButton
-                    entry={entry}
-                    isSelected={featuredItemId === item.id}
+                    item={listItem}
+                    isFeatured={featuredItemId === item.id}
                     columns={columns}
                     onClick={handleEntryClick}
                   >
-                    <ItemList.TextCell className="text-neutral2">{entry.id}</ItemList.TextCell>
-                    <ItemList.TextCell className="font-mono text-neutral4">{entry.input}</ItemList.TextCell>
-                    <ItemList.TextCell className="font-mono text-neutral4">{entry.groundTruth}</ItemList.TextCell>
-                    <ItemList.TextCell className="text-neutral2">{entry.date}</ItemList.TextCell>
+                    <ItemList.IdCell id={listItem.id} />
+                    <ItemList.TextCell className="font-mono">{listItem.input}</ItemList.TextCell>
+                    {columns.some(col => col.name === 'groundTruth') && (
+                      <ItemList.TextCell className="font-mono">{listItem.groundTruth}</ItemList.TextCell>
+                    )}
+                    <ItemList.DateCell date={listItem.date} withTime />
                   </ItemList.RowButton>
                 </ItemList.Row>
               );
