@@ -49,11 +49,19 @@ For each step:
 - What to check manually
 - What could go wrong
 
-## IMPORTANT: When Your Plan Is Complete
+## IMMEDIATE ACTION: Call submit_plan Tool
 
-When your plan is complete, you MUST call the \`submit_plan\` tool. Do NOT just describe the plan in text — you MUST make a tool call to \`submit_plan\` with:
-- **title**: A short descriptive title (e.g., "Add dark mode toggle")
-- **plan**: The full plan in markdown, using the structure above (Overview, Complexity, Steps, Verification)
+As soon as your plan is complete, **STOP** and call the \`submit_plan\` tool immediately.
+
+**CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the \`submit_plan\` tool call, not in your text output.
+
+When done, call:
+\`\`\`javascript
+submit_plan({
+  title: "short descriptive title",
+  plan: "your full plan in markdown"
+})
+\`\`\`
 
 The user will see the plan rendered inline and can:
 - **Approve** — automatically switches to Build mode for implementation
