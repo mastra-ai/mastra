@@ -1727,6 +1727,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.displayState.tasks = [];
     this.displayState.previousTasks = [];
     this.displayState.omProgress = defaultOMProgressState();
+    this.displayState.bufferingMessages = false;
+    this.displayState.bufferingObservations = false;
   }
 
   /**
@@ -2129,6 +2131,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         };
         ds.omProgress.generationCount = event.generationCount;
         ds.omProgress.stepNumber = event.stepNumber;
+        // Drive buffering animation flags from status fields
+        ds.bufferingMessages = w.buffered.observations.status === 'running';
+        ds.bufferingObservations = w.buffered.reflection.status === 'running';
         break;
       }
 
@@ -2142,6 +2147,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         ds.omProgress.status = 'idle';
         ds.omProgress.cycleId = undefined;
         ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.observationTokens;
+        // Messages have been observed — reset pending tokens
+        ds.omProgress.pendingTokens = 0;
+        ds.omProgress.thresholdPercent = 0;
         break;
 
       case 'om_observation_failed':
@@ -2154,18 +2163,59 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         ds.omProgress.status = 'reflecting';
         ds.omProgress.cycleId = event.cycleId;
         ds.omProgress.startTime = Date.now();
+        ds.omProgress.preReflectionTokens = ds.omProgress.observationTokens;
+        ds.omProgress.observationTokens = event.tokensToReflect;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0 ? (event.tokensToReflect / ds.omProgress.reflectionThreshold) * 100 : 0;
         break;
 
       case 'om_reflection_end':
         ds.omProgress.status = 'idle';
         ds.omProgress.cycleId = undefined;
         ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.compressedTokens;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0
+            ? (event.compressedTokens / ds.omProgress.reflectionThreshold) * 100
+            : 0;
         break;
 
       case 'om_reflection_failed':
         ds.omProgress.status = 'idle';
         ds.omProgress.cycleId = undefined;
         ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_buffering_start':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = true;
+        } else {
+          ds.bufferingObservations = true;
+        }
+        break;
+
+      case 'om_buffering_end':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_buffering_failed':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_activation':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
         break;
 
       // ── Token usage ────────────────────────────────────────────────────
@@ -2193,6 +2243,26 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         this.resetThreadDisplayState();
         ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
         break;
+
+      // ── State changes (for OM threshold overrides) ──────────────────────
+      case 'state_changed': {
+        const keys = event.changedKeys;
+        if (keys.includes('observationThreshold')) {
+          const value = (event.state as Record<string, unknown>).observationThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.threshold = value;
+            ds.omProgress.thresholdPercent = value > 0 ? (ds.omProgress.pendingTokens / value) * 100 : 0;
+          }
+        }
+        if (keys.includes('reflectionThreshold')) {
+          const value = (event.state as Record<string, unknown>).reflectionThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.reflectionThreshold = value;
+            ds.omProgress.reflectionThresholdPercent = value > 0 ? (ds.omProgress.observationTokens / value) * 100 : 0;
+          }
+        }
+        break;
+      }
 
       default:
         break;

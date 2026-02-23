@@ -22,7 +22,6 @@ import { AskQuestionInlineComponent } from './components/ask-question-inline.js'
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
-import { defaultOMProgressState } from './components/om-progress.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -318,30 +317,13 @@ export class MastraTUI {
   // ===========================================================================
 
   /**
-   * Sync omProgress thresholds from harness state (thread metadata).
-   * Called after thread load to pick up per-thread threshold overrides.
+   * Sync OM status line from harness display state.
+   * Called after thread load — loadOMProgress() already propagates thresholds.
    */
   private syncOMThresholdsFromHarness(): void {
-    const obsThreshold = this.state.harness.getObservationThreshold() ?? this.state.omProgress.threshold;
-    const refThreshold = this.state.harness.getReflectionThreshold() ?? this.state.omProgress.reflectionThreshold;
-    this.state.omProgress.threshold = obsThreshold;
-    this.state.omProgress.thresholdPercent =
-      obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
-    this.state.omProgress.reflectionThreshold = refThreshold;
-    this.state.omProgress.reflectionThresholdPercent =
-      refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
     updateStatusLine(this.state);
   }
   private resetStatusLineState(): void {
-    const prev = this.state.omProgress;
-    this.state.omProgress = {
-      ...defaultOMProgressState(),
-      // Preserve thresholds across resets
-      threshold: prev.threshold,
-      reflectionThreshold: prev.reflectionThreshold,
-    };
-    this.state.bufferingMessages = false;
-    this.state.bufferingObservations = false;
     updateStatusLine(this.state);
   }
 

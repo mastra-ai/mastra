@@ -380,6 +380,8 @@ export interface OMProgressState {
   stepNumber: number;
   cycleId?: string;
   startTime?: number;
+  /** Observation tokens before reflection compression (set on om_reflection_start) */
+  preReflectionTokens: number;
 }
 
 // =============================================================================
@@ -475,6 +477,12 @@ export interface HarnessDisplayState {
   /** Full OM progress state (status, tokens, thresholds, buffered) */
   omProgress: OMProgressState;
 
+  /** Whether message buffering is currently running */
+  bufferingMessages: boolean;
+
+  /** Whether observation buffering is currently running */
+  bufferingObservations: boolean;
+
   // ── File modifications ───────────────────────────────────────────────
   /** Files modified by tool executions (for /diff and similar features) */
   modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
@@ -510,6 +518,8 @@ export function defaultDisplayState(): HarnessDisplayState {
     pendingPlanApproval: null,
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
+    bufferingMessages: false,
+    bufferingObservations: false,
     modifiedFiles: new Map(),
     tasks: [],
     previousTasks: [],
@@ -544,6 +554,7 @@ export function defaultOMProgressState(): OMProgressState {
     },
     generationCount: 0,
     stepNumber: 0,
+    preReflectionTokens: 0,
   };
 }
 

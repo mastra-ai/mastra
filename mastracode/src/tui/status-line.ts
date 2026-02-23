@@ -23,7 +23,7 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.omProgress.status;
+  const omStatus = state.harness.getDisplayState().omProgress.status;
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
   const showOMMode = isObserving || isReflecting;
@@ -205,8 +205,9 @@ export function updateStatusLine(state: TUIState): void {
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
+    const ds = state.harness.getDisplayState();
     const msgLabelStyler =
-      state.bufferingMessages && state.gradientAnimator?.isRunning()
+      ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (label: string) =>
             applyGradientSweep(
               label,
@@ -216,7 +217,7 @@ export function updateStatusLine(state: TUIState): void {
             )
         : undefined;
     const obsLabelStyler =
-      state.bufferingObservations && state.gradientAnimator?.isRunning()
+      ds.bufferingObservations && state.gradientAnimator?.isRunning()
         ? (label: string) =>
             applyGradientSweep(
               label,
@@ -225,8 +226,9 @@ export function updateStatusLine(state: TUIState): void {
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const obs = formatObservationStatus(state.omProgress, opts.memCompact, msgLabelStyler);
-    const ref = formatReflectionStatus(state.omProgress, opts.memCompact, obsLabelStyler);
+    const omProg = state.harness.getDisplayState().omProgress;
+    const obs = formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
+    const ref = formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
       parts.push({ plain: obs, styled: obs });
     }

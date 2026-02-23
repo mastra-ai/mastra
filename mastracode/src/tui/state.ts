@@ -21,8 +21,7 @@ import { CustomEditor } from './components/custom-editor.js';
 
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
-import { defaultOMProgressState } from './components/om-progress.js';
-import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
+import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -142,14 +141,10 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
 
   // ── Observational Memory ──────────────────────────────────────────────
-  omProgress: OMProgressState;
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
-  /** Drives statusline label animation */
-  bufferingMessages: boolean;
-  bufferingObservations: boolean;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
@@ -229,11 +224,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Status line
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
-
-    // Observational Memory
-    omProgress: defaultOMProgressState(),
-    bufferingMessages: false,
-    bufferingObservations: false,
 
     // Input
     customSlashCommands: [],
