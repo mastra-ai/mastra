@@ -36,8 +36,15 @@ export interface GlobalSettings {
     activeModelPackId: string | null;
     /** Explicit per-mode overrides — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
-    /** Observational Memory model */
-    omModelId: string | null;
+    /**
+     * Active OM pack ID (e.g. "gemini", "anthropic", "custom").
+     * When set, the OM model is resolved from the pack at startup so pack
+     * updates (e.g. new model versions) apply automatically.
+     * Cleared when the user manually overrides via /om (falls back to omModelOverride).
+     */
+    activeOmPackId: string | null;
+    /** Explicit OM model override — used for custom OM pack or /om manual changes. */
+    omModelOverride: string | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
@@ -62,7 +69,8 @@ const DEFAULTS: GlobalSettings = {
   models: {
     activeModelPackId: null,
     modeDefaults: {},
-    omModelId: null,
+    activeOmPackId: null,
+    omModelOverride: null,
     subagentModels: {},
   },
   preferences: {
@@ -162,13 +170,21 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return structuredClone(DEFAULTS);
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
-    return {
+    const settings: GlobalSettings = {
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
       preferences: { ...DEFAULTS.preferences, ...raw.preferences },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
     };
+
+    // Migrate legacy omModelId → omModelOverride
+    if (raw.models?.omModelId && !settings.models.omModelOverride) {
+      settings.models.omModelOverride = raw.models.omModelId;
+      saveSettings(settings, filePath);
+    }
+
+    return settings;
   } catch {
     return structuredClone(DEFAULTS);
   }
@@ -206,6 +222,32 @@ export function resolveModelDefaults(
 
   // Unknown pack id — fall through
   return modeDefaults;
+}
+
+/**
+ * Resolve the effective OM model ID.
+ *
+ * If `activeOmPackId` is set, looks up the matching OM pack and returns its
+ * model. Falls back to the explicit `omModelOverride`.
+ *
+ * @param settings  The loaded global settings.
+ * @param builtinOmPacks  Built-in OM packs for the current provider access
+ *                        (from `getAvailableOmPacks`). Pass `[]` if unavailable.
+ */
+export function resolveOmModel(
+  settings: GlobalSettings,
+  builtinOmPacks: Array<{ id: string; modelId: string }>,
+): string | null {
+  const { activeOmPackId, omModelOverride } = settings.models;
+  if (!activeOmPackId) return omModelOverride;
+
+  if (activeOmPackId === 'custom') return omModelOverride;
+
+  const pack = builtinOmPacks.find(p => p.id === activeOmPackId);
+  if (pack) return pack.modelId;
+
+  // Unknown pack — fall back to override
+  return omModelOverride;
 }
 
 export function saveSettings(

@@ -20,8 +20,8 @@ import { createMcpManager } from './mcp/index.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
-import { loadSettings, resolveModelDefaults } from './onboarding/settings.js';
-import { getAvailableModePacks } from './onboarding/packs.js';
+import { loadSettings, resolveModelDefaults, resolveOmModel } from './onboarding/settings.js';
+import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 
 import { stateSchema } from './schema.js';
 import {
@@ -221,7 +221,9 @@ export function createMastraCode(config?: MastraCodeConfig) {
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
   const builtinPacks = getAvailableModePacks(startupAccess);
+  const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
+  const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -239,9 +241,9 @@ export function createMastraCode(config?: MastraCodeConfig) {
 
   // Build initial state with global preferences
   const globalInitialState: Record<string, unknown> = {};
-  if (globalSettings.models.omModelId) {
-    globalInitialState.observerModelId = globalSettings.models.omModelId;
-    globalInitialState.reflectorModelId = globalSettings.models.omModelId;
+  if (effectiveOmModel) {
+    globalInitialState.observerModelId = effectiveOmModel;
+    globalInitialState.reflectorModelId = effectiveOmModel;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

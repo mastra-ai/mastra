@@ -740,7 +740,8 @@ export class MastraTUI {
       settings.models.modeDefaults = {};
     }
 
-    settings.models.omModelId = omPack.modelId;
+    settings.models.activeOmPackId = omPack.id;
+    settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
     settings.preferences.yolo = result.yolo;
 
     // Clear any manual subagent overrides so they derive from the active pack
