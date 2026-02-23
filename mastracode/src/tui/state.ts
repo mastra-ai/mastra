@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
-import type { Harness, HarnessMessage, TaskItem } from '@mastra/core/harness';
+import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
@@ -153,8 +153,6 @@ export interface TUIState {
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
-  /** Track previous state for diff */
-  previousTasks: TaskItem[];
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -236,9 +234,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,
-
-    // Tasks
-    previousTasks: [],
 
     // Input
     customSlashCommands: [],

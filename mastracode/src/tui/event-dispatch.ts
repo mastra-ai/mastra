@@ -149,7 +149,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
-      state.previousTasks = [];
       state.taskWriteInsertIndex = -1;
       ectx.updateStatusLine();
       break;
@@ -282,13 +281,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         if (allCompleted) {
           // Show collapsed completed list (pinned/live)
           ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (state.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        } else if (state.harness.getDisplayState().previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
-          ectx.renderClearedTasksInline(state.previousTasks, insertIndex);
+          ectx.renderClearedTasksInline(state.harness.getDisplayState().previousTasks, insertIndex);
         }
-
-        // Track for next diff
-        state.previousTasks = tasks ? [...tasks] : [];
 
         state.ui.requestRender();
       }

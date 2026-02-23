@@ -165,6 +165,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
 
+  // Local accumulator for detecting task clears during history reconstruction
+  let previousTasksAcc: TaskItem[] = [];
+
   for (const message of messages) {
     if (message.role === 'user') {
       addUserMessage(state, message);
@@ -269,14 +272,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               replacedWithInline = true;
             } else if (!tasks || tasks.length === 0) {
               // Tasks were cleared - show with previous tasks if we have them
-              if (state.previousTasks.length > 0) {
-                renderClearedTasksInline(state, state.previousTasks);
-                state.previousTasks = [];
+              if (previousTasksAcc.length > 0) {
+                renderClearedTasksInline(state, previousTasksAcc);
+                previousTasksAcc = [];
                 replacedWithInline = true;
               }
             } else {
               // Track for detecting clears
-              state.previousTasks = [...tasks];
+              previousTasksAcc = [...tasks];
             }
           }
 
@@ -377,8 +380,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   // Restore pinned task list from the last active task_write in history
-  if (state.previousTasks.length > 0 && state.taskProgress) {
-    state.taskProgress.updateTasks(state.previousTasks);
+  if (previousTasksAcc.length > 0 && state.taskProgress) {
+    state.taskProgress.updateTasks(previousTasksAcc);
   }
 
   state.ui.requestRender();

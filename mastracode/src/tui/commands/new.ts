@@ -13,7 +13,6 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.previousTasks = [];
   state.taskWriteInsertIndex = -1;
 
   ctx.resetStatusLineState();
