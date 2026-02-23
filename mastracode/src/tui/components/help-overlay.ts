@@ -1,19 +1,14 @@
 /**
- * Help overlay — shows slash commands and keyboard shortcuts in a styled panel.
- * Opened by the /help slash command; closed with Escape.
+ * Help text builder — generates the inline help content shown by /help.
  */
 
-import { Box, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
-import { bg, bold, fg } from '../theme.js';
 
-export interface HelpOverlayOptions {
+export interface HelpTextOptions {
   /** Number of available harness modes (mode commands shown when > 1) */
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
-  onClose: () => void;
 }
 
 interface HelpEntry {
@@ -91,66 +86,29 @@ function getShortcuts(modes: number): HelpEntry[] {
 
 function renderSection(title: string, entries: HelpEntry[]): string {
   const maxKeyLen = Math.max(...entries.map(e => e.key.length));
-  const lines = entries
-    .map(e => `  ${fg('accent', e.key.padEnd(maxKeyLen + 2))}${fg('muted', e.description)}`)
-    .join('\n');
-  return `${bold(fg('text', title))}\n${lines}`;
+  const lines = entries.map(e => `  ${e.key.padEnd(maxKeyLen + 2)}${e.description}`).join('\n');
+  return `${title}\n${lines}`;
 }
 
-// =============================================================================
-// Component
-// =============================================================================
+/**
+ * Build the full help text as a plain string for inline display via showInfo().
+ */
+export function buildHelpText(options: HelpTextOptions): string {
+  const sections: string[] = [];
 
-export class HelpOverlayComponent extends Box implements Focusable {
-  private _focused = false;
-  private onClose: () => void;
+  sections.push(renderSection('Commands', getCommands(options.modes)));
 
-  get focused(): boolean {
-    return this._focused;
-  }
-  set focused(value: boolean) {
-    this._focused = value;
-  }
-
-  constructor(options: HelpOverlayOptions) {
-    super(2, 1, (text: string) => bg('overlayBg', text));
-    this.onClose = options.onClose;
-
-    // Title
-    this.addChild(new Text(bold(fg('accent', 'Help')), 0, 0));
-    this.addChild(new Spacer(1));
-
-    // Commands
-    this.addChild(new Text(renderSection('Commands', getCommands(options.modes)), 0, 0));
-
-    // Custom commands
-    if (options.customSlashCommands.length > 0) {
-      this.addChild(new Spacer(1));
-      const customEntries = options.customSlashCommands.map(cmd => ({
-        key: `//${cmd.name}`,
-        description: cmd.description || 'No description',
-      }));
-      this.addChild(new Text(renderSection('Custom Commands', customEntries), 0, 0));
-    }
-
-    // Shell
-    this.addChild(new Spacer(1));
-    this.addChild(
-      new Text(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]), 0, 0),
-    );
-
-    // Keyboard shortcuts
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)), 0, 0));
-
-    // Footer
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('dim', '  Esc to close'), 0, 0));
+  if (options.customSlashCommands.length > 0) {
+    const customEntries = options.customSlashCommands.map(cmd => ({
+      key: `//${cmd.name}`,
+      description: cmd.description || 'No description',
+    }));
+    sections.push(renderSection('Custom Commands', customEntries));
   }
 
-  handleInput(data: string): void {
-    if (matchesKey(data, 'escape')) {
-      this.onClose();
-    }
-  }
+  sections.push(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]));
+
+  sections.push(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)));
+
+  return sections.join('\n\n');
 }
