@@ -1,8 +1,7 @@
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Label } from '@/ds/components/Label';
+import { SelectField } from '@/ds/components/FormFields/select-field';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';
@@ -14,27 +13,33 @@ export interface TargetSelectorProps {
   setTargetId: (id: string) => void;
 }
 
+const targetTypeOptions = [
+  { value: 'agent', label: 'Agent' },
+  { value: 'workflow', label: 'Workflow' },
+  { value: 'scorer', label: 'Scorer' },
+];
+
 export function TargetSelector({ targetType, setTargetType, targetId, setTargetId }: TargetSelectorProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Get list of targets based on selected type
-  const targets =
+  const targetOptions =
     targetType === 'agent'
       ? Object.entries(agents ?? {}).map(([id, agent]) => ({
-          id,
-          name: agent.name ?? id,
+          value: id,
+          label: agent.name ?? id,
         }))
       : targetType === 'workflow'
         ? Object.entries(workflows ?? {}).map(([id, workflow]) => ({
-            id,
-            name: workflow.name ?? id,
+            value: id,
+            label: workflow.name ?? id,
           }))
         : targetType === 'scorer'
           ? Object.entries(scorers ?? {}).map(([id, scorer]) => ({
-              id,
-              name: scorer.scorer?.config?.name ?? id,
+              value: id,
+              label: scorer.scorer?.config?.name ?? id,
             }))
           : [];
 
@@ -49,47 +54,36 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
     setTargetId('');
   };
 
-  return (
-    <div className="grid gap-4">
-      {/* Target Type Selection */}
-      <div className="grid gap-2">
-        <Label htmlFor="target-type">Target Type</Label>
-        <Select value={targetType} onValueChange={handleTypeChange}>
-          <SelectTrigger id="target-type">
-            <SelectValue placeholder="Select target type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="agent">Agent</SelectItem>
-            <SelectItem value="workflow">Workflow</SelectItem>
-            <SelectItem value="scorer">Scorer</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+  const targetLabel = targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer';
 
-      {/* Specific Target Selection */}
-      {targetType && (
-        <div className="grid gap-2">
-          <Label htmlFor="target-id">
-            {targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer'}
-          </Label>
-          {isTargetsLoading ? (
-            <Skeleton className="h-10 w-full" />
-          ) : (
-            <Select value={targetId} onValueChange={setTargetId}>
-              <SelectTrigger id="target-id">
-                <SelectValue placeholder={`Select ${targetType}`} />
-              </SelectTrigger>
-              <SelectContent>
-                {targets.map(target => (
-                  <SelectItem key={target.id} value={target.id}>
-                    {target.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      )}
+  return (
+    <div className="grid gap-6">
+      <SelectField
+        label="Target Type"
+        name="target-type"
+        value={targetType}
+        onValueChange={handleTypeChange}
+        options={targetTypeOptions}
+        placeholder="Select target type"
+        variant="experimental"
+        size="default"
+      />
+
+      {targetType &&
+        (isTargetsLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <SelectField
+            label={targetLabel}
+            name="target-id"
+            value={targetId}
+            onValueChange={setTargetId}
+            options={targetOptions}
+            placeholder={`Select ${targetType}`}
+            variant="experimental"
+            size="default"
+          />
+        ))}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import type {
   RuleGroup,
   StorageConditionalVariant,
   StorageConditionalField,
+  StoredProcessorGraph,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -127,7 +128,9 @@ export interface GetAgentResponse {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -770,6 +773,27 @@ export interface StoredAgentScorerConfig {
   rules?: RuleGroup;
 }
 
+/**
+ * Per-skill config stored in agent snapshots.
+ * Allows overriding skill description and instructions for a specific agent context.
+ */
+export interface StoredAgentSkillConfig {
+  description?: string;
+  instructions?: string;
+  /** Pin to a specific version ID. Takes precedence over strategy. */
+  pin?: string;
+  /** Resolution strategy: 'latest' = latest published version, 'live' = read from filesystem */
+  strategy?: 'latest' | 'live';
+}
+
+/**
+ * Workspace reference stored in agent snapshots.
+ * Can reference a stored workspace by ID or provide inline workspace config.
+ */
+export type StoredWorkspaceRef =
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: Record<string, unknown> };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -807,10 +831,12 @@ export interface StoredAgentResponse {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -878,10 +904,12 @@ export interface CreateStoredAgentParams {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -905,10 +933,12 @@ export interface UpdateStoredAgentParams {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
 }
 
@@ -1164,8 +1194,8 @@ export interface AgentVersionResponse {
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<string[]>;
-  outputProcessors?: ConditionalField<string[]>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
   memory?: ConditionalField<SerializedMemoryConfig>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
@@ -1226,6 +1256,70 @@ export type AgentVersionDiff = VersionDiff;
 export interface CompareVersionsResponse {
   fromVersion: AgentVersionResponse;
   toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
+}
+
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+export interface ScorerVersionResponse {
+  id: string;
+  scorerDefinitionId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateScorerVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CompareScorerVersionsResponse {
+  fromVersion: ScorerVersionResponse;
+  toVersion: ScorerVersionResponse;
   diffs: VersionDiff[];
 }
 
@@ -1527,6 +1621,98 @@ export interface GetSkillReferenceResponse {
 }
 
 // ============================================================================
+// Stored Skill Types
+// ============================================================================
+
+/**
+ * File node for skill workspace
+ */
+export interface StoredSkillFileNode {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StoredSkillFileNode[];
+}
+
+/**
+ * Stored skill data returned from API
+ */
+export interface StoredSkillResponse {
+  id: string;
+  status: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for listing stored skills
+ */
+export interface ListStoredSkillsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored skills
+ */
+export interface ListStoredSkillsResponse {
+  skills: StoredSkillResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored skill
+ */
+export interface CreateStoredSkillParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for updating a stored skill
+ */
+export interface UpdateStoredSkillParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  instructions?: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Response for deleting a stored skill
+ */
+export interface DeleteStoredSkillResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Processor Types
 // ============================================================================
 
@@ -1757,6 +1943,40 @@ export interface ListToolProviderToolsResponse {
 export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
 
 // ============================================================================
+// Processor Provider Types
+// ============================================================================
+
+/**
+ * Provider phase names as returned by the server (prefixed form).
+ * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
+ */
+export type ProcessorProviderPhase =
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
+
+export interface ProcessorProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+}
+
+export interface GetProcessorProvidersResponse {
+  providers: ProcessorProviderInfo[];
+}
+
+export interface GetProcessorProviderResponse {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+  configSchema: Record<string, unknown>;
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -1817,8 +2037,8 @@ export interface DatasetRecord {
   name: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;

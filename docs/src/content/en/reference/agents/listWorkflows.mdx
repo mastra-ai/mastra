@@ -12,34 +12,34 @@ The `.listWorkflows()` method retrieves the workflows configured for an agent, r
 ## Usage example
 
 ```typescript
-await agent.listWorkflows();
+await agent.listWorkflows()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
-    },
-  ]}
+{
+name: "options",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing request context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "workflows",
-      type: "Promise<Record<string, Workflow>>",
-      description:
-        "A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
-    },
-  ]}
+{
+name: "workflows",
+type: "Promise<Record<string, Workflow>>",
+description:
+"A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
+},
+]}
 />
 
 ## Extended usage example
@@ -47,22 +47,22 @@ await agent.listWorkflows();
 ```typescript
 await agent.listWorkflows({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related

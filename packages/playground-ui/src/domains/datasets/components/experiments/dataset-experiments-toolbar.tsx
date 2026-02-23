@@ -74,30 +74,39 @@ export function DatasetExperimentsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      <div className="flex items-center gap-2">
+      <ButtonsGroup>
         <SelectField
           label="Status"
+          labelIsHidden={true}
           name="filter-status"
           options={STATUS_OPTIONS}
           value={filters.status ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, status: v === 'all' ? undefined : v })}
+          variant="experimental"
+          size="default"
         />
 
         <SelectField
           label="Type"
+          labelIsHidden={true}
           name="filter-target-type"
           options={TARGET_TYPE_OPTIONS}
           value={filters.targetType ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, targetType: v === 'all' ? undefined : v })}
+          variant="experimental"
+          size="default"
         />
 
         {targetIds.length > 0 && (
           <SelectField
             label="Target"
+            labelIsHidden={true}
             name="filter-target-id"
             options={targetIdOptions}
             value={filters.targetId ?? 'all'}
             onValueChange={v => onFiltersChange({ ...filters, targetId: v === 'all' ? undefined : v })}
+            variant="experimental"
+            size="default"
           />
         )}
 
@@ -109,7 +118,7 @@ export function DatasetExperimentsToolbar({
             Reset
           </Button>
         )}
-      </div>
+      </ButtonsGroup>
 
       {hasExperiments && (
         <Button variant="standard" size="default" onClick={onCompareClick}>

@@ -15,13 +15,13 @@ The `Memory` class provides a robust system for managing conversation history an
 ## Usage example
 
 ```typescript title="src/mastra/agents/test-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "test-agent",
-  instructions: "You are an agent with memory.",
-  model: "openai/gpt-5.1",
+  name: 'test-agent',
+  instructions: 'You are an agent with memory.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     options: {
       workingMemory: {
@@ -29,7 +29,7 @@ export const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 > To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class) for more information.
@@ -38,131 +38,131 @@ export const agent = new Agent({
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MastraCompositeStore",
-      description:
-        'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
-      isOptional: true,
-    },
-    {
-      name: "vector",
-      type: "MastraVector | false",
-      description:
-        "Vector store for semantic search capabilities. Set to `false` to disable vector operations.",
-      isOptional: true,
-    },
-    {
-      name: "embedder",
-      type: "EmbeddingModel<string> | EmbeddingModelV2<string>",
-      description:
-        "Embedder instance for vector embeddings. Required when semantic recall is enabled.",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "MemoryConfig",
-      description: "Memory configuration options.",
-      isOptional: true,
-    },
-    
-  ]}
+{
+name: "storage",
+type: "MastraCompositeStore",
+description:
+'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
+isOptional: true,
+},
+{
+name: "vector",
+type: "MastraVector | false",
+description:
+"Vector store for semantic search capabilities. Set to `false` to disable vector operations.",
+isOptional: true,
+},
+{
+name: "embedder",
+type: "EmbeddingModel<string> | EmbeddingModelV2<string>",
+description:
+"Embedder instance for vector embeddings. Required when semantic recall is enabled.",
+isOptional: true,
+},
+{
+name: "options",
+type: "MemoryConfig",
+description: "Memory configuration options.",
+isOptional: true,
+},
+
+]}
 />
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description:
-        "When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description:
-        "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "workingMemory",
-      type: "WorkingMemory",
-      description:
-        "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
-    },
-    {
-      name: "observationalMemory",
-      type: "boolean | ObservationalMemoryOptions",
-      description:
-        "Enable Observational Memory for long-context agentic memory. Set to `true` for defaults, or pass a config object to customize token budgets, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "generateTitle",
-      type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
-      description:
-        "Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "lastMessages",
+type: "number | false",
+description:
+"Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.",
+isOptional: true,
+defaultValue: "10",
+},
+{
+name: "readOnly",
+type: "boolean",
+description:
+"When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "semanticRecall",
+type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+description:
+"Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "workingMemory",
+type: "WorkingMemory",
+description:
+"Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
+isOptional: true,
+defaultValue:
+"{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+},
+{
+name: "observationalMemory",
+type: "boolean | ObservationalMemoryOptions",
+description:
+"Enable Observational Memory for long-context agentic memory. Set to `true` for defaults, or pass a config object to customize token budgets, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "generateTitle",
+type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
+description:
+"Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "memory",
-      type: "Memory",
-      description: "A new Memory instance with the specified configuration.",
-    },
-  ]}
+{
+name: "memory",
+type: "Memory",
+description: "A new Memory instance with the specified configuration.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/test-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 export const agent = new Agent({
-  name: "test-agent",
-  instructions: "You are an agent with memory.",
-  model: "openai/gpt-5.1",
+  name: 'test-agent',
+  instructions: 'You are an agent with memory.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'test-agent-storage',
-      url: "file:./working-memory.db",
+      url: 'file:./working-memory.db',
     }),
     vector: new LibSQLVector({
       id: 'test-agent-vector',
-      url: "file:./vector-memory.db",
+      url: 'file:./vector-memory.db',
     }),
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
         messageRange: 2,
-        scope: "resource",
+        scope: 'resource',
       },
       workingMemory: {
         enabled: true,
@@ -170,21 +170,21 @@ export const agent = new Agent({
       generateTitle: true,
     },
   }),
-});
+})
 ```
 
 ## PostgreSQL with index configuration
 
 ```typescript title="src/mastra/agents/pg-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { PgStore, PgVector } from "@mastra/pg";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { PgStore, PgVector } from '@mastra/pg'
 
 export const agent = new Agent({
-  name: "pg-agent",
-  instructions: "You are an agent with optimized PostgreSQL memory.",
-  model: "openai/gpt-5.1",
+  name: 'pg-agent',
+  instructions: 'You are an agent with optimized PostgreSQL memory.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new PgStore({
       id: 'pg-agent-storage',
@@ -194,16 +194,16 @@ export const agent = new Agent({
       id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
-    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     options: {
       lastMessages: 20,
       semanticRecall: {
         topK: 5,
         messageRange: 3,
-        scope: "resource",
+        scope: 'resource',
         indexConfig: {
-          type: "hnsw", // Use HNSW for better performance
-          metric: "dotproduct", // Optimal for OpenAI embeddings
+          type: 'hnsw', // Use HNSW for better performance
+          metric: 'dotproduct', // Optimal for OpenAI embeddings
           m: 16, // Number of bi-directional links
           efConstruction: 64, // Construction-time candidate list size
         },
@@ -213,7 +213,7 @@ export const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 ### Related

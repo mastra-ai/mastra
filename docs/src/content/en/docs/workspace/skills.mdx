@@ -67,12 +67,12 @@ You are a code reviewer. When reviewing code:
 Enable skill discovery by setting the `skills` option on your workspace:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: ['/skills'],
-});
+})
 ```
 
 The `skills` directory is relative to your `basePath`. You can specify multiple skill directories:
@@ -81,10 +81,10 @@ The `skills` directory is relative to your `basePath`. You can specify multiple 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: [
-    '/skills',      // Project skills
+    '/skills', // Project skills
     '/team-skills', // Shared team skills
   ],
-});
+})
 ```
 
 ## Dynamic skills
@@ -94,14 +94,14 @@ For dynamic skill paths based on context, pass a function:
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: (context) => {
-    const paths = ['/skills'];
+  skills: context => {
+    const paths = ['/skills']
     if (context.user?.role === 'developer') {
-      paths.push('/dev-skills');
+      paths.push('/dev-skills')
     }
-    return paths;
+    return paths
   },
-});
+})
 ```
 
 ## How agents use skills
@@ -124,7 +124,7 @@ const workspace = new Workspace({
   skills: ['/skills'],
   // highlight-next-line
   bm25: true,
-});
+})
 ```
 
 ## Related

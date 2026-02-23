@@ -25,7 +25,27 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools, resolveToolConfig, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
+export {
+  createWorkspaceTools,
+  resolveToolConfig,
+  type WorkspaceToolConfig,
+  type WorkspaceToolsConfig,
+  // Individual standalone tools
+  readFileTool,
+  writeFileTool,
+  editFileTool,
+  listFilesTool,
+  deleteFileTool,
+  fileStatTool,
+  mkdirTool,
+  searchTool,
+  indexContentTool,
+  executeCommandTool,
+  // Helpers
+  requireWorkspace,
+  requireFilesystem,
+  requireSandbox,
+} from './tools';
 
 // Lifecycle
 export * from './lifecycle';
@@ -88,3 +108,15 @@ export type {
   SkillsResolver,
   SkillsContext,
 } from './skills';
+
+// Skill Publishing
+export type { SkillPublishResult } from './skills';
+export { collectSkillForPublish, publishSkillFromSource } from './skills';
+
+// Skill Source
+export type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skills';
+export { LocalSkillSource } from './skills';
+
+// Versioned Skill Sources
+export { VersionedSkillSource } from './skills';
+export { CompositeVersionedSkillSource, type VersionedSkillEntry } from './skills';

@@ -4,12 +4,8 @@ import { useState } from 'react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon, IconProps } from '@/ds/icons';
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import { IconProps } from '@/ds/icons';
 import { Button, ButtonProps } from '../Button';
-import { B } from 'node_modules/vitest/dist/chunks/config.d.CzIjkicf';
 
 export type CopyButtonProps = {
   content: string;
@@ -26,7 +22,7 @@ export function CopyButton({
   tooltip = 'Copy to clipboard',
   iconSize = 'default',
   className,
-  size = 'tiny',
+  size = 'sm',
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({

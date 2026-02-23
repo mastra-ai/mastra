@@ -47,6 +47,8 @@ export function DatasetCompareVersionToolbar({
         options={options}
         value={versionA ?? ''}
         onValueChange={val => onVersionChange?.(val, versionB ?? '')}
+        variant="experimental"
+        size="default"
       />
       <SelectField
         label="Version B"
@@ -54,6 +56,8 @@ export function DatasetCompareVersionToolbar({
         options={options}
         value={versionB ?? ''}
         onValueChange={val => onVersionChange?.(versionA ?? '', val)}
+        variant="experimental"
+        size="default"
       />
     </Column.Toolbar>
   );

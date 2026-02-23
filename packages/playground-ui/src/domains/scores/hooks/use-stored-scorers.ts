@@ -3,13 +3,13 @@ import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
 import type { CreateStoredScorerParams, UpdateStoredScorerParams } from '@mastra/client-js';
 
-export const useStoredScorer = (scorerId?: string) => {
+export const useStoredScorer = (scorerId?: string, options?: { status?: 'draft' | 'published' }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['stored-scorer', scorerId, requestContext],
-    queryFn: () => (scorerId ? client.getStoredScorer(scorerId).details(requestContext) : null),
+    queryKey: ['stored-scorer', scorerId, options?.status, requestContext],
+    queryFn: () => (scorerId ? client.getStoredScorer(scorerId).details(requestContext, options) : null),
     enabled: Boolean(scorerId),
   });
 };

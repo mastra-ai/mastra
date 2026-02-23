@@ -17,6 +17,7 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
+import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type {
   ChunkType,
@@ -30,7 +31,6 @@ import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
-import { isControllerOpen } from '../stream';
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -156,9 +156,7 @@ async function processOutputStream<OUTPUT = undefined>({
             providerOptions: chunk.payload.providerMetadata,
           });
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -169,9 +167,7 @@ async function processOutputStream<OUTPUT = undefined>({
           textDeltas: textDeltasFromState,
           isStreaming: true,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -181,9 +177,7 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: undefined,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -204,9 +198,7 @@ async function processOutputStream<OUTPUT = undefined>({
           }
         }
 
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
 
         break;
       }
@@ -228,9 +220,7 @@ async function processOutputStream<OUTPUT = undefined>({
             logger?.error('Error calling onInputDelta', error);
           }
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -259,14 +249,10 @@ async function processOutputStream<OUTPUT = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          if (isControllerOpen(controller)) {
-            controller.enqueue(chunk);
-          }
+          safeEnqueue(controller, chunk);
           break;
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -278,9 +264,7 @@ async function processOutputStream<OUTPUT = undefined>({
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -314,9 +298,7 @@ async function processOutputStream<OUTPUT = undefined>({
           providerOptions: undefined,
         });
 
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -339,7 +321,7 @@ async function processOutputStream<OUTPUT = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          safeEnqueue(controller, chunk);
         }
         break;
 
@@ -366,7 +348,7 @@ async function processOutputStream<OUTPUT = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          safeEnqueue(controller, chunk);
         }
         break;
 
@@ -405,14 +387,12 @@ async function processOutputStream<OUTPUT = undefined>({
         const error = getErrorFromUnknown(chunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
         await options?.onError?.({ error });
         break;
 
       default:
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
     }
 
     if (
@@ -634,19 +614,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
               // Emit tripwire chunk to the stream
-              if (isControllerOpen(controller)) {
-                controller.enqueue({
-                  type: 'tripwire',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    reason: error.message,
-                    retry: error.options?.retry,
-                    metadata: error.options?.metadata,
-                    processorId: error.processorId,
-                  },
-                });
-              }
+              safeEnqueue(controller, {
+                type: 'tripwire',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  reason: error.message,
+                  retry: error.options?.retry,
+                  metadata: error.options?.metadata,
+                  processorId: error.processorId,
+                },
+              });
 
               // Create a minimal runState for the bail response
               const runState = new AgenticRunState({
@@ -800,13 +778,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   request = requestFromStream || {};
                   rawResponse = rawResponseFromStream;
 
-                  if (!isControllerOpen(controller)) {
-                    // Controller is closed or errored, skip enqueueing
-                    // This can happen when downstream errors (like in onStepFinish) close the controller
-                    return;
-                  }
-
-                  controller.enqueue({
+                  safeEnqueue(controller, {
                     runId,
                     from: ChunkFrom.AGENT,
                     type: 'step-start',
@@ -893,22 +865,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               steps: inputData?.output?.steps ?? [],
             });
 
-            if (isControllerOpen(controller)) {
-              controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-            }
+            safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
           if (isLastModel) {
-            if (isControllerOpen(controller)) {
-              controller.enqueue({
-                type: 'error',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: { error },
-              });
-            }
+            safeEnqueue(controller, {
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            });
 
             runState.setState({
               hasErrored: true,
@@ -1004,7 +972,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   toolName: toolCall.toolName,
                   args: toolCall.args,
                 },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                providerMetadata: toolCall.providerMetadata,
+                providerExecuted: toolCall.providerExecuted,
               };
             }),
           },

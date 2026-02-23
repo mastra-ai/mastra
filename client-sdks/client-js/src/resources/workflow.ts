@@ -7,7 +7,12 @@ import type {
   GetWorkflowRunByIdResponse,
 } from '../types';
 
-import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
+import {
+  parseClientRequestContext,
+  base64RequestContext,
+  requestContextQueryString,
+  parseSuperJsonString,
+} from '../utils';
 import { BaseResource } from './base';
 import { Run } from './run';
 
@@ -140,8 +145,10 @@ export class Workflow extends BaseResource {
   }> {
     const details = await this.details();
     return {
-      inputSchema: details.inputSchema ? JSON.parse(details.inputSchema) : null,
-      outputSchema: details.outputSchema ? JSON.parse(details.outputSchema) : null,
+      inputSchema: details.inputSchema ? (parseSuperJsonString(details.inputSchema) as Record<string, unknown>) : null,
+      outputSchema: details.outputSchema
+        ? (parseSuperJsonString(details.outputSchema) as Record<string, unknown>)
+        : null,
     };
   }
 

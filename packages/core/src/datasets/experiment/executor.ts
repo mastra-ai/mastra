@@ -1,9 +1,29 @@
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
+import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
+import type { ScoringData } from '../../llm/model/base.types';
 import type { TargetType } from '../../storage/types';
 import type { Workflow } from '../../workflows';
+
+/**
+ * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
+ * Used to type the agent result uniformly without coupling to the full return types.
+ */
+interface AgentGenerateResult {
+  text?: string;
+  object?: unknown;
+  toolCalls?: unknown[];
+  toolResults?: unknown[];
+  sources?: unknown[];
+  files?: unknown[];
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  reasoningText?: string;
+  traceId?: string;
+  error?: Error;
+  scoringData?: ScoringData;
+}
 
 /**
  * Target types supported for dataset execution.
@@ -161,31 +181,44 @@ async function executeAgent(
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
-  // Use generate() - works for both v1 and v2 models
-  // Pass input as-is - let agent handle normalization
-  const result = isSupportedLanguageModel(model)
-    ? await agent.generate(item.input as any, {
+  // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
+  // but share the fields we extract. Cast input to MessageListInput at the boundary.
+  const input = item.input as MessageListInput;
+
+  const rawResult = isSupportedLanguageModel(model)
+    ? await agent.generate(input, {
         scorers: {},
         returnScorerData: true,
         abortSignal: signal,
       })
-    : await (agent as any).generateLegacy?.(item.input as any, {
+    : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
       });
 
-  if (result == null) {
-    throw new Error(`Agent "${agent.name}" does not support generateLegacy for this model type`);
-  }
+  // Narrow to the common fields we need — both v1 and v2 results share these
+  const result = rawResult as AgentGenerateResult;
 
-  // Capture traceId and scoring data from agent result
-  const traceId = (result as any)?.traceId ?? null;
-  const scoringData = (result as any)?.scoringData as
-    | { input: ScorerRunInputForAgent; output: ScorerRunOutputForAgent }
-    | undefined;
+  const traceId = result.traceId ?? null;
+  const scoringData = result.scoringData;
+
+  // Only persist fields relevant to experiment evaluation — drop provider metadata,
+  // duplicate messages, steps trace, and other debugging internals
+  const trimmedOutput = {
+    text: result.text,
+    object: result.object,
+    toolCalls: result.toolCalls,
+    toolResults: result.toolResults,
+    sources: result.sources,
+    files: result.files,
+    usage: result.usage,
+    reasoningText: result.reasoningText,
+    traceId,
+    error: result.error ?? null,
+  };
 
   return {
-    output: result,
+    output: trimmedOutput,
     error: null,
     traceId,
     scorerInput: scoringData?.input,
@@ -206,8 +239,8 @@ async function executeWorkflow(
     inputData: item.input,
   });
 
-  // Capture traceId from workflow result
-  const traceId = (result as any)?.traceId ?? null;
+  // TracingProperties is intersected on every WorkflowResult variant
+  const traceId = result.traceId ?? null;
 
   if (result.status === 'success') {
     return { output: result.result, error: null, traceId };

@@ -220,8 +220,8 @@ export class DatasetsPG extends DatasetsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
-        inputSchema: input.inputSchema,
-        groundTruthSchema: input.groundTruthSchema,
+        inputSchema: input.inputSchema ?? undefined,
+        groundTruthSchema: input.groundTruthSchema ?? undefined,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -305,8 +305,9 @@ export class DatasetsPG extends DatasetsStorage {
         name: args.name ?? existing.name,
         description: args.description ?? existing.description,
         metadata: args.metadata ?? existing.metadata,
-        inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
-        groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
+        inputSchema: (args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema) ?? undefined,
+        groundTruthSchema:
+          (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
         updatedAt: new Date(now),
       };
     } catch (error) {

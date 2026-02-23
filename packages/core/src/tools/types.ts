@@ -96,6 +96,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * per-step via prepareStep.
    */
   workspace?: Workspace;
+  /**
+   * Request context for tool execution. When provided at execution time, this overrides
+   * any requestContext configured at tool build time. Allows workflow steps to forward
+   * their requestContext (e.g., authenticated API clients, feature flags) to tools.
+   */
+  requestContext?: RequestContext;
 };
 
 /**
@@ -195,6 +201,12 @@ export type CoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Receives the raw tool output and returns a transformed representation.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (output: unknown) => unknown;
 } & (
   | {
       type?: 'function' | undefined;
@@ -227,6 +239,12 @@ export type InternalCoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Receives the raw tool output and returns a transformed representation.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (output: unknown) => unknown;
 } & (
   | {
       type?: 'function' | undefined;
@@ -302,6 +320,12 @@ export interface ToolAction<
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Receives the raw tool output and returns a transformed representation.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

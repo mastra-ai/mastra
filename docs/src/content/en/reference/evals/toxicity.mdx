@@ -16,20 +16,20 @@ The `createToxicityScorer()` function accepts a single options object with the f
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate toxicity.",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value (default is 1).",
-    },
-  ]}
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate toxicity.",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value (default is 1).",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -38,45 +38,45 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description:
-        "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Toxicity score (0 to scale, default 0-1).",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the toxicity assessment.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description:
-        "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description:
+"The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Toxicity score (0 to scale, default 0-1).",
+},
+{
+name: "reason",
+type: "string",
+description: "Detailed explanation of the toxicity assessment.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description:
+"The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 `.run()` returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   analyzeStepResult: {
@@ -106,7 +106,7 @@ The scorer evaluates toxicity through multiple aspects:
    - Detects hate speech and threats
    - Evaluates dismissive statements
    - Assesses severity levels
-2. Calculates toxicity score:
+1. Calculates toxicity score:
    - Weighs detected elements
    - Combines severity ratings
    - Normalizes to scale
@@ -127,22 +127,22 @@ A toxicity score between 0 and 1:
 Evaluate agent responses for toxic, biased, or harmful content:
 
 ```typescript title="src/example-toxicity.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createToxicityScorer({ model: "openai/gpt-4o" });
+const scorer = createToxicityScorer({ model: 'openai/gpt-4o' })
 
 const result = await runEvals({
   data: [
     {
-      input: "What do you think about the new team member?",
+      input: 'What do you think about the new team member?',
     },
     {
-      input: "How was the meeting discussion?",
+      input: 'How was the meeting discussion?',
     },
     {
-      input: "Can you provide feedback on the project proposal?",
+      input: 'Can you provide feedback on the project proposal?',
     },
   ],
   scorers: [scorer],
@@ -151,11 +151,11 @@ const result = await runEvals({
     console.log({
       score: scorerResults[scorer.id].score,
       reason: scorerResults[scorer.id].reason,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

@@ -43,7 +43,7 @@ import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
-import type { WorkspaceSkills, SkillsResolver } from './skills';
+import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
@@ -223,6 +223,25 @@ export interface WorkspaceConfig<
    */
   skills?: SkillsResolver;
 
+  /**
+   * Custom SkillSource to use for skill discovery.
+   * When provided, this source is used instead of the workspace filesystem or LocalSkillSource.
+   *
+   * Use `VersionedSkillSource` to read skills from the content-addressable blob store,
+   * serving a specific published version without touching the live filesystem.
+   *
+   * @example
+   * ```typescript
+   * import { VersionedSkillSource } from '@mastra/core/workspace';
+   *
+   * const workspace = new Workspace({
+   *   skills: ['/skills'],
+   *   skillSource: new VersionedSkillSource(tree, blobStore, versionCreatedAt),
+   * });
+   * ```
+   */
+  skillSource?: SkillSource;
+
   // ---------------------------------------------------------------------------
   // Tool Configuration
   // ---------------------------------------------------------------------------
@@ -268,6 +287,12 @@ export interface WorkspaceConfig<
 
 // Re-export WorkspaceStatus from types
 export type { WorkspaceStatus } from './types';
+
+/**
+ * A Workspace with any combination of filesystem, sandbox, and mounts.
+ * Use this when you need to accept any Workspace regardless of its generic parameters.
+ */
+export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
 
 // =============================================================================
 // Path Context Types
@@ -502,8 +527,8 @@ export class Workspace<
 
     // Lazy initialization
     if (!this._skills) {
-      // Use filesystem if available, otherwise use LocalSkillSource (read-only from local disk)
-      const source = this._fs ?? new LocalSkillSource();
+      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
+      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
 
       this._skills = new WorkspaceSkillsImpl({
         source,

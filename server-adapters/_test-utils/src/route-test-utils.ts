@@ -59,6 +59,7 @@ export function generateContextualValue(fieldName?: string): string {
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
+  if (field.includes('tool') && field.includes('slug')) return 'test-tool-slug';
   if (field.includes('tool')) return 'test-tool';
   if (field.includes('skill')) return 'test-skill';
   if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
@@ -78,6 +79,14 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('model')) return 'gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
+  if (field.includes('provider')) return 'test-provider';
+  if (field.includes('dataset') && field.includes('version')) return '1';
+  if (field.includes('dataset')) return 'test-dataset';
+  if (field.includes('item')) return 'test-item';
+  if (field.includes('experiment')) return 'test-experiment';
+  if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
+  if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
+  if (field.includes('block')) return 'test-prompt-block';
 
   return 'test-string';
 }
@@ -220,7 +229,12 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
-  if (route.path.includes(':scorerId')) params.scorerId = 'test-scorer';
+  // For stored scorer version routes, use the stored scorer ID to match test context
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {
+    params.scorerId = 'test-stored-scorer';
+  } else if (route.path.includes(':scorerId')) {
+    params.scorerId = 'test-scorer';
+  }
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -247,6 +261,26 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Skills route params
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';
   if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
+
+  // Stored entity route params
+  if (route.path.includes(':storedMCPClientId')) params.storedMCPClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':mcpClientId')) params.mcpClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':storedPromptBlockId')) params.storedPromptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':promptBlockId')) params.promptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
+  if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+    params.scorerId = 'test-stored-scorer';
+
+  // Dataset route params
+  if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
+  if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
+
+  // Tool provider route params
+  if (route.path.includes(':providerId')) params.providerId = 'test-provider';
+  if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
 
   return params;
 }
