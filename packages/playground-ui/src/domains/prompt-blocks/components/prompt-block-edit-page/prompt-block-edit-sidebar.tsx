@@ -154,7 +154,12 @@ export function PromptBlockEditSidebar({
             }
           />
 
-          <JSONSchemaForm.Root key={formResetKey} onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
+          <JSONSchemaForm.Root
+            key={formResetKey}
+            onChange={handleVariablesChange}
+            defaultValue={initialFields}
+            maxDepth={5}
+          >
             <JSONSchemaForm.FieldList>
               {(field, _index, { parentPath, depth }) => (
                 <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
