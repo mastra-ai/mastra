@@ -17,9 +17,13 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { ProviderAccess } from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
+import { loadSettings, resolveModelDefaults, resolveOmModel } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+
 import { stateSchema } from './schema.js';
 import {
   createViewTool,
@@ -205,13 +209,62 @@ export function createMastraCode(config?: MastraCodeConfig) {
     },
   ];
 
+  // Load global settings to override defaults with user preferences from onboarding
+  const globalSettings = loadSettings();
+
+  // Build lightweight provider access for resolving built-in packs at startup.
+  // OAuth providers are checked via authStorage, env-only providers via process.env.
+  const startupAccess: ProviderAccess = {
+    anthropic: authStorage.isLoggedIn('anthropic') ? 'oauth' : process.env.ANTHROPIC_API_KEY ? 'apikey' : false,
+    openai: authStorage.isLoggedIn('openai-codex') ? 'oauth' : process.env.OPENAI_API_KEY ? 'apikey' : false,
+    cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
+    google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
+    deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+  };
+  const builtinPacks = getAvailableModePacks(startupAccess);
+  const builtinOmPacks = getAvailableOmPacks(startupAccess);
+  const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
+  const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+
+  // Apply resolved model defaults to modes
+  const modes = (config?.modes ?? defaultModes).map(mode => {
+    const savedModel = effectiveDefaults[mode.id];
+    return savedModel ? { ...mode, defaultModelId: savedModel } : mode;
+  });
+
+  // Map subagent types to mode models: explore→fast, plan→plan, execute→build
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
+    const modeId = subagentModeMap[sa.id];
+    const model = modeId ? effectiveDefaults[modeId] : undefined;
+    return model ? { ...sa, defaultModelId: model } : sa;
+  });
+
+  // Build initial state with global preferences
+  const globalInitialState: Record<string, unknown> = {};
+  if (effectiveOmModel) {
+    globalInitialState.observerModelId = effectiveOmModel;
+    globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (globalSettings.preferences.yolo !== null) {
+    globalInitialState.yolo = globalSettings.preferences.yolo;
+  }
+  // Seed subagent models from global settings
+  for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
+    if (key === '_default') {
+      globalInitialState.subagentModelId = modelId;
+    } else {
+      globalInitialState[`subagentModelId_${key}`] = modelId;
+    }
+  }
+
   const harness = new Harness({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
     memory,
     stateSchema,
-    subagents: config?.subagents ?? defaultSubagents,
+    subagents,
     resolveModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
@@ -219,10 +272,11 @@ export function createMastraCode(config?: MastraCodeConfig) {
       projectName: project.name,
       gitBranch: project.gitBranch,
       yolo: true,
+      ...globalInitialState,
       ...config?.initialState,
     },
     workspace: getDynamicWorkspace,
-    modes: config?.modes ?? defaultModes,
+    modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
@@ -231,7 +285,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
       }
       return undefined;
     },
-    modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+    modelUseCountProvider: () => loadSettings().modelUseCounts,
     threadLock: {
       acquire: acquireThreadLock,
       release: releaseThreadLock,
