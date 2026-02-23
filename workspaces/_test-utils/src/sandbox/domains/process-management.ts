@@ -376,11 +376,21 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'first get() after natural exit returns output, second get() returns undefined (pruned)',
         async () => {
           // Spawn a short-lived process and let it exit on its own (no wait() call)
-          const handle = await processes.spawn('echo prune-test');
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
+
+          const handle = await processes.spawn('echo prune-test', {
+            onStdout: () => gotOutput(),
+          });
           const pid = handle.pid;
 
-          // Give the process time to finish naturally
-          await new Promise(r => setTimeout(r, 200));
+          // Wait for output to arrive, then poll until process has exited
+          await outputArrived;
+          const deadline = Date.now() + 5000;
+          while (handle.exitCode === undefined && Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+          expect(handle.exitCode).toBeDefined();
 
           // First get() — process exited, should return handle with output
           const first = await processes.get(pid);
