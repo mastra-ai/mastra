@@ -23,7 +23,9 @@ import type {
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
-type InstructionsOption = string | ((opts: { auto: string; requestContext?: RequestContext }) => string);
+type InstructionsOption =
+  | string
+  | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
@@ -90,12 +92,12 @@ export interface E2BSandboxOptions extends MastraSandboxOptions {
   /** Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var. */
   accessToken?: string;
   /**
-   * Custom instructions that override the auto-generated instructions
+   * Custom instructions that override the default instructions
    * returned by `getInstructions()`.
    *
-   * - `string` — Fully replaces the auto-generated instructions.
+   * - `string` — Fully replaces the default instructions.
    *   Pass an empty string to suppress instructions entirely.
-   * - `(opts) => string` — Receives the auto-generated instructions and
+   * - `(opts) => string` — Receives the default instructions and
    *   optional request context so you can extend or customise per-request.
    */
   instructions?: InstructionsOption;
@@ -847,13 +849,13 @@ export class E2BSandbox extends MastraSandbox {
    * Used by agents to understand the execution environment.
    */
   getInstructions(opts?: { requestContext?: RequestContext }): string {
-    const auto = this._getAutoInstructions();
-    if (this._instructionsOverride === undefined) return auto;
+    if (this._instructionsOverride === undefined) return this._getDefaultInstructions();
     if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
-    return this._instructionsOverride({ auto, requestContext: opts?.requestContext });
+    const defaultInstructions = this._getDefaultInstructions();
+    return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
   }
 
-  private _getAutoInstructions(): string {
+  private _getDefaultInstructions(): string {
     return 'Cloud E2B sandbox. Working directory: /home/user.';
   }
 

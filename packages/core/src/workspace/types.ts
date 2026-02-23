@@ -11,8 +11,8 @@ export type WorkspaceStatus = 'pending' | 'initializing' | 'ready' | 'paused' | 
 /**
  * Instructions configuration for workspace providers.
  *
- * - `string` — Fully replaces the auto-generated instructions.
- * - `(opts) => string` — Receives the auto-generated instructions and optional
+ * - `string` — Fully replaces the default instructions.
+ * - `(opts) => string` — Receives the default instructions and optional
  *   request context, allowing the caller to extend or customise per-request.
  *
  * @example Static override
@@ -27,11 +27,13 @@ export type WorkspaceStatus = 'pending' | 'initializing' | 'ready' | 'paused' | 
  * ```typescript
  * new LocalFilesystem({
  *   basePath: './data',
- *   instructions: ({ auto, requestContext }) => {
+ *   instructions: ({ defaultInstructions, requestContext }) => {
  *     const locale = requestContext?.get('locale') ?? 'en';
- *     return `${auto}\nUser locale: ${locale}`;
+ *     return `${defaultInstructions}\nUser locale: ${locale}`;
  *   },
  * });
  * ```
  */
-export type InstructionsOption = string | ((opts: { auto: string; requestContext?: RequestContext }) => string);
+export type InstructionsOption =
+  | string
+  | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);

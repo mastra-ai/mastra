@@ -772,7 +772,7 @@ describe('LocalFilesystem', () => {
     it('should support function form that extends auto instructions', () => {
       const testFs = new LocalFilesystem({
         basePath: tempDir,
-        instructions: ({ auto }) => `${auto}\nExtra info.`,
+        instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra info.`,
       });
       const result = testFs.getInstructions();
       expect(result).toContain('Local filesystem');
@@ -781,8 +781,8 @@ describe('LocalFilesystem', () => {
 
     it('should pass requestContext to function form', () => {
       const ctx = new RequestContext([['locale', 'fr']]);
-      const fn = vi.fn(({ auto, requestContext }: any) => {
-        return `${auto} locale=${requestContext?.get('locale')}`;
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} locale=${requestContext?.get('locale')}`;
       });
       const testFs = new LocalFilesystem({
         basePath: tempDir,
@@ -795,8 +795,8 @@ describe('LocalFilesystem', () => {
     });
 
     it('should pass undefined requestContext when not provided to function form', () => {
-      const fn = vi.fn(({ auto, requestContext }: any) => {
-        return `${auto} ctx=${String(requestContext)}`;
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} ctx=${String(requestContext)}`;
       });
       const testFs = new LocalFilesystem({
         basePath: tempDir,

@@ -8,14 +8,14 @@
 - Added `WorkspaceInstructionsProcessor`: workspace context is injected directly into the agent system message instead of embedded in tool descriptions.
 - Deprecated `Workspace.getPathContext()` in favour of `getInstructions()`.
 
-Added `instructions` option to `LocalFilesystem` and `LocalSandbox`. Pass a string to fully replace auto-generated instructions, or a function to extend them with access to the current `requestContext` for per-request customization (e.g. by tenant or locale).
+Added `instructions` option to `LocalFilesystem` and `LocalSandbox`. Pass a string to fully replace default instructions, or a function to extend them with access to the current `requestContext` for per-request customization (e.g. by tenant or locale).
 
 ```typescript
 const filesystem = new LocalFilesystem({
   basePath: './workspace',
-  instructions: ({ auto, requestContext }) => {
+  instructions: ({ defaultInstructions, requestContext }) => {
     const locale = requestContext?.get('locale') ?? 'en';
-    return `${auto}\nLocale: ${locale}`;
+    return `${defaultInstructions}\nLocale: ${locale}`;
   },
 });
 ```

@@ -2,19 +2,19 @@ import type { RequestContext } from '../request-context';
 import type { InstructionsOption } from './types';
 
 /**
- * Resolve an instructions override against auto-generated instructions.
+ * Resolve an instructions override against default instructions.
  *
- * - `undefined` → return auto-generated
+ * - `undefined` → return default
  * - `string` → return the string as-is
- * - `function` → call with { auto, requestContext }
+ * - `function` → call with { defaultInstructions, requestContext }
  */
 export function resolveInstructions(
   override: InstructionsOption | undefined,
-  getAuto: () => string,
+  getDefault: () => string,
   requestContext?: RequestContext,
 ): string {
   if (typeof override === 'string') return override;
-  const auto = getAuto();
-  if (override === undefined) return auto;
-  return override({ auto, requestContext });
+  const defaultInstructions = getDefault();
+  if (override === undefined) return defaultInstructions;
+  return override({ defaultInstructions, requestContext });
 }

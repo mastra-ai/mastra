@@ -150,7 +150,7 @@ describe('LocalSandbox', () => {
     it('should support function form that extends auto instructions', () => {
       const sb = new LocalSandbox({
         workingDirectory: tempDir,
-        instructions: ({ auto }) => `${auto}\nExtra sandbox info.`,
+        instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra sandbox info.`,
       });
       const result = sb.getInstructions();
       expect(result).toContain('Local command execution');
@@ -159,8 +159,8 @@ describe('LocalSandbox', () => {
 
     it('should pass requestContext to function form', () => {
       const ctx = new RequestContext([['tenant', 'acme']]);
-      const fn = vi.fn(({ auto, requestContext }: any) => {
-        return `${auto} tenant=${requestContext?.get('tenant')}`;
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} tenant=${requestContext?.get('tenant')}`;
       });
       const sb = new LocalSandbox({
         workingDirectory: tempDir,

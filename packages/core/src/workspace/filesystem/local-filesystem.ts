@@ -87,12 +87,12 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    */
   allowedPaths?: string[];
   /**
-   * Custom instructions that override the auto-generated instructions
+   * Custom instructions that override the default instructions
    * returned by `getInstructions()`.
    *
-   * - `string` — Fully replaces the auto-generated instructions.
+   * - `string` — Fully replaces the default instructions.
    *   Pass an empty string to suppress instructions entirely.
-   * - `(opts) => string` — Receives the auto-generated instructions and
+   * - `(opts) => string` — Receives the default instructions and
    *   optional request context so you can extend or customise per-request.
    */
   instructions?: InstructionsOption;
@@ -720,10 +720,10 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   getInstructions(opts?: { requestContext?: RequestContext }): string {
-    return resolveInstructions(this._instructionsOverride, () => this._getAutoInstructions(), opts?.requestContext);
+    return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
   }
 
-  private _getAutoInstructions(): string {
+  private _getDefaultInstructions(): string {
     const allowedNote =
       this._allowedPaths.length > 0
         ? ` Additionally, the following paths outside basePath are accessible: ${this._allowedPaths.join(', ')}.`

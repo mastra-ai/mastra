@@ -678,8 +678,8 @@ Line 3 conclusion`;
       const ctx = new RequestContext([['locale', 'fr']]);
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        instructions: ({ auto, requestContext }: any) => {
-          return `${auto} locale=${requestContext?.get('locale')}`;
+        instructions: ({ defaultInstructions, requestContext }: any) => {
+          return `${defaultInstructions} locale=${requestContext?.get('locale')}`;
         },
       });
       const workspace = new Workspace({ filesystem });
@@ -693,8 +693,8 @@ Line 3 conclusion`;
       const ctx = new RequestContext([['tenant', 'acme']]);
       const sandbox = new LocalSandbox({
         workingDirectory: tempDir,
-        instructions: ({ auto, requestContext }: any) => {
-          return `${auto} tenant=${requestContext?.get('tenant')}`;
+        instructions: ({ defaultInstructions, requestContext }: any) => {
+          return `${defaultInstructions} tenant=${requestContext?.get('tenant')}`;
         },
       });
       const workspace = new Workspace({ sandbox });
