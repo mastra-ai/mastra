@@ -274,8 +274,18 @@ export class MastraTUI {
   // Event Handling
   // ===========================================================================
 
+  /** Cached event context – built once, reused for every event. */
+  private _ectx: EventHandlerContext | undefined;
+
+  private getEventContext(): EventHandlerContext {
+    if (!this._ectx) {
+      this._ectx = this.buildEventContext();
+    }
+    return this._ectx;
+  }
+
   private async handleEvent(event: HarnessEvent): Promise<void> {
-    await dispatchEvent(event, this.buildEventContext(), this.state);
+    await dispatchEvent(event, this.getEventContext(), this.state);
   }
 
   // ===========================================================================
