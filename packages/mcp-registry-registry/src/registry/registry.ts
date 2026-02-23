@@ -1,3 +1,4 @@
+import { processAiListServers } from './processors/ailist';
 import { processApifyServers } from './processors/apify';
 import { processApiTrackerServers } from './processors/apitracker';
 import { processDockerServers } from './processors/docker';
@@ -9,6 +10,16 @@ import type { RegistryFile } from './types';
 // Registry data with post-processing functions
 export const registryData: RegistryFile = {
   registries: [
+    {
+      id: 'ailist',
+      name: 'AiList',
+      description: 'A directory of 1,200+ Ai projects including MCP servers, CLI tools, libraries, and APIs.',
+      url: 'https://hifriendbot.com/ai-list/',
+      servers_url: 'https://hifriendbot.com/wp-json/ailist/v1/projects',
+      tags: ['verified'],
+      count: '1200+',
+      postProcessServers: processAiListServers,
+    },
     {
       id: 'apitracker',
       name: 'API Tracker',
