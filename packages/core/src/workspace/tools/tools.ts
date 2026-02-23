@@ -16,16 +16,17 @@ import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
-import { executeCommandTool } from './execute-command';
+import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
+import { getProcessOutputTool } from './get-process-output';
 import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
+import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
-
 import { writeFileTool } from './write-file';
 
 /**
@@ -222,7 +223,15 @@ export function createWorkspaceTools(workspace: Workspace) {
   if (workspace.sandbox) {
     const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
-      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = wrapTool(executeCommandTool, workspace, executeCommandConfig);
+      // Pick the right tool variant based on whether processes are available
+      const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = wrapTool(baseTool, workspace, executeCommandConfig);
+    }
+
+    // Background process tools (only when process manager is available)
+    if (workspace.sandbox.processes) {
+      addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
+      addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }
 
