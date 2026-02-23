@@ -18,19 +18,11 @@ import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
-import { MastraSandbox } from './mastra-sandbox';
+import { MastraSandbox, shellQuote } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
-
-/** Shell-quote an argument for safe interpolation into a shell command string. */
-function shellQuote(arg: string): string {
-  // If the arg only contains safe characters, no quoting needed
-  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
-  // Wrap in single quotes, escaping embedded single quotes
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   /** Timeout in ms - handled manually for custom exit code 124 */

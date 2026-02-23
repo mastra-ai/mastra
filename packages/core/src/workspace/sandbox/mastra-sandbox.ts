@@ -35,6 +35,23 @@ import type { WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 /**
+ * Shell-quote an argument for safe interpolation into a shell command string.
+ * Safe characters (alphanumeric, `.`, `_`, `-`, `/`, `=`, `:`, `@`) pass through.
+ * Everything else is wrapped in single quotes with embedded quotes escaped.
+ */
+export function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Combine a command and args into a single shell command string with safe quoting.
+ */
+export function buildShellCommand(command: string, args: string[] = []): string {
+  return args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+}
+
+/**
  * Lifecycle hook that fires during sandbox state transitions.
  * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
  */
@@ -167,7 +184,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     // subclass implements processes but not executeCommand.
     if (!this.executeCommand && this.processes) {
       this.executeCommand = async (command, args = [], options = {}) => {
-        const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+        const fullCommand = buildShellCommand(command, args);
         return this.processes!.spawn(fullCommand, options).then(handle =>
           handle.wait({ onStdout: options.onStdout, onStderr: options.onStderr }),
         );
