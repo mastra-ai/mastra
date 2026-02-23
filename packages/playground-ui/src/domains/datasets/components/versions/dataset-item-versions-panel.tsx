@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format } from 'date-fns';
-import { BanIcon, ClockIcon, GitCompareIcon } from 'lucide-react';
+import { GitCompareIcon } from 'lucide-react';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -50,7 +49,11 @@ export function DatasetItemVersionsPanel({
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-      } else if (next.size < 2) {
+      } else if (next.size >= 2) {
+        // Drop most recent selection, keep oldest + add new one
+        const [first] = Array.from(next);
+        return new Set([first, id]);
+      } else {
         next.add(id);
       }
       return next;

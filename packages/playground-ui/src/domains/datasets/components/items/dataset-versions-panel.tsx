@@ -50,7 +50,11 @@ export function DatasetVersionsPanel({
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
-      } else if (next.size < 2) {
+      } else if (next.size >= 2) {
+        // Drop most recent selection, keep oldest + add new one
+        const [first] = Array.from(next);
+        return new Set([first, key]);
+      } else {
         next.add(key);
       }
       return next;

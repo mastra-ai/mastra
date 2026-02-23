@@ -4,7 +4,7 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Plus, Upload, FileJson } from 'lucide-react';
-import { format, isToday } from 'date-fns';
+import { isToday } from 'date-fns';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
@@ -89,7 +89,12 @@ export function DatasetItemsList({
   };
 
   const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
-    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) return;
+    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) {
+      // Drop most recent selection, keep oldest + add new one
+      const [first] = Array.from(selectedIds);
+      onSelectAll([first, id]);
+      return;
+    }
     onToggleSelection(id, shiftKey, allIds);
   };
 
