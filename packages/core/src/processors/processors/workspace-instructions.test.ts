@@ -82,6 +82,24 @@ describe('WorkspaceInstructionsProcessor', () => {
     expect(messageList.addSystem).not.toHaveBeenCalled();
   });
 
+  it('should inject system message even when instructions are whitespace-only', async () => {
+    const workspace = createMockWorkspace('   ');
+    const processor = new WorkspaceInstructionsProcessor({ workspace });
+
+    const messageList = createMockMessageList();
+    await processor.processInputStep({
+      messageList: messageList as any,
+      stepNumber: 0,
+      steps: [],
+      systemMessages: [],
+      state: {},
+      model: {} as any,
+      tools: {},
+    } as any);
+
+    expect(messageList.addSystem).toHaveBeenCalledOnce();
+  });
+
   it('should call getInstructions on each processInputStep', async () => {
     const workspace = createMockWorkspace('instructions');
     const processor = new WorkspaceInstructionsProcessor({ workspace });

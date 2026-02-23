@@ -1968,7 +1968,13 @@ export class Agent<
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#workspace) {
+    if (
+      inputProcessorOverrides?.length ||
+      this.#inputProcessors ||
+      this.#memory ||
+      this.#workspace ||
+      this.#mastra?.getWorkspace()
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
