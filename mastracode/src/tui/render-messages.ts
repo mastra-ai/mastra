@@ -142,7 +142,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     // can be inserted before them (keeping them anchored at bottom).
     // Only track if the agent is already streaming a response — otherwise
     // this is the initial message that triggers the response, not a follow-up.
-    if (state.isAgentActive && state.streamingComponent) {
+    if (state.harness.getDisplayState().isRunning && state.streamingComponent) {
       state.followUpComponents.push(userComponent);
     }
   }

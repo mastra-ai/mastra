@@ -11,7 +11,6 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = true;
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
       ctx.updateStatusLine();
@@ -23,7 +22,6 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -53,7 +51,6 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -83,7 +80,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

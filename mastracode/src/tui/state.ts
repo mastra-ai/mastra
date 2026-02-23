@@ -92,7 +92,6 @@ export interface TUIState {
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
-  isAgentActive: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
@@ -212,7 +211,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Agent / streaming
     isInitialized: false,
-    isAgentActive: false,
     pendingTools: new Map(),
     toolInputBuffers: new Map(),
     taskWriteInsertIndex: -1,
