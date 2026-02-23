@@ -77,7 +77,7 @@ const TELNYX_TOOLS: readonly {
     execute: async (input, config) => {
       try {
         const telnyx = await import('telnyx');
-        telnyx.default.apiKey = config.apiKey;
+        const client = new telnyx.default(config.apiKey);
 
         const from = input.from || config.fromNumber;
         if (!from) {
@@ -94,7 +94,7 @@ const TELNYX_TOOLS: readonly {
           messageParams.messaging_profile_id = config.messagingProfileId;
         }
 
-        const message = await telnyx.default.Message.create(messageParams);
+        const message = await client.messages.create(messageParams);
 
         return `Successfully sent SMS to ${input.to}. Message ID: ${message.id}. Status: ${message.status}.`;
       } catch (error: any) {
@@ -119,7 +119,7 @@ const TELNYX_TOOLS: readonly {
     execute: async (input, config) => {
       try {
         const telnyx = await import('telnyx');
-        telnyx.default.apiKey = config.apiKey;
+        const client = new telnyx.default(config.apiKey);
 
         const from = input.from || config.fromNumber;
         if (!from) {
@@ -135,7 +135,7 @@ const TELNYX_TOOLS: readonly {
           callParams.webhook_url = input.webhook_url;
         }
 
-        const call = await telnyx.default.Call.create(callParams);
+        const call = await client.calls.create(callParams);
 
         return `Successfully initiated call to ${input.to}. Call Control ID: ${call.call_control_id}. The call will be connected shortly.`;
       } catch (error: any) {
@@ -157,9 +157,9 @@ const TELNYX_TOOLS: readonly {
     execute: async (input, config) => {
       try {
         const telnyx = await import('telnyx');
-        telnyx.default.apiKey = config.apiKey;
+        const client = new telnyx.default(config.apiKey);
 
-        const call = await telnyx.default.Call.retrieve(input.call_control_id);
+        const call = await client.calls.retrieve(input.call_control_id);
         await call.hangup();
 
         return `Successfully hung up call ${input.call_control_id}.`;
@@ -182,9 +182,9 @@ const TELNYX_TOOLS: readonly {
     execute: async (input, config) => {
       try {
         const telnyx = await import('telnyx');
-        telnyx.default.apiKey = config.apiKey;
+        const client = new telnyx.default(config.apiKey);
 
-        const lookup = await telnyx.default.NumberLookup.retrieve(input.phone_number);
+        const lookup = await client.numberLookups.retrieve(input.phone_number);
 
         return JSON.stringify(
           {
@@ -409,4 +409,4 @@ export class TelnyxToolProvider implements ToolProvider {
   }
 }
 
-export { TELNYX_TOOLS };
+export { TELNYX_TOOLS, TELNYX_TOOLKIT };

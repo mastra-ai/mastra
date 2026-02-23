@@ -100,7 +100,7 @@ Hang up an active voice call.
 
 ### telnyx_lookup_number
 
-Lookup information about a phone number.
+Look up information about a phone number.
 
 **Parameters:**
 - `phone_number` (required): Phone number to lookup in E.164 format
@@ -125,7 +125,7 @@ All tools return descriptive error messages for:
 ## Documentation
 
 - [Telnyx API Reference](https://developers.telnyx.com/docs/api/v2/overview)
-- [Telnyx Python SDK](https://github.com/team-telnyx/telnyx-python)
+- [Telnyx Node.js SDK](https://github.com/team-telnyx/telnyx-node)
 - [Telnyx Call Control](https://developers.telnyx.com/docs/api/v2/call-control)
 - [Mastra Documentation](https://mastra.ai/docs)
 
