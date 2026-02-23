@@ -1,8 +1,8 @@
+import { join } from 'node:path';
 import type { Plugin } from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getInputOptions } from './watcher';
 
-// Mock bundler module at the top level
 vi.mock('./bundler', () => ({
   getInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
 }));
@@ -32,11 +32,8 @@ vi.mock('find-workspaces', () => ({
 vi.mock('empathic/package', () => ({
   up: vi.fn().mockReturnValue('/test/project/package.json'),
 }));
-vi.mock('local-pkg', () => ({
-  resolveModule: vi.fn(),
-}));
 vi.mock('node:fs', () => ({
-  readFileSync: vi.fn().mockImplementation(() => {
+  readdirSync: vi.fn().mockImplementation(() => {
     throw new Error('ENOENT');
   }),
 }));
@@ -48,16 +45,12 @@ describe('watcher', () => {
 
   describe('getInputOptions', () => {
     it('should pass NODE_ENV to bundler when provided', async () => {
-      // Arrange
       const env = { 'process.env.NODE_ENV': JSON.stringify('test') };
       const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
 
-      // Act
       await getInputOptions('test-entry.js', 'node', env);
 
-      // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith(
-        // expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
         expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
@@ -76,13 +69,10 @@ describe('watcher', () => {
     });
 
     it('should not pass NODE_ENV to bundler when not provided', async () => {
-      // Act
       await getInputOptions('test-entry.js', 'node');
       const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
 
-      // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith(
-        // expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
         expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
@@ -122,9 +112,6 @@ describe('watcher', () => {
       });
 
       it('forwards "neutral" platform to bundler for Bun runtime support', async () => {
-        // When running under Bun, callers should pass 'neutral' to preserve
-        // Bun-specific globals (like Bun.s3). The watcher correctly forwards
-        // whatever platform value is passed to it.
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
 
         await getInputOptions('test-entry.js', 'neutral');
@@ -145,8 +132,20 @@ describe('watcher', () => {
       });
     });
 
-    describe('workspace-source-resolver plugin', () => {
-      it('replaces alias-optimized-deps with workspace-source-resolver', async () => {
+    describe('workspace-file-watcher plugin', () => {
+      it('adds workspace-file-watcher plugin to the plugin chain', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const pluginNames = (result.plugins as Plugin[]).map(p => p.name);
+        expect(pluginNames).toContain('workspace-file-watcher');
+      });
+
+      it('preserves alias-optimized-deps in the plugin chain', async () => {
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
           plugins: [
@@ -158,102 +157,150 @@ describe('watcher', () => {
         const result = await getInputOptions('test-entry.js', 'node');
 
         const pluginNames = (result.plugins as Plugin[]).map(p => p.name);
-        expect(pluginNames).toContain('workspace-source-resolver');
-        expect(pluginNames).not.toContain('alias-optimized-deps');
+        expect(pluginNames).toContain('alias-optimized-deps');
+        expect(pluginNames).toContain('workspace-file-watcher');
       });
 
-      it('prefers "source" field from package.json over resolveModule', async () => {
-        const { readFileSync } = await import('node:fs');
-        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
+      it('calls addWatchFile for source and dist files in buildStart', async () => {
+        const { readdirSync } = await import('node:fs');
+        vi.mocked(readdirSync).mockImplementation(((dir: string) => {
+          if (dir === '/workspace/packages/core/src') {
+            return [
+              { name: 'index.ts', isDirectory: () => false },
+              { name: 'utils.ts', isDirectory: () => false },
+            ];
+          }
+          if (dir === '/workspace/packages/core/dist') {
+            return [{ name: 'index.js', isDirectory: () => false }];
+          }
+          throw new Error('ENOENT');
+        }) as typeof readdirSync);
 
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
-          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
         });
 
         const result = await getInputOptions('test-entry.js', 'node');
 
-        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
-        expect(resolver).toBeDefined();
+        const watcher = (result.plugins as Plugin[]).find(p => p.name === 'workspace-file-watcher');
+        expect(watcher).toBeDefined();
 
-        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
-        expect(resolved).toEqual({ id: '/workspace/packages/core/src/index.ts', external: false });
+        const addWatchFile = vi.fn();
+        (watcher!.buildStart as Function).call({ addWatchFile });
+
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('/workspace/packages/core/src/index.ts'));
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('/workspace/packages/core/src/utils.ts'));
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('/workspace/packages/core/dist/index.js'));
+        expect(addWatchFile).toHaveBeenCalledTimes(3);
       });
 
-      it('falls back to resolveModule when no "source" field exists', async () => {
-        const { readFileSync } = await import('node:fs');
-        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ main: './dist/index.js' }));
-
-        const { resolveModule } = await import('local-pkg');
-        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/dist/index.js');
+      it('recursively watches files in subdirectories', async () => {
+        const { readdirSync } = await import('node:fs');
+        vi.mocked(readdirSync).mockImplementation(((dir: string) => {
+          if (dir === '/workspace/packages/core/src') {
+            return [
+              { name: 'index.ts', isDirectory: () => false },
+              { name: 'utils', isDirectory: () => true },
+            ];
+          }
+          if (dir === '/workspace/packages/core/src/utils') {
+            return [{ name: 'helper.ts', isDirectory: () => false }];
+          }
+          throw new Error('ENOENT');
+        }) as typeof readdirSync);
 
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
-          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
         });
 
         const result = await getInputOptions('test-entry.js', 'node');
 
-        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
-        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
-        expect(resolved).toEqual({ id: '/workspace/packages/core/dist/index.js', external: false });
+        const watcher = (result.plugins as Plugin[]).find(p => p.name === 'workspace-file-watcher');
+        const addWatchFile = vi.fn();
+        (watcher!.buildStart as Function).call({ addWatchFile });
+
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('/workspace/packages/core/src/index.ts'));
+        expect(addWatchFile).toHaveBeenCalledWith(
+          expect.stringContaining(join('/workspace/packages/core/src/utils', 'helper.ts')),
+        );
       });
 
-      it('falls back to resolveModule for subpath imports even when "source" field exists', async () => {
-        const { readFileSync } = await import('node:fs');
-        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
-
-        const { resolveModule } = await import('local-pkg');
-        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/src/utils.ts');
+      it('skips node_modules directories', async () => {
+        const { readdirSync } = await import('node:fs');
+        vi.mocked(readdirSync).mockImplementation(((dir: string) => {
+          if (dir === '/workspace/packages/core/src') {
+            return [
+              { name: 'index.ts', isDirectory: () => false },
+              { name: 'node_modules', isDirectory: () => true },
+            ];
+          }
+          throw new Error('ENOENT');
+        }) as typeof readdirSync);
 
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
-          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
         });
 
         const result = await getInputOptions('test-entry.js', 'node');
 
-        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
-        // Subpath import — "source" field only applies to bare package name
-        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core/utils');
-        expect(resolved).toEqual({ id: '/workspace/packages/core/src/utils.ts', external: false });
+        const watcher = (result.plugins as Plugin[]).find(p => p.name === 'workspace-file-watcher');
+        const addWatchFile = vi.fn();
+        (watcher!.buildStart as Function).call({ addWatchFile });
+
+        expect(addWatchFile).toHaveBeenCalledTimes(1);
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('index.ts'));
       });
 
-      it('returns null for non-workspace imports', async () => {
-        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
-        bundlerGetInputOptions.mockResolvedValueOnce({
-          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
-        });
-
-        const result = await getInputOptions('test-entry.js', 'node');
-
-        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
-        expect(resolver).toBeDefined();
-
-        // lodash is not in the workspaceMap, so should return null
-        const resolved = (resolver!.resolveId as Function).call(null, 'lodash');
-        expect(resolved).toBeNull();
-      });
-
-      it('returns null when resolveModule cannot resolve the import', async () => {
-        const { readFileSync } = await import('node:fs');
-        vi.mocked(readFileSync).mockImplementation(() => {
+      it('handles missing src and dist directories gracefully', async () => {
+        const { readdirSync } = await import('node:fs');
+        vi.mocked(readdirSync).mockImplementation(() => {
           throw new Error('ENOENT');
         });
 
-        const { resolveModule } = await import('local-pkg');
-        vi.mocked(resolveModule).mockReturnValue(undefined);
-
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
-          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
         });
 
         const result = await getInputOptions('test-entry.js', 'node');
 
-        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
-        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
-        expect(resolved).toBeNull();
+        const watcher = (result.plugins as Plugin[]).find(p => p.name === 'workspace-file-watcher');
+        const addWatchFile = vi.fn();
+        (watcher!.buildStart as Function).call({ addWatchFile });
+
+        expect(addWatchFile).not.toHaveBeenCalled();
+      });
+
+      it('ignores non-source files like .json and .md', async () => {
+        const { readdirSync } = await import('node:fs');
+        vi.mocked(readdirSync).mockImplementation(((dir: string) => {
+          if (dir === '/workspace/packages/core/src') {
+            return [
+              { name: 'index.ts', isDirectory: () => false },
+              { name: 'README.md', isDirectory: () => false },
+              { name: 'config.json', isDirectory: () => false },
+              { name: 'styles.css', isDirectory: () => false },
+            ];
+          }
+          throw new Error('ENOENT');
+        }) as typeof readdirSync);
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'esbuild' } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const watcher = (result.plugins as Plugin[]).find(p => p.name === 'workspace-file-watcher');
+        const addWatchFile = vi.fn();
+        (watcher!.buildStart as Function).call({ addWatchFile });
+
+        expect(addWatchFile).toHaveBeenCalledTimes(1);
+        expect(addWatchFile).toHaveBeenCalledWith(expect.stringContaining('index.ts'));
       });
 
       it('preserves other plugins in the chain', async () => {
@@ -270,8 +317,9 @@ describe('watcher', () => {
 
         const pluginNames = (result.plugins as Plugin[]).map(p => p.name);
         expect(pluginNames).toContain('some-other-plugin');
-        expect(pluginNames).toContain('workspace-source-resolver');
+        expect(pluginNames).toContain('alias-optimized-deps');
         expect(pluginNames).toContain('esbuild');
+        expect(pluginNames).toContain('workspace-file-watcher');
       });
     });
   });

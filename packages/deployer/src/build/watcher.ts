@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
-import { resolveModule } from 'local-pkg';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
@@ -14,6 +13,25 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'node_modules') continue;
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...collectSourceFiles(fullPath));
+      } else if (/\.[mc]?[jt]sx?$/.test(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+  } catch {
+    // directory doesn't exist or isn't readable
+  }
+  return files;
+}
 
 export async function getInputOptions(
   entryFile: string,
@@ -65,20 +83,6 @@ export async function getInputOptions(
     { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
   );
 
-  // Pre-compute source entry points for workspace packages so the watcher
-  // tracks actual source files rather than compiled dist/ output.
-  const workspaceSourceEntries = new Map<string, string>();
-  for (const [pkgName, info] of workspaceMap.entries()) {
-    try {
-      const pkgJson = JSON.parse(readFileSync(join(info.location, 'package.json'), 'utf-8'));
-      if (pkgJson.source) {
-        workspaceSourceEntries.set(pkgName, slash(join(info.location, pkgJson.source)));
-      }
-    } catch {
-      // package.json unreadable — fall back to resolveModule
-    }
-  }
-
   if (Array.isArray(inputOptions.plugins)) {
     // filter out node-resolve plugin so all node_modules are external
     // and tsconfig-paths plugin as we are injection a custom one
@@ -97,35 +101,6 @@ export async function getInputOptions(
         return;
       }
 
-      // Replace alias-optimized-deps with workspace-source-resolver so that
-      // workspace package source files are included in Rollup's module graph
-      // and automatically watched for changes during `mastra dev`.
-      if ((plugin as Plugin | undefined)?.name === 'alias-optimized-deps') {
-        plugins.push({
-          name: 'workspace-source-resolver',
-          resolveId(id: string) {
-            const pkgName = getPackageName(id);
-            if (!pkgName || !workspaceMap.has(pkgName)) {
-              return null;
-            }
-            // Prefer "source" field so we watch source files, not compiled dist/
-            if (id === pkgName) {
-              const sourceEntry = workspaceSourceEntries.get(pkgName);
-              if (sourceEntry) {
-                return { id: sourceEntry, external: false };
-              }
-            }
-            // Fall back to resolveModule (uses main/exports)
-            const resolved = resolveModule(id);
-            if (resolved) {
-              return { id: slash(resolved), external: false };
-            }
-            return null;
-          },
-        } satisfies Plugin);
-        return;
-      }
-
       plugins.push(plugin as Plugin);
     });
 
@@ -133,6 +108,20 @@ export async function getInputOptions(
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());
+
+    inputOptions.plugins.push({
+      name: 'workspace-file-watcher',
+      buildStart() {
+        for (const [, info] of workspaceMap.entries()) {
+          for (const file of collectSourceFiles(join(info.location, 'src'))) {
+            this.addWatchFile(slash(file));
+          }
+          for (const file of collectSourceFiles(join(info.location, 'dist'))) {
+            this.addWatchFile(slash(file));
+          }
+        }
+      },
+    } satisfies Plugin);
   }
 
   return inputOptions;
