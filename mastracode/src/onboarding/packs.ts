@@ -169,6 +169,14 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
     });
   }
 
+  // Custom — always available; user picks any model
+  packs.push({
+    id: 'custom',
+    name: 'Custom',
+    description: 'Choose any available model',
+    modelId: '',
+  });
+
   return packs;
 }
 

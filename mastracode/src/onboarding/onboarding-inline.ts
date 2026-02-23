@@ -455,9 +455,14 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     if (prevOmIdx > 0) this.selectList.setSelectedIndex(prevOmIdx);
 
     this.selectList.onSelect = (item: SelectItem) => {
-      this.selectedOmPack = omPacks.find(p => p.id === item.value) ?? omPacks[0]!;
-      this.collapseStep(`Observational memory → ${bold(this.selectedOmPack.name)}`);
-      this.renderStep('yolo');
+      const pack = omPacks.find(p => p.id === item.value) ?? omPacks[0]!;
+      if (pack.id === 'custom') {
+        this.runCustomOmFlow();
+      } else {
+        this.selectedOmPack = pack;
+        this.collapseStep(`Observational memory → ${bold(this.selectedOmPack.name)}`);
+        this.renderStep('yolo');
+      }
     };
     this.selectList.onCancel = () => {
       this.collapseStep(`Observational memory → ${bold(this.selectedOmPack.name)} (default)`);
@@ -467,6 +472,28 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     box.addChild(this.selectList);
     box.addChild(new Spacer(1));
     box.addChild(new Text(fg('dim', '↑↓ navigate · Enter select · Esc use default'), 0, 0));
+  }
+
+  private async runCustomOmFlow(): Promise<void> {
+    this.selectList = undefined;
+    this.collapseStep(`Observational memory → ${bold('Custom')}`);
+
+    const modelId = await this.options.onSelectModel('Select model for observational memory');
+    if (modelId) {
+      this.selectedOmPack = { id: 'custom', name: 'Custom', description: 'User-selected model', modelId };
+      this.collapseStep(`Observational memory → ${bold('Custom')}  ${modelId}`);
+    } else {
+      // Cancelled — fall back to first non-custom pack
+      const fallback = this.options.omPacks.find(p => p.id !== 'custom');
+      if (fallback) {
+        this.selectedOmPack = fallback;
+        this.collapseStep(`Observational memory → ${bold(fallback.name)} (cancelled custom)`);
+      } else {
+        this.collapseStep(`Observational memory → ${bold('Custom')} (cancelled)`);
+      }
+    }
+    this.renderStep('yolo');
+    this.tui.requestRender();
   }
 
   // ---------------------------------------------------------------------------
