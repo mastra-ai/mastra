@@ -4,7 +4,7 @@ The user will issue this command. You will need to do two things.
 
 ## Create a changeset using the CLI
 
-Create a changeset using the CLI. The CLI will automatically detect changed packages and create the changeset file.
+Create a changeset using the CLI. The goal of changesets are to use it for generating changelogs. Individual package changelogs will later be combined into a single changelog that is published with each release.
 
 ```bash
 pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--patch pkg3]
@@ -37,7 +37,7 @@ pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--p
 
 If the changes span multiple packages (e.g. `@mastra/core`, `@mastra/memory`, `mastra`, so 3 packages) and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist. Example: The majority of the main feature was changed in `@mastra/memory` and only supporting changes were done in `@mastra/core` and `mastra`. Then `@mastra/memory` needs its own changeset separate from the others. You can achieve this by running the CLI multiple times and selecting the appropriate packages for each changeset.
 
-**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.
+**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided. If you have multiple packages likely there is one or two main packages where the majority of change lives.
 
 ## Open a PR using the GitHub CLI
 
