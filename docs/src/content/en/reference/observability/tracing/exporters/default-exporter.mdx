@@ -13,19 +13,19 @@ Persists traces to Mastra's configured storage with automatic batching and retry
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new DefaultExporter(config?: DefaultExporterConfig)
 ```
 
 <PropertiesTable
   props={[
-    {
-      name: "config",
-      type: "DefaultExporterConfig",
-      description: "Batching and configuration options",
-      required: false,
-    },
-  ]}
+{
+name: "config",
+type: "DefaultExporterConfig",
+description: "Batching and configuration options",
+required: false,
+},
+]}
 />
 
 ## DefaultExporterConfig
@@ -33,44 +33,45 @@ new DefaultExporter(config?: DefaultExporterConfig)
 ```typescript
 interface DefaultExporterConfig extends BaseExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
-  maxBatchSize?: number;
+  maxBatchSize?: number
 
   /** Maximum total buffer size before emergency flush. Default: 10000 */
-  maxBufferSize?: number;
+  maxBufferSize?: number
 
   /** Maximum time to wait before flushing batch in milliseconds. Default: 5000 */
-  maxBatchWaitMs?: number;
+  maxBatchWaitMs?: number
 
   /** Maximum number of retry attempts. Default: 4 */
-  maxRetries?: number;
+  maxRetries?: number
 
   /** Base retry delay in milliseconds (uses exponential backoff). Default: 500 */
-  retryDelayMs?: number;
+  retryDelayMs?: number
 
   /** Tracing storage strategy or 'auto' for automatic selection. Default: 'auto' */
-  strategy?: TracingStorageStrategy | "auto";
+  strategy?: TracingStorageStrategy | 'auto'
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 ## TracingStorageStrategy
 
 ```typescript
-type TracingStorageStrategy = "realtime" | "batch-with-updates" | "insert-only";
+type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
 ```
 
 ### Strategy Behaviors
 
 - **realtime**: Immediately persists each event to storage
 - **batch-with-updates**: Batches creates and updates separately, applies in order
-- **insert-only**: Only processes SPAN_ENDED events, ignores updates
+- **insert-only**: Only processes SPAN\_ENDED events, ignores updates
 
 ## Properties
 
-```typescript
+```typescript prettier:false
 readonly name = 'mastra-default-observability-exporter';
 ```
 
@@ -78,7 +79,7 @@ readonly name = 'mastra-default-observability-exporter';
 
 ### init
 
-```typescript
+```typescript prettier:false
 init(options: InitExporterOptions): void
 ```
 
@@ -86,18 +87,18 @@ Initializes the exporter after dependencies are ready. Resolves tracing strategy
 
 <PropertiesTable
   props={[
-    {
-      name: "options",
-      type: "InitExporterOptions",
-      description: "Initialization options containing Mastra instance and config",
-      required: true,
-    },
-  ]}
+{
+name: "options",
+type: "InitExporterOptions",
+description: "Initialization options containing Mastra instance and config",
+required: true,
+},
+]}
 />
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -105,18 +106,18 @@ Processes a tracing event according to the resolved strategy.
 
 <PropertiesTable
   props={[
-    {
-      name: "event",
-      type: "TracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+{
+name: "event",
+type: "TracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -124,7 +125,7 @@ Force flushes any buffered events to storage without shutting down the exporter.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -137,18 +138,18 @@ When `strategy: 'auto'` (default), the exporter queries the storage adapter for 
 ```typescript
 interface TracingStrategy {
   /** Strategies supported by this adapter */
-  supported: TracingStorageStrategy[];
+  supported: TracingStorageStrategy[]
 
   /** Preferred strategy for optimal performance */
-  preferred: TracingStorageStrategy;
+  preferred: TracingStorageStrategy
 }
 ```
 
 The exporter will:
 
 1. Use the storage adapter's preferred strategy if available
-2. Fall back to the first supported strategy if preferred isn't available
-3. Log a warning if a user-specified strategy isn't supported
+1. Fall back to the first supported strategy if preferred isn't available
+1. Log a warning if a user-specified strategy isn't supported
 
 ## Batching Behavior
 
@@ -181,18 +182,18 @@ For `batch-with-updates` strategy:
 ## Usage
 
 ```typescript
-import { DefaultExporter } from "@mastra/observability";
+import { DefaultExporter } from '@mastra/observability'
 
 // Default configuration
-const exporter = new DefaultExporter();
+const exporter = new DefaultExporter()
 
 // Custom batching configuration
 const customExporter = new DefaultExporter({
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
-  strategy: "batch-with-updates",
-  logLevel: 'debug'
-});
+  strategy: 'batch-with-updates',
+  logLevel: 'debug',
+})
 ```
 
 ## See Also

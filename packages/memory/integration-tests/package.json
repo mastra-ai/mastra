@@ -3,31 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:fastembed && pnpm test:ai-sdk-ids && pnpm test:message-ordering && pnpm test:processors",
-    "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
-    "test:pg": "vitest run ./src/with-pg-storage.test.ts",
-    "posttest:pg": "docker compose down --volumes",
-    "pretest:upstash": "docker compose up -d redis serverless-redis-http",
-    "test:upstash": "vitest run ./src/with-upstash-storage.test.ts",
-    "posttest:upstash": "docker compose down --volumes",
-    "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
-    "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
-    "test:streaming": "vitest run ./src/streaming-memory.test.ts",
-    "test:working-memory": "vitest run ./src/working-memory.test.ts && vitest run ./src/working-memory-processor.test.ts",
-    "pretest:pg:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
-    "test:pg:perf": "vitest run ./src/performance-testing/with-pg-storage.test.ts",
-    "posttest:pg:perf": "docker compose down --volumes",
-    "pretest:upstash:perf": "docker compose up -d redis serverless-redis-http",
-    "test:upstash:perf": "vitest run ./src/performance-testing/with-upstash-storage.test.ts",
-    "posttest:upstash:perf": "docker compose down --volumes",
-    "pretest:libsql:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
-    "test:libsql:perf": "vitest run ./src/performance-testing/with-libsql-storage.test.ts",
-    "posttest:libsql:perf": "docker compose down --volumes",
-    "test:perf": "pnpm test:pg:perf && pnpm test:upstash:perf && pnpm test:libsql:perf",
-    "test:fastembed": "vitest run ./src/fastembed.test.ts",
-    "test:ai-sdk-ids": "vitest run ./src/ai-sdk-duplicate-ids.test.ts",
-    "test:message-ordering": "vitest run ./src/message-ordering.test.ts",
-    "test:processors": "vitest run ./src/processors.test.ts",
+    "test": "vitest run",
     "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev"
   },
@@ -56,6 +32,8 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
+    "@internal/llm-recorder": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@mastra/core": "*",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^27.0.0",
@@ -64,6 +42,7 @@
     "ai": "^4.2.2",
     "ai-v5": "npm:ai@^5.0.117",
     "ai-v6": "npm:ai@latest",
+    "execa": "^9.6.1",
     "jsdom": "^26.1.0",
     "mastra": "*",
     "next": "^15.5.7",
@@ -82,7 +61,9 @@
       "@mastra/libsql": "link:../../../stores/libsql",
       "@mastra/pg": "link:../../../stores/pg",
       "@mastra/upstash": "link:../../../stores/upstash",
-      "mastra": "link:../../cli"
+      "mastra": "link:../../cli",
+      "@internal/llm-recorder": "link:../../_llm-recorder",
+      "@internal/test-utils": "link:../../_test-utils"
     }
   }
 }

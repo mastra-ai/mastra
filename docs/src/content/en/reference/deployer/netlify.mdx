@@ -22,14 +22,14 @@ npm install @mastra/deployer-netlify@latest
 Import `NetlifyDeployer` and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 // highlight-next-line
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   // highlight-next-line
   deployer: new NetlifyDeployer(),
-});
+})
 ```
 
 ## Output
@@ -55,9 +55,7 @@ The `config.json` file contains:
   "functions": {
     "directory": ".netlify/v1/functions",
     "node_bundler": "none",
-    "included_files": [
-      ".netlify/v1/functions/**"
-    ]
+    "included_files": [".netlify/v1/functions/**"]
   },
   "redirects": [
     {

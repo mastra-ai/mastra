@@ -25,35 +25,35 @@ Mastra agents can be enhanced with voice capabilities, allowing them to speak re
 The simplest way to add voice to an agent is to use a single provider for both speaking and listening:
 
 ```typescript
-import { createReadStream } from "fs";
-import path from "path";
-import { Agent } from "@mastra/core/agent";
-import { OpenAIVoice } from "@mastra/voice-openai";
+import { createReadStream } from 'fs'
+import path from 'path'
+import { Agent } from '@mastra/core/agent'
+import { OpenAIVoice } from '@mastra/voice-openai'
 
 // Initialize the voice provider with default settings
-const voice = new OpenAIVoice();
+const voice = new OpenAIVoice()
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  id: "voice-agent",
-  name: "Voice Agent",
+  id: 'voice-agent',
+  name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   voice,
-});
+})
 
 // The agent can now use voice for interaction
 const audioStream = await agent.voice.speak("Hello, I'm your AI assistant!", {
-  filetype: "m4a",
-});
+  filetype: 'm4a',
+})
 
-playAudio(audioStream!);
+playAudio(audioStream!)
 
 try {
-  const transcription = await agent.voice.listen(audioStream);
-  console.log(transcription);
+  const transcription = await agent.voice.listen(audioStream)
+  console.log(transcription)
 } catch (error) {
-  console.error("Error transcribing audio:", error);
+  console.error('Error transcribing audio:', error)
 }
 ```
 
@@ -66,20 +66,20 @@ The `speak()` and `listen()` methods work with Node.js streams. Here's how to sa
 The `speak` method returns a stream that you can pipe to a file or speaker.
 
 ```typescript
-import { createWriteStream } from "fs";
-import path from "path";
+import { createWriteStream } from 'fs'
+import path from 'path'
 
 // Generate speech and save to file
-const audio = await agent.voice.speak("Hello, World!");
-const filePath = path.join(process.cwd(), "agent.mp3");
-const writer = createWriteStream(filePath);
+const audio = await agent.voice.speak('Hello, World!')
+const filePath = path.join(process.cwd(), 'agent.mp3')
+const writer = createWriteStream(filePath)
 
-audio.pipe(writer);
+audio.pipe(writer)
 
 await new Promise<void>((resolve, reject) => {
-  writer.on("finish", () => resolve());
-  writer.on("error", reject);
-});
+  writer.on('finish', () => resolve())
+  writer.on('error', reject)
+})
 ```
 
 ### Transcribing Audio Input
@@ -87,21 +87,21 @@ await new Promise<void>((resolve, reject) => {
 The `listen` method expects a stream of audio data from a microphone or file.
 
 ```typescript
-import { createReadStream } from "fs";
-import path from "path";
+import { createReadStream } from 'fs'
+import path from 'path'
 
 // Read audio file and transcribe
-const audioFilePath = path.join(process.cwd(), "/agent.m4a");
-const audioStream = createReadStream(audioFilePath);
+const audioFilePath = path.join(process.cwd(), '/agent.m4a')
+const audioStream = createReadStream(audioFilePath)
 
 try {
-  console.log("Transcribing audio file...");
+  console.log('Transcribing audio file...')
   const transcription = await agent.voice.listen(audioStream, {
-    filetype: "m4a",
-  });
-  console.log("Transcription:", transcription);
+    filetype: 'm4a',
+  })
+  console.log('Transcription:', transcription)
 } catch (error) {
-  console.error("Error transcribing audio:", error);
+  console.error('Error transcribing audio:', error)
 }
 ```
 
@@ -110,44 +110,44 @@ try {
 For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { getMicrophoneStream } from "@mastra/node-audio";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { search, calculate } from "../tools";
+import { Agent } from '@mastra/core/agent'
+import { getMicrophoneStream } from '@mastra/node-audio'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { search, calculate } from '../tools'
 
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "gpt-5.1-realtime",
-  speaker: "alloy",
-});
+  model: 'gpt-5.1-realtime',
+  speaker: 'alloy',
+})
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  id: "speech-to-speech-agent",
-  name: "Speech-to-Speech Agent",
+  id: 'speech-to-speech-agent',
+  name: 'Speech-to-Speech Agent',
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
     calculate,
   },
   voice,
-});
+})
 
 // Establish a WebSocket connection
-await agent.voice.connect();
+await agent.voice.connect()
 
 // Start a conversation
-agent.voice.speak("Hello, I'm your AI assistant!");
+agent.voice.speak("Hello, I'm your AI assistant!")
 
 // Stream audio from a microphone
-const microphoneStream = getMicrophoneStream();
-agent.voice.send(microphoneStream);
+const microphoneStream = getMicrophoneStream()
+agent.voice.send(microphoneStream)
 
 // When done with the conversation
-agent.voice.close();
+agent.voice.close()
 ```
 
 ### Event System
@@ -156,19 +156,19 @@ The realtime voice provider emits several events you can listen for:
 
 ```typescript
 // Listen for speech audio data sent from voice provider
-agent.voice.on("speaking", ({ audio }) => {
+agent.voice.on('speaking', ({ audio }) => {
   // audio contains ReadableStream or Int16Array audio data
-});
+})
 
 // Listen for transcribed text sent from both voice provider and user
-agent.voice.on("writing", ({ text, role }) => {
-  console.log(`${role} said: ${text}`);
-});
+agent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role} said: ${text}`)
+})
 
 // Listen for errors
-agent.voice.on("error", (error) => {
-  console.error("Voice error:", error);
-});
+agent.voice.on('error', error => {
+  console.error('Voice error:', error)
+})
 ```
 
 ## Examples
@@ -183,92 +183,88 @@ The following files are created:
 - **unified-response.mp3** – Unified agent's spoken response.
 
 ```typescript title="src/test-voice-agents.ts"
-import "dotenv/config";
+import 'dotenv/config'
 
-import path from "path";
-import { createReadStream } from "fs";
-import { Agent } from "@mastra/core/agent";
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { Mastra } from "@mastra/core";
+import path from 'path'
+import { createReadStream } from 'fs'
+import { Agent } from '@mastra/core/agent'
+import { CompositeVoice } from '@mastra/core/voice'
+import { OpenAIVoice } from '@mastra/voice-openai'
+import { Mastra } from '@mastra/core'
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 export const saveAudioToFile = async (
   audio: NodeJS.ReadableStream,
   filename: string,
 ): Promise<void> => {
-  const audioDir = path.join(process.cwd(), "audio");
-  const filePath = path.join(audioDir, filename);
+  const audioDir = path.join(process.cwd(), 'audio')
+  const filePath = path.join(audioDir, filename)
 
-  await fs.promises.mkdir(audioDir, { recursive: true });
+  await fs.promises.mkdir(audioDir, { recursive: true })
 
-  const writer = createWriteStream(filePath);
-  audio.pipe(writer);
+  const writer = createWriteStream(filePath)
+  audio.pipe(writer)
   return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
-};
+    writer.on('finish', resolve)
+    writer.on('error', reject)
+  })
+}
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
-export const convertToText = async (
-  input: string | NodeJS.ReadableStream,
-): Promise<string> => {
-  if (typeof input === "string") {
-    return input;
+export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
+  if (typeof input === 'string') {
+    return input
   }
 
-  const chunks: Buffer[] = [];
+  const chunks: Buffer[] = []
   return new Promise((resolve, reject) => {
-    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    inputData.on("error", reject);
-    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-  });
-};
+    inputData.on('data', chunk => chunks.push(Buffer.from(chunk)))
+    inputData.on('error', reject)
+    inputData.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+  })
+}
 
 export const hybridVoiceAgent = new Agent({
-  id: "hybrid-voice-agent",
-  name: "Hybrid Voice Agent",
-  model: "openai/gpt-5.1",
-  instructions: "You can speak and listen using different providers.",
+  id: 'hybrid-voice-agent',
+  name: 'Hybrid Voice Agent',
+  model: 'openai/gpt-5.1',
+  instructions: 'You can speak and listen using different providers.',
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
     output: new OpenAIVoice(),
   }),
-});
+})
 
 export const unifiedVoiceAgent = new Agent({
-  id: "unified-voice-agent",
-  name: "Unified Voice Agent",
-  instructions: "You are an agent with both STT and TTS capabilities.",
-  model: "openai/gpt-5.1",
+  id: 'unified-voice-agent',
+  name: 'Unified Voice Agent',
+  instructions: 'You are an agent with both STT and TTS capabilities.',
+  model: 'openai/gpt-5.1',
   voice: new OpenAIVoice(),
-});
+})
 
 export const mastra = new Mastra({
   agents: { hybridVoiceAgent, unifiedVoiceAgent },
-});
+})
 
-const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
-const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");
+const hybridVoiceAgent = mastra.getAgent('hybridVoiceAgent')
+const unifiedVoiceAgent = mastra.getAgent('unifiedVoiceAgent')
 
-const question = "What is the meaning of life in one sentence?";
+const question = 'What is the meaning of life in one sentence?'
 
-const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
+const hybridSpoken = await hybridVoiceAgent.voice.speak(question)
 
-await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
+await saveAudioToFile(hybridSpoken!, 'hybrid-question.mp3')
 
-const audioStream = createReadStream(
-  path.join(process.cwd(), "audio", "hybrid-question.mp3"),
-);
-const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
+const audioStream = createReadStream(path.join(process.cwd(), 'audio', 'hybrid-question.mp3'))
+const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream)
 
-const inputText = await convertToText(unifiedHeard!);
+const inputText = await convertToText(unifiedHeard!)
 
-const unifiedResponse = await unifiedVoiceAgent.generate(inputText);
-const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text);
+const unifiedResponse = await unifiedVoiceAgent.generate(inputText)
+const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text)
 
-await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
+await saveAudioToFile(unifiedSpoken!, 'unified-response.mp3')
 ```
 
 ### Using Multiple Providers
@@ -276,23 +272,23 @@ await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
 For more flexibility, you can use different providers for speaking and listening using the CompositeVoice class:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
+import { Agent } from '@mastra/core/agent'
+import { CompositeVoice } from '@mastra/core/voice'
+import { OpenAIVoice } from '@mastra/voice-openai'
+import { PlayAIVoice } from '@mastra/voice-playai'
 
 export const agent = new Agent({
-  id: "voice-agent",
-  name: "Voice Agent",
+  id: 'voice-agent',
+  name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
     output: new PlayAIVoice(),
   }),
-});
+})
 ```
 
 ### Using AI SDK
@@ -300,28 +296,28 @@ export const agent = new Agent({
 Mastra supports using AI SDK's transcription and speech models directly in `CompositeVoice`, giving you access to a wide range of providers through the AI SDK ecosystem:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { CompositeVoice } from "@mastra/core/voice";
-import { openai } from "@ai-sdk/openai";
-import { elevenlabs } from "@ai-sdk/elevenlabs";
-import { groq } from "@ai-sdk/groq";
+import { Agent } from '@mastra/core/agent'
+import { CompositeVoice } from '@mastra/core/voice'
+import { openai } from '@ai-sdk/openai'
+import { elevenlabs } from '@ai-sdk/elevenlabs'
+import { groq } from '@ai-sdk/groq'
 
 export const agent = new Agent({
-  id: "aisdk-voice-agent",
-  name: "AI SDK Voice Agent",
+  id: 'aisdk-voice-agent',
+  name: 'AI SDK Voice Agent',
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({
-    input: openai.transcription('whisper-1'),      // AI SDK transcription model
-    output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech model
+    input: openai.transcription('whisper-1'), // AI SDK transcription model
+    output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech model
   }),
-});
+})
 
 // Use voice capabilities as usual
-const audioStream = await agent.voice.speak("Hello!");
-const transcribedText = await agent.voice.listen(audioStream);
+const audioStream = await agent.voice.speak('Hello!')
+const transcribedText = await agent.voice.listen(audioStream)
 ```
 
 #### Mix and Match Providers
@@ -329,38 +325,39 @@ const transcribedText = await agent.voice.listen(audioStream);
 You can mix AI SDK models with Mastra voice providers:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { PlayAIVoice } from "@mastra/voice-playai";
-import { openai } from "@ai-sdk/openai";
+import { CompositeVoice } from '@mastra/core/voice'
+import { PlayAIVoice } from '@mastra/voice-playai'
+import { openai } from '@ai-sdk/openai'
 
 // Use AI SDK for transcription and Mastra provider for speech
 const voice = new CompositeVoice({
-  input: openai.transcription('whisper-1'),  // AI SDK
-  output: new PlayAIVoice(),                  // Mastra provider
-});
+  input: openai.transcription('whisper-1'), // AI SDK
+  output: new PlayAIVoice(), // Mastra provider
+})
 ```
 
 For the complete list of supported AI SDK providers and their capabilities:
-* [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
-* [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
+
+- [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
+- [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
 
 ## Supported Voice Providers
 
 Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-text (STT) capabilities:
 
-| Provider        | Package                         | Features                  | Reference                                         |
-| --------------- | ------------------------------- | ------------------------- | ------------------------------------------------- |
-| OpenAI          | `@mastra/voice-openai`          | TTS, STT                  | [Documentation](/reference/voice/openai)          |
+| Provider | Package | Features | Reference |
+| - | - | - | - |
+| OpenAI | `@mastra/voice-openai` | TTS, STT | [Documentation](/reference/voice/openai) |
 | OpenAI Realtime | `@mastra/voice-openai-realtime` | Realtime speech-to-speech | [Documentation](/reference/voice/openai-realtime) |
-| ElevenLabs      | `@mastra/voice-elevenlabs`      | High-quality TTS          | [Documentation](/reference/voice/elevenlabs)      |
-| PlayAI          | `@mastra/voice-playai`          | TTS                       | [Documentation](/reference/voice/playai)          |
-| Google          | `@mastra/voice-google`          | TTS, STT                  | [Documentation](/reference/voice/google)          |
-| Deepgram        | `@mastra/voice-deepgram`        | STT                       | [Documentation](/reference/voice/deepgram)        |
-| Murf            | `@mastra/voice-murf`            | TTS                       | [Documentation](/reference/voice/murf)            |
-| Speechify       | `@mastra/voice-speechify`       | TTS                       | [Documentation](/reference/voice/speechify)       |
-| Sarvam          | `@mastra/voice-sarvam`          | TTS, STT                  | [Documentation](/reference/voice/sarvam)          |
-| Azure           | `@mastra/voice-azure`           | TTS, STT                  | [Documentation](/reference/voice/mastra-voice)    |
-| Cloudflare      | `@mastra/voice-cloudflare`      | TTS                       | [Documentation](/reference/voice/mastra-voice)    |
+| ElevenLabs | `@mastra/voice-elevenlabs` | High-quality TTS | [Documentation](/reference/voice/elevenlabs) |
+| PlayAI | `@mastra/voice-playai` | TTS | [Documentation](/reference/voice/playai) |
+| Google | `@mastra/voice-google` | TTS, STT | [Documentation](/reference/voice/google) |
+| Deepgram | `@mastra/voice-deepgram` | STT | [Documentation](/reference/voice/deepgram) |
+| Murf | `@mastra/voice-murf` | TTS | [Documentation](/reference/voice/murf) |
+| Speechify | `@mastra/voice-speechify` | TTS | [Documentation](/reference/voice/speechify) |
+| Sarvam | `@mastra/voice-sarvam` | TTS, STT | [Documentation](/reference/voice/sarvam) |
+| Azure | `@mastra/voice-azure` | TTS, STT | [Documentation](/reference/voice/mastra-voice) |
+| Cloudflare | `@mastra/voice-cloudflare` | TTS | [Documentation](/reference/voice/mastra-voice) |
 
 ## Next Steps
 

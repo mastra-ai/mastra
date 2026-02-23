@@ -16,21 +16,21 @@ The `createContentSimilarityScorer()` function accepts a single options object w
 
 <PropertiesTable
   content={[
-    {
-      name: "ignoreCase",
-      type: "boolean",
-      required: false,
-      defaultValue: "true",
-      description: "Whether to ignore case differences when comparing strings.",
-    },
-    {
-      name: "ignoreWhitespace",
-      type: "boolean",
-      required: false,
-      defaultValue: "true",
-      description: "Whether to normalize whitespace when comparing strings.",
-    },
-  ]}
+{
+name: "ignoreCase",
+type: "boolean",
+required: false,
+defaultValue: "true",
+description: "Whether to ignore case differences when comparing strings.",
+},
+{
+name: "ignoreWhitespace",
+type: "boolean",
+required: false,
+defaultValue: "true",
+description: "Whether to normalize whitespace when comparing strings.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
@@ -39,29 +39,29 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description:
-        "Object with processed input and output: { processedInput: string, processedOutput: string }",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with similarity: { similarity: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Similarity score (0-1) where 1 indicates perfect similarity.",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description:
+"Object with processed input and output: { processedInput: string, processedOutput: string }",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with similarity: { similarity: number }",
+},
+{
+name: "score",
+type: "number",
+description:
+"Similarity score (0-1) where 1 indicates perfect similarity.",
+},
+]}
 />
 
 ## Scoring Details
@@ -73,7 +73,7 @@ The scorer evaluates textual similarity through character-level matching and con
 1. Normalizes text:
    - Case normalization (if ignoreCase: true)
    - Whitespace normalization (if ignoreWhitespace: true)
-2. Compares processed strings using string-similarity algorithm:
+1. Compares processed strings using string-similarity algorithm:
    - Analyzes character sequences
    - Aligns word boundaries
    - Considers relative positions
@@ -86,23 +86,23 @@ Final score: `similarity_value * scale`
 Evaluate textual similarity between expected and actual agent outputs:
 
 ```typescript title="src/example-content-similarity.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createContentSimilarityScorer();
+const scorer = createContentSimilarityScorer()
 
 const result = await runEvals({
   data: [
     {
-      input: "Summarize the benefits of TypeScript",
+      input: 'Summarize the benefits of TypeScript',
       groundTruth:
-        "TypeScript provides static typing, better tooling support, and improved code maintainability.",
+        'TypeScript provides static typing, better tooling support, and improved code maintainability.',
     },
     {
-      input: "What is machine learning?",
+      input: 'What is machine learning?',
       groundTruth:
-        "Machine learning is a subset of AI that enables systems to learn from data without explicit programming.",
+        'Machine learning is a subset of AI that enables systems to learn from data without explicit programming.',
     },
   ],
   scorers: [scorer],
@@ -111,11 +111,11 @@ const result = await runEvals({
     console.log({
       score: scorerResults[scorer.id].score,
       groundTruth: scorerResults[scorer.id].groundTruth,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

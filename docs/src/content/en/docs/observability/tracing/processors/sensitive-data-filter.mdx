@@ -19,17 +19,14 @@ import {
   DefaultExporter,
   CloudExporter,
   SensitiveDataFilter,
-} from "@mastra/observability";
+} from '@mastra/observability'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "mastra",
-        exporters: [
-          new DefaultExporter(),
-          new CloudExporter(),
-        ],
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter(), new CloudExporter()],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive fields before export
         ],
@@ -38,9 +35,9 @@ export const mastra = new Mastra({
   }),
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
-});
+})
 ```
 
 With the default configuration, the filter redacts these common sensitive field names:
@@ -84,42 +81,42 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 You can customize which fields are redacted and how redaction appears:
 
 ```ts title="src/mastra/index.ts"
-import { SensitiveDataFilter, DefaultExporter, Observability } from "@mastra/observability";
+import { SensitiveDataFilter, DefaultExporter, Observability } from '@mastra/observability'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       production: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new DefaultExporter()],
         spanOutputProcessors: [
           new SensitiveDataFilter({
             // Add custom sensitive fields
             sensitiveFields: [
               // Default fields
-              "password",
-              "token",
-              "secret",
-              "key",
-              "apikey",
+              'password',
+              'token',
+              'secret',
+              'key',
+              'apikey',
               // Custom fields for your application
-              "creditCard",
-              "bankAccount",
-              "routingNumber",
-              "email",
-              "phoneNumber",
-              "dateOfBirth",
+              'creditCard',
+              'bankAccount',
+              'routingNumber',
+              'email',
+              'phoneNumber',
+              'dateOfBirth',
             ],
             // Custom redaction token
-            redactionToken: "***SENSITIVE***",
+            redactionToken: '***SENSITIVE***',
             // Redaction style
-            redactionStyle: "full", // or 'partial'
+            redactionStyle: 'full', // or 'partial'
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ## Redaction Styles
@@ -130,7 +127,7 @@ The filter supports two redaction styles:
 
 Replaces the entire value with a fixed token:
 
-```json
+```jsonc prettier:false
 // Before
 {
   "apiKey": "sk-abc123xyz789def456",
@@ -150,11 +147,11 @@ Shows the first and last 3 characters, useful for debugging without exposing ful
 
 ```ts
 new SensitiveDataFilter({
-  redactionStyle: "partial",
-});
+  redactionStyle: 'partial',
+})
 ```
 
-```json
+```json prettier:false
 // Before
 {
   "apiKey": "sk-abc123xyz789def456",
@@ -175,8 +172,8 @@ Values shorter than 7 characters are fully redacted to prevent information leaka
 The filter uses intelligent field matching:
 
 1. **Case-Insensitive**: `APIKey`, `apikey`, and `ApiKey` are all matched
-2. **Separator-Agnostic**: `api-key`, `api_key`, and `apiKey` are treated identically
-3. **Exact Matching**: After normalization, fields must match exactly
+1. **Separator-Agnostic**: `api-key`, `api_key`, and `apiKey` are treated identically
+1. **Exact Matching**: After normalization, fields must match exactly
    - `token` matches `token`, `Token`, `TOKEN`
    - `token` does NOT match `promptTokens` or `tokenCount`
 
@@ -184,7 +181,7 @@ The filter uses intelligent field matching:
 
 The filter recursively processes nested structures:
 
-```json
+```json prettier:false
 // Before
 {
   "user": {
@@ -235,13 +232,13 @@ export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       debug: {
-        serviceName: "debug-service",
+        serviceName: 'debug-service',
         spanOutputProcessors: [], // No processors, including no SensitiveDataFilter
         exporters: [new DefaultExporter()],
       },
     },
   }),
-});
+})
 ```
 
 :::warning
@@ -258,17 +255,17 @@ Only disable sensitive data filtering in controlled environments. Never disable 
 new SensitiveDataFilter({
   sensitiveFields: [
     // HIPAA-related fields
-    "ssn",
-    "socialSecurityNumber",
-    "medicalRecordNumber",
-    "mrn",
-    "healthInsuranceNumber",
-    "diagnosisCode",
-    "icd10",
-    "prescription",
-    "medication",
+    'ssn',
+    'socialSecurityNumber',
+    'medicalRecordNumber',
+    'mrn',
+    'healthInsuranceNumber',
+    'diagnosisCode',
+    'icd10',
+    'prescription',
+    'medication',
   ],
-});
+})
 ```
 
 ### Financial Services
@@ -277,21 +274,21 @@ new SensitiveDataFilter({
 new SensitiveDataFilter({
   sensitiveFields: [
     // PCI compliance fields
-    "creditCard",
-    "ccNumber",
-    "cardNumber",
-    "cvv",
-    "cvc",
-    "securityCode",
-    "expirationDate",
-    "expiry",
-    "bankAccount",
-    "accountNumber",
-    "routingNumber",
-    "iban",
-    "swift",
+    'creditCard',
+    'ccNumber',
+    'cardNumber',
+    'cvv',
+    'cvc',
+    'securityCode',
+    'expirationDate',
+    'expiry',
+    'bankAccount',
+    'accountNumber',
+    'routingNumber',
+    'iban',
+    'swift',
   ],
-});
+})
 ```
 
 ## Error Handling

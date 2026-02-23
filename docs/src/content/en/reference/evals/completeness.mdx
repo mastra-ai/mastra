@@ -20,29 +20,29 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description:
-        "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Completeness score (0-1) representing the proportion of input elements covered in the output.",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description:
+"Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+},
+{
+name: "score",
+type: "number",
+description:
+"Completeness score (0-1) representing the proportion of input elements covered in the output.",
+},
+]}
 />
 
 The `.run()` method returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   extractStepResult: {
@@ -92,7 +92,7 @@ The scorer evaluates completeness through linguistic element coverage analysis.
    - Action verbs
    - Topic-specific terms
    - Normalized word forms
-2. Calculates coverage of input elements:
+1. Calculates coverage of input elements:
    - Exact matches for short terms (≤3 chars)
    - Substantial overlap (>60%) for longer terms
 
@@ -113,25 +113,24 @@ A completeness score between 0 and 1:
 Evaluate agent responses for completeness across different query complexities:
 
 ```typescript title="src/example-completeness.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createCompletenessScorer();
+const scorer = createCompletenessScorer()
 
 const result = await runEvals({
   data: [
     {
       input:
-        "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.",
+        'Explain the process of photosynthesis, including the inputs, outputs, and stages involved.',
+    },
+    {
+      input: 'What are the benefits and drawbacks of remote work for both employees and employers?',
     },
     {
       input:
-        "What are the benefits and drawbacks of remote work for both employees and employers?",
-    },
-    {
-      input:
-        "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.",
+        'Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.',
     },
   ],
   scorers: [scorer],
@@ -139,11 +138,11 @@ const result = await runEvals({
   onItemComplete: ({ scorerResults }) => {
     console.log({
       score: scorerResults[scorer.id].score,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

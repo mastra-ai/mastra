@@ -27,45 +27,33 @@ The **App Platform** uses an ephemeral filesystem, so any storage you configure 
 After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
 
 <Steps>
+  <StepItem>
+    Follow the official [App Platform quickstart](https://docs.digitalocean.com/products/app-platform/getting-started/quickstart/#create-an-app). It'll guide you through connecting your repository, selecting the branch to deploy from, and configuring the source directory if necessary.
+  </StepItem>
 
-<StepItem>
+  <StepItem>
+    Make sure that a "Node.js" build is detected. You'll need to configure a build command. Set it based on your package manager:
 
-Follow the official [App Platform quickstart](https://docs.digitalocean.com/products/app-platform/getting-started/quickstart/#create-an-app). It'll guide you through connecting your repository, selecting the branch to deploy from, and configuring the source directory if necessary.
+    ```bash npm2yarn
+    npm run build
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
+  </StepItem>
 
-<StepItem>
+  <StepItem>
+    Your app will be built and deployed automatically. Digital Ocean will provide you with a URL to access your deployed application.
+  </StepItem>
 
-Make sure that a "Node.js" build is detected. You'll need to configure a build command. Set it based on your package manager:
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
 
-```bash npm2yarn
-npm run build
-```
-
-</StepItem>
-
-<StepItem>
-
-Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
-
-</StepItem>
-
-<StepItem>
-
-Your app will be built and deployed automatically. Digital Ocean will provide you with a URL to access your deployed application.
-
-</StepItem>
-
-<StepItem>
-
-You can now call your Mastra endpoints over HTTP.
-
-:::warning
-Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
-:::
-
-</StepItem>
-
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
 </Steps>
 
 ## Droplets
@@ -83,99 +71,81 @@ Set up [authentication](/docs/server/auth) before exposing your endpoints public
 After setting up your project, push it to your remote Git provider of choice (e.g. GitHub). Connect to your Droplet and make sure `git` is installed.
 
 <Steps>
+  <StepItem>
+    Clone your repository:
 
-<StepItem>
+    <Tabs>
+      <TabItem value="public" label="Public Repository">
+        ```bash
+        git clone https://github.com/<your-username>/<your-repository>.git
+        ```
+      </TabItem>
 
-Clone your repository:
+      <TabItem value="private" label="Private Repository">
+        ```bash
+        git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+        ```
+      </TabItem>
+    </Tabs>
 
-<Tabs>
-  <TabItem value="public" label="Public Repository">
+    Navigate to the repository directory:
 
-```bash
-git clone https://github.com/<your-username>/<your-repository>.git
-```
+    ```bash
+    cd "<your-repository>"
+    ```
+  </StepItem>
 
-  </TabItem>
+  <StepItem>
+    Install the project dependencies:
 
-  <TabItem value="private" label="Private Repository">
+    ```bash npm2yarn
+    npm install
+    ```
+  </StepItem>
 
-```bash
-git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
-```
+  <StepItem>
+    Set the required environment variables for your Mastra application. Create a `.env` file in the root of your project:
 
-  </TabItem>
-</Tabs>
+    ```bash
+    touch .env
+    ```
 
-Navigate to the repository directory:
+    Edit the `.env` file and add your environment variables:
 
-```bash
-cd "<your-repository>"
-```
+    ```bash title=".env"
+    OPENAI_API_KEY=your-api-key
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Build the project:
 
-<StepItem>
+    ```bash npm2yarn
+    npm run build
+    ```
 
-Install the project dependencies:
+    This will create a production build of Mastra's server in the `.mastra/output` directory.
+  </StepItem>
 
-```bash npm2yarn
-npm install
-```
+  <StepItem>
+    You can run the [Mastra Server](/docs/deployment/mastra-server) by running the `mastra start` command:
 
-</StepItem>
+    ```bash
+    mastra start
+    ```
 
-<StepItem>
+    :::info
+    Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+    :::
+  </StepItem>
 
-Set the required environment variables for your Mastra application. Create a `.env` file in the root of your project:
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
 
-```bash
-touch .env
-```
-
-Edit the `.env` file and add your environment variables:
-
-```bash title=".env"
-OPENAI_API_KEY=your-api-key
-```
-
-</StepItem>
-
-<StepItem>
-
-Build the project:
-
-```bash npm2yarn
-npm run build
-```
-
-This will create a production build of Mastra's server in the `.mastra/output` directory.
-
-</StepItem>
-
-<StepItem>
-
-You can run the [Mastra Server](/docs/deployment/mastra-server) by running the `mastra start` command:
-
-```bash
-mastra start
-```
-
-:::info
-Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
-:::
-
-</StepItem>
-
-<StepItem>
-
-You can now call your Mastra endpoints over HTTP.
-
-:::warning
-Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
-:::
-
-</StepItem>
-
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
 </Steps>
 
 ## Related

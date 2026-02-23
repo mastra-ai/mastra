@@ -8,5 +8,13 @@
   "bracketSpacing": true,
   "printWidth": 120,
   "arrowParens": "avoid",
-  "plugins": ["prettier-plugin-tailwindcss"]
+  "plugins": ["prettier-plugin-tailwindcss", "./prettier-mdx.mjs"],
+  "overrides": [
+    {
+      "files": ["*.mdx"],
+      "options": {
+        "parser": "mdx-custom"
+      }
+    }
+  ]
 }

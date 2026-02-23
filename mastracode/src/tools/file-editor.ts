@@ -68,10 +68,7 @@ export class FileEditor {
   async view(args: ViewArgs) {
     await validatePath('view', args.path);
     if (await this.isDirectory(args.path)) {
-      if (args.view_range) {
-        return 'The `view_range` parameter is not allowed when `path` points to a directory.';
-      }
-      const { stdout, stderr } = await this.execAsync(`find "${args.path}" -maxdepth 2 -not -path '*/\\.*'`);
+      const { stdout, stderr } = await this.execAsync(`find "${args.path}" -maxdepth 2 -not -path '*/.*'`);
       if (stderr) return stderr;
       return `Here's the files and directories up to 2 levels deep in ${args.path}, excluding hidden items:\n${stdout}\n`;
     }

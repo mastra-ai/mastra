@@ -1,0 +1,235 @@
+---
+title: "Customization | Mastra Code"
+description: "Learn how to extend Mastra Code programmatically by creating custom modes, adding tools, defining subagents, and integrating with your own TUI."
+packages:
+  - "mastracode"
+---
+
+# Customization
+
+Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference/mastra-code/createMastraCode) factory function accepts configuration overrides, and the returned [`Harness`](/reference/harness/harness-class) can drive any frontend, not just the built-in TUI.
+
+## Programmatic usage
+
+Import `createMastraCode` to bootstrap Mastra Code in your own application:
+
+```typescript title="src/custom-agent.ts"
+import { createMastraCode } from 'mastracode'
+
+const { harness, mcpManager, authStorage } = createMastraCode({
+  cwd: '/path/to/project',
+  initialState: {
+    yolo: false,
+  },
+})
+
+await harness.init()
+await harness.selectOrCreateThread()
+
+harness.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message.content)
+  }
+})
+
+await harness.sendMessage({ content: 'Explain the auth module' })
+```
+
+The `harness` object is a standard [Harness](/reference/harness/harness-class) instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
+
+## Custom modes
+
+Override the default Build/Plan/Fast modes by passing a `modes` array:
+
+```typescript title="src/custom-modes.ts"
+import { createMastraCode } from 'mastracode'
+import { Agent } from '@mastra/core/agent'
+
+const reviewAgent = new Agent({
+  id: 'review-agent',
+  name: 'Review Agent',
+  instructions:
+    'You are a code review specialist. Analyze code for bugs, security issues, and best practices.',
+  model: 'anthropic/claude-sonnet-4',
+})
+
+const { harness } = createMastraCode({
+  modes: [
+    {
+      id: 'review',
+      name: 'Review',
+      default: true,
+      defaultModelId: 'anthropic/claude-sonnet-4',
+      color: '#f59e0b',
+      agent: reviewAgent,
+    },
+    {
+      id: 'build',
+      name: 'Build',
+      defaultModelId: 'anthropic/claude-opus-4-6',
+      color: '#7c3aed',
+      agent: reviewAgent,
+    },
+  ],
+})
+```
+
+Each mode requires an `id` and an `agent`. The `name`, `defaultModelId`, and `color` fields control how the mode appears in the TUI.
+
+## Extra tools
+
+Add custom tools to the agent's tool set without replacing the built-in tools:
+
+```typescript title="src/custom-tools.ts"
+import { createMastraCode } from 'mastracode'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const deployTool = createTool({
+  id: 'deploy',
+  description: 'Deploy the current branch to staging',
+  inputSchema: z.object({
+    environment: z.enum(['staging', 'production']),
+  }),
+  execute: async ({ environment }) => {
+    return { content: `Deployed to ${environment}` }
+  },
+})
+
+const { harness } = createMastraCode({
+  extraTools: { deploy: deployTool },
+})
+```
+
+Extra tools are merged with the dynamic tool set and are available to the agent in all modes.
+
+## Custom subagents
+
+Override the default Explore/Plan/Execute subagents. Each subagent receives its own set of tools, scoping what it can do:
+
+```typescript title="src/custom-subagents.ts"
+import { createMastraCode } from 'mastracode'
+import { createTool } from '@mastra/core/tools'
+
+const { harness } = createMastraCode({
+  subagents: [
+    {
+      id: 'explore',
+      name: 'Explore',
+      description: 'Read-only codebase exploration',
+      instructions:
+        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
+    },
+    {
+      id: 'test-writer',
+      name: 'Test Writer',
+      description: 'Write tests for the specified module',
+      instructions:
+        'You are a test-writing specialist. Generate comprehensive tests for the given module.',
+    },
+  ],
+})
+```
+
+## Custom storage
+
+Connect to a remote database instead of the default local SQLite:
+
+```typescript title="src/custom-storage.ts"
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  storage: {
+    url: 'libsql://my-db.turso.io',
+    authToken: 'my-auth-token',
+  },
+})
+```
+
+This is equivalent to setting `.mastracode/database.json` but allows configuration at the code level.
+
+## Custom heartbeat handlers
+
+Replace or extend the default background tasks:
+
+```typescript title="src/custom-heartbeats.ts"
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  heartbeatHandlers: [
+    {
+      id: 'sync-config',
+      intervalMs: 60_000,
+      handler: async () => {
+        await syncConfigFromRemote()
+      },
+    },
+  ],
+})
+```
+
+Heartbeat handlers run on a fixed interval. They start when `harness.init()` is called and stop when `harness.destroy()` is called.
+
+## Building a custom TUI
+
+Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the Harness event system:
+
+```typescript title="src/custom-tui.ts"
+import { createMastraCode } from 'mastracode'
+import { MastraTUI } from 'mastracode/tui'
+
+const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+
+const tui = new MastraTUI({
+  harness,
+  hookManager,
+  authStorage,
+  mcpManager,
+  appName: 'My Coding Agent',
+  version: '1.0.0',
+})
+
+tui.run()
+```
+
+The TUI subscribes to harness events and renders messages, tool calls, approvals, and status information in real time.
+
+## Initial state overrides
+
+Control default behavior through `initialState`:
+
+```typescript title="src/custom-state.ts"
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  initialState: {
+    yolo: false,
+    thinkingLevel: 'high',
+    smartEditing: true,
+    notifications: 'system',
+    permissionRules: {
+      categories: {
+        read: 'allow',
+        edit: 'ask',
+        execute: 'ask',
+        mcp: 'deny',
+      },
+      tools: {},
+    },
+  },
+})
+```
+
+### Available state fields
+
+| Field | Type | Default | Description |
+| - | - | - | - |
+| `yolo` | `boolean` | `true` | Auto-approve all tool calls |
+| `thinkingLevel` | `string` | `"off"` | Extended thinking depth for Anthropic models |
+| `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
+| `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert when the TUI needs attention |
+| `permissionRules` | `object` | Default policies | Per-category and per-tool approval policies |
+| `observerModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory observer |
+| `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
+| `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
+| `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |

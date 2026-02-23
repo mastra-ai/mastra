@@ -1,0 +1,240 @@
+---
+title: "Tools | Mastra Code"
+description: "Learn about Mastra Code's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
+packages:
+  - "mastracode"
+---
+
+# Tools
+
+Mastra Code provides built-in tools that the agent uses to interact with your codebase. Each tool is designed for a specific task, and the agent selects the right one based on what it needs to do.
+
+## File tools
+
+### `view`
+
+Read file contents with line numbers or list directory contents. The agent uses this tool before editing a file.
+
+- Displays line-numbered output (like `cat -n`) for easy reference.
+- For directories, lists files up to 2 levels deep, excluding hidden items.
+- Supports `view_range` to read specific line ranges in large files.
+- Output is truncated if the file exceeds the token limit. Use `view_range` to read specific sections.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Path to the file or directory (relative to project root) |
+| `view_range` | `[number, number]` | No | Line range `[start, end]` to view a section of the file |
+
+### `string_replace_lsp`
+
+Edit a file by replacing an exact text match with new content. Returns Language Server Protocol (LSP) diagnostics showing any errors or warnings introduced by the edit.
+
+- The agent reads the file first with `view` before editing.
+- `old_str` must be an exact substring of the current file content.
+- Include enough surrounding context to uniquely identify the replacement location.
+- When `new_str` is omitted or empty, the matched text is deleted.
+- After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Path to the file |
+| `old_str` | `string` | Yes | Exact text to find and replace |
+| `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
+| `start_line` | `number` | No | Line number to narrow the search region |
+
+### `ast_smart_edit`
+
+Edit code using abstract syntax tree (AST) analysis for intelligent, structure-aware transformations. Powered by [ast-grep](https://ast-grep.github.io/), this tool understands code structure rather than treating files as raw text.
+
+Supported transformations:
+
+- **Pattern-based search and replace**: Find and replace code using AST patterns with `$VARIABLE` placeholders (e.g., replace `console.log($ARG)` with `logger.debug($ARG)`).
+- **Add/remove imports**: Intelligently insert or remove import statements.
+- **Rename functions**: Rename function declarations and all call sites with scope awareness.
+- **Rename variables**: Rename variable declarations and all references.
+- **Selector queries**: Find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | File path relative to project root |
+| `pattern` | `string` | No | AST pattern to search for (supports `$VARIABLE` placeholders) |
+| `replacement` | `string` | No | Replacement pattern (can use captured `$VARIABLES`) |
+| `selector` | `string` | No | CSS-like selector for AST nodes |
+| `transform` | `string` | No | Transformation type: `add-import`, `remove-import`, `rename-function`, `rename-variable`, `extract-function`, `inline-variable` |
+| `targetName` | `string` | No | Name of the target element (for rename/remove operations) |
+| `newName` | `string` | No | New name (for rename operations) |
+| `importSpec` | `object` | No | Import specification for `add-import`: `{ module, names, isDefault? }` |
+
+### `write_file`
+
+Create a new file or overwrite an existing file entirely.
+
+- Use for creating new files. For editing existing files, prefer `string_replace_lsp`.
+- Parent directories are created automatically if they don't exist.
+- If overwriting an existing file, the agent reads it first with `view`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | File path to write to (relative to project root) |
+| `content` | `string` | Yes | Full content to write to the file |
+
+## Search tools
+
+### `search_content`
+
+Search file contents using regular expressions. Uses ripgrep when available, falling back to grep.
+
+- Supports full regex syntax (e.g., `"function\\s+\\w+"`, `"import.*from"`).
+- Respects `.gitignore` automatically in Git repositories.
+- Always preferred over running `grep` or `rg` via `execute_command`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `pattern` | `string` | Yes | Regex pattern to search for in file contents |
+| `path` | `string` | No | Directory or file to search in (relative to project root, defaults to project root) |
+| `glob` | `string` | No | Glob pattern to filter files (e.g., `"*.ts"`, `"*.{js,jsx}"`, `"test/**"`) |
+| `contextLines` | `number` | No | Number of lines to show before and after each match (default: 0) |
+| `maxResults` | `number` | No | Maximum number of matching lines to return (default: 100) |
+| `caseSensitive` | `boolean` | No | Whether the search is case-sensitive (default: true) |
+
+### `find_files`
+
+Find files by name pattern using glob matching. Results are sorted by modification time (most recent first).
+
+- Supports standard glob syntax: `*` (any characters), `**` (any path segments), `?` (single character), `{a,b}` (alternatives).
+- Respects `.gitignore` automatically in Git repositories.
+- Always preferred over running `find` or `ls` via `execute_command`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `pattern` | `string` | Yes | Glob pattern (e.g., `"**/*.ts"`, `"src/**/*.test.*"`, `"**/package.json"`) |
+| `path` | `string` | No | Directory to search in (relative to project root, defaults to project root) |
+
+## Shell execution
+
+### `execute_command`
+
+Execute a shell command in the project directory.
+
+- Use for Git commands, package managers (`npm`, `pnpm`), build tools, test runners, Docker, and other terminal operations.
+- Commands run with a 30-second default timeout. Use the `timeout` parameter for longer operations.
+- Output is stripped of ANSI codes and streamed to the TUI in real time.
+- Pipe to `| tail -N` for commands with long output — full output streams to the user, but only the last N lines are returned to the agent.
+- The `CI=true` environment variable is set automatically to prevent interactive prompts.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `command` | `string` | Yes | Shell command to execute |
+| `cwd` | `string` | No | Working directory (defaults to project root) |
+| `timeout` | `number` | No | Timeout in seconds (default: 30) |
+
+### `request_sandbox_access`
+
+Request access to directories outside the project root. The user is prompted to approve or deny the request.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Absolute path to the directory needing access |
+| `reason` | `string` | Yes | Explanation of why access is needed |
+
+## Web tools
+
+### `web_search`
+
+Search the web for documentation, error messages, package APIs, and other information.
+
+This tool is available through two providers:
+
+- **Tavily**: When the `TAVILY_API_KEY` environment variable is set.
+- **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `query` | `string` | Yes | The search query |
+| `searchDepth` | `"basic" \| "advanced"` | No | Search depth (default: `"basic"`) |
+| `maxResults` | `number` | No | Maximum number of results (default: 10) |
+| `includeImages` | `boolean` | No | Include related images (default: false) |
+
+### `web_extract`
+
+Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
+| `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
+| `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
+
+## Task management
+
+### `task_write`
+
+Create or update a structured task list for tracking progress on complex, multi-step work.
+
+- Each task has a `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
+- Pass the full task list each time — it replaces the previous list.
+- Only one task should be `in_progress` at a time.
+
+### `task_check`
+
+Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete.
+
+## Interactive tools
+
+### `ask_user`
+
+Ask the user a structured question. The agent uses this when it needs clarification, wants to validate assumptions, or needs the user to make a decision. Questions render inline in the conversation flow and support optional multiple-choice options.
+
+### `submit_plan`
+
+Submit a structured implementation plan for user review and approval (Plan mode only). The plan renders inline, and the user can approve, reject, or request changes.
+
+## MCP tools
+
+When [MCP servers](/docs/mastra-code/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
+
+MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
+
+## Tool availability by mode
+
+Not all tools are available in every mode:
+
+| Tool | Build | Plan | Fast |
+| - | - | - | - |
+| `view` | Yes | Yes | Yes |
+| `search_content` | Yes | Yes | Yes |
+| `find_files` | Yes | Yes | Yes |
+| `execute_command` | Yes | Read-only | Yes |
+| `string_replace_lsp` | Yes | No | Yes |
+| `ast_smart_edit` | Yes | No | Yes |
+| `write_file` | Yes | No | Yes |
+| `web_search` | Yes | Yes | Yes |
+| `web_extract` | Yes | Yes | Yes |
+| `task_write` | Yes | Yes | Yes |
+| `task_check` | Yes | Yes | Yes |
+| `ask_user` | Yes | Yes | Yes |
+| `submit_plan` | No | Yes | No |
+| `request_sandbox_access` | Yes | Yes | Yes |
+
+In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
+
+## Permission system
+
+Tools are grouped into four categories, each with a configurable approval policy:
+
+| Category | Tools | Default policy |
+| - | - | - |
+| **Read** | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow` |
+| **Edit** | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent` | `ask` |
+| **Execute** | `execute_command` | `ask` |
+| **MCP** | All MCP server tools | `ask` |
+
+When YOLO mode is enabled (the default), all categories are set to `allow`. When disabled, the agent prompts for approval based on the category policy.
+
+You can configure per-category or per-tool overrides through `/settings`, and session-level grants let you approve a category once for the rest of the session.
+
+:::note
+
+Visit [Modes](/docs/mastra-code/modes) for details on how modes affect tool access and approval behavior.
+
+:::
