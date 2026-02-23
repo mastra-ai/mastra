@@ -327,10 +327,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           let gotOutput: () => void;
           const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          const handle = await processes.spawn(
-            `node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`,
-            { onStdout: () => gotOutput() },
-          );
+          const handle = await processes.spawn(`node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`, {
+            onStdout: () => gotOutput(),
+          });
           await outputArrived;
 
           const retrieved = await processes.get(handle.pid);
@@ -350,10 +349,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           let gotOutput: () => void;
           const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          const handle = await processes.spawn(
-            `node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`,
-            { onStdout: () => gotOutput() },
-          );
+          const handle = await processes.spawn(`node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`, {
+            onStdout: () => gotOutput(),
+          });
           await outputArrived;
 
           const pid = handle.pid;
