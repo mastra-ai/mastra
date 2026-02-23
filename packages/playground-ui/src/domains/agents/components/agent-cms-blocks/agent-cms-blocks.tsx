@@ -68,7 +68,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
           <button
             type="button"
             className={cn(
-              'flex justify-center items-center gap-2 border border-dashed border-border1 text-neutral6 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3 text-neutral3 hover:text-neutral6 active:text-neutral6',
+              'flex justify-center items-center gap-2 border border-dashed border-border1 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3 text-neutral3 hover:text-neutral6',
             )}
           >
             <Icon>
