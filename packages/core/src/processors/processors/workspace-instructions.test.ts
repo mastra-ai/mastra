@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import type { Workspace } from '../../workspace/workspace';
 import { WorkspaceInstructionsProcessor } from './workspace-instructions';
 
@@ -100,7 +101,6 @@ describe('WorkspaceInstructionsProcessor', () => {
   });
 
   it('should pass requestContext through to workspace.getInstructions', async () => {
-    const { RequestContext } = await import('../../request-context');
     const ctx = new RequestContext([['locale', 'en']]);
 
     const workspace = createMockWorkspace('instructions');

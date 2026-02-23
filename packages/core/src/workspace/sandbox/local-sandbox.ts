@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import type { RequestContext } from '../../request-context';
 import type { ProviderStatus } from '../lifecycle';
 import type { InstructionsOption } from '../types';
+import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
@@ -386,17 +387,11 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   getInstructions(opts?: { requestContext?: RequestContext }): string {
-    const auto = this._getAutoInstructions();
-    if (this._instructionsOverride === undefined) return auto;
-    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
-    return this._instructionsOverride({ auto, requestContext: opts?.requestContext });
+    return resolveInstructions(this._instructionsOverride, () => this._getAutoInstructions(), opts?.requestContext);
   }
 
   private _getAutoInstructions(): string {
-    if (this.workingDirectory) {
-      return `Local command execution. Working directory: "${this.workingDirectory}".`;
-    }
-    return 'Local command execution on the host machine.';
+    return `Local command execution. Working directory: "${this.workingDirectory}".`;
   }
 
   /**

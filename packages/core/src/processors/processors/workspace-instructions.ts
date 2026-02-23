@@ -25,7 +25,7 @@
  * ```
  */
 
-import type { Workspace } from '../../workspace/workspace';
+import type { AnyWorkspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
 // =============================================================================
@@ -39,7 +39,7 @@ export interface WorkspaceInstructionsProcessorOptions {
   /**
    * Workspace instance to derive instructions from.
    */
-  workspace: Workspace;
+  workspace: AnyWorkspace;
 }
 
 // =============================================================================
@@ -53,7 +53,7 @@ export class WorkspaceInstructionsProcessor implements Processor<'workspace-inst
   readonly id = 'workspace-instructions-processor' as const;
   readonly name = 'Workspace Instructions Processor';
 
-  private readonly _workspace: Workspace;
+  private readonly _workspace: AnyWorkspace;
 
   constructor(opts: WorkspaceInstructionsProcessorOptions) {
     this._workspace = opts.workspace;

@@ -21,6 +21,7 @@ import {
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
 import type { InstructionsOption } from '../types';
+import { resolveInstructions } from '../utils';
 import type {
   FilesystemInfo,
   FileContent,
@@ -719,10 +720,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   getInstructions(opts?: { requestContext?: RequestContext }): string {
-    const auto = this._getAutoInstructions();
-    if (this._instructionsOverride === undefined) return auto;
-    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
-    return this._instructionsOverride({ auto, requestContext: opts?.requestContext });
+    return resolveInstructions(this._instructionsOverride, () => this._getAutoInstructions(), opts?.requestContext);
   }
 
   private _getAutoInstructions(): string {
