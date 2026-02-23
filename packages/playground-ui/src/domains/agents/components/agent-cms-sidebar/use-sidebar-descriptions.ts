@@ -14,8 +14,8 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
   return useMemo(() => {
     const identity = !values.name || !values.model?.provider || !values.model?.name ? 'Required' : values.name;
 
-    const blockCount = (values.instructionBlocks ?? []).filter(b =>
-      b.type === 'prompt_block' ? b.content?.trim() : true,
+    const blockCount = (values.instructionBlocks ?? []).filter(
+      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
     ).length;
     const instructions = blockCount === 0 ? 'Required' : pluralize(blockCount, 'block');
 
