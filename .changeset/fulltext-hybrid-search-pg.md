@@ -4,7 +4,9 @@
 
 Add full-text and hybrid search support to PgVector (#10453).
 
-`createIndex` accepts a `fullTextSearch` option to enable a `content` column and GIN tsvector index. Queries support `searchMode: 'fulltext'` (keyword-only, no embedding needed) and `searchMode: 'hybrid'` (vector + keyword).
+Previously `PgVector` only supported pure vector similarity search. This adds keyword-only retrieval (no embeddings needed) and combined keyword + vector scoring for better recall on keyword-specific queries.
+
+`createIndex` accepts a `fullTextSearch` option to enable a `content` column and GIN tsvector index. Queries support `searchMode: 'fulltext'` (keyword-only) and `searchMode: 'hybrid'` (vector + keyword).
 
 ```ts
 import { PgVector } from '@mastra/pg';

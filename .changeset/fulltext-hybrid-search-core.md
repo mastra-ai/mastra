@@ -4,7 +4,11 @@
 
 Add full-text and hybrid search types for RAG vector queries (#10453).
 
-New types on `QueryVectorParams`: `searchMode`, `queryText`, `hybridConfig`. New field on `UpsertVectorParams`: `documents`. New `SearchMode` type (`'vector'` | `'fulltext'` | `'hybrid'`) and `HybridConfig` interface let users choose keyword-based, semantic, or combined retrieval.
+Vector search alone misses keyword-specific queries. Use `'fulltext'` for exact keyword matches without embeddings, `'vector'` for semantic similarity (default), or `'hybrid'` to combine both for better recall.
+
+- `QueryVectorParams`: new `searchMode`, `queryText`, `hybridConfig` fields
+- `UpsertVectorParams`: new `documents` field for storing raw text
+- New types: `SearchMode`, `HybridConfig`
 
 ```ts
 import type { SearchMode, HybridConfig } from '@mastra/core/vector';
