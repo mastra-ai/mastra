@@ -22,7 +22,7 @@ swap:
 
   should not: shouldn't
 
-  "that is(?![.,])": that's
+  'that is(?![.,])': that's
   'that''s(?=\.)': that is
 
   'they are(?!\.)': they're

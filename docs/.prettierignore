@@ -3,6 +3,5 @@
 build/**
 node_modules/**
 static/**
-styles/**
 src/content/ja/**
 src/content/en/models/**
