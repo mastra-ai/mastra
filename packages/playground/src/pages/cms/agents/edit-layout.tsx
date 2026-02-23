@@ -89,7 +89,7 @@ function EditFormContent({
       isSavingDraft={isSavingDraft}
       handlePublish={handlePublish}
       handleSaveDraft={handleSaveDraft}
-      readOnly={readOnly || isViewingVersion}
+      readOnly={readOnly}
       basePath={`/cms/agents/${agentId}/edit`}
       currentPath={location.pathname}
       banner={banner}
@@ -128,7 +128,7 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent]);
 
-  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, isDirty } = useAgentCmsForm({
+  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
@@ -163,7 +163,7 @@ function EditLayoutWrapper() {
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
+            <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -178,11 +178,7 @@ function EditLayoutWrapper() {
                 </>
               )}
             </Button>
-            <Button
-              variant="primary"
-              onClick={handlePublish}
-              disabled={!hasDraft || isDirty || isSubmitting || isSavingDraft}
-            >
+            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
               {isSubmitting ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -226,7 +222,6 @@ function EditLayoutWrapper() {
           agentId={agentId ?? ''}
           selectedVersionId={selectedVersionId}
           versionData={versionData}
-          readOnly={isLoadingAgent || isLoadingVersion}
           form={form}
           handlePublish={handlePublish}
           handleSaveDraft={handleSaveDraft}
