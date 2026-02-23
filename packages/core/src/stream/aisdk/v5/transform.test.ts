@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChunkFrom } from '../../types';
-import { convertFullStreamChunkToMastra } from './transform';
+import { convertFullStreamChunkToMastra, sanitizeToolCallInput } from './transform';
 import type { StreamPart } from './transform';
 
 describe('convertFullStreamChunkToMastra', () => {
@@ -179,6 +179,112 @@ describe('convertFullStreamChunkToMastra', () => {
       } else {
         throw new Error('Result is not a tool-call');
       }
+    });
+
+    it('should recover valid JSON with trailing <|call|> token', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{}<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({});
+      }
+    });
+
+    it('should recover valid JSON with tab + <|call|> token (issue #13185)', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-2',
+        toolName: 'checkpoint',
+        input: '{\n"checkpointNumber": 1,\n"vehicleType": "leopard"\n}\t<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ checkpointNumber: 1, vehicleType: 'leopard' });
+      }
+    });
+
+    it('should recover valid JSON with <|endoftext|> token', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-3',
+        toolName: 'search',
+        input: '{"query": "hello world"}<|endoftext|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ query: 'hello world' });
+      }
+    });
+
+    it('should gracefully return undefined for truly malformed JSON (issue #13261)', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-4',
+        toolName: 'checkpoint',
+        input: '{"vehicleType":"leopard","checkpointNumber":?}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toBeUndefined();
+      }
+    });
+  });
+
+  describe('sanitizeToolCallInput', () => {
+    it('should strip <|call|> token from valid JSON', () => {
+      expect(sanitizeToolCallInput('{}<|call|>')).toBe('{}');
+    });
+
+    it('should strip <|endoftext|> token', () => {
+      expect(sanitizeToolCallInput('{"a":1}<|endoftext|>')).toBe('{"a":1}');
+    });
+
+    it('should strip multiple tokens', () => {
+      expect(sanitizeToolCallInput('{}<|call|><|endoftext|>')).toBe('{}');
+    });
+
+    it('should strip tab + token combinations', () => {
+      expect(sanitizeToolCallInput('{}\t<|call|>')).toBe('{}');
+    });
+
+    it('should be a no-op on clean JSON', () => {
+      expect(sanitizeToolCallInput('{"key": "value"}')).toBe('{"key": "value"}');
+    });
+
+    it('should handle empty string', () => {
+      expect(sanitizeToolCallInput('')).toBe('');
+    });
+
+    it('should strip <|end|> token', () => {
+      expect(sanitizeToolCallInput('{"x":1}<|end|>')).toBe('{"x":1}');
+    });
+
+    it('should strip tokens with surrounding whitespace', () => {
+      expect(sanitizeToolCallInput('{"x":1}  <|call|>  ')).toBe('{"x":1}');
     });
   });
 

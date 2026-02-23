@@ -11,6 +11,18 @@ import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
+/**
+ * Strips LLM-specific tokens (e.g. `<|call|>`, `<|endoftext|>`, `<|end|>`) and surrounding
+ * whitespace from tool-call input strings. LLMs sometimes append these internal tokens to
+ * otherwise valid JSON, causing JSON.parse to fail.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13261
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function sanitizeToolCallInput(input: string): string {
+  return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+}
+
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
@@ -134,8 +146,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       let toolCallInput: Record<string, any> | undefined = undefined;
 
       if (value.input) {
+        const sanitized = sanitizeToolCallInput(value.input);
         try {
-          toolCallInput = JSON.parse(value.input);
+          toolCallInput = JSON.parse(sanitized);
         } catch (error) {
           console.error('Error converting tool call input to JSON', {
             error,
