@@ -18,7 +18,7 @@ import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
-import { MastraSandbox, shellQuote } from './mastra-sandbox';
+import { MastraSandbox, resolveExecuteCommandArgs } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
@@ -416,18 +416,21 @@ export class LocalSandbox extends MastraSandbox {
 
   async executeCommand(
     command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
+    argsOrOptions?: string[] | ExecuteCommandOptions,
+    maybeOptions?: ExecuteCommandOptions,
   ): Promise<CommandResult> {
-    this.logger.debug('[LocalSandbox] Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
+    const { fullCommand, options } = resolveExecuteCommandArgs(command, argsOrOptions, maybeOptions);
+
+    this.logger.debug('[LocalSandbox] Executing command', {
+      command: fullCommand,
+      cwd: options.cwd ?? this.workingDirectory,
+    });
 
     // Auto-start if not running (lazy initialization)
     await this.ensureRunning();
 
     const startTime = Date.now();
 
-    // Combine command + args into a single shell string, then wrap with isolation
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
     const wrapped = this.wrapCommandForIsolation(fullCommand);
 
     try {
@@ -452,7 +455,7 @@ export class LocalSandbox extends MastraSandbox {
       };
 
       this.logger.debug('[LocalSandbox] Command completed', {
-        command,
+        command: fullCommand,
         exitCode: commandResult.exitCode,
         executionTimeMs: commandResult.executionTimeMs,
       });
@@ -460,7 +463,7 @@ export class LocalSandbox extends MastraSandbox {
       return commandResult;
     } catch (error: unknown) {
       const executionTimeMs = Date.now() - startTime;
-      this.logger.error('[LocalSandbox] Command failed', { command, error, executionTimeMs });
+      this.logger.error('[LocalSandbox] Command failed', { command: fullCommand, error, executionTimeMs });
       return {
         success: false,
         stdout: '',

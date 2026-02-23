@@ -518,7 +518,7 @@ describe('Workspace Logger Integration', () => {
       expect(result.success).toBe(true);
       expect(mockLogger.debug).toHaveBeenCalledWith(
         '[LocalSandbox] Executing command',
-        expect.objectContaining({ command: 'echo' }),
+        expect.objectContaining({ command: 'echo hello' }),
       );
       expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Command completed', expect.any(Object));
 

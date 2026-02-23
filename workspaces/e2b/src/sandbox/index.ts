@@ -22,7 +22,7 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
-import { shellQuote } from '../utils/shell-quote';
+import { resolveExecuteCommandArgs } from '@mastra/core/workspace';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
@@ -908,17 +908,16 @@ export class E2BSandbox extends MastraSandbox {
    */
   async executeCommand(
     command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
+    argsOrOptions?: string[] | ExecuteCommandOptions,
+    maybeOptions?: ExecuteCommandOptions,
   ): Promise<CommandResult> {
-    this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
+    const { fullCommand, options } = resolveExecuteCommandArgs(command, argsOrOptions, maybeOptions);
+
+    this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`, options);
     await this.ensureRunning();
     const sandbox = this.instance;
 
     const startTime = Date.now();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-
-    this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
     try {
       // Merge sandbox default env with per-command env (per-command overrides)
@@ -948,8 +947,7 @@ export class E2BSandbox extends MastraSandbox {
         stdout: result.stdout,
         stderr: result.stderr,
         executionTimeMs,
-        command,
-        args,
+        command: fullCommand,
       };
     } catch (error) {
       // Handle sandbox-is-dead errors - retry once (not infinitely)
@@ -957,7 +955,7 @@ export class E2BSandbox extends MastraSandbox {
         this.handleSandboxTimeout();
         this._isRetrying = true;
         try {
-          return await this.executeCommand(command, args, options);
+          return await this.executeCommand(fullCommand, options);
         } finally {
           this._isRetrying = false;
         }
@@ -981,8 +979,7 @@ export class E2BSandbox extends MastraSandbox {
         stdout,
         stderr,
         executionTimeMs,
-        command,
-        args,
+        command: fullCommand,
       };
     }
   }

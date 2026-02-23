@@ -45,10 +45,25 @@ export function shellQuote(arg: string): string {
 }
 
 /**
- * Combine a command and args into a single shell command string with safe quoting.
+ * Resolve the overloaded executeCommand arguments.
+ *
+ * Supports two call signatures:
+ * - `executeCommand(command, options?)` — preferred
+ * - `executeCommand(command, args, options?)` — legacy (deprecated)
  */
-export function buildShellCommand(command: string, args: string[] = []): string {
-  return args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+export function resolveExecuteCommandArgs(
+  command: string,
+  argsOrOptions?: string[] | ExecuteCommandOptions,
+  maybeOptions?: ExecuteCommandOptions,
+): { fullCommand: string; args: string[]; options: ExecuteCommandOptions } {
+  if (Array.isArray(argsOrOptions)) {
+    // Legacy: executeCommand(command, args, options?)
+    const args = argsOrOptions;
+    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+    return { fullCommand, args, options: maybeOptions ?? {} };
+  }
+  // Preferred: executeCommand(command, options?)
+  return { fullCommand: command, args: [], options: argsOrOptions ?? {} };
 }
 
 /**
@@ -127,7 +142,11 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   // ---------------------------------------------------------------------------
 
   /** Execute a shell command and wait for completion */
-  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+  executeCommand?(
+    command: string,
+    argsOrOptions?: string[] | ExecuteCommandOptions,
+    options?: ExecuteCommandOptions,
+  ): Promise<CommandResult>;
 
   /** Background process manager */
   declare readonly processes?: SandboxProcessManager;
@@ -183,8 +202,8 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     // Provide a default executeCommand via processes.spawn + wait if the
     // subclass implements processes but not executeCommand.
     if (!this.executeCommand && this.processes) {
-      this.executeCommand = async (command, args = [], options = {}) => {
-        const fullCommand = buildShellCommand(command, args);
+      this.executeCommand = async (command, argsOrOptions?, maybeOptions?) => {
+        const { fullCommand, options } = resolveExecuteCommandArgs(command, argsOrOptions, maybeOptions);
         return this.processes!.spawn(fullCommand, options).then(handle =>
           handle.wait({ onStdout: options.onStdout, onStderr: options.onStderr }),
         );
