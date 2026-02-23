@@ -9,29 +9,32 @@ Create a changeset using the CLI. The goal of changesets are to use it for gener
 
 ## CLI Usage
 
+Run the CLI with the following command to create a changeset:
+
 ```bash
-pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--patch pkg3]
+pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg1] [--patch pkg1]
 ```
+
+For each package that has changes, run the CLI once and specify the appropriate version bump type (`--major`, `--minor`, or `--patch`) and message for that package. This will create a separate changeset file for each package, which is important for generating accurate changelogs.
 
 **Arguments:**
 
-- `-s` or `--skipPrompt` - Run non-interactively (required for automation)
-- `-m "message"` or `--message "message"` - The changeset message (required)
-- `--major @scope/pkg` - Packages that should have a major version bump
-- `--minor @scope/pkg` - Packages that should have a minor version bump
-- `--patch @scope/pkg` - Packages that should have a patch version bump (default for detected changes)
+- `-s` or `--skipPrompt`: Run non-interactively (required for automation)
+- `-m "message"` or `--message "message"`: The changeset message (required)
+- `--major @scope/pkg`: Packages that should have a major version bump
+- `--minor @scope/pkg`: Packages that should have a minor version bump
+- `--patch @scope/pkg`: Packages that should have a patch version bump (default for detected changes)
 
 **Notes:**
 
-- The CLI auto-detects changed packages from git and defaults them to `patch` bumps
 - You can override the bump type by specifying `--major` or `--minor` for specific packages
 - Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor mastra`
 
 ## Version Bump Types
 
-- `patch` - Bugfixes with backward-compatible changes
-- `minor` - New features with backward-compatible changes
-- `major` - Breaking changes that are not backward-compatible
+- `patch`: Bugfixes with backward-compatible changes
+- `minor`: New features with backward-compatible changes
+- `major`: Breaking changes that are not backward-compatible
 
 ## Message Guidelines
 
