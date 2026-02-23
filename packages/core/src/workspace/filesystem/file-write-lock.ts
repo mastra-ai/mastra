@@ -8,6 +8,12 @@ import * as nodePath from 'node:path';
  * target the same file concurrently.
  */
 
+/** Options for constructing a FileWriteLock. */
+export interface FileWriteLockOptions {
+  /** Maximum time (ms) a single lock-holder may run before being rejected. Default: 30 000. */
+  timeoutMs?: number;
+}
+
 /**
  * Interface for per-file write locking.
  */
@@ -26,6 +32,11 @@ export interface FileWriteLock {
  */
 export class InMemoryFileWriteLock implements FileWriteLock {
   private queues = new Map<string, Promise<void>>();
+  private readonly timeoutMs: number;
+
+  constructor(opts?: FileWriteLockOptions) {
+    this.timeoutMs = opts?.timeoutMs ?? 30_000;
+  }
 
   get size(): number {
     return this.queues.size;
@@ -38,19 +49,22 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     const currentQueue = this.queues.get(key) ?? Promise.resolve();
 
     // Create a deferred promise for our result
-    let resolve!: (value: T) => void;
-    let reject!: (error: unknown) => void;
-    const resultPromise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
+    const { promise: resultPromise, resolve, reject } = Promise.withResolvers<T>();
 
     // Chain our operation onto the queue
     const queuePromise = currentQueue
       .catch(() => {}) // Ignore errors from previous operations
       .then(async () => {
         try {
-          const result = await fn();
+          const result = await Promise.race([
+            fn(),
+            new Promise<never>((_, rej) =>
+              setTimeout(
+                () => rej(new Error(`write-lock timeout on "${key}" after ${this.timeoutMs}ms`)),
+                this.timeoutMs,
+              ),
+            ),
+          ]);
           resolve(result);
         } catch (error) {
           reject(error);
@@ -81,7 +95,8 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     // - No base-directory resolution: "foo.txt" and "/workspace/foo.txt" are
     //   distinct keys. Workspace tools pass paths relative to the workspace root,
     //   so this doesn't arise in practice.
-    const normalized = nodePath.posix.normalize(pathStr.replace(/\\/g, '/'));
-    return normalized.replace(/\/$/, '') || '/';
+    // Collapse leading //+ before normalize (POSIX preserves leading //)
+    const normalized = nodePath.posix.normalize(pathStr.replace(/\\/g, '/').replace(/^\/\/+/, '/'));
+    return normalized.replace(/\/+$/, '') || '/';
   }
 }

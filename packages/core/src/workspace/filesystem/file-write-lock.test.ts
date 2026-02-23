@@ -99,6 +99,46 @@ describe('InMemoryFileWriteLock', () => {
     expect(order).toEqual([1, 2]);
   });
 
+  it('should normalize leading double-slash to single slash', async () => {
+    const lock = new InMemoryFileWriteLock();
+    const order: number[] = [];
+
+    const op1 = lock.withLock('//file.txt', async () => {
+      await delay(20);
+      order.push(1);
+    });
+    const op2 = lock.withLock('/file.txt', async () => {
+      order.push(2);
+    });
+
+    await Promise.all([op1, op2]);
+
+    // Serialized because //file.txt normalizes to /file.txt
+    expect(order).toEqual([1, 2]);
+  });
+
+  it('should reject with timeout when fn hangs', async () => {
+    const lock = new InMemoryFileWriteLock({ timeoutMs: 50 });
+
+    const hung = lock.withLock('/file.txt', () => new Promise<string>(() => {})); // never resolves
+
+    await expect(hung).rejects.toThrow('write-lock timeout');
+
+    // Queue should clean up after timeout
+    await delay(0);
+    expect(lock.size).toBe(0);
+  });
+
+  it('should not block next operation after timeout', async () => {
+    const lock = new InMemoryFileWriteLock({ timeoutMs: 50 });
+
+    const hung = lock.withLock('/file.txt', () => new Promise<string>(() => {}));
+    const next = lock.withLock('/file.txt', async () => 'recovered');
+
+    await expect(hung).rejects.toThrow('write-lock timeout');
+    await expect(next).resolves.toBe('recovered');
+  });
+
   it('should normalize backslash paths to match posix paths', async () => {
     const lock = new InMemoryFileWriteLock();
     const order: number[] = [];
