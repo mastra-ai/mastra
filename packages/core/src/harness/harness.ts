@@ -516,7 +516,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const thread: HarnessThread = {
       id: this.generateId(),
       resourceId: this.resourceId,
-      title: title || 'New Thread',
+      title: title || '',
       createdAt: now,
       updatedAt: now,
     };
@@ -543,7 +543,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         thread: {
           id: thread.id,
           resourceId: thread.resourceId,
-          title: thread.title!,
+          title: thread.title,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,

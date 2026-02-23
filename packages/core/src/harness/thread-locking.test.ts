@@ -195,4 +195,47 @@ describe('Harness thread locking', () => {
       // No errors thrown — locking is optional
     });
   });
+
+  describe('createThread title defaults', () => {
+    it('defaults to empty string when no title is provided', async () => {
+      const thread = await harness.createThread();
+      expect(thread.title).toBe('');
+    });
+
+    it('defaults to empty string when called with empty args', async () => {
+      const thread = await harness.createThread({});
+      expect(thread.title).toBe('');
+    });
+
+    it('empty default title is falsy so generateTitle can fire', async () => {
+      const thread = await harness.createThread();
+      expect(!thread.title).toBe(true);
+    });
+
+    it('uses the provided title when explicitly set', async () => {
+      const thread = await harness.createThread({ title: 'My Custom Thread' });
+      expect(thread.title).toBe('My Custom Thread');
+    });
+
+    it('persists empty title to storage', async () => {
+      const store = new InMemoryStore();
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const h = new Harness({
+        id: 'test-harness',
+        storage: store,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+      await h.init();
+
+      const thread = await h.createThread();
+      const memoryStorage = await store.getStore('memory');
+      const stored = await memoryStorage!.getThreadById({ threadId: thread.id });
+      expect(stored).toBeDefined();
+      expect(stored!.title).toBe('');
+    });
+  });
 });
