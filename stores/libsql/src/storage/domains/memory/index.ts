@@ -107,6 +107,21 @@ export class MemoryLibSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    // Add lastMessageAt column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    await this.#client.execute({
+      sql: `UPDATE "${TABLE_THREADS}" SET "lastMessageAt" = (
+        SELECT MAX("createdAt") FROM "${TABLE_MESSAGES}" WHERE thread_id = "${TABLE_THREADS}".id
+      ) WHERE "lastMessageAt" IS NULL AND id IN (
+        SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}"
+      )`,
+      args: [],
+    });
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       await this.#client.execute({
@@ -593,9 +608,14 @@ export class MemoryLibSQL extends MemoryStorage {
       });
 
       const now = new Date().toISOString();
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const maxCreatedAt =
+        messages.length > 0
+          ? new Date(Math.max(...messages.map(m => new Date(m.createdAt || now).getTime()))).toISOString()
+          : now;
       batchStatements.push({
-        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
-        args: [now, threadId],
+        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = COALESCE(MAX("lastMessageAt", ?), ?) WHERE id = ?`,
+        args: [now, maxCreatedAt, maxCreatedAt, threadId],
       });
 
       // Execute in batches to avoid potential limitations
@@ -773,13 +793,13 @@ export class MemoryLibSQL extends MemoryStorage {
           });
         }
 
-        // Update thread timestamps within the transaction
+        // Update thread timestamps and recompute lastMessageAt within the transaction
         if (threadIds.size > 0) {
           const now = new Date().toISOString();
           for (const threadId of threadIds) {
             await tx.execute({
-              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
-              args: [now, threadId],
+              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = (SELECT MAX("createdAt") FROM "${TABLE_MESSAGES}" WHERE thread_id = ?) WHERE id = ?`,
+              args: [now, threadId, threadId],
             });
           }
         }
@@ -918,6 +938,7 @@ export class MemoryLibSQL extends MemoryStorage {
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
         createdAt: new Date(result.createdAt),
         updatedAt: new Date(result.updatedAt),
+        lastMessageAt: (result as any).lastMessageAt ? new Date((result as any).lastMessageAt) : null,
       };
     } catch (error) {
       throw new MastraError(
@@ -1023,6 +1044,7 @@ export class MemoryLibSQL extends MemoryStorage {
         title: row.title as string,
         createdAt: new Date(row.createdAt as string),
         updatedAt: new Date(row.updatedAt as string),
+        lastMessageAt: row.lastMessageAt ? new Date(row.lastMessageAt as string) : null,
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
@@ -1146,12 +1168,13 @@ export class MemoryLibSQL extends MemoryStorage {
     };
 
     try {
+      const now = new Date().toISOString();
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), id],
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), "updatedAt" = ? WHERE id = ?`,
+        args: [title, JSON.stringify(updatedThread.metadata), now, id],
       });
 
-      return updatedThread;
+      return { ...updatedThread, updatedAt: new Date(now) };
     } catch (error) {
       throw new MastraError(
         {
@@ -1280,6 +1303,11 @@ export class MemoryLibSQL extends MemoryStorage {
       };
 
       // Create the new thread
+      const hasMessages = sourceMessages.length > 0;
+      const maxMessageDate = hasMessages
+        ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt as string).getTime())))
+        : null;
+      const maxMessageDateStr = maxMessageDate ? maxMessageDate.toISOString() : null;
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
@@ -1290,6 +1318,7 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         createdAt: now,
         updatedAt: now,
+        lastMessageAt: maxMessageDate,
       };
 
       // Use transaction for consistency
@@ -1298,8 +1327,8 @@ export class MemoryLibSQL extends MemoryStorage {
       try {
         // Insert the new thread
         await tx.execute({
-          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
+          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt", "lastMessageAt")
+                VALUES (?, ?, ?, jsonb(?), ?, ?, ?)`,
           args: [
             newThread.id,
             newThread.resourceId,
@@ -1307,6 +1336,7 @@ export class MemoryLibSQL extends MemoryStorage {
             JSON.stringify(newThread.metadata),
             nowStr,
             nowStr,
+            maxMessageDateStr,
           ],
         });
 

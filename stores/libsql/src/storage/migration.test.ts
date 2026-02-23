@@ -581,7 +581,8 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
           title TEXT NOT NULL,
           metadata TEXT,
           "createdAt" TEXT NOT NULL,
-          "updatedAt" TEXT NOT NULL
+          "updatedAt" TEXT NOT NULL,
+          "lastMessageAt" TEXT
         )
       `);
 
@@ -648,7 +649,8 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
           title TEXT NOT NULL,
           metadata TEXT,
           "createdAt" TEXT NOT NULL,
-          "updatedAt" TEXT NOT NULL
+          "updatedAt" TEXT NOT NULL,
+          "lastMessageAt" TEXT
         )
       `);
 

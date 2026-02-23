@@ -1,4 +1,4 @@
-import type { StorageOrderBy, ThreadOrderBy, ThreadSortDirection } from '../types';
+import type { StorageOrderBy, EntityOrderBy, ThreadSortDirection } from '../types';
 import { StorageDomain } from './base';
 
 // ============================================================================
@@ -85,7 +85,7 @@ export interface VersionedEntityBase {
 // Constants for validation (shared across all versioned domains)
 // ============================================================================
 
-const ENTITY_ORDER_BY_SET: Record<ThreadOrderBy, true> = {
+const ENTITY_ORDER_BY_SET: Record<EntityOrderBy, true> = {
   createdAt: true,
   updatedAt: true,
 };
@@ -277,9 +277,9 @@ export abstract class VersionedStorageDomain<
   // ==========================================================================
 
   protected parseOrderBy(
-    orderBy?: StorageOrderBy,
+    orderBy?: StorageOrderBy<EntityOrderBy>,
     defaultDirection: ThreadSortDirection = 'DESC',
-  ): { field: ThreadOrderBy; direction: ThreadSortDirection } {
+  ): { field: EntityOrderBy; direction: ThreadSortDirection } {
     return {
       field: orderBy?.field && orderBy.field in ENTITY_ORDER_BY_SET ? orderBy.field : 'createdAt',
       direction: orderBy?.direction && orderBy.direction in SORT_DIRECTION_SET ? orderBy.direction : defaultDirection,

@@ -77,12 +77,15 @@ export class StoreMemoryLance extends MemoryStorage {
       const idConditions = messageIds.map(id => `id = '${this.escapeSql(id)}'`).join(' OR ');
       await messagesTable.delete(idConditions);
 
-      // Update thread timestamps using mergeInsert
+      // Recompute lastMessageAt and update thread timestamps using mergeInsert
       const now = new Date().getTime();
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       for (const threadId of threadIds) {
         const thread = await this.getThreadById({ threadId });
         if (thread) {
+          const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+          const lastMessageAt =
+            remaining.length > 0 ? Math.max(...remaining.map(m => new Date(m.createdAt).getTime())) : null;
           const record = {
             id: threadId,
             resourceId: thread.resourceId,
@@ -90,6 +93,7 @@ export class StoreMemoryLance extends MemoryStorage {
             metadata: JSON.stringify(thread.metadata),
             createdAt: new Date(thread.createdAt).getTime(),
             updatedAt: now,
+            lastMessageAt,
           };
           await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
         }
@@ -124,6 +128,7 @@ export class StoreMemoryLance extends MemoryStorage {
         ...thread,
         createdAt: new Date(thread.createdAt),
         updatedAt: new Date(thread.updatedAt),
+        lastMessageAt: thread.lastMessageAt ? new Date(thread.lastMessageAt) : null,
       };
     } catch (error: any) {
       throw new MastraError(
@@ -543,11 +548,27 @@ export class StoreMemoryLance extends MemoryStorage {
       const table = await this.client.openTable(TABLE_MESSAGES);
       await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
 
-      // Update the thread's updatedAt timestamp
+      // Update the thread's updatedAt and lastMessageAt timestamps
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       const currentTime = new Date().getTime();
-      const updateRecord = { id: threadId, updatedAt: currentTime };
-      await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const maxCreatedAt = Math.max(...messages.map(m => new Date(m.createdAt).getTime()));
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        // Only advance lastMessageAt, never regress
+        const existingLastMessageAt = thread.lastMessageAt ? new Date(thread.lastMessageAt).getTime() : 0;
+        const lastMessageAt = Math.max(maxCreatedAt, existingLastMessageAt);
+        const record = {
+          id: threadId,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: JSON.stringify(thread.metadata),
+          createdAt: new Date(thread.createdAt).getTime(),
+          updatedAt: currentTime,
+          lastMessageAt,
+        };
+        await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+      }
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
@@ -645,13 +666,16 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
-        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
-        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+        const aRaw = a[field];
+        const bRaw = b[field];
 
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+        // Handle null/undefined before conversion - nulls last for DESC, nulls first for ASC
+        if (aRaw == null && bRaw == null) return 0;
+        if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+        if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+
+        const aValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field) ? new Date(aRaw).getTime() : aRaw;
+        const bValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field) ? new Date(bRaw).getTime() : bRaw;
 
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);

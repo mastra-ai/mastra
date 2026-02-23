@@ -74,6 +74,34 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    // Add lastMessageAt column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    // ClickHouse ALTER TABLE UPDATE does not support correlated subqueries,
+    // so we query the max createdAt per thread first, then update each thread individually.
+    const backfillResult = await this.client.query({
+      query: `SELECT thread_id, max(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} GROUP BY thread_id`,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+    const backfillRows = await backfillResult.json();
+    for (const row of backfillRows.data as any[]) {
+      const maxCreatedAt = row.maxCreatedAt ? new Date(row.maxCreatedAt).toISOString().replace('Z', '') : null;
+      if (maxCreatedAt) {
+        await this.client.command({
+          query: `ALTER TABLE ${TABLE_THREADS} UPDATE lastMessageAt = {lma:DateTime64(3)} WHERE id = {threadId:String} AND lastMessageAt IS NULL`,
+          query_params: { lma: maxCreatedAt, threadId: row.thread_id },
+        });
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -101,13 +129,48 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         query_params: { messageIds },
       });
 
-      // Update thread timestamps
-      if (threadIds.length > 0) {
-        // Remove 'Z' suffix as ClickHouse DateTime64 expects format without timezone suffix
-        const now = new Date().toISOString().replace('Z', '');
-        await this.client.command({
-          query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)} WHERE id IN {threadIds:Array(String)}`,
-          query_params: { now, threadIds },
+      // Recompute lastMessageAt by inserting new rows (ReplacingMergeTree pattern)
+      // ALTER TABLE UPDATE is async in ClickHouse; INSERT is immediate and deduped by ReplacingMergeTree
+      const uniqueThreadIds = [...new Set(threadIds)];
+      for (const threadId of uniqueThreadIds) {
+        const existingThread = await this.getThreadById({ threadId });
+        if (!existingThread) continue;
+
+        // Query max createdAt from remaining messages for this thread
+        const maxResult = await this.client.query({
+          query: `SELECT MAX(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} WHERE thread_id = {threadId:String}`,
+          query_params: { threadId },
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            date_time_output_format: 'iso',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        });
+        const maxRows = await maxResult.json();
+        const maxCreatedAt = (maxRows.data as any[])[0]?.maxCreatedAt || null;
+
+        const lastMessageAt = maxCreatedAt ? new Date(maxCreatedAt).toISOString() : null;
+
+        await this.client.insert({
+          table: TABLE_THREADS,
+          format: 'JSONEachRow',
+          values: [
+            {
+              id: existingThread.id,
+              resourceId: existingThread.resourceId,
+              title: existingThread.title,
+              metadata: serializeMetadata(existingThread.metadata),
+              createdAt: existingThread.createdAt,
+              updatedAt: new Date().toISOString(),
+              lastMessageAt,
+            },
+          ],
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
         });
       }
     } catch (error) {
@@ -660,18 +723,30 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }),
         ...updatePromises,
         ...deletePromises,
-        // Update thread's updatedAt timestamp
+        // Update thread's updatedAt and lastMessageAt timestamps
         this.client.insert({
           table: TABLE_THREADS,
           format: 'JSONEachRow',
-          values: Array.from(threadIdSet.values()).map(thread => ({
-            id: thread.id,
-            resourceId: thread.resourceId,
-            title: thread.title,
-            metadata: serializeMetadata(thread.metadata),
-            createdAt: thread.createdAt,
-            updatedAt: new Date().toISOString(),
-          })),
+          values: Array.from(threadIdSet.entries()).map(([tid, thread]) => {
+            const nowStr = new Date().toISOString();
+            // Compute lastMessageAt from the max createdAt of saved messages for this thread
+            const threadMsgs = messages.filter(m => m.threadId === tid);
+            const maxCreatedAt = new Date(
+              Math.max(...threadMsgs.map(m => new Date(m.createdAt).getTime())),
+            ).toISOString();
+            // Use the greater of existing lastMessageAt and computed max
+            const existingLMA = thread.lastMessageAt ? new Date(thread.lastMessageAt).toISOString() : null;
+            const lastMessageAt = existingLMA && existingLMA > maxCreatedAt ? existingLMA : maxCreatedAt;
+            return {
+              id: thread.id,
+              resourceId: thread.resourceId,
+              title: thread.title,
+              metadata: serializeMetadata(thread.metadata),
+              createdAt: thread.createdAt,
+              updatedAt: nowStr,
+              lastMessageAt,
+            };
+          }),
           clickhouse_settings: {
             date_time_input_format: 'best_effort',
             use_client_time_zone: 1,
@@ -698,13 +773,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
       const result = await this.client.query({
-        query: `SELECT 
+        query: `SELECT
           id,
           "resourceId",
           title,
           metadata,
           toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
+          toDateTime64(updatedAt, 3) as updatedAt,
+          lastMessageAt
         FROM "${TABLE_THREADS}"
         WHERE id = {var_id:String}
         ORDER BY updatedAt DESC
@@ -731,6 +807,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         metadata: parseMetadata(thread.metadata),
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        lastMessageAt: thread.lastMessageAt || null,
       };
     } catch (error: any) {
       throw new MastraError(
@@ -757,6 +834,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
+            lastMessageAt: thread.lastMessageAt
+              ? thread.lastMessageAt instanceof Date
+                ? thread.lastMessageAt.toISOString()
+                : thread.lastMessageAt
+              : null,
           },
         ],
         format: 'JSONEachRow',
@@ -822,6 +904,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(updatedThread.metadata),
             createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
+            lastMessageAt: existingThread.lastMessageAt ?? null,
           },
         ],
         clickhouse_settings: {
@@ -986,6 +1069,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   metadata,
                   toDateTime64(createdAt, 3) as createdAt,
                   toDateTime64(updatedAt, 3) as updatedAt,
+                  lastMessageAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
               )
@@ -995,10 +1079,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 title,
                 metadata,
                 createdAt,
-                updatedAt
+                updatedAt,
+                lastMessageAt
               FROM ranked_threads
               WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
-              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}${field === 'lastMessageAt' ? (direction === 'DESC' ? ' NULLS LAST' : ' NULLS FIRST') : ''}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
@@ -1018,6 +1103,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
         ...thread,
         metadata: parseMetadata(thread.metadata),
+        lastMessageAt: thread.lastMessageAt || null,
       }));
 
       return {
@@ -1155,8 +1241,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 UPDATE ${setClauses.join(', ')}
                 WHERE id = {var_id_${paramIdx}:String}
               `;
-
-          console.info('Updating message:', id, 'with query:', updateQuery, 'values:', values);
 
           updatePromises.push(
             this.client.command({
@@ -1307,7 +1391,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
           // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
+            query: `SELECT id, resourceId, title, metadata, createdAt, lastMessageAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
             query_params: { threadId },
             clickhouse_settings: {
               date_time_input_format: 'best_effort',
@@ -1347,6 +1431,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                       : serializeMetadata(existingThread.metadata as Record<string, unknown>),
                   createdAt: existingThread.createdAt,
                   updatedAt: now,
+                  lastMessageAt: existingThread.lastMessageAt ?? null,
                 },
               ],
               clickhouse_settings: {

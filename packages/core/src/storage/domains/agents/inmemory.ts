@@ -6,7 +6,7 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  ThreadOrderBy,
+  EntityOrderBy,
   ThreadSortDirection,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
@@ -330,7 +330,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
   private sortAgents(
     agents: StorageAgentType[],
-    field: ThreadOrderBy,
+    field: EntityOrderBy,
     direction: ThreadSortDirection,
   ): StorageAgentType[] {
     return agents.sort((a, b) => {
