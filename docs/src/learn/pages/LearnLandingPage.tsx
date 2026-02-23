@@ -35,7 +35,11 @@ function LandingContent() {
       {/* Hero */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">{course.title}</h1>
-        <p className="mt-2 text-(--mastra-text-tertiary)">{course.description}</p>
+        {course.description.split('\n\n').map((para, i) => (
+          <p key={i} className="mt-2 text-(--mastra-text-tertiary)">
+            {para}
+          </p>
+        ))}
       </div>
 
       {/* Lesson list grouped by module */}
