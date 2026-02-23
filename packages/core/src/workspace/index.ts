@@ -8,7 +8,7 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
-export { MastraSandbox, SandboxProcessManager, ProcessHandle, resolveExecuteCommandArgs } from './sandbox';
+export { MastraSandbox, SandboxProcessManager, ProcessHandle } from './sandbox';
 
 // Errors
 export * from './errors';

@@ -86,21 +86,17 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * @example
    * ```typescript
-   * // Preferred: single command string
+   * // Recommended: single command string with options
    * await sandbox.executeCommand('npm install', { timeout: 60000 });
    *
-   * // Legacy: command + args (deprecated, use single string instead)
+   * // Legacy: command + args array (use single string instead)
    * await sandbox.executeCommand('npm', ['install'], { timeout: 60000 });
    * ```
    *
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
-  executeCommand?(
-    command: string,
-    argsOrOptions?: string[] | ExecuteCommandOptions,
-    options?: ExecuteCommandOptions,
-  ): Promise<CommandResult>;
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   // ---------------------------------------------------------------------------
   // Background Process Management (Optional)

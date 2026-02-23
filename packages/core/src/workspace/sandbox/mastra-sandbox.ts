@@ -33,38 +33,7 @@ import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
 import type { WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
-
-/**
- * Shell-quote an argument for safe interpolation into a shell command string.
- * Safe characters (alphanumeric, `.`, `_`, `-`, `/`, `=`, `:`, `@`) pass through.
- * Everything else is wrapped in single quotes with embedded quotes escaped.
- */
-export function shellQuote(arg: string): string {
-  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-/**
- * Resolve the overloaded executeCommand arguments.
- *
- * Supports two call signatures:
- * - `executeCommand(command, options?)` — preferred
- * - `executeCommand(command, args, options?)` — legacy (deprecated)
- */
-export function resolveExecuteCommandArgs(
-  command: string,
-  argsOrOptions?: string[] | ExecuteCommandOptions,
-  maybeOptions?: ExecuteCommandOptions,
-): { fullCommand: string; args: string[]; options: ExecuteCommandOptions } {
-  if (Array.isArray(argsOrOptions)) {
-    // Legacy: executeCommand(command, args, options?)
-    const args = argsOrOptions;
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    return { fullCommand, args, options: maybeOptions ?? {} };
-  }
-  // Preferred: executeCommand(command, options?)
-  return { fullCommand: command, args: [], options: argsOrOptions ?? {} };
-}
+import { shellQuote } from './utils';
 
 /**
  * Lifecycle hook that fires during sandbox state transitions.
@@ -83,6 +52,28 @@ export interface MastraSandboxOptions {
   onStop?: SandboxLifecycleHook;
   /** Called before the sandbox is destroyed */
   onDestroy?: SandboxLifecycleHook;
+
+  /**
+   * Background process manager for this sandbox.
+   *
+   * When provided, the base class automatically:
+   * 1. Sets the sandbox back-reference on the process manager
+   * 2. Exposes it via `this.processes`
+   * 3. Creates a default `executeCommand` implementation (spawn + wait)
+   *
+   * @example
+   * ```typescript
+   * class MySandbox extends MastraSandbox {
+   *   constructor() {
+   *     super({
+   *       name: 'MySandbox',
+   *       processes: new MyProcessManager({ env: myEnv }),
+   *     });
+   *   }
+   * }
+   * ```
+   */
+  processes?: SandboxProcessManager;
 }
 
 /**
@@ -102,20 +93,15 @@ export interface MastraSandboxOptions {
  *   status: ProviderStatus = 'pending';
  *
  *   constructor() {
- *     super({ name: 'MyCustomSandbox' });
+ *     super({
+ *       name: 'MyCustomSandbox',
+ *       processes: new MyProcessManager({ env: myEnv }),
+ *     });
  *   }
  *
- *   // Override start() to provide startup logic
- *   async start(): Promise<void> {
- *     // Your startup logic here
- *   }
- *
+ *   async start(): Promise<void> { /* startup logic *\/ }
  *   async mount(filesystem, mountPath) { ... }
  *   async unmount(mountPath) { ... }
- *   async executeCommand(command: string, args?: string[]): Promise<CommandResult> {
- *     this.logger.debug('Executing command', { command, args });
- *     // Implementation...
- *   }
  * }
  * ```
  */
@@ -141,15 +127,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   // invisible on the class type unless explicitly listed.
   // ---------------------------------------------------------------------------
 
-  /** Execute a shell command and wait for completion */
-  executeCommand?(
-    command: string,
-    argsOrOptions?: string[] | ExecuteCommandOptions,
-    options?: ExecuteCommandOptions,
-  ): Promise<CommandResult>;
+  /**
+   * Execute a shell command and wait for completion.
+   *
+   * Method syntax (not property syntax) is intentional — it prevents
+   * `useDefineForClassFields` from emitting `this.executeCommand = undefined`
+   * which would shadow prototype methods defined by subclasses.
+   */
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   /** Background process manager */
-  declare readonly processes?: SandboxProcessManager;
+  readonly processes?: SandboxProcessManager;
 
   /** Mount manager - automatically created if subclass implements mount() */
   readonly mounts?: MountManager;
@@ -199,15 +187,30 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       });
     }
 
-    // Provide a default executeCommand via processes.spawn + wait if the
-    // subclass implements processes but not executeCommand.
-    if (!this.executeCommand && this.processes) {
-      this.executeCommand = async (command, argsOrOptions?, maybeOptions?) => {
-        const { fullCommand, options } = resolveExecuteCommandArgs(command, argsOrOptions, maybeOptions);
-        return this.processes!.spawn(fullCommand, options).then(handle =>
-          handle.wait({ onStdout: options.onStdout, onStderr: options.onStderr }),
-        );
-      };
+    // Wire up process manager if provided
+    if (options.processes) {
+      const pm = options.processes;
+      // Set the sandbox back-reference. The process manager reads this
+      // lazily (at call time), so it's fine that the subclass constructor
+      // hasn't finished yet.
+      pm.sandbox = this;
+      this.processes = pm;
+
+      // Auto-create executeCommand (spawn + wait) unless the subclass
+      // defines its own implementation.
+      if (!this.executeCommand) {
+        this.executeCommand = async (command: string, args?: string[], opts?: ExecuteCommandOptions) => {
+          const fullCommand = args?.length ? `${command} ${args.map(a => shellQuote(a)).join(' ')}` : command;
+          this.logger.debug(`[${this.name}] Executing: ${fullCommand}`, { cwd: opts?.cwd });
+
+          const handle = await pm.spawn(fullCommand, opts ?? {});
+          const result = await handle.wait();
+
+          this.logger.debug(`[${this.name}] Exit code: ${result.exitCode} (${result.executionTimeMs}ms)`);
+
+          return { ...result, command: fullCommand };
+        };
+      }
     }
   }
 

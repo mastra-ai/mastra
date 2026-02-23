@@ -37,20 +37,24 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
  * await proc?.kill();
  * ```
  */
-export interface ProcessManagerOptions<TSandbox extends MastraSandbox = MastraSandbox> {
-  sandbox: TSandbox;
+export interface ProcessManagerOptions {
   env?: Record<string, string | undefined>;
 }
 
 export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = MastraSandbox> {
-  protected readonly sandbox: TSandbox;
+  /**
+   * The sandbox this process manager belongs to.
+   * Set automatically by MastraSandbox when processes are passed into the constructor.
+   * @internal
+   */
+  sandbox!: TSandbox;
+
   protected readonly env: Record<string, string | undefined>;
 
   /** Tracked process handles keyed by PID. Populated by spawn(), used by get()/kill(). */
   protected readonly _tracked = new Map<number, ProcessHandle>();
 
-  constructor({ sandbox, env = {} }: ProcessManagerOptions<TSandbox>) {
-    this.sandbox = sandbox;
+  constructor({ env = {} }: ProcessManagerOptions = {}) {
     this.env = env;
 
     // Capture subclass overrides (via prototype chain) before shadowing
