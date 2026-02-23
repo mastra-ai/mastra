@@ -1,17 +1,17 @@
 ---
-title: "Configuration | Mastracode"
-description: "Learn how to configure Mastracode with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
+title: "Configuration | Mastra Code"
+description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
 packages:
   - "mastracode"
 ---
 
 # Configuration
 
-Mastracode is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
+Mastra Code is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
 
 ## Authentication
 
-Mastracode authenticates with AI providers through OAuth. Run `/login` in the TUI to start the flow.
+Mastra Code authenticates with AI providers through OAuth. Run `/login` in the TUI to start the flow.
 
 ### Supported providers
 
@@ -24,9 +24,9 @@ OAuth credentials are stored in `auth.json` alongside the database in the [app d
 
 ### Model routing
 
-For providers not covered by OAuth, Mastracode uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
+For providers not covered by OAuth, Mastra Code uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
 
-```sh filename="terminal"
+```sh
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 export GOOGLE_GENERATIVE_AI_API_KEY=...
@@ -34,7 +34,7 @@ export GOOGLE_GENERATIVE_AI_API_KEY=...
 
 ## MCP servers
 
-Mastracode can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
+Mastra Code can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
 
 | Priority | Path | Scope |
 |---|---|---|
@@ -62,7 +62,7 @@ Project config overrides global config by server name. Claude Code settings are 
 
 Each server entry requires a `command` field. The `args` and `env` fields are optional.
 
-On startup, Mastracode connects to all configured servers and reports the status:
+On startup, Mastra Code connects to all configured servers and reports the status:
 
 ```
 MCP: 2 server(s) connected, 15 tool(s)
@@ -145,7 +145,7 @@ Global hooks run before project hooks. For the same event, all hooks execute in 
 
 ## Custom slash commands
 
-Define reusable prompt templates as markdown files. Mastracode scans these directories for `.md` files:
+Define reusable prompt templates as markdown files. Mastra Code scans these directories for `.md` files:
 
 | Priority | Path | Scope |
 |---|---|---|
@@ -174,7 +174,7 @@ Commands support variables like `$ARGUMENTS` for positional args, `@filename` fo
 
 Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
 
-Mastracode scans these directories for skills:
+Mastra Code scans these directories for skills:
 
 | Priority | Path | Scope |
 |---|---|---|
@@ -187,28 +187,28 @@ Each skill is a directory containing a `SKILL.md` file with instructions and tri
 
 ## Agent instructions
 
-Mastracode loads project-specific instructions from `AGENTS.md` or `CLAUDE.md` files and injects them into the agent's system prompt. This is how you can customize the agent's behavior for your project.
+Mastra Code loads project-specific instructions from `AGENTS.md` or `CLAUDE.md` files and injects them into the agent's system prompt. This is how you can customize the agent's behavior for your project.
 
 ### Lookup order
 
 For project instructions (first match wins):
 
 1. `AGENTS.md` or `CLAUDE.md` in the project root
-2. `.claude/AGENTS.md` or `.claude/CLAUDE.md`
-3. `.mastracode/AGENTS.md` or `.mastracode/CLAUDE.md`
+1. `.claude/AGENTS.md` or `.claude/CLAUDE.md`
+1. `.mastracode/AGENTS.md` or `.mastracode/CLAUDE.md`
 
 For global instructions (first match wins):
 
 1. `~/.claude/AGENTS.md` or `~/.claude/CLAUDE.md`
-2. `~/.mastracode/AGENTS.md` or `~/.mastracode/CLAUDE.md`
-3. `~/.config/claude/AGENTS.md` or `~/.config/claude/CLAUDE.md`
-4. `~/.config/mastracode/AGENTS.md` or `~/.config/mastracode/CLAUDE.md`
+1. `~/.mastracode/AGENTS.md` or `~/.mastracode/CLAUDE.md`
+1. `~/.config/claude/AGENTS.md` or `~/.config/claude/CLAUDE.md`
+1. `~/.config/mastracode/AGENTS.md` or `~/.config/mastracode/CLAUDE.md`
 
 `AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
 
 ## Database
 
-Mastracode uses LibSQL (SQLite) for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
+Mastra Code uses LibSQL (SQLite) for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
 
 ### Database location
 
@@ -286,7 +286,7 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 
 ## Resource ID override
 
-Resource IDs determine how threads are grouped. By default, Mastracode generates one from the Git remote URL or filesystem path. Override it to share threads across repositories or isolate threads within a monorepo:
+Resource IDs determine how threads are grouped. By default, Mastra Code generates one from the Git remote URL or filesystem path. Override it to share threads across repositories or isolate threads within a monorepo:
 
 ```json title=".mastracode/database.json"
 {
@@ -295,10 +295,3 @@ Resource IDs determine how threads are grouped. By default, Mastracode generates
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
-
-## Related
-
-- [Mastracode overview](/docs/mastracode/overview)
-- [Tools](/docs/mastracode/tools)
-- [Customization](/docs/mastracode/customization)
-- [API reference](/reference/mastracode/createMastraCode)

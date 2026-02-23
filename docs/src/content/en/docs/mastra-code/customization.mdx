@@ -1,17 +1,17 @@
 ---
-title: "Customization | Mastracode"
-description: "Learn how to extend Mastracode programmatically by creating custom modes, adding tools, defining subagents, and integrating with your own TUI."
+title: "Customization | Mastra Code"
+description: "Learn how to extend Mastra Code programmatically by creating custom modes, adding tools, defining subagents, and integrating with your own TUI."
 packages:
   - "mastracode"
 ---
 
 # Customization
 
-Mastracode is designed as a composable library. The `createMastraCode()` factory function accepts configuration overrides, and the returned `Harness` can drive any frontend — not just the built-in TUI.
+Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference/mastra-code/createMastraCode) factory function accepts configuration overrides, and the returned [`Harness`](/reference/harness/harness-class) can drive any frontend, not just the built-in TUI.
 
 ## Programmatic usage
 
-Import `createMastraCode` to bootstrap Mastracode in your own application:
+Import `createMastraCode` to bootstrap Mastra Code in your own application:
 
 ```typescript title="src/custom-agent.ts"
 import { createMastraCode } from 'mastracode'
@@ -169,7 +169,7 @@ Heartbeat handlers run on a fixed interval. They start when `harness.init()` is 
 
 ## Building a custom TUI
 
-Mastracode exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the Harness event system:
+Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the Harness event system:
 
 ```typescript title="src/custom-tui.ts"
 import { createMastraCode } from 'mastracode'
@@ -230,10 +230,3 @@ const { harness } = createMastraCode({
 | `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
 | `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
 | `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |
-
-## Related
-
-- [Mastracode overview](/docs/mastracode/overview)
-- [Configuration](/docs/mastracode/configuration)
-- [API reference](/reference/mastracode/createMastraCode)
-- [Harness Class reference](/reference/harness/harness-class)

@@ -1,13 +1,13 @@
 ---
-title: "Reference: createMastraCode() | Mastracode"
-description: "API reference for createMastraCode(), the factory function that initializes the Mastracode coding agent with its harness, MCP manager, hooks, and auth."
+title: "Reference: createMastraCode() | Mastra Code"
+description: "API reference for createMastraCode(), the factory function that initializes the Mastra Code coding agent with its harness, MCP manager, hooks, and auth."
 packages:
   - "mastracode"
 ---
 
-# `createMastraCode()`
+# createMastraCode()
 
-`createMastraCode()` is the main factory function that bootstraps the Mastracode coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the [Harness](/reference/harness/harness-class) that drives the TUI or any other frontend.
+`createMastraCode()` is the main factory function that bootstraps the Mastra Code coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the [Harness](/reference/harness/harness-class) that drives the TUI or any other frontend.
 
 ## Usage example
 
@@ -42,20 +42,20 @@ await harness.sendMessage({ content: 'Explain the auth flow' })
     {
       name: "cwd",
       type: "string",
-      description: "Working directory for project detection. Mastracode uses this path to find the Git root, determine the project name, and scope threads.",
+      description: "Working directory for project detection. Mastra Code uses this path to find the Git root, determine the project name, and scope threads.",
       isOptional: true,
       defaultValue: "process.cwd()",
     },
     {
       name: "modes",
       type: "HarnessMode[]",
-      description: "Override the default agent modes. Each mode defines an agent, a default model, and a display color. When omitted, Mastracode ships with Build, Plan, and Fast modes.",
+      description: "Override the default agent modes. Each mode defines an agent, a default model, and a display color. When omitted, Mastra Code ships with Build, Plan, and Fast modes.",
       isOptional: true,
     },
     {
       name: "subagents",
       type: "HarnessSubagent[]",
-      description: "Override the default subagent definitions. When omitted, Mastracode includes Explore (read-only codebase exploration), Plan (read-only analysis and planning), and Execute (task execution with write access).",
+      description: "Override the default subagent definitions. When omitted, Mastra Code includes Explore (read-only codebase exploration), Plan (read-only analysis and planning), and Execute (task execution with write access).",
       isOptional: true,
     },
     {
@@ -67,7 +67,7 @@ await harness.sendMessage({ content: 'Explain the auth flow' })
     {
       name: "storage",
       type: "{ url: string; authToken?: string }",
-      description: "Custom LibSQL storage configuration. When omitted, Mastracode auto-detects storage from environment variables, project config, global config, or falls back to a local SQLite database.",
+      description: "Custom LibSQL storage configuration. When omitted, Mastra Code auto-detects storage from environment variables, project config, global config, or falls back to a local SQLite database.",
       isOptional: true,
     },
     {
@@ -130,7 +130,7 @@ await harness.sendMessage({ content: 'Explain the auth flow' })
 
 ## Default modes
 
-When no `modes` are specified, Mastracode creates three modes:
+When no `modes` are specified, Mastra Code creates three modes:
 
 | Mode | Default model | Description |
 |---|---|---|
@@ -140,7 +140,7 @@ When no `modes` are specified, Mastracode creates three modes:
 
 ## Default subagents
 
-When no `subagents` are specified, Mastracode creates three subagent types:
+When no `subagents` are specified, Mastra Code creates three subagent types:
 
 | Subagent | Tools | Description |
 |---|---|---|
@@ -150,7 +150,7 @@ When no `subagents` are specified, Mastracode creates three subagent types:
 
 ## Project detection
 
-Mastracode automatically detects project identity from the working directory:
+Mastra Code automatically detects project identity from the working directory:
 
 1. **Git remote URL** — if available, normalizes SSH and HTTPS URLs to create a stable identifier shared across clones and worktrees.
 2. **Absolute path** — falls back to the filesystem path when Git isn't available.
@@ -175,6 +175,6 @@ The returned `harness` object is a full [Harness](/reference/harness/harness-cla
 
 ## Related
 
-- [Mastracode overview](/docs/mastracode/overview)
+- [Mastra Code overview](/docs/mastra-code/overview)
 - [Harness Class reference](/reference/harness/harness-class)
-- [Mastracode configuration](/docs/mastracode/configuration)
+- [Mastra Code configuration](/docs/mastra-code/configuration)

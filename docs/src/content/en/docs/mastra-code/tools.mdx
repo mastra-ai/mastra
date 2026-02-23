@@ -1,13 +1,13 @@
 ---
-title: "Tools | Mastracode"
-description: "Learn about Mastracode's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
+title: "Tools | Mastra Code"
+description: "Learn about Mastra Code's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
 packages:
   - "mastracode"
 ---
 
 # Tools
 
-Mastracode provides built-in tools that the agent uses to interact with your codebase. Each tool is designed for a specific task, and the agent selects the right one based on what it needs to do.
+Mastra Code provides built-in tools that the agent uses to interact with your codebase. Each tool is designed for a specific task, and the agent selects the right one based on what it needs to do.
 
 ## File tools
 
@@ -48,11 +48,11 @@ Edit code using abstract syntax tree (AST) analysis for intelligent, structure-a
 
 Supported transformations:
 
-- **Pattern-based search and replace** — find and replace code using AST patterns with `$VARIABLE` placeholders (e.g., replace `console.log($ARG)` with `logger.debug($ARG)`).
-- **Add/remove imports** — intelligently insert or remove import statements.
-- **Rename functions** — rename function declarations and all call sites with scope awareness.
-- **Rename variables** — rename variable declarations and all references.
-- **Selector queries** — find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
+- **Pattern-based search and replace**: Find and replace code using AST patterns with `$VARIABLE` placeholders (e.g., replace `console.log($ARG)` with `logger.debug($ARG)`).
+- **Add/remove imports**: Intelligently insert or remove import statements.
+- **Rename functions**: Rename function declarations and all call sites with scope awareness.
+- **Rename variables**: Rename variable declarations and all references.
+- **Selector queries**: Find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -145,8 +145,8 @@ Search the web for documentation, error messages, package APIs, and other inform
 
 This tool is available through two providers:
 
-- **Tavily** — when the `TAVILY_API_KEY` environment variable is set.
-- **Anthropic web search** — built into Anthropic models, used as a fallback when no Tavily key is configured.
+- **Tavily**: When the `TAVILY_API_KEY` environment variable is set.
+- **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -191,7 +191,7 @@ Submit a structured implementation plan for user review and approval (Plan mode 
 
 ## MCP tools
 
-When [MCP servers](/docs/mastracode/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
+When [MCP servers](/docs/mastra-code/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
 
 MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
 
@@ -234,13 +234,6 @@ You can configure per-category or per-tool overrides through `/settings`, and se
 
 :::note
 
-Visit [Modes](/docs/mastracode/modes) for details on how modes affect tool access and approval behavior.
+Visit [Modes](/docs/mastra-code/modes) for details on how modes affect tool access and approval behavior.
 
 :::
-
-## Related
-
-- [Mastracode overview](/docs/mastracode/overview)
-- [Modes](/docs/mastracode/modes)
-- [Configuration](/docs/mastracode/configuration)
-- [createMastraCode() reference](/reference/mastracode/createMastraCode)

@@ -310,6 +310,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Mastra Code',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-code/createMastraCode',
+          label: 'createMastraCode()',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [
@@ -695,21 +707,6 @@ const sidebars = {
           type: 'doc',
           id: 'harness/harness-class',
           label: 'Harness Class',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Mastracode',
-      collapsed: true,
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastracode/createMastraCode',
-          label: 'createMastraCode()',
         },
       ],
     },

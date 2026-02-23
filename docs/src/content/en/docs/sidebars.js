@@ -667,34 +667,34 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastracode',
+      label: 'Mastra Code',
       customProps: {
         tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastracode/overview',
+          id: 'mastra-code/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'mastracode/modes',
+          id: 'mastra-code/modes',
           label: 'Modes',
         },
         {
           type: 'doc',
-          id: 'mastracode/tools',
+          id: 'mastra-code/tools',
           label: 'Tools',
         },
         {
           type: 'doc',
-          id: 'mastracode/configuration',
+          id: 'mastra-code/configuration',
           label: 'Configuration',
         },
         {
           type: 'doc',
-          id: 'mastracode/customization',
+          id: 'mastra-code/customization',
           label: 'Customization',
         },
       ],
