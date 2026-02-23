@@ -54,6 +54,9 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   /** Tracked process handles keyed by PID. Populated by spawn(), used by get()/kill(). */
   protected readonly _tracked = new Map<number, ProcessHandle>();
 
+  /** PIDs that have been read after exit and should not be re-discovered by subclass fallbacks. */
+  protected readonly _dismissed = new Set<number>();
+
   constructor({ env = {} }: ProcessManagerOptions = {}) {
     this.env = env;
 
@@ -79,12 +82,15 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.get = async (...args: Parameters<typeof impl.get>) => {
       await this.sandbox.ensureRunning();
+      // Skip PIDs that were already read after exit and dismissed.
+      if (this._dismissed.has(args[0])) return undefined;
       const handle = await impl.get(...args);
       // Prune exited processes when their output is read — this is the
       // only automatic cleanup path. Keeps output available until the
       // consumer has seen it at least once.
       if (handle?.exitCode !== undefined) {
         this._tracked.delete(handle.pid);
+        this._dismissed.add(handle.pid);
       }
       return handle;
     };
@@ -118,6 +124,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     }
     // Release tracked handle to free accumulated output buffers.
     this._tracked.delete(pid);
+    this._dismissed.add(pid);
     return killed;
   }
 }

@@ -364,6 +364,24 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       );
 
       it(
+        'first get() after exit returns output, second get() returns undefined (pruned)',
+        async () => {
+          const handle = await processes.spawn('echo prune-test');
+          await handle.wait();
+
+          // First get() — process exited, should return handle with output
+          const first = await processes.get(handle.pid);
+          expect(first).toBeDefined();
+          expect(first!.stdout).toContain('prune-test');
+
+          // Second get() — handle was pruned on first read, should be gone
+          const second = await processes.get(handle.pid);
+          expect(second).toBeUndefined();
+        },
+        getContext().testTimeout,
+      );
+
+      it(
         'returns undefined for unknown pid',
         async () => {
           const retrieved = await processes.get(99999);

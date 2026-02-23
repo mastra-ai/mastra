@@ -23,7 +23,6 @@ import type { E2BSandbox } from './index';
  */
 class E2BProcessHandle extends ProcessHandle {
   readonly pid: number;
-  exitCode: number | undefined;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -37,10 +36,14 @@ class E2BProcessHandle extends ProcessHandle {
     this._startTime = startTime;
   }
 
+  /** Delegates to E2B's handle so exitCode reflects server-side state without needing wait(). */
+  get exitCode(): number | undefined {
+    return this._e2bHandle.exitCode;
+  }
+
   async wait(): Promise<CommandResult> {
     try {
       const result = await this._e2bHandle.wait();
-      this.exitCode = result.exitCode;
       return {
         success: result.exitCode === 0,
         exitCode: result.exitCode,
@@ -55,7 +58,7 @@ class E2BProcessHandle extends ProcessHandle {
         exitCode?: number;
         result?: { exitCode: number; stdout: string; stderr: string };
       };
-      this.exitCode = errorObj.result?.exitCode ?? errorObj.exitCode ?? 1;
+      const exitCode = errorObj.result?.exitCode ?? errorObj.exitCode ?? this.exitCode ?? 1;
 
       // Emit any output attached to the error (E2B sometimes puts it in .result)
       if (errorObj.result?.stdout) this.emitStdout(errorObj.result.stdout);
@@ -63,7 +66,7 @@ class E2BProcessHandle extends ProcessHandle {
 
       return {
         success: false,
-        exitCode: this.exitCode,
+        exitCode,
         stdout: this.stdout,
         stderr: this.stderr || (error instanceof Error ? error.message : String(error)),
         executionTimeMs: Date.now() - this._startTime,
