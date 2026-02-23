@@ -28,16 +28,20 @@ async function showSubagentModelListForScope(
       title: `Select subagent model (${scopeLabel})`,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
-        await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
-        if (scope === 'global') {
-          if (ctx.authStorage) {
-            ctx.authStorage.setSubagentModelId(model.id, agentType);
-            ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+        try {
+          await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
+          if (scope === 'global') {
+            if (ctx.authStorage) {
+              ctx.authStorage.setSubagentModelId(model.id, agentType);
+              ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+            } else {
+              ctx.showError('Cannot persist global preference: auth storage not configured');
+            }
           } else {
-            ctx.showError('Cannot persist global preference: auth storage not configured');
+            ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
           }
-        } else {
-          ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+        } catch (err) {
+          ctx.showError(`Failed to set subagent model: ${err instanceof Error ? err.message : String(err)}`);
         }
         resolve();
       },
@@ -85,9 +89,13 @@ async function showSubagentScopeThenList(
         formatResult: answer => `${agentTypeLabel} · ${answer}`,
         onSubmit: async answer => {
           ctx.state.activeInlineQuestion = undefined;
-          const selected = scopes.find(s => s.label === answer);
-          if (selected) {
-            await showSubagentModelListForScope(ctx, selected.scope, agentType, agentTypeLabel);
+          try {
+            const selected = scopes.find(s => s.label === answer);
+            if (selected) {
+              await showSubagentModelListForScope(ctx, selected.scope, agentType, agentTypeLabel);
+            }
+          } catch (err) {
+            ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
           }
           resolve();
         },
@@ -138,9 +146,13 @@ export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<
         formatResult: answer => `Subagent: ${answer}`,
         onSubmit: async answer => {
           ctx.state.activeInlineQuestion = undefined;
-          const selected = agentTypes.find(t => t.label === answer);
-          if (selected) {
-            await showSubagentScopeThenList(ctx, selected.id, selected.label);
+          try {
+            const selected = agentTypes.find(t => t.label === answer);
+            if (selected) {
+              await showSubagentScopeThenList(ctx, selected.id, selected.label);
+            }
+          } catch (err) {
+            ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
           }
           resolve();
         },

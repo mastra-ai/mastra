@@ -7,7 +7,12 @@ export async function handleModeCommand(ctx: SlashCommandContext, args: string[]
     return;
   }
   if (args[0]) {
-    await ctx.harness.switchMode({ modeId: args[0] });
+    try {
+      await ctx.harness.switchMode({ modeId: args[0] });
+      ctx.updateStatusLine();
+    } catch (err) {
+      ctx.showError(`Failed to switch mode: ${err instanceof Error ? err.message : String(err)}`);
+    }
   } else {
     const currentMode = ctx.harness.getCurrentMode();
     const modeList = modes

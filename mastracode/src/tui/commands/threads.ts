@@ -89,10 +89,11 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid);
-            resolve();
-            return;
+          } else {
+            ctx.showError(`Failed to switch thread: ${error instanceof Error ? error.message : String(error)}`);
           }
-          throw error;
+          resolve();
+          return;
         }
         state.pendingNewThread = false;
 

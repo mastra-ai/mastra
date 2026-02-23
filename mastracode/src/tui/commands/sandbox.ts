@@ -93,9 +93,8 @@ export async function handleSandboxCommand(ctx: SlashCommandContext, args: strin
   ];
 
   for (const p of currentPaths) {
-    const short = p.split('/').pop() || p;
     options.push({
-      label: `Remove: ${short}`,
+      label: `Remove: ${p}`,
       description: p,
     });
   }
@@ -112,8 +111,7 @@ export async function handleSandboxCommand(ctx: SlashCommandContext, args: strin
         formatResult: answer => {
           if (answer === 'Add path') return 'Adding sandbox path…';
           if (answer.startsWith('Remove: ')) {
-            const short = answer.replace('Remove: ', '');
-            return `Removed: ${short}`;
+            return `Removed: ${answer.replace('Remove: ', '')}`;
           }
           return answer;
         },
@@ -123,10 +121,9 @@ export async function handleSandboxCommand(ctx: SlashCommandContext, args: strin
             resolve();
             await showSandboxAddPrompt(ctx);
           } else if (answer.startsWith('Remove: ')) {
-            const short = answer.replace('Remove: ', '');
-            const fullPath = currentPaths.find(p => (p.split('/').pop() || p) === short);
-            if (fullPath) {
-              await sandboxRemovePath(ctx, fullPath, currentPaths);
+            const targetPath = answer.replace('Remove: ', '');
+            if (currentPaths.includes(targetPath)) {
+              await sandboxRemovePath(ctx, targetPath, currentPaths);
             }
             resolve();
           } else {

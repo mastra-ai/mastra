@@ -28,9 +28,13 @@ async function showModelListForScope(
       title: `Select model (${scopeLabel})`,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
-        await ctx.state.harness.switchModel({ modelId: model.id, scope, modeId });
-        ctx.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
-        ctx.updateStatusLine();
+        try {
+          await ctx.state.harness.switchModel({ modelId: model.id, scope, modeId });
+          ctx.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
+          ctx.updateStatusLine();
+        } catch (err) {
+          ctx.showError(`Failed to switch model: ${err instanceof Error ? err.message : String(err)}`);
+        }
         resolve();
       },
       onCancel: () => {
@@ -73,9 +77,13 @@ async function showModelScopeThenList(ctx: SlashCommandContext, modeId: string, 
         formatResult: answer => `${modeName} · ${answer}`,
         onSubmit: async answer => {
           ctx.state.activeInlineQuestion = undefined;
-          const selected = scopes.find(s => s.label === answer);
-          if (selected) {
-            await showModelListForScope(ctx, selected.scope, modeId, modeName);
+          try {
+            const selected = scopes.find(s => s.label === answer);
+            if (selected) {
+              await showModelListForScope(ctx, selected.scope, modeId, modeName);
+            }
+          } catch (err) {
+            ctx.showError(`Model selection failed: ${err instanceof Error ? err.message : String(err)}`);
           }
           resolve();
         },
@@ -123,9 +131,13 @@ export async function handleModelsCommand(ctx: SlashCommandContext): Promise<voi
         },
         onSubmit: async answer => {
           ctx.state.activeInlineQuestion = undefined;
-          const selected = modeOptions.find(m => m.label === answer);
-          if (selected?.modeId && selected?.modeName) {
-            await showModelScopeThenList(ctx, selected.modeId, selected.modeName);
+          try {
+            const selected = modeOptions.find(m => m.label === answer);
+            if (selected?.modeId && selected?.modeName) {
+              await showModelScopeThenList(ctx, selected.modeId, selected.modeName);
+            }
+          } catch (err) {
+            ctx.showError(`Model selection failed: ${err instanceof Error ? err.message : String(err)}`);
           }
           resolve();
         },

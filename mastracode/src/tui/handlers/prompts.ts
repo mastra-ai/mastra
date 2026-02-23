@@ -158,6 +158,7 @@ export async function handleSandboxAccessRequest(
     state.chatContainer.addChild(new Spacer(1));
     state.chatContainer.addChild(questionComponent);
     state.chatContainer.addChild(new Spacer(1));
+    questionComponent.focused = true;
     state.ui.requestRender();
     state.chatContainer.invalidate();
 

@@ -3,6 +3,7 @@
  * om_status, om_observation_start/end, om_reflection_start/end,
  * om_buffering_start/end/failed, om_activation, and om_*_failed.
  */
+import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent, TokenUsage } from '@mastra/core/harness';
 
 import { OMMarkerComponent } from '../components/om-marker.js';
@@ -12,34 +13,21 @@ import { OMOutputComponent } from '../components/om-output.js';
 import type { EventHandlerContext } from './types.js';
 
 /**
- * Add an OM marker to the chat container, inserting it *before* the
- * current streaming component so it doesn't get pushed down as text
- * streams in.  Falls back to a normal append when nothing is streaming.
+ * Insert a child component *before* the current streaming component so it
+ * doesn't get pushed down as text streams in.  Falls back to a normal
+ * append when nothing is streaming.
  */
-function addOMMarkerToChat(ctx: EventHandlerContext, marker: OMMarkerComponent): void {
+function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
   const { state } = ctx;
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent);
     if (idx >= 0) {
-      state.chatContainer.children.splice(idx, 0, marker);
+      state.chatContainer.children.splice(idx, 0, child);
       state.chatContainer.invalidate();
       return;
     }
   }
-  state.chatContainer.addChild(marker);
-}
-
-function addOMOutputToChat(ctx: EventHandlerContext, output: OMOutputComponent): void {
-  const { state } = ctx;
-  if (state.streamingComponent) {
-    const idx = state.chatContainer.children.indexOf(state.streamingComponent);
-    if (idx >= 0) {
-      state.chatContainer.children.splice(idx, 0, output);
-      state.chatContainer.invalidate();
-      return;
-    }
-  }
-  state.chatContainer.addChild(output);
+  state.chatContainer.addChild(child);
 }
 
 /**
@@ -94,7 +82,7 @@ export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: stri
     tokensToObserve,
     operationType: 'observation',
   });
-  addOMMarkerToChat(ctx, state.activeOMMarker);
+  addChildBeforeStreaming(ctx, state.activeOMMarker);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }
@@ -136,7 +124,7 @@ export function handleOMObservationEnd(
     tokensObserved,
     observationTokens,
   });
-  addOMOutputToChat(ctx, outputComponent);
+  addChildBeforeStreaming(ctx, outputComponent);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }
@@ -156,7 +144,7 @@ export function handleOMReflectionStart(ctx: EventHandlerContext, cycleId: strin
     tokensToObserve: tokensToReflect,
     operationType: 'reflection',
   });
-  addOMMarkerToChat(ctx, state.activeOMMarker);
+  addChildBeforeStreaming(ctx, state.activeOMMarker);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }
@@ -195,7 +183,7 @@ export function handleOMReflectionEnd(
     compressedTokens,
     tokensObserved: preCompressionTokens,
   });
-  addOMOutputToChat(ctx, outputComponent);
+  addChildBeforeStreaming(ctx, outputComponent);
   // Revert spinner to "Working..."
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -221,7 +209,7 @@ export function handleOMFailed(
     state.activeOMMarker.update(failData);
     state.activeOMMarker = undefined;
   } else {
-    addOMMarkerToChat(ctx, new OMMarkerComponent(failData));
+    addChildBeforeStreaming(ctx, new OMMarkerComponent(failData));
   }
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -244,7 +232,7 @@ export function handleOMBufferingStart(
     operationType,
     tokensToBuffer,
   });
-  addOMMarkerToChat(ctx, state.activeBufferingMarker);
+  addChildBeforeStreaming(ctx, state.activeBufferingMarker);
   ctx.updateStatusLine();
   state.ui.requestRender();
 }
@@ -318,7 +306,7 @@ export function handleOMActivation(
     observationTokens,
   };
   state.activeActivationMarker = new OMMarkerComponent(activationData);
-  addOMMarkerToChat(ctx, state.activeActivationMarker);
+  addChildBeforeStreaming(ctx, state.activeActivationMarker);
   state.activeBufferingMarker = undefined;
   ctx.updateStatusLine();
   state.ui.requestRender();

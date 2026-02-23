@@ -16,49 +16,12 @@ import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
+import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { getMarkdownTheme, fg, bold, mastra } from './theme.js';
 
-// =============================================================================
-// formatToolResult
-// =============================================================================
-
-/**
- * Format a tool result for display. Pure function, no state dependency.
- */
-export function formatToolResult(result: unknown): string {
-  if (result === null || result === undefined) {
-    return '';
-  }
-  if (typeof result === 'string') {
-    return result;
-  }
-  if (typeof result === 'object') {
-    const obj = result as Record<string, unknown>;
-    // Handle common tool return format: { content: "...", isError: boolean }
-    if ('content' in obj && typeof obj.content === 'string') {
-      return obj.content;
-    }
-    // Handle content array format: { content: [{ type: "text", text: "..." }] }
-    if ('content' in obj && Array.isArray(obj.content)) {
-      const textParts = obj.content
-        .filter(
-          (part: unknown) =>
-            typeof part === 'object' && part !== null && (part as Record<string, unknown>).type === 'text',
-        )
-        .map((part: unknown) => (part as Record<string, unknown>).text || '');
-      if (textParts.length > 0) {
-        return textParts.join('\n');
-      }
-    }
-    try {
-      return JSON.stringify(result, null, 2);
-    } catch {
-      return String(result);
-    }
-  }
-  return String(result);
-}
+// Re-export so existing consumers can still import from here
+export { formatToolResult };
 
 // =============================================================================
 // renderCompletedTasksInline / renderClearedTasksInline
@@ -157,7 +120,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   }
 
   // Check for slash command tags
-  const slashCommandMatch = displayText.match(/<slash-command\s+name="([^"]*)">([\\s\S]*?)<\/slash-command>/);
+  const slashCommandMatch = displayText.match(/<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>/);
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
     const commandContent = slashCommandMatch[2]!.trim();
