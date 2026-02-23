@@ -8,7 +8,7 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
-export { MastraSandbox } from './sandbox';
+export { MastraSandbox, SandboxProcessManager, ProcessHandle } from './sandbox';
 
 // Errors
 export * from './errors';
@@ -72,11 +72,15 @@ export { MountManager } from './sandbox';
 export type {
   WorkspaceSandbox,
   ExecutionResult,
+  CommandOptions,
   CommandResult,
   ExecuteCommandOptions,
   SandboxInfo,
   SandboxLifecycleHook,
   MastraSandboxOptions,
+  // Process management types
+  ProcessInfo,
+  SpawnProcessOptions,
 } from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountArgs, OnMountResult } from './sandbox';
 
