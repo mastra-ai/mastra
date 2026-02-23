@@ -7,14 +7,16 @@ import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui
 import type { SlashCommand } from '@mariozechner/pi-tui';
 import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
 
+import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
+import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import { fg, bold } from './theme.js';
+import { fg } from './theme.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -159,24 +161,33 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   const appName = state.options.appName || 'Mastra Code';
   const version = state.options.version || '0.1.0';
 
-  const logo = fg('accent', '◆') + ' ' + bold(fg('accent', appName)) + fg('dim', ` v${version}`);
+  const banner = renderBanner(version, appName);
 
-  const sep = fg('dim', ' · ');
-  const hints = [
-    state.harness.listModes().length > 1 ? `${fg('dim', '⇧Tab')} ${fg('muted', 'mode')}` : '',
-    `${fg('dim', '/help')} ${fg('muted', 'info & shortcuts')}`,
+  // Project frontmatter
+  const frontmatter = [
+    `Project: ${state.projectInfo.name}`,
+    `Resource ID: ${state.projectInfo.resourceId}`,
+    state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
+    state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
+    `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
-    .join(sep);
+    .map(line => fg('muted', line as string))
+    .join('\n');
+
+  const keyStyle = (k: string) => fg('accent', k);
+  const sep = fg('dim', ' · ');
+  const instructions = [
+    `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
+    `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
+    `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${state.harness.listModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
+  ].join('\n');
 
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(
-    new Text(
-      `${logo}\n  ${hints}`,
-      1,
-      0,
-    ),
-  );
+  state.ui.addChild(new Text(banner, 1, 0));
+  state.ui.addChild(new Text(frontmatter, 1, 0));
+  state.ui.addChild(new Spacer(1));
+  state.ui.addChild(new Text(instructions, 0, 0));
   state.ui.addChild(new Spacer(1));
 
   // Add main containers
@@ -209,6 +220,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'new', description: 'Start a new thread' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Configure model (global/thread/mode)' },
+    { name: 'models:pack', description: 'Switch model pack' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
     { name: 'think', description: 'Set thinking level (Anthropic)' },
@@ -245,6 +257,7 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

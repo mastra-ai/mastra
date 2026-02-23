@@ -11,6 +11,7 @@ import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
+import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
@@ -126,6 +127,7 @@ export interface TUIState {
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
+  activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
   /** Follow-up messages sent via Ctrl+F while streaming */
   followUpComponents: UserMessageComponent[];

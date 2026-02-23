@@ -10,22 +10,23 @@
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
-import { InMemoryFileReadTracker } from '../filesystem';
-import type { FileReadTracker } from '../filesystem';
+import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
+import type { FileReadTracker, FileWriteLock } from '../filesystem';
 import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
-import { executeCommandTool } from './execute-command';
+import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
+import { getProcessOutputTool } from './get-process-output';
 import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
+import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
-
 import { writeFileTool } from './write-file';
 
 /**
@@ -141,6 +142,25 @@ function wrapWithReadTracker(
   };
 }
 
+/**
+ * Wrap a tool with a per-file write lock.
+ *
+ * The lock serializes the entire execute pipeline (including any
+ * read-before-write checks) so concurrent calls to the same path
+ * run one at a time.
+ */
+function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
+  return {
+    ...tool,
+    execute: async (input: any, context: any = {}) => {
+      if (!input.path) {
+        throw new Error('wrapWithWriteLock: input.path is required');
+      }
+      return writeLock.withLock(input.path, () => tool.execute(input, context));
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -155,6 +175,9 @@ export function createWorkspaceTools(workspace: Workspace) {
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
+
+  // Shared write lock — serializes concurrent writes to the same file path
+  const writeLock: FileWriteLock = new InMemoryFileWriteLock();
 
   // Shared read tracker for requireReadBeforeWrite
   let readTracker: FileReadTracker | undefined;
@@ -173,17 +196,25 @@ export function createWorkspaceTools(workspace: Workspace) {
   const addTool = (
     name: WorkspaceToolName,
     tool: any,
-    opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write' },
+    opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write'; useWriteLock?: boolean },
   ) => {
     const config = resolveToolConfig(toolsConfig, name);
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
+    let wrapped: any;
     if (readTracker && opts?.readTrackerMode) {
-      tools[name] = wrapWithReadTracker(tool, workspace, readTracker, config, opts.readTrackerMode);
+      wrapped = wrapWithReadTracker(tool, workspace, readTracker, config, opts.readTrackerMode);
     } else {
-      tools[name] = wrapTool(tool, workspace, config);
+      wrapped = wrapTool(tool, workspace, config);
     }
+
+    // Write lock is outermost — serializes the entire enriched execute pipeline
+    if (opts?.useWriteLock) {
+      wrapped = wrapWithWriteLock(wrapped, writeLock);
+    }
+
+    tools[name] = wrapped;
   };
 
   // Filesystem tools
@@ -192,13 +223,15 @@ export function createWorkspaceTools(workspace: Workspace) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, writeFileTool, {
       requireWrite: true,
       readTrackerMode: 'write',
+      useWriteLock: true,
     });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE, editFileTool, {
       requireWrite: true,
       readTrackerMode: 'write',
+      useWriteLock: true,
     });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, listFilesTool);
-    addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true });
+    addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true, useWriteLock: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
     addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
@@ -208,6 +241,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       addTool(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT, astEditTool, {
         requireWrite: true,
         readTrackerMode: 'write',
+        useWriteLock: true,
       });
     }
   }
@@ -222,15 +256,15 @@ export function createWorkspaceTools(workspace: Workspace) {
   if (workspace.sandbox) {
     const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
-      // Inject dynamic path context into description
-      const pathContext = workspace.getPathContext();
-      const pathInfo = pathContext.instructions ? `\n\n${pathContext.instructions}` : '';
-      const description = pathInfo ? `${executeCommandTool.description}${pathInfo}` : executeCommandTool.description;
+      // Pick the right tool variant based on whether processes are available
+      const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = wrapTool(baseTool, workspace, executeCommandConfig);
+    }
 
-      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = {
-        ...wrapTool(executeCommandTool, workspace, executeCommandConfig),
-        description,
-      };
+    // Background process tools (only when process manager is available)
+    if (workspace.sandbox.processes) {
+      addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
+      addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }
 
