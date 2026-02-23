@@ -25,7 +25,7 @@ For each package that has changes, run the CLI once and specify the appropriate 
 - You can override the bump type by specifying `--major` or `--minor` for specific packages
 - Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor mastra`
 
-## Version Bump Types
+**Version Bump Types:**
 
 - `patch`: Bugfixes with backward-compatible changes
 - `minor`: New features with backward-compatible changes
