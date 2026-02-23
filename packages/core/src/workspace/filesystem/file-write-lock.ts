@@ -49,7 +49,12 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     const currentQueue = this.queues.get(key) ?? Promise.resolve();
 
     // Create a deferred promise for our result
-    const { promise: resultPromise, resolve, reject } = Promise.withResolvers<T>();
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const resultPromise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
 
     // Chain our operation onto the queue
     const queuePromise = currentQueue
