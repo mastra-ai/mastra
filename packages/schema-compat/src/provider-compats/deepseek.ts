@@ -6,7 +6,7 @@ import type { Targets } from 'zod-to-json-schema';
 import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isString } from '../zodTypes';
+import { isOptional, isNull, isObj, isArr, isUnion, isString } from '../zodTypes';
 
 export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -27,6 +27,11 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
       return this.defaultZodOptionalHandler(value, ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber']);
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .optional()
+        .describe(value.description ?? 'null value');
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (isArr(z)(value)) {

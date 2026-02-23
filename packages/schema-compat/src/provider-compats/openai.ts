@@ -7,7 +7,7 @@ import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '..
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
+import { isOptional, isNull, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -91,6 +91,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       }
 
       return value;
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .optional()
+        .describe(value.description ?? 'null value');
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (isUnion(z)(value)) {

@@ -7,7 +7,18 @@ import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionS
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
+import {
+  isOptional,
+  isNull,
+  isObj,
+  isArr,
+  isUnion,
+  isDefault,
+  isNumber,
+  isString,
+  isDate,
+  isNullable,
+} from '../zodTypes';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -100,6 +111,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return result;
     } else if (isNumber(z)(value)) {
       return this.defaultZodNumberHandler(value);
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .optional()
+        .describe(value.description ?? 'null value');
     } else if (isString(z)(value)) {
       return this.defaultZodStringHandler(value);
     } else if (isDate(z)(value)) {

@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
@@ -23,6 +24,13 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
       const handleTypes: string[] = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodNever', 'ZodUndefined', 'ZodTuple'];
       if (this.getModel().modelId.includes('claude-3.5-haiku')) handleTypes.push('ZodString');
       return this.defaultZodOptionalHandler(value, handleTypes);
+    } else if (this.isNull(value)) {
+      // Coerce z.null() (from MCP JSON Schema { "type": "null" }) to z.any().optional()
+      // so it doesn't crash the provider compat layer.
+      return z
+        .any()
+        .optional()
+        .describe(value.description ?? 'null value');
     } else if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (this.isArr(value)) {

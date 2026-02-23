@@ -27,7 +27,7 @@ export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
  * Zod types that are not supported by most AI model providers and should be avoided.
  * @constant
  */
-export const UNSUPPORTED_ZOD_TYPES = ['ZodIntersection', 'ZodNever', 'ZodNull', 'ZodTuple', 'ZodUndefined'] as const;
+export const UNSUPPORTED_ZOD_TYPES = ['ZodIntersection', 'ZodNever', 'ZodTuple', 'ZodUndefined'] as const;
 
 /**
  * Zod types that are generally supported by AI model providers.

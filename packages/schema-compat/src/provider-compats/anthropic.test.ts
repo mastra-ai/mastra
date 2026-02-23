@@ -772,4 +772,55 @@ describe('AnthropicSchemaCompatLayer', () => {
       expect(jsonSchema).toMatchSnapshot();
     });
   });
+
+  describe('processZodType - ZodNull handling', () => {
+    it('should not throw on z.null() (MCP JSON Schema { "type": "null" })', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+
+      // z.null() should be coerced, not throw
+      expect(() => {
+        layer.processZodType(z.null());
+      }).not.toThrow();
+    });
+
+    it('should coerce z.null() to an optional type', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const result = layer.processZodType(z.null());
+
+      // The coerced type should accept undefined (optional)
+      expect(result.safeParse(undefined).success).toBe(true);
+    });
+
+    it('should handle z.null() inside an object schema', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        supportsStructuredOutputs: false,
+      };
+
+      const schema = z.object({
+        name: z.string(),
+        deletedAt: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+
+      // Should not throw when processing the full schema
+      expect(() => {
+        layer.processToAISDKSchema(schema);
+      }).not.toThrow();
+    });
+  });
 });
