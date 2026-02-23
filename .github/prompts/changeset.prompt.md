@@ -12,7 +12,7 @@ Create a changeset using the CLI. The goal of changesets is to use it for genera
 Run the CLI with the following command to create a changeset:
 
 ```bash
-pnpm changeset -s -m "your changeset message" (--major | --minor | --patch) @scope/pkg
+pnpm changeset -s -m "your changeset message" (--major | --minor | --patch) pkg-name
 ```
 
 For each package that has changes, run the CLI once and specify the appropriate version bump type (`--major`, `--minor`, or `--patch`) and message for that package. This will create a separate changeset file for each package, which is important for generating accurate changelogs.
@@ -21,9 +21,9 @@ For each package that has changes, run the CLI once and specify the appropriate 
 
 - `-s` or `--skipPrompt`: Run non-interactively; requires at least one of `--major`, `--minor`, or `--patch` (required for automation)
 - `-m "message"` or `--message "message"`: The changeset message (required)
-- `--major @scope/pkg`: Packages that should have a major version bump
-- `--minor @scope/pkg`: Packages that should have a minor version bump
-- `--patch @scope/pkg`: Packages that should have a patch version bump
+- `--major pkg-name`: Packages that should have a major version bump
+- `--minor pkg-name`: Packages that should have a minor version bump
+- `--patch pkg-name`: Packages that should have a patch version bump
 
 **Notes:**
 
