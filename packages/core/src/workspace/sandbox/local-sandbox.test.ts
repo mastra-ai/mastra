@@ -2,8 +2,10 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createSandboxTestSuite } from '../../../../../workspaces/_test-utils/src/sandbox/factory';
 
+import { RequestContext } from '../../request-context';
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
@@ -14,7 +16,7 @@ describe('LocalSandbox', () => {
 
   beforeEach(async () => {
     // Create a unique temp directory for each test
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-sandbox-test-'));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-test-'));
     // PATH is included by default, so basic commands work out of the box
     sandbox = new LocalSandbox({ workingDirectory: tempDir });
   });
@@ -112,6 +114,63 @@ describe('LocalSandbox', () => {
       expect(info.resources?.cpuCores).toBeGreaterThan(0);
       expect(info.metadata?.platform).toBe(os.platform());
       expect(info.metadata?.nodeVersion).toBe(process.version);
+    });
+  });
+
+  // ===========================================================================
+  // getInstructions
+  // ===========================================================================
+  describe('getInstructions', () => {
+    it('should return auto-generated instructions with working directory', () => {
+      const instructions = sandbox.getInstructions();
+      expect(instructions).toContain('Local command execution');
+      expect(instructions).toContain(tempDir);
+    });
+
+    it('should return custom instructions when override is provided', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: 'Custom sandbox instructions.',
+      });
+      expect(sb.getInstructions()).toBe('Custom sandbox instructions.');
+    });
+
+    it('should return empty string when override is empty string', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: '',
+      });
+      expect(sb.getInstructions()).toBe('');
+    });
+
+    it('should return auto-generated instructions when no override', () => {
+      const sb = new LocalSandbox({ workingDirectory: tempDir });
+      expect(sb.getInstructions()).toContain('Local command execution');
+    });
+
+    it('should support function form that extends auto instructions', () => {
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra sandbox info.`,
+      });
+      const result = sb.getInstructions();
+      expect(result).toContain('Local command execution');
+      expect(result).toContain('Extra sandbox info.');
+    });
+
+    it('should pass requestContext to function form', () => {
+      const ctx = new RequestContext([['tenant', 'acme']]);
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} tenant=${requestContext?.get('tenant')}`;
+      });
+      const sb = new LocalSandbox({
+        workingDirectory: tempDir,
+        instructions: fn,
+      });
+      const result = sb.getInstructions({ requestContext: ctx });
+      expect(fn).toHaveBeenCalledOnce();
+      expect(result).toContain('tenant=acme');
+      expect(result).toContain('Local command execution');
     });
   });
 
@@ -751,4 +810,38 @@ describe('LocalSandbox', () => {
       await bwrapSandbox._destroy();
     });
   });
+});
+
+/**
+ * Shared Sandbox Conformance Tests
+ *
+ * Verifies LocalSandbox conforms to the WorkspaceSandbox interface.
+ * Same suite that runs against E2BSandbox.
+ */
+createSandboxTestSuite({
+  suiteName: 'LocalSandbox Conformance',
+  createSandbox: async options => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-conformance-'));
+    const realDir = await fs.realpath(dir);
+    return new LocalSandbox({ workingDirectory: realDir, env: { PATH: process.env.PATH!, ...options?.env } });
+  },
+  capabilities: {
+    supportsMounting: false,
+    supportsReconnection: false,
+    supportsConcurrency: true,
+    supportsEnvVars: true,
+    supportsWorkingDirectory: true,
+    supportsTimeout: true,
+    defaultCommandTimeout: 10000,
+    supportsStreaming: true,
+  },
+  testDomains: {
+    commandExecution: true,
+    lifecycle: true,
+    mountOperations: false,
+    reconnection: false,
+    processManagement: true,
+  },
+  testTimeout: 10000,
+  fastOnly: false,
 });

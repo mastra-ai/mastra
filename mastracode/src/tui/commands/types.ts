@@ -25,4 +25,5 @@ export interface SlashCommandContext {
   getResolvedWorkspace: () => Workspace | undefined;
   addUserMessage: (message: HarnessMessage) => void;
   renderExistingMessages: () => Promise<void>;
+  showOnboarding: () => Promise<void>;
 }

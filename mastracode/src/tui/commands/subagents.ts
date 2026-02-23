@@ -1,4 +1,5 @@
 import { Spacer } from '@mariozechner/pi-tui';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -31,15 +32,11 @@ async function showSubagentModelListForScope(
         try {
           await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
           if (scope === 'global') {
-            if (ctx.authStorage) {
-              ctx.authStorage.setSubagentModelId(model.id, agentType);
-              ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
-            } else {
-              ctx.showError('Cannot persist global preference: auth storage not configured');
-            }
-          } else {
-            ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+            const settings = loadSettings();
+            settings.models.subagentModels[agentType] = model.id;
+            saveSettings(settings);
           }
+          ctx.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
         } catch (err) {
           ctx.showError(`Failed to set subagent model: ${err instanceof Error ? err.message : String(err)}`);
         }

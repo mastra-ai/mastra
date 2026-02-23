@@ -21,11 +21,13 @@ import {
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsCommand,
+  handleModelsPackCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
+  handleSetupCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -80,6 +82,9 @@ export async function dispatchSlashCommand(
     case 'models':
       await handleModelsCommand(buildCtx());
       return true;
+    case 'models:pack':
+      await handleModelsPackCommand(buildCtx());
+      return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());
       return true;
@@ -130,6 +135,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'review':
       await handleReviewCmd(buildCtx(), args);
+      return true;
+    case 'setup':
+      await handleSetupCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
