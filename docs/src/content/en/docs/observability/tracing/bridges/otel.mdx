@@ -37,12 +37,14 @@ Use the OtelBridge when you:
 The OtelBridge provides two-way integration:
 
 **From OTEL to Mastra:**
+
 - Reads from OTEL ambient context (AsyncLocalStorage) automatically
 - Inherits trace ID and parent span ID from active OTEL spans
 - Respects OTEL sampling decisions — if a trace is not sampled, Mastra won't create spans for it
 - No manual trace ID passing required when OTEL auto-instrumentation is active
 
 **From Mastra to OTEL:**
+
 - Creates native OTEL spans for Mastra operations (agents, LLM calls, tools, workflows)
 - Maintains proper parent-child relationships in distributed traces
 - Allows OTEL-instrumented code (HTTP clients, database calls) within Mastra operations to nest correctly
@@ -68,35 +70,35 @@ The bridge works with your existing OpenTelemetry setup. Depending on your confi
 Using the OtelBridge requires two steps:
 
 1. Configure OpenTelemetry instrumentation in your application
-2. Add the OtelBridge to your Mastra observability config
+1. Add the OtelBridge to your Mastra observability config
 
 ### Step 1: OpenTelemetry Instrumentation
 
 Create an instrumentation file that initializes OTEL. This must run before your application code:
 
 ```typescript title="instrumentation.ts"
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { W3CTraceContextPropagator } from '@opentelemetry/core'
 
 const sdk = new NodeSDK({
-  serviceName: "my-service",
+  serviceName: 'my-service',
   spanProcessors: [
     new BatchSpanProcessor(
       new OTLPTraceExporter({
-        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4318/v1/traces",
-      })
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+      }),
     ),
   ],
   instrumentations: [getNodeAutoInstrumentations()],
   textMapPropagator: new W3CTraceContextPropagator(),
-});
+})
 
-sdk.start();
+sdk.start()
 
-export { sdk };
+export { sdk }
 ```
 
 ### Step 2: Mastra Configuration
@@ -104,15 +106,15 @@ export { sdk };
 Add the OtelBridge to your Mastra observability config:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelBridge } from "@mastra/otel-bridge";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelBridge } from '@mastra/otel-bridge'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         bridge: new OtelBridge(),
       },
     },
@@ -120,7 +122,7 @@ export const mastra = new Mastra({
   agents: {
     /* your agents */
   },
-});
+})
 ```
 
 No Mastra exporters are required when using the bridge — traces are sent via your OTEL SDK configuration. You can optionally add Mastra exporters if you want to send traces to additional destinations.
@@ -166,20 +168,21 @@ Service B: HTTP POST /api/analyze (incoming call - same trace!)
 ```
 
 Both services must have:
+
 1. OTEL instrumentation configured
-2. W3C Trace Context propagator enabled
-3. Mastra with OtelBridge configured
+1. W3C Trace Context propagator enabled
+1. Mastra with OtelBridge configured
 
 ## Using Tags
 
 Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
 
 ```typescript
-const result = await agent.generate("Hello", {
+const result = await agent.generate('Hello', {
   tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
+    tags: ['production', 'experiment-v2', 'user-request'],
   },
-});
+})
 ```
 
 Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:

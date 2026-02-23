@@ -22,8 +22,8 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 Add a `LocalSandbox` to a workspace and assign it to an agent. The agent can then execute shell commands as part of its tasks:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
@@ -33,16 +33,16 @@ const workspace = new Workspace({
       NODE_ENV: 'development',
     },
   }),
-});
+})
 
 const agent = new Agent({
   id: 'dev-agent',
   model: 'openai/gpt-4o',
   workspace,
-});
+})
 
 // The agent now has the execute_command tool available
-const response = await agent.generate('Run npm install');
+const response = await agent.generate('Run npm install')
 ```
 
 ### Auto-start behavior
@@ -53,47 +53,47 @@ const response = await agent.generate('Run npm install');
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this sandbox instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "workingDirectory",
-      type: "string",
-      description: "Directory for command execution. Defaults to .sandbox/ in process.cwd() for isolation from seatbelt profiles.",
-      isOptional: true,
-      defaultValue: "process.cwd()/.sandbox/",
-    },
-    {
-      name: "env",
-      type: "NodeJS.ProcessEnv",
-      description: "Environment variables to set. PATH is included by default unless overridden.",
-      isOptional: true,
-    },
-    {
-      name: "timeout",
-      type: "number",
-      description: "Default timeout for operations in milliseconds",
-      isOptional: true,
-      defaultValue: "30000",
-    },
-    {
-      name: "isolation",
-      type: "'none' | 'seatbelt' | 'bwrap'",
-      description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
-      isOptional: true,
-      defaultValue: "'none'",
-    },
-    {
-      name: "nativeSandbox",
-      type: "NativeSandboxConfig",
-      description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this sandbox instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "workingDirectory",
+type: "string",
+description: "Directory for command execution. Defaults to .sandbox/ in process.cwd() for isolation from seatbelt profiles.",
+isOptional: true,
+defaultValue: "process.cwd()/.sandbox/",
+},
+{
+name: "env",
+type: "NodeJS.ProcessEnv",
+description: "Environment variables to set. PATH is included by default unless overridden.",
+isOptional: true,
+},
+{
+name: "timeout",
+type: "number",
+description: "Default timeout for operations in milliseconds",
+isOptional: true,
+defaultValue: "30000",
+},
+{
+name: "isolation",
+type: "'none' | 'seatbelt' | 'bwrap'",
+description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
+isOptional: true,
+defaultValue: "'none'",
+},
+{
+name: "nativeSandbox",
+type: "NativeSandboxConfig",
+description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
+isOptional: true,
+},
+]}
 />
 
 ## NativeSandboxConfig
@@ -102,77 +102,77 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 
 <PropertiesTable
   content={[
-    {
-      name: "allowNetwork",
-      type: "boolean",
-      description: "Allow network access from sandboxed commands.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "readOnlyPaths",
-      type: "string[]",
-      description: "Additional paths to allow read-only access (system paths are always readable).",
-      isOptional: true,
-    },
-    {
-      name: "readWritePaths",
-      type: "string[]",
-      description: "Additional paths to allow read-write access beyond the workspace directory.",
-      isOptional: true,
-    },
-    {
-      name: "seatbeltProfilePath",
-      type: "string",
-      description: "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
-      isOptional: true,
-    },
-    {
-      name: "bwrapArgs",
-      type: "string[]",
-      description: "Additional arguments to pass to bwrap (Linux only).",
-      isOptional: true,
-    },
-    {
-      name: "allowSystemBinaries",
-      type: "boolean",
-      description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "allowNetwork",
+type: "boolean",
+description: "Allow network access from sandboxed commands.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "readOnlyPaths",
+type: "string[]",
+description: "Additional paths to allow read-only access (system paths are always readable).",
+isOptional: true,
+},
+{
+name: "readWritePaths",
+type: "string[]",
+description: "Additional paths to allow read-write access beyond the workspace directory.",
+isOptional: true,
+},
+{
+name: "seatbeltProfilePath",
+type: "string",
+description: "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
+isOptional: true,
+},
+{
+name: "bwrapArgs",
+type: "string[]",
+description: "Additional arguments to pass to bwrap (Linux only).",
+isOptional: true,
+},
+{
+name: "allowSystemBinaries",
+type: "boolean",
+description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Sandbox instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('LocalSandbox')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('local')",
-    },
-    {
-      name: "status",
-      type: "ProviderStatus",
-      description: "'starting' | 'running' | 'stopped' | 'error'",
-    },
-    {
-      name: "workingDirectory",
-      type: "string",
-      description: "The configured working directory",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Sandbox instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('LocalSandbox')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('local')",
+},
+{
+name: "status",
+type: "ProviderStatus",
+description: "'starting' | 'running' | 'stopped' | 'error'",
+},
+{
+name: "workingDirectory",
+type: "string",
+description: "The configured working directory",
+},
+]}
 />
 
 ## Methods
@@ -182,7 +182,7 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 Initialize and start the sandbox. Creates the working directory and sets up seatbelt profiles if using native isolation.
 
 ```typescript
-await sandbox.start();
+await sandbox.start()
 ```
 
 Called automatically by `workspace.init()` or on first `executeCommand()` call.
@@ -192,7 +192,7 @@ Called automatically by `workspace.init()` or on first `executeCommand()` call.
 Stop the sandbox.
 
 ```typescript
-await sandbox.stop();
+await sandbox.stop()
 ```
 
 ### `destroy()`
@@ -200,7 +200,7 @@ await sandbox.stop();
 Clean up sandbox resources. Removes seatbelt profiles if they were auto-generated.
 
 ```typescript
-await sandbox.destroy();
+await sandbox.destroy()
 ```
 
 Called by `workspace.destroy()`.
@@ -210,70 +210,68 @@ Called by `workspace.destroy()`.
 Check if the sandbox is ready for operations.
 
 ```typescript
-const ready = await sandbox.isReady();
+const ready = await sandbox.isReady()
 // true if status is 'running'
 ```
-
-
 
 ### `executeCommand(command, args?, options?)`
 
 Execute a shell command in the sandbox.
 
 ```typescript
-const listResult = await sandbox.executeCommand('ls', ['-la']);
+const listResult = await sandbox.executeCommand('ls', ['-la'])
 const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
   timeout: 60000,
   env: { NODE_ENV: 'development' },
-});
+})
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "command",
-      type: "string",
-      description: "Command to execute",
-    },
-    {
-      name: "args",
-      type: "string[]",
-      description: "Command arguments",
-      isOptional: true,
-    },
-    {
-      name: "options.timeout",
-      type: "number",
-      description: "Execution timeout in milliseconds",
-      isOptional: true,
-    },
-    {
-      name: "options.cwd",
-      type: "string",
-      description: "Working directory for the command",
-      isOptional: true,
-    },
-    {
-      name: "options.env",
-      type: "Record<string, string>",
-      description: "Additional environment variables",
-      isOptional: true,
-    },
-    {
-      name: "options.onStdout",
-      type: "(data: string) => void",
-      description: "Callback for stdout streaming",
-      isOptional: true,
-    },
-    {
-      name: "options.onStderr",
-      type: "(data: string) => void",
-      description: "Callback for stderr streaming",
-      isOptional: true,
-    },
-  ]}
+{
+name: "command",
+type: "string",
+description: "Command to execute",
+},
+{
+name: "args",
+type: "string[]",
+description: "Command arguments",
+isOptional: true,
+},
+{
+name: "options.timeout",
+type: "number",
+description: "Execution timeout in milliseconds",
+isOptional: true,
+},
+{
+name: "options.cwd",
+type: "string",
+description: "Working directory for the command",
+isOptional: true,
+},
+{
+name: "options.env",
+type: "Record<string, string>",
+description: "Additional environment variables",
+isOptional: true,
+},
+{
+name: "options.onStdout",
+type: "(data: string) => void",
+description: "Callback for stdout streaming",
+isOptional: true,
+},
+{
+name: "options.onStderr",
+type: "(data: string) => void",
+description: "Callback for stderr streaming",
+isOptional: true,
+},
+]}
 />
 
 ### `getInfo()`
@@ -281,7 +279,7 @@ const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'],
 Get sandbox status and resource information.
 
 ```typescript
-const info = await sandbox.getInfo();
+const info = await sandbox.getInfo()
 // { status: 'running', resources: { ... } }
 ```
 
@@ -290,7 +288,7 @@ const info = await sandbox.getInfo();
 Returns a description of how this sandbox works. Used in tool descriptions.
 
 ```typescript
-const instructions = sandbox.getInstructions();
+const instructions = sandbox.getInstructions()
 // 'Local command execution. Working directory: "/workspace".'
 ```
 
@@ -301,7 +299,7 @@ const instructions = sandbox.getInstructions();
 When you use a relative path for `workingDirectory`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
 
 | Context | Working directory | `./workspace` resolves to |
-|---------|------------------|---------------------------|
+| - | - | - |
 | `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
 | `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
 | Direct script | Where you ran the command | Relative to that location |
@@ -313,11 +311,11 @@ This can cause confusion when the same relative path resolves to different locat
 For consistent paths across all execution contexts, use an environment variable with an absolute path:
 
 ```typescript
-import { LocalSandbox } from '@mastra/core/workspace';
+import { LocalSandbox } from '@mastra/core/workspace'
 
 const sandbox = new LocalSandbox({
   workingDirectory: process.env.WORKSPACE_PATH!,
-});
+})
 ```
 
 Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures commands run from a consistent directory regardless of how you run your code.
@@ -329,7 +327,7 @@ Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my
 Detect the best available isolation backend for the current platform.
 
 ```typescript
-const detection = LocalSandbox.detectIsolation();
+const detection = LocalSandbox.detectIsolation()
 // { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
 ```
 
@@ -341,7 +339,7 @@ By default, `LocalSandbox` only includes `PATH` in the environment. This allows 
 // Default: only PATH is available (commands work, secrets protected)
 const secureSandbox = new LocalSandbox({
   workingDirectory: './workspace',
-});
+})
 
 // Explicit: pass specific variables
 const sandbox = new LocalSandbox({
@@ -350,13 +348,13 @@ const sandbox = new LocalSandbox({
     NODE_ENV: 'development',
     API_URL: 'https://api.example.com',
   },
-});
+})
 
 // Full access (use with caution)
 const devSandbox = new LocalSandbox({
   workingDirectory: './workspace',
   env: process.env,
-});
+})
 ```
 
 ## Native OS Sandboxing
@@ -368,8 +366,8 @@ const devSandbox = new LocalSandbox({
 
 ```typescript
 // Detect the best available backend for this platform
-const detection = LocalSandbox.detectIsolation();
-console.log(detection);
+const detection = LocalSandbox.detectIsolation()
+console.log(detection)
 // { backend: 'seatbelt', available: true, message: '...' }
 
 // Enable native sandboxing
@@ -380,10 +378,11 @@ const sandbox = new LocalSandbox({
     allowNetwork: false, // Block network access (default)
     readWritePaths: ['/tmp/extra'], // Additional writable paths
   },
-});
+})
 ```
 
 When isolation is enabled:
+
 - File writes are restricted to the workspace directory (and configured paths)
 - File reads are allowed everywhere (needed for system binaries)
 - Network access is blocked by default

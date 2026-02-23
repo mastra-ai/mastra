@@ -16,6 +16,7 @@ const tui = new MastraTUI({
   harness,
   hookManager,
   authStorage,
+  mcpManager,
   appName: 'Mastra Code',
   version: '0.1.0',
   inlineQuestions: true,

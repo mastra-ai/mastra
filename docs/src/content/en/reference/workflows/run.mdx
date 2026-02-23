@@ -12,16 +12,16 @@ The `Run` class represents a workflow execution instance, providing methods to s
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const result = await run.start({
-  inputData: { value: "initial data" },
-});
+  inputData: { value: 'initial data' },
+})
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
-    resumeData: { value: "resume data" },
-  });
+    resumeData: { value: 'resume data' },
+  })
 }
 ```
 
@@ -29,55 +29,55 @@ if (result.status === "suspended") {
 
 <PropertiesTable
   content={[
-    {
-      name: "start",
-      type: "(options?: StartOptions) => Promise<WorkflowResult>",
-      description: "Starts workflow execution with input data",
-      required: true,
-    },
-    {
-      name: "resume",
-      type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
-      description: "Resumes a suspended workflow from a specific step",
-      required: true,
-    },
-    {
-      name: "stream",
-      type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "Monitors workflow execution as a stream of events with enhanced streaming features",
-      required: true,
-    },
-    {
-      name: "resumeStream",
-      type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
-      description: "Resumes a suspended workflow with streaming support",
-      required: true,
-    },
-    {
-      name: "cancel",
-      type: "() => Promise<{ message: string }>",
-      description: "Cancels the workflow execution, stopping any running steps and preventing subsequent steps from executing",
-      required: true,
-    },
-    {
-      name: "restart",
-      type: "(options?: RestartOptions) => Promise<WorkflowResult>",
-      description: "Restarts the workflow execution from last active step",
-      required: true,
-    },
-    {
-      name: "timeTravel",
-      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
-      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
-      required: true,
-    },
-    {
-      name: "timeTravelStream",
-      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
-      description: "Time travels a workflow execution with streaming support",
-      required: true,
-    },
-  ]}
+{
+name: "start",
+type: "(options?: StartOptions) => Promise<WorkflowResult>",
+description: "Starts workflow execution with input data",
+required: true,
+},
+{
+name: "resume",
+type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
+description: "Resumes a suspended workflow from a specific step",
+required: true,
+},
+{
+name: "stream",
+type: "(options?: StreamOptions) => MastraWorkflowStream",
+description: "Monitors workflow execution as a stream of events with enhanced streaming features",
+required: true,
+},
+{
+name: "resumeStream",
+type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
+description: "Resumes a suspended workflow with streaming support",
+required: true,
+},
+{
+name: "cancel",
+type: "() => Promise<{ message: string }>",
+description: "Cancels the workflow execution, stopping any running steps and preventing subsequent steps from executing",
+required: true,
+},
+{
+name: "restart",
+type: "(options?: RestartOptions) => Promise<WorkflowResult>",
+description: "Restarts the workflow execution from last active step",
+required: true,
+},
+{
+name: "timeTravel",
+type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+required: true,
+},
+{
+name: "timeTravelStream",
+type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+description: "Time travels a workflow execution with streaming support",
+required: true,
+},
+]}
 />
 
 ## Run Status
@@ -86,31 +86,31 @@ A workflow run's `status` indicates its current execution state. The possible va
 
 <PropertiesTable
   content={[
-    {
-      name: "success",
-      type: "string",
-      description:
-        "All steps finished executing successfully, with a valid result output",
-    },
-    {
-      name: "failed",
-      type: "string",
-      description:
-        "Workflow execution encountered an error during execution, with error details available",
-    },
-    {
-      name: "suspended",
-      type: "string",
-      description:
-        "Workflow execution is paused waiting for resume, with suspended step information",
-    },
-    {
-      name: "canceled",
-      type: "string",
-      description:
-        "Workflow execution was canceled via the cancel() method, stopping any running steps and preventing subsequent steps from executing",
-    },
-  ]}
+{
+name: "success",
+type: "string",
+description:
+"All steps finished executing successfully, with a valid result output",
+},
+{
+name: "failed",
+type: "string",
+description:
+"Workflow execution encountered an error during execution, with error details available",
+},
+{
+name: "suspended",
+type: "string",
+description:
+"Workflow execution is paused waiting for resume, with suspended step information",
+},
+{
+name: "canceled",
+type: "string",
+description:
+"Workflow execution was canceled via the cancel() method, stopping any running steps and preventing subsequent steps from executing",
+},
+]}
 />
 
 ## Related

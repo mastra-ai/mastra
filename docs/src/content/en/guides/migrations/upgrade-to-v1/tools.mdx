@@ -164,17 +164,17 @@ The return type of `tool.execute` now includes `ValidationError` to handle valid
 When calling `tool.execute`, check if the result contains an error before accessing output properties:
 
 ```typescript
-const result = await getUserTool.execute({});
+const result = await getUserTool.execute({})
 
 // Type-safe check for validation errors
 if ('error' in result && result.error) {
-  console.error('Validation failed:', result.message);
-  console.error('Details:', result.validationErrors);
-  return;
+  console.error('Validation failed:', result.message)
+  console.error('Details:', result.validationErrors)
+  return
 }
 
 // TypeScript knows result is valid here
-console.log(result.id, result.name, result.email);
+console.log(result.id, result.name, result.email)
 ```
 
 Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.
@@ -185,9 +185,8 @@ The `tool.execute` property is optional in the type system to support client-sid
 
 ```typescript
 // Optional chaining (recommended)
-const result = await weatherTool.execute?.({ location: 'New York' }, {});
+const result = await weatherTool.execute?.({ location: 'New York' }, {})
 
 // Non-null assertion (when you know execute exists)
-const result = await weatherTool.execute!({ location: 'New York' }, {});
+const result = await weatherTool.execute!({ location: 'New York' }, {})
 ```
-

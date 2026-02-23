@@ -461,6 +461,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     listTools: vi.fn().mockResolvedValue({ data: [], total: 0, page: 0, perPage: 20, hasMore: false }),
     getToolSchema: vi.fn().mockResolvedValue({ name: 'test-tool-slug', inputSchema: {}, outputSchema: {} }),
   };
+  const mockProcessorProvider = {
+    info: { id: 'test-provider', name: 'Test Processor Provider', description: 'A test processor provider' },
+    configSchema: z.object({}),
+    availablePhases: ['processInput'] as const,
+    createProcessor: vi.fn(),
+  };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
@@ -490,6 +496,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
+    getProcessorProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockProcessorProvider : undefined)),
   } as any);
 
   await mockWorkflowRun(workflow);
