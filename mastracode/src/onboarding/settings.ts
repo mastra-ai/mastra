@@ -250,10 +250,7 @@ export function resolveOmModel(
   return omModelOverride;
 }
 
-export function saveSettings(
-  settings: GlobalSettings,
-  filePath: string = getSettingsPath(),
-): void {
+export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });

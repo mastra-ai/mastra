@@ -108,7 +108,8 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     const prevOmPack = options.previous?.omPackId
       ? options.omPacks.find(p => p.id === options.previous!.omPackId)
       : undefined;
-    this.selectedOmPack = prevOmPack ?? options.omPacks[0] ?? { id: 'none', name: 'None available', description: '', modelId: '' };
+    this.selectedOmPack = prevOmPack ??
+      options.omPacks[0] ?? { id: 'none', name: 'None available', description: '', modelId: '' };
 
     if (options.previous?.yolo != null) {
       this.selectedYolo = options.previous.yolo;
@@ -246,9 +247,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
     const items: SelectItem[] = providers.map(p => ({
       value: p.value,
-      label: p.loggedIn
-        ? `  ${p.label}  ${fg('success', '✓ logged in')}`
-        : `  ${p.label}`,
+      label: p.loggedIn ? `  ${p.label}  ${fg('success', '✓ logged in')}` : `  ${p.label}`,
     }));
     items.push({ value: '__skip', label: `  ${fg('dim', 'Skip (configure later with /login)')}` });
 
@@ -293,7 +292,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       box.addChild(new Text(fg('text', 'To use Mastra Code you need at least one API key or OAuth login'), 0, 0));
       box.addChild(new Text(fg('text', 'for Anthropic, OpenAI, or another supported provider.'), 0, 0));
       box.addChild(new Spacer(1));
-      box.addChild(new Text(fg('dim', 'See https://mastra.ai/docs/models for supported providers and API key env vars.'), 0, 0));
+      box.addChild(
+        new Text(fg('dim', 'See https://mastra.ai/docs/models for supported providers and API key env vars.'), 0, 0),
+      );
       box.addChild(new Spacer(1));
       box.addChild(new Text(fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0));
       this._finished = true;
@@ -358,7 +359,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     if (!pack || !this.modePackDetail) return;
 
     if (pack.id === 'custom') {
-      this.modePackDetail.setText(fg('dim', '  You\'ll pick a model for each mode in the next steps.'));
+      this.modePackDetail.setText(fg('dim', "  You'll pick a model for each mode in the next steps."));
     } else {
       const detail = [
         `  ${chalk.hex(mastra.blue)('plan')}  → ${fg('text', pack.models.plan)}`,
@@ -413,9 +414,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
     this.collapseStep(
       `Model pack → ${bold('Custom')}  ` +
-      `${chalk.hex(mastra.blue)('plan')} ${models.plan}  ` +
-      `${chalk.hex(mastra.purple)('build')} ${models.build}  ` +
-      `${chalk.hex(mastra.green)('fast')} ${models.fast}`,
+        `${chalk.hex(mastra.blue)('plan')} ${models.plan}  ` +
+        `${chalk.hex(mastra.purple)('build')} ${models.build}  ` +
+        `${chalk.hex(mastra.green)('fast')} ${models.fast}`,
     );
     this.renderStep('omPack');
     this.tui.requestRender();
@@ -512,8 +513,14 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     const currentOn = prevYolo === true ? fg('dim', ' (current)') : '';
     const currentOff = prevYolo === false ? fg('dim', ' (current)') : '';
     const items: SelectItem[] = [
-      { value: 'on', label: `  ${fg('success', 'Enable YOLO')}  ${fg('dim', '(recommended — auto-approve everything)')}${currentOn}` },
-      { value: 'off', label: `  ${fg('warning', 'Disable YOLO')}  ${fg('dim', '(ask before each tool call)')}${currentOff}` },
+      {
+        value: 'on',
+        label: `  ${fg('success', 'Enable YOLO')}  ${fg('dim', '(recommended — auto-approve everything)')}${currentOn}`,
+      },
+      {
+        value: 'off',
+        label: `  ${fg('warning', 'Disable YOLO')}  ${fg('dim', '(ask before each tool call)')}${currentOff}`,
+      },
     ];
 
     this.selectList = new SelectList(items, items.length, getSelectListTheme());

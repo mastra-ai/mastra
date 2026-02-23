@@ -50,7 +50,7 @@ Simply type your message and press Enter. The agent will respond with streaming 
 | `/cost`    | Show token usage for current conversation |
 | `/login`   | Authenticate with OAuth providers         |
 | `/logout`  | Log out from a provider                   |
-| `/setup` | Re-run the interactive setup wizard  |
+| `/setup`   | Re-run the interactive setup wizard       |
 | `/help`    | Show available commands                   |
 | `/exit`    | Exit the TUI                              |
 

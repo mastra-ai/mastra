@@ -78,7 +78,8 @@ export function getAvailableModePacks(
     packs.push({
       id: 'anthropic',
       name: 'Anthropic',
-      description: access.anthropic === 'oauth' ? 'All Anthropic models via Max subscription' : 'All Anthropic models via API key',
+      description:
+        access.anthropic === 'oauth' ? 'All Anthropic models via Max subscription' : 'All Anthropic models via API key',
       models: {
         build: anthropicBuild,
         plan: anthropicBuild,
@@ -91,7 +92,8 @@ export function getAvailableModePacks(
     packs.push({
       id: 'openai',
       name: 'OpenAI',
-      description: access.openai === 'oauth' ? 'All OpenAI models via Codex subscription' : 'All OpenAI models via API key',
+      description:
+        access.openai === 'oauth' ? 'All OpenAI models via Codex subscription' : 'All OpenAI models via API key',
       models: {
         build: openaiCodex,
         plan: openaiCodex,

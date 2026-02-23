@@ -520,8 +520,8 @@ export class MastraTUI {
       });
       dialog.focused = true;
 
-      this.state.authStorage!
-        .login(providerId, {
+      this.state
+        .authStorage!.login(providerId, {
           onAuth: (info: { url: string; instructions?: string }) => {
             dialog.showAuth(info.url, info.instructions);
           },

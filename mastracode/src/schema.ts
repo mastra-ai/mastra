@@ -51,5 +51,4 @@ export const stateSchema = z.object({
     })
     .nullable()
     .default(null),
-
 });

@@ -17,11 +17,12 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { ProviderAccess } from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
+import { loadSettings, resolveModelDefaults, resolveOmModel } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
-import { loadSettings, resolveModelDefaults, resolveOmModel } from './onboarding/settings.js';
-import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 
 import { stateSchema } from './schema.js';
 import {
@@ -213,7 +214,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // OAuth providers are checked via authStorage, env-only providers via process.env.
-  const startupAccess: import('./onboarding/packs.js').ProviderAccess = {
+  const startupAccess: ProviderAccess = {
     anthropic: authStorage.isLoggedIn('anthropic') ? 'oauth' : process.env.ANTHROPIC_API_KEY ? 'apikey' : false,
     openai: authStorage.isLoggedIn('openai-codex') ? 'oauth' : process.env.OPENAI_API_KEY ? 'apikey' : false,
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
