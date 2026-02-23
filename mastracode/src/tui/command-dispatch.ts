@@ -21,6 +21,7 @@ import {
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsCommand,
+  handleModelsPackCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
@@ -80,6 +81,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'models':
       await handleModelsCommand(buildCtx());
+      return true;
+    case 'models:pack':
+      await handleModelsPackCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());

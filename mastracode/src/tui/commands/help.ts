@@ -21,6 +21,7 @@ export function handleHelpCommand(ctx: SlashCommandContext): void {
   /resource      - Show/switch resource ID (tag for sharing)
   /skills        - List available skills
   /models    - Configure model (global/thread/mode)
+  /models:pack - Switch model pack
   /subagents - Configure subagent model defaults
   /permissions - View/manage tool approval permissions
   /settings - General settings (notifications, YOLO, thinking)
