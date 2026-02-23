@@ -37,12 +37,12 @@ describe('InMemoryFileWriteLock', () => {
 
     const opA = lock.withLock('/a.txt', async () => {
       running.push('a');
-      await delay(30);
+      await delay(100);
       completed.push('a');
     });
     const opB = lock.withLock('/b.txt', async () => {
       running.push('b');
-      await delay(10);
+      await delay(5);
       completed.push('b');
     });
 

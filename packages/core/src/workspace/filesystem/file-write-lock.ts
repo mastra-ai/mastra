@@ -31,7 +31,7 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     return this.queues.size;
   }
 
-  async withLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+  withLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
     const key = this.normalizePath(filePath);
 
     // Get the current queue for this file (or a resolved promise if none)

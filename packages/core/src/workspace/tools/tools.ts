@@ -152,6 +152,9 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
+      if (!input.path) {
+        throw new Error('wrapWithWriteLock: input.path is required');
+      }
       return writeLock.withLock(input.path, () => tool.execute(input, context));
     },
   };
