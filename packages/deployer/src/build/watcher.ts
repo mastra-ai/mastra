@@ -1,4 +1,5 @@
-import { dirname, posix } from 'node:path';
+import { readdirSync } from 'node:fs';
+import { dirname, join, posix } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
@@ -12,6 +13,25 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'node_modules') continue;
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...collectSourceFiles(fullPath));
+      } else if (/\.[mc]?[jt]sx?$/.test(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+  } catch {
+    // directory doesn't exist or isn't readable
+  }
+  return files;
+}
 
 export async function getInputOptions(
   entryFile: string,
@@ -88,6 +108,20 @@ export async function getInputOptions(
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());
+
+    inputOptions.plugins.push({
+      name: 'workspace-file-watcher',
+      buildStart() {
+        for (const [, info] of workspaceMap.entries()) {
+          for (const file of collectSourceFiles(join(info.location, 'src'))) {
+            this.addWatchFile(slash(file));
+          }
+          for (const file of collectSourceFiles(join(info.location, 'dist'))) {
+            this.addWatchFile(slash(file));
+          }
+        }
+      },
+    } satisfies Plugin);
   }
 
   return inputOptions;
