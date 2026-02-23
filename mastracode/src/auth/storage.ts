@@ -1,7 +1,6 @@
 /**
  * Credential storage for API keys and OAuth tokens.
  * Handles loading, saving, and refreshing credentials from auth.json.
- * Also stores global preferences like last used model.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
@@ -180,102 +179,5 @@ export class AuthStorage {
     }
 
     return undefined;
-  }
-
-  /**
-   * Get the last used model ID (global preference).
-   */
-  getLastModelId(): string | undefined {
-    return (this.data as any)._lastModelId;
-  }
-
-  /**
-   * Set the last used model ID (global preference).
-   */
-  setLastModelId(modelId: string): void {
-    (this.data as any)._lastModelId = modelId;
-    this.save();
-  }
-
-  /**
-   * Get the global model ID for a specific mode.
-   * @param modeId Mode ID (e.g., "build", "plan", "explore")
-   */
-  getModeModelId(modeId: string): string | undefined {
-    return (this.data as any)[`_modeModelId_${modeId}`];
-  }
-
-  /**
-   * Set the global model ID for a specific mode.
-   * @param modeId Mode ID (e.g., "build", "plan", "explore")
-   * @param modelId Full model ID
-   */
-  setModeModelId(modeId: string, modelId: string): void {
-    (this.data as any)[`_modeModelId_${modeId}`] = modelId;
-    this.save();
-  }
-
-  /**
-   * Get the global subagent model ID for an agent type.
-   * @param agentType Optional agent type (explore, plan, execute)
-   */
-  getSubagentModelId(agentType?: string): string | undefined {
-    if (agentType) {
-      return (this.data as any)[`_subagentModelId_${agentType}`];
-    }
-    return (this.data as any)._subagentModelId;
-  }
-
-  /**
-   * Set the global subagent model ID for an agent type.
-   * @param modelId Full model ID
-   * @param agentType Optional agent type (explore, plan, execute)
-   */
-  setSubagentModelId(modelId: string, agentType?: string): void {
-    if (agentType) {
-      (this.data as any)[`_subagentModelId_${agentType}`] = modelId;
-    } else {
-      (this.data as any)._subagentModelId = modelId;
-    }
-    this.save();
-  }
-
-  /**
-   * Get the default model for a provider after login.
-   */
-  getDefaultModelForProvider(providerId: OAuthProviderId): string | undefined {
-    return PROVIDER_DEFAULT_MODELS[providerId];
-  }
-
-  // ===========================================================================
-  // Model Usage Ranking
-  // ===========================================================================
-
-  private getModelRanks(): Record<string, number> {
-    return (this.data as any)._modelRanks ?? {};
-  }
-
-  /**
-   * Get the use count for a model (0 if never used).
-   */
-  getModelUseCount(modelId: string): number {
-    return this.getModelRanks()[modelId] ?? 0;
-  }
-
-  /**
-   * Get all model use counts.
-   */
-  getAllModelUseCounts(): Record<string, number> {
-    return { ...this.getModelRanks() };
-  }
-
-  /**
-   * Increment the use count for a model and persist.
-   */
-  incrementModelUseCount(modelId: string): void {
-    const ranks = this.getModelRanks();
-    ranks[modelId] = (ranks[modelId] ?? 0) + 1;
-    (this.data as any)._modelRanks = ranks;
-    this.save();
   }
 }

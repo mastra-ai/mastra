@@ -6,9 +6,22 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
+import { getOAuthProviders } from '../auth/storage.js';
+import {
+  OnboardingInlineComponent,
+  getAvailableModePacks,
+  getAvailableOmPacks,
+  ONBOARDING_VERSION,
+  loadSettings,
+  saveSettings,
+} from '../onboarding/index.js';
+import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
+import { LoginDialogComponent } from './components/login-dialog.js';
+import { ModelSelectorComponent } from './components/model-selector.js';
+import type { ModelItem } from './components/model-selector.js';
 import { defaultOMProgressState } from './components/om-progress.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
@@ -66,6 +79,18 @@ export class MastraTUI {
       if (this.state.activeInlineQuestion) {
         this.state.activeInlineQuestion.handleInput(data);
         return;
+      }
+      // If onboarding is active, route input there
+      if (this.state.activeOnboarding) {
+        // Ctrl+C during onboarding — cancel it
+        if (data === '\x03') {
+          this.state.activeOnboarding.cancel();
+          this.state.activeOnboarding = undefined;
+          // Fall through to let the editor's 'clear' action fire
+        } else {
+          this.state.activeOnboarding.handleInput(data);
+          return;
+        }
       }
       // Otherwise, handle normally
       originalHandleInput(data);
@@ -262,6 +287,9 @@ export class MastraTUI {
     if (this.state.pendingLockConflict) {
       this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
       this.state.pendingLockConflict = null;
+      // Skip onboarding when there's a lock conflict — it'll run on next clean startup
+    } else if (this.shouldShowOnboarding()) {
+      await this.showOnboarding();
     }
   }
 
@@ -373,6 +401,9 @@ export class MastraTUI {
           if (answer.toLowerCase().startsWith('y')) {
             // pendingNewThread is already true — thread will be
             // created lazily on first message
+            if (this.shouldShowOnboarding()) {
+              await this.showOnboarding();
+            }
           } else {
             process.exit(0);
           }
@@ -427,6 +458,7 @@ export class MastraTUI {
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
       renderExistingMessages: () => renderExistingMessages(this.state),
+      showOnboarding: () => this.showOnboarding(),
     };
   }
 
@@ -455,5 +487,278 @@ export class MastraTUI {
 
   private async handleSlashCommand(input: string): Promise<boolean> {
     return dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+  }
+
+  // ===========================================================================
+  // Login (used by onboarding)
+  // ===========================================================================
+
+  async performLogin(providerId: string): Promise<void> {
+    const provider = getOAuthProviders().find(p => p.id === providerId);
+    const providerName = provider?.name || providerId;
+
+    if (!this.state.authStorage) {
+      showError(this.state, 'Auth storage not configured');
+      return;
+    }
+
+    return new Promise(resolve => {
+      const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
+        this.state.ui.hideOverlay();
+        if (success) {
+          showInfo(this.state, `Successfully logged in to ${providerName}`);
+        } else if (message) {
+          showInfo(this.state, message);
+        }
+        resolve();
+      });
+
+      this.state.ui.showOverlay(dialog, {
+        width: '80%',
+        maxHeight: '60%',
+        anchor: 'center',
+      });
+      dialog.focused = true;
+
+      this.state
+        .authStorage!.login(providerId, {
+          onAuth: (info: { url: string; instructions?: string }) => {
+            dialog.showAuth(info.url, info.instructions);
+          },
+          onPrompt: async (prompt: { message: string; placeholder?: string }) => {
+            return dialog.showPrompt(prompt.message, prompt.placeholder);
+          },
+          onProgress: (message: string) => {
+            dialog.showProgress(message);
+          },
+          signal: dialog.signal,
+        })
+        .then(async () => {
+          this.state.ui.hideOverlay();
+
+          const { PROVIDER_DEFAULT_MODELS } = await import('../auth/storage.js');
+          const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
+          if (defaultModel) {
+            await this.state.harness.switchModel({ modelId: defaultModel });
+            updateStatusLine(this.state);
+            showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
+          } else {
+            showInfo(this.state, `Successfully logged in to ${providerName}`);
+          }
+
+          resolve();
+        })
+        .catch((error: Error) => {
+          this.state.ui.hideOverlay();
+          if (error.message !== 'Login cancelled') {
+            showError(this.state, `Failed to login: ${error.message}`);
+          }
+          resolve();
+        });
+    });
+  }
+
+  // ===========================================================================
+  // Onboarding
+  // ===========================================================================
+
+  async showOnboarding(): Promise<void> {
+    const allProviders = getOAuthProviders();
+    const authProviders = allProviders.map(p => ({
+      label: p.name,
+      value: p.id,
+      loggedIn: this.state.authStorage?.isLoggedIn(p.id) ?? false,
+    }));
+
+    const buildAccess = async (): Promise<ProviderAccess> => {
+      const models = await this.state.harness.listAvailableModels();
+      const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+      const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
+        if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
+        if (hasEnv(provider)) return 'apikey';
+        return false;
+      };
+      return {
+        anthropic: accessLevel('anthropic', 'anthropic'),
+        openai: accessLevel('openai', 'openai-codex'),
+        cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
+        google: hasEnv('google') ? ('apikey' as const) : false,
+        deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+      };
+    };
+
+    const access = await buildAccess();
+
+    const savedSettings = loadSettings();
+    const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
+    const omPacks = getAvailableOmPacks(access);
+
+    let prevModePackId = savedSettings.onboarding.modePackId;
+    if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
+      prevModePackId = savedSettings.models.activeModelPackId;
+    }
+    const previous = savedSettings.onboarding.completedAt
+      ? {
+          modePackId: prevModePackId,
+          omPackId: savedSettings.onboarding.omPackId,
+          yolo: savedSettings.preferences.yolo,
+        }
+      : undefined;
+
+    return new Promise<void>(resolve => {
+      const component = new OnboardingInlineComponent({
+        tui: this.state.ui,
+        authProviders,
+        modePacks,
+        omPacks,
+        previous,
+        onComplete: async (result: OnboardingResult) => {
+          this.state.activeOnboarding = undefined;
+          await this.applyOnboardingResult(result);
+          resolve();
+        },
+        onCancel: () => {
+          this.state.activeOnboarding = undefined;
+          const settings = loadSettings();
+          if (!settings.onboarding.completedAt) {
+            settings.onboarding.skippedAt = new Date().toISOString();
+            settings.onboarding.version = ONBOARDING_VERSION;
+            saveSettings(settings);
+          }
+          resolve();
+        },
+        onLogin: (providerId: string, done: () => void) => {
+          this.performLogin(providerId).then(async () => {
+            const updatedAccess = await buildAccess();
+            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+            done();
+          });
+        },
+        onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
+          const availableModels = await this.state.harness.listAvailableModels();
+          if (availableModels.length === 0) return undefined;
+
+          return new Promise<string | undefined>(resolveModel => {
+            const selector = new ModelSelectorComponent({
+              tui: this.state.ui,
+              models: availableModels,
+              currentModelId: undefined,
+              title,
+              titleColor: modeColor,
+              onSelect: (model: ModelItem) => {
+                this.state.ui.hideOverlay();
+                resolveModel(model.id);
+              },
+              onCancel: () => {
+                this.state.ui.hideOverlay();
+                resolveModel(undefined);
+              },
+            });
+
+            this.state.ui.showOverlay(selector, {
+              width: '80%',
+              maxHeight: '60%',
+              anchor: 'center',
+            });
+            selector.focused = true;
+          });
+        },
+      });
+
+      this.state.activeOnboarding = component;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(component);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
+    });
+  }
+
+  private async applyOnboardingResult(result: OnboardingResult): Promise<void> {
+    const harness = this.state.harness;
+    const modePack = result.modePack;
+    const modes = harness.listModes();
+
+    for (const mode of modes) {
+      const modelId = (modePack.models as Record<string, string>)[mode.id];
+      if (modelId) {
+        (mode as any).defaultModelId = modelId;
+        await harness.setThreadSetting({
+          key: `modeModelId_${mode.id}`,
+          value: modelId,
+        });
+      }
+    }
+
+    const currentModeId = harness.getCurrentModeId();
+    const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
+    if (currentModeModel) {
+      await harness.switchModel({ modelId: currentModeModel });
+    }
+
+    const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+    for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+      const saModelId = (modePack.models as Record<string, string>)[modeId];
+      if (saModelId) {
+        await harness.setSubagentModelId({ modelId: saModelId, agentType });
+      }
+    }
+
+    const omPack = result.omPack;
+    harness.setState({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
+    harness.setState({ yolo: result.yolo });
+
+    const settings = loadSettings();
+    settings.onboarding.completedAt = new Date().toISOString();
+    settings.onboarding.skippedAt = null;
+    settings.onboarding.version = ONBOARDING_VERSION;
+    settings.onboarding.modePackId = modePack.id;
+    settings.onboarding.omPackId = omPack.id;
+
+    const modeDefaults: Record<string, string> = {};
+    for (const mode of modes) {
+      const modelId = (modePack.models as Record<string, string>)[mode.id];
+      if (modelId) modeDefaults[mode.id] = modelId;
+    }
+
+    if (modePack.id === 'custom') {
+      const idx = settings.customModelPacks.findIndex(p => p.name === 'Setup');
+      const entry = { name: 'Setup', models: modeDefaults, createdAt: new Date().toISOString() };
+      if (idx >= 0) {
+        settings.customModelPacks[idx] = entry;
+      } else {
+        settings.customModelPacks.push(entry);
+      }
+      settings.models.activeModelPackId = 'custom:Setup';
+      settings.models.modeDefaults = modeDefaults;
+    } else if (modePack.id.startsWith('custom:')) {
+      settings.models.activeModelPackId = modePack.id;
+      settings.models.modeDefaults = modeDefaults;
+    } else {
+      settings.models.activeModelPackId = modePack.id;
+      settings.models.modeDefaults = {};
+    }
+
+    settings.models.activeOmPackId = omPack.id;
+    settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    settings.preferences.yolo = result.yolo;
+
+    // Clear any manual subagent overrides so they derive from the active pack
+    settings.models.subagentModels = {};
+
+    saveSettings(settings);
+
+    updateStatusLine(this.state);
+    await this.refreshModelAuthStatus();
+  }
+
+  private shouldShowOnboarding(): boolean {
+    const settings = loadSettings();
+    const ob = settings.onboarding;
+    if (ob.completedAt || ob.skippedAt) {
+      return ob.version < ONBOARDING_VERSION;
+    }
+    return true;
   }
 }

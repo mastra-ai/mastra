@@ -25,7 +25,14 @@ If you prefer not to install packages globally, you can use `npx`:
 npx mastracode
 ```
 
-Once you start `mastracode`, execute the `/login` command to authenticate with your AI providers.
+On first launch, an interactive onboarding wizard guides you through:
+
+1. **Authentication** — log in with your AI provider (Anthropic, OpenAI, etc.)
+2. **Model packs** — choose default models for each mode (build / plan / fast)
+3. **Observational Memory** — pick a model for OM (learns about you over time)
+4. **YOLO mode** — auto-approve tool calls, or require manual confirmation
+
+You can re-run setup anytime with `/setup`.
 
 ## Usage
 
@@ -43,6 +50,7 @@ Simply type your message and press Enter. The agent will respond with streaming 
 | `/cost`    | Show token usage for current conversation |
 | `/login`   | Authenticate with OAuth providers         |
 | `/logout`  | Log out from a provider                   |
+| `/setup`   | Re-run the interactive setup wizard       |
 | `/help`    | Show available commands                   |
 | `/exit`    | Exit the TUI                              |
 
