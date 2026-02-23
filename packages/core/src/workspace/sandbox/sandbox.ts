@@ -86,10 +86,9 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * @example
    * ```typescript
-   * // Recommended: single command string with options
    * await sandbox.executeCommand('npm install', { timeout: 60000 });
    *
-   * // Legacy: command + args array (use single string instead)
+   * // With args array (each arg is shell-quoted automatically)
    * await sandbox.executeCommand('npm', ['install'], { timeout: 60000 });
    * ```
    *
