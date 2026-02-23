@@ -249,9 +249,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
       const rangeDisplay = viewRange ? theme.fg('muted', `:${viewRange[0]},${viewRange[1]}`) : '';
       const status = this.getStatusIndicator();
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('accent', path), fullPath, startLine)
-        : theme.fg('accent', path);
+      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
       const headerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
       this.contentBox.addChild(new Text(headerText, 0, 0));
       return;
@@ -270,9 +268,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('accent', path), fullPath, startLine)
-      : theme.fg('accent', path);
+    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
