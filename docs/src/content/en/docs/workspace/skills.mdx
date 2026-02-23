@@ -153,11 +153,13 @@ By default, skills are read from the workspace filesystem. For advanced use case
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace'
+// highlight-next-line
 import { VersionedSkillSource } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: ['/skills'],
+  // highlight-next-line
   skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
 })
 ```

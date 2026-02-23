@@ -112,6 +112,7 @@ By default, the search index name is derived from the workspace ID. To set a cus
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
+  // highlight-next-line
   searchIndexName: 'my_workspace_vectors',
 })
 ```
@@ -165,6 +166,7 @@ Glob patterns let you index specific file types:
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
+  // highlight-next-line
   autoIndexPaths: ['/docs/**/*.md', '/support/**/*.txt'],
 })
 ```
