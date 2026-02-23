@@ -300,7 +300,7 @@ Get file or directory metadata.
 
 ```typescript
 const stat = await filesystem.stat('/docs/guide.md')
-// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
+// { name: 'guide.md', path: '/docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
 ```
 
 **Returns:** `Promise<FileStat>`

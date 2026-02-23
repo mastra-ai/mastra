@@ -152,7 +152,7 @@ By default, skills are read from the workspace filesystem. For advanced use case
 `VersionedSkillSource` serves published skill versions from a content-addressable blob store, so production agents use a specific published version without touching the live filesystem:
 
 ```typescript
-import { Workspace } from '@mastra/core/workspace'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 // highlight-next-line
 import { VersionedSkillSource } from '@mastra/core/workspace'
 
@@ -163,6 +163,12 @@ const workspace = new Workspace({
   skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
 })
 ```
+
+`VersionedSkillSource` accepts three parameters:
+
+- **`versionTree`** (`SkillVersionTree`) — A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
+- **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
+- **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
 
 When `skillSource` is provided, it is used instead of the workspace filesystem for skill discovery.
 
