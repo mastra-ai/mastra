@@ -743,12 +743,8 @@ export class MastraTUI {
     settings.models.omModelId = omPack.modelId;
     settings.preferences.yolo = result.yolo;
 
-    const subagentModels: Record<string, string> = {};
-    for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-      const saModelId = (modePack.models as Record<string, string>)[modeId];
-      if (saModelId) subagentModels[agentType] = saModelId;
-    }
-    settings.models.subagentModels = subagentModels;
+    // Clear any manual subagent overrides so they derive from the active pack
+    settings.models.subagentModels = {};
 
     saveSettings(settings);
 
