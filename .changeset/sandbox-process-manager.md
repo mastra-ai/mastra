@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/e2b': minor
 ---
 
 Added background process management to workspace sandboxes.
@@ -21,8 +20,8 @@ const procs = await sandbox.processes.list();
 await sandbox.processes.kill(handle.pid);
 ```
 
-- `sandbox.processes.spawn()` to start background processes
-- `sandbox.processes.list()`, `.get(pid)`, `.kill(pid)` for process lifecycle management
-- `ProcessHandle` with stdout/stderr streaming and `wait()` with callbacks
+- `SandboxProcessManager` abstract base class with `spawn()`, `list()`, `get(pid)`, `kill(pid)`
+- `ProcessHandle` base class with stdout/stderr accumulation, streaming callbacks, and `wait()`
+- `LocalProcessManager` implementation wrapping Node.js `child_process`
 - Node.js stream interop via `handle.reader` / `handle.writer`
-- Works with both `LocalSandbox` and `E2BSandbox`
+- Default `executeCommand` implementation built on process manager (spawn + wait)
