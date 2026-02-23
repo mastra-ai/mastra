@@ -12,33 +12,33 @@ The `.getAgentById()` method is used to retrieve an agent by its ID. The method 
 ## Usage example
 
 ```typescript
-mastra.getAgentById("test-agent-123");
+mastra.getAgentById('test-agent-123')
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "The ID of the agent to retrieve. The method will first search for an agent with this ID, and if not found, will attempt to use it as a name to call getAgent().",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description:
+"The ID of the agent to retrieve. The method will first search for an agent with this ID, and if not found, will attempt to use it as a name to call getAgent().",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "agent",
-      type: "Agent",
-      description:
-        "The agent instance with the specified ID. Throws an error if the agent is not found.",
-    },
-  ]}
+{
+name: "agent",
+type: "Agent",
+description:
+"The agent instance with the specified ID. Throws an error if the agent is not found.",
+},
+]}
 />
 
 ## Related
