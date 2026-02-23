@@ -71,6 +71,7 @@ export async function runScorersForItem(
               id: scorer.id,
               name: scorer.name,
               description: scorer.description ?? '',
+              hasJudge: !!scorer.judge,
             },
             entity: {
               id: targetId,
