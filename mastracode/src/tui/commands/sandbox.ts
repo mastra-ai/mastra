@@ -46,8 +46,7 @@ async function showSandboxAddPrompt(ctx: SlashCommandContext): Promise<void> {
       {
         question: 'Enter path to allow',
         formatResult: answer => {
-          const resolved = path.resolve(answer);
-          return `Added: ${resolved}`;
+          return `Path: ${path.resolve(answer)}`;
         },
         onSubmit: async answer => {
           ctx.state.activeInlineQuestion = undefined;

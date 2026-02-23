@@ -217,7 +217,7 @@ export async function handlePlanApproval(
         },
         onReject: async (feedback?: string) => {
           state.activeInlinePlanApproval = undefined;
-          state.harness.respondToPlanApproval({
+          await state.harness.respondToPlanApproval({
             planId,
             response: { action: 'rejected', feedback },
           });

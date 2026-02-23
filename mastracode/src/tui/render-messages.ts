@@ -157,12 +157,13 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
+  const messages = await state.harness.listMessages({ limit: 40 });
+
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.toolInputBuffers.clear();
   state.allToolComponents = [];
-
-  const messages = await state.harness.listMessages({ limit: 40 });
+  state.allSlashCommandComponents = [];
 
   for (const message of messages) {
     if (message.role === 'user') {

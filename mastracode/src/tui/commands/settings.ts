@@ -17,8 +17,8 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         await ctx.state.harness.setState({ notifications: mode });
         ctx.showInfo(`Notifications: ${mode}`);
       },
-      onYoloChange: enabled => {
-        ctx.state.harness.setState({ yolo: enabled } as any);
+      onYoloChange: async enabled => {
+        await ctx.state.harness.setState({ yolo: enabled } as any);
         ctx.updateStatusLine();
       },
       onThinkingLevelChange: async level => {
