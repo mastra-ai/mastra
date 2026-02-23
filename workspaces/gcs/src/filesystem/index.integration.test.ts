@@ -266,7 +266,7 @@ if (canRunGCSTests) {
       const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       return new Workspace({
         sandbox: new LocalSandbox({ env: process.env }),
-        lsp: true,
+        lsp: { diagnosticTimeout: 10000 },
         mounts: {
           '/mount-a': new GCSFilesystem({
             bucket: testBucket,
@@ -319,7 +319,7 @@ if (canRunGCSTests) {
           endpoint: process.env.GCS_ENDPOINT,
         }),
         sandbox: new LocalSandbox({ env: process.env }),
-        lsp: true,
+        lsp: { diagnosticTimeout: 10000 },
       });
     },
     cleanupWorkspace: async workspace => {

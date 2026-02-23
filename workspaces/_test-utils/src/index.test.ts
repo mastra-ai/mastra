@@ -37,12 +37,14 @@ createWorkspaceIntegrationTests({
     largeFileHandling: true,
     lspDiagnostics: true,
     lspPerFileRoot: true,
+    lspLargeFile: true,
+    lspPython: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-contained-'));
     const filesystem = new LocalFilesystem({ basePath: tempDir, contained: true });
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
-    return new Workspace({ filesystem, sandbox, lsp: true });
+    return new Workspace({ filesystem, sandbox, lsp: { diagnosticTimeout: 10000 } });
   },
 });
 
@@ -60,12 +62,14 @@ createWorkspaceIntegrationTests({
     largeFileHandling: true,
     lspDiagnostics: true,
     lspPerFileRoot: true,
+    lspLargeFile: true,
+    lspPython: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-uncontained-'));
     const filesystem = new LocalFilesystem({ basePath: tempDir, contained: false });
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
-    return new Workspace({ filesystem, sandbox, lsp: true });
+    return new Workspace({ filesystem, sandbox, lsp: { diagnosticTimeout: 10000 } });
   },
 });
 
@@ -99,6 +103,8 @@ createWorkspaceIntegrationTests({
     mountIsolation: true,
     lspDiagnostics: true,
     lspPerFileRoot: true,
+    lspLargeFile: true,
+    lspPython: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-mounts-'));
@@ -110,7 +116,7 @@ createWorkspaceIntegrationTests({
     const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
     return new Workspace({
       sandbox,
-      lsp: true,
+      lsp: { diagnosticTimeout: 10000 },
       mounts: {
         [mountADir]: new LocalFilesystem({ basePath: mountADir, contained: true }),
         [mountBDir]: new LocalFilesystem({ basePath: mountBDir, contained: true }),

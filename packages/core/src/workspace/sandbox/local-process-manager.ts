@@ -104,8 +104,15 @@ class LocalProcessHandle extends ProcessHandle {
     if (!this.proc.stdin) {
       throw new Error(`Process ${this.pid} does not have stdin available`);
     }
+    if (this.proc.stdin.destroyed) {
+      throw new Error(`Process ${this.pid} stdin stream is destroyed`);
+    }
     return new Promise<void>((resolve, reject) => {
-      this.proc.stdin!.write(data, err => (err ? reject(err) : resolve()));
+      try {
+        this.proc.stdin!.write(data, err => (err ? reject(err) : resolve()));
+      } catch (err) {
+        reject(err);
+      }
     });
   }
 }

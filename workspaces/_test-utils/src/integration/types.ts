@@ -86,4 +86,10 @@ export interface IntegrationTestScenarios {
 
   /** LSP per-file root resolution - two projects with different tsconfig settings */
   lspPerFileRoot?: boolean;
+
+  /** LSP large file diagnostics - ~500-line TypeScript file with type error */
+  lspLargeFile?: boolean;
+
+  /** LSP Python diagnostics - Pyright type checking (graceful skip if not installed) */
+  lspPython?: boolean;
 }

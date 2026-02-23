@@ -123,6 +123,11 @@ export class LSPClient {
     this.processManager = processManager;
   }
 
+  /** Whether the underlying server process is still running. */
+  get isAlive(): boolean {
+    return this.handle !== null && this.handle.exitCode === undefined;
+  }
+
   /**
    * Initialize the LSP connection — spawns the server and performs the handshake.
    */
@@ -271,12 +276,25 @@ export class LSPClient {
 
   /**
    * Wait for diagnostics to arrive for a file.
+   *
+   * When `waitForChange` is false (default), returns as soon as diagnostics
+   * are available. To avoid returning a premature empty array (servers may
+   * publish `[]` first while still analysing), empty results trigger a short
+   * settle window: polling continues for up to `settleMs` (default 500ms)
+   * to see if non-empty diagnostics arrive. Non-empty results are returned
+   * immediately.
    */
-  async waitForDiagnostics(filePath: string, timeoutMs: number = 5000, waitForChange: boolean = false): Promise<any[]> {
+  async waitForDiagnostics(
+    filePath: string,
+    timeoutMs: number = 5000,
+    waitForChange: boolean = false,
+    settleMs: number = 500,
+  ): Promise<any[]> {
     if (!this.connection) return [];
     const uri = toFileUri(filePath);
     const startTime = Date.now();
     const initialDiagnostics = this.diagnostics.get(uri);
+    let emptyReceivedAt: number | undefined;
 
     while (Date.now() - startTime < timeoutMs) {
       const currentDiagnostics = this.diagnostics.get(uri);
@@ -288,14 +306,19 @@ export class LSPClient {
         }
       } else {
         if (currentDiagnostics !== undefined) {
-          return currentDiagnostics;
+          // Non-empty — the server has real results, return immediately
+          if (currentDiagnostics.length > 0) return currentDiagnostics;
+          // Empty — start a settle window. The server may have published a
+          // clearing notification before the real analysis results arrive.
+          if (emptyReceivedAt === undefined) emptyReceivedAt = Date.now();
+          if (Date.now() - emptyReceivedAt >= settleMs) return currentDiagnostics;
         }
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    return waitForChange ? initialDiagnostics || [] : [];
+    return waitForChange ? initialDiagnostics || [] : this.diagnostics.get(uri) || [];
   }
 
   /**

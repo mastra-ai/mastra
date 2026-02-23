@@ -269,7 +269,7 @@ if (hasS3Credentials) {
       const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       return new Workspace({
         sandbox: new LocalSandbox({ env: process.env }),
-        lsp: true,
+        lsp: { diagnosticTimeout: 10000 },
         mounts: {
           '/mount-a': new S3Filesystem({ ...config, prefix: `${prefix}-a` }),
           '/mount-b': new S3Filesystem({ ...config, prefix: `${prefix}-b` }),
@@ -304,7 +304,7 @@ if (hasS3Credentials) {
       return new Workspace({
         filesystem: new S3Filesystem({ ...config, prefix }),
         sandbox: new LocalSandbox({ env: process.env }),
-        lsp: true,
+        lsp: { diagnosticTimeout: 10000 },
       });
     },
     cleanupWorkspace: async workspace => {

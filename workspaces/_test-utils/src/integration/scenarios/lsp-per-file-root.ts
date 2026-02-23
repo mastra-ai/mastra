@@ -73,13 +73,9 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
     it(
       'uses project-specific tsconfig strict settings',
       async () => {
-        const ctx = getContext();
-        const { workspace, getTestPath } = ctx;
+        const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return;
-
-        // TS server can't read tsconfig from remote paths — skip on remote FS
-        if (!ctx.sandboxPathsAligned) return;
 
         const fs = workspace.filesystem;
         if (!fs) return;

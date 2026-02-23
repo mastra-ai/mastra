@@ -10,13 +10,16 @@
  * walkup finds nothing.
  */
 
+import { existsSync } from 'node:fs';
+import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
 import { getServersForFile, walkUp, walkUpAsync } from './servers';
-import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic } from './types';
+import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic, LSPServerDef } from './types';
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
 function mapSeverity(severity: number | undefined): DiagnosticSeverity {
@@ -37,16 +40,24 @@ function mapSeverity(severity: number | undefined): DiagnosticSeverity {
 export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
+  private fileLocks: Map<string, Promise<void>> = new Map();
   private processManager: SandboxProcessManager;
   private _root: string;
   private config: LSPConfig;
-  private filesystem?: { exists(path: string): Promise<boolean> };
+  private filesystem?: {
+    exists(path: string): Promise<boolean>;
+    readFile?(path: string, options?: any): Promise<string | Buffer>;
+  };
+  private tempDirs: Set<string> = new Set();
 
   constructor(
     processManager: SandboxProcessManager,
     root: string,
     config: LSPConfig = {},
-    filesystem?: { exists(path: string): Promise<boolean> },
+    filesystem?: {
+      exists(path: string): Promise<boolean>;
+      readFile?(path: string, options?: any): Promise<string | Buffer>;
+    },
   ) {
     this.processManager = processManager;
     this._root = root;
@@ -70,6 +81,81 @@ export class LSPManager {
       return (await walkUpAsync(fileDir, markers, this.filesystem)) ?? this._root;
     }
     return walkUp(fileDir, markers) ?? this._root;
+  }
+
+  /**
+   * Acquire a per-file lock so that concurrent getDiagnostics calls for the
+   * same file are serialized (preventing interleaved open/change/close).
+   * Different files can run in parallel.
+   */
+  private async acquireFileLock(filePath: string): Promise<() => void> {
+    // Wait for any existing lock on this file
+    while (this.fileLocks.has(filePath)) {
+      await this.fileLocks.get(filePath);
+    }
+
+    let release!: () => void;
+    const lockPromise = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.fileLocks.set(filePath, lockPromise);
+
+    return () => {
+      this.fileLocks.delete(filePath);
+      release();
+    };
+  }
+
+  /**
+   * Initialize an LSP client for the given server definition and project root.
+   * Handles timeout, deduplication of concurrent init calls, and caching.
+   */
+  private async initClient(serverDef: LSPServerDef, projectRoot: string, key: string): Promise<LSPClient | null> {
+    // In-progress initialization — wait for it
+    if (this.initPromises.has(key)) {
+      await this.initPromises.get(key);
+      return this.clients.get(key) || null;
+    }
+
+    // Determine the workspace root for the LSP server.
+    // For remote filesystems, materialize config files to a local temp dir
+    // so the TS server can read tsconfig.json.
+    let workspaceRoot = projectRoot;
+    if (this.filesystem?.readFile && !existsSync(projectRoot)) {
+      workspaceRoot = await this.materializeConfig(projectRoot, serverDef.markers);
+    }
+
+    // Create and initialize
+    const initTimeout = this.config.initTimeout ?? 15000;
+    let timedOut = false;
+    const initPromise = (async () => {
+      const client = new LSPClient(serverDef, workspaceRoot, this.processManager);
+      await client.initialize(initTimeout);
+      if (timedOut) {
+        await client.shutdown().catch(() => {});
+        return;
+      }
+      this.clients.set(key, client);
+    })();
+
+    this.initPromises.set(key, initPromise);
+    initPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
+
+    try {
+      await Promise.race([
+        initPromise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000),
+        ),
+      ]);
+      return this.clients.get(key) || null;
+    } catch {
+      timedOut = true;
+      this.clients.delete(key);
+      return null;
+    } finally {
+      this.initPromises.delete(key);
+    }
   }
 
   /**
@@ -98,56 +184,27 @@ export class LSPManager {
 
     const key = `${serverDef.name}:${projectRoot}`;
 
-    // Existing client
+    // Existing client — check liveness before returning
     if (this.clients.has(key)) {
-      return this.clients.get(key)!;
-    }
-
-    // In-progress initialization — wait for it
-    if (this.initPromises.has(key)) {
-      await this.initPromises.get(key);
-      return this.clients.get(key) || null;
-    }
-
-    // Create and initialize
-    const initTimeout = this.config.initTimeout ?? 15000;
-    let timedOut = false;
-    const initPromise = (async () => {
-      const client = new LSPClient(serverDef, projectRoot, this.processManager);
-      await client.initialize(initTimeout);
-      if (timedOut) {
-        // Timeout already fired — don't leak the client
-        await client.shutdown().catch(() => {});
-        return;
+      const existing = this.clients.get(key)!;
+      if (!existing.isAlive) {
+        this.clients.delete(key);
+        existing.shutdown().catch(() => {});
+      } else {
+        return existing;
       }
-      this.clients.set(key, client);
-    })();
-
-    this.initPromises.set(key, initPromise);
-    initPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
-
-    try {
-      await Promise.race([
-        initPromise,
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000),
-        ),
-      ]);
-      return this.clients.get(key) || null;
-    } catch {
-      timedOut = true;
-      this.clients.delete(key);
-      return null;
-    } finally {
-      this.initPromises.delete(key);
     }
+
+    return this.initClient(serverDef, projectRoot, key);
   }
 
   /**
    * Convenience method: open file, send content, wait for diagnostics, return normalized results.
    * Returns an empty array on any failure (non-blocking).
+   * Uses a per-file lock to serialize concurrent calls for the same file.
    */
   async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[]> {
+    const release = await this.acquireFileLock(filePath);
     try {
       const client = await this.getClient(filePath);
       if (!client) return [];
@@ -176,15 +233,192 @@ export class LSPManager {
       }));
     } catch {
       return [];
+    } finally {
+      release();
     }
   }
 
   /**
-   * Shutdown all managed LSP clients.
+   * Get diagnostics from ALL matching language servers for a file.
+   * Deduplicates results by (line, character, message).
+   * Individual server failures don't block other servers.
+   */
+  async getDiagnosticsMulti(filePath: string, content: string): Promise<LSPDiagnostic[]> {
+    const servers = getServersForFile(filePath, this.config.disableServers);
+    if (servers.length === 0) return [];
+
+    const release = await this.acquireFileLock(filePath);
+    try {
+      const languageId = getLanguageId(filePath);
+      if (!languageId) return [];
+
+      const allDiagnostics: LSPDiagnostic[] = [];
+
+      const results = await Promise.allSettled(
+        servers.map(async serverDef => {
+          const projectRoot = await this.resolveRoot(filePath, serverDef.markers);
+          if (serverDef.command(projectRoot) === undefined) return [];
+
+          const key = `${serverDef.name}:${projectRoot}`;
+
+          // Existing client — check liveness
+          if (this.clients.has(key)) {
+            const existing = this.clients.get(key)!;
+            if (!existing.isAlive) {
+              this.clients.delete(key);
+              existing.shutdown().catch(() => {});
+            } else {
+              return this.collectDiagnostics(existing, filePath, content, languageId);
+            }
+          }
+
+          const client = await this.initClient(serverDef, projectRoot, key);
+          if (!client) return [];
+
+          return this.collectDiagnostics(client, filePath, content, languageId);
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          allDiagnostics.push(...result.value);
+        }
+      }
+
+      // Deduplicate by (line, character, message)
+      const seen = new Set<string>();
+      return allDiagnostics.filter(d => {
+        const key = `${d.line}:${d.character}:${d.message}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Collect diagnostics from a single client for a file.
+   */
+  private async collectDiagnostics(
+    client: LSPClient,
+    filePath: string,
+    content: string,
+    languageId: string,
+  ): Promise<LSPDiagnostic[]> {
+    client.notifyOpen(filePath, content, languageId);
+    client.notifyChange(filePath, content, 1);
+
+    const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
+    let rawDiagnostics: any[];
+    try {
+      rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
+    } finally {
+      client.notifyClose(filePath);
+    }
+
+    return rawDiagnostics.map((d: any) => ({
+      severity: mapSeverity(d.severity),
+      message: d.message,
+      line: (d.range?.start?.line ?? 0) + 1,
+      character: (d.range?.start?.character ?? 0) + 1,
+      source: d.source,
+    }));
+  }
+
+  /**
+   * Materialize remote config files to a local temp directory.
+   * Reads marker files (e.g. tsconfig.json) from the remote filesystem
+   * and writes them to a temp dir so the locally-spawned TS server can read them.
+   * Handles `extends` in tsconfig.json by recursively materializing referenced files.
+   */
+  async materializeConfig(remotePath: string, markers: string[]): Promise<string> {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'lsp-config-'));
+    this.tempDirs.add(tempDir);
+
+    if (!this.filesystem?.readFile) return tempDir;
+
+    for (const marker of markers) {
+      const remoteFile = path.join(remotePath, marker);
+      try {
+        const raw = await this.filesystem.readFile(remoteFile);
+        const content = typeof raw === 'string' ? raw : raw.toString('utf-8');
+        await writeFile(path.join(tempDir, marker), content, 'utf-8');
+
+        // Handle tsconfig extends
+        if (marker === 'tsconfig.json') {
+          await this.materializeExtends(remotePath, tempDir, content, 0);
+        }
+      } catch {
+        // File doesn't exist on remote — skip
+      }
+    }
+
+    return tempDir;
+  }
+
+  /**
+   * Recursively materialize files referenced by tsconfig's `extends` field.
+   * Only handles relative paths (not npm package references).
+   * Depth-limited to prevent infinite loops.
+   */
+  private async materializeExtends(
+    remotePath: string,
+    tempDir: string,
+    tsconfigContent: string,
+    depth: number,
+  ): Promise<void> {
+    if (depth >= 5) return;
+
+    try {
+      const parsed = JSON.parse(tsconfigContent);
+      if (!parsed.extends || typeof parsed.extends !== 'string') return;
+
+      const extendsPath = parsed.extends;
+      // Only handle relative paths
+      if (!extendsPath.startsWith('.')) return;
+
+      const remoteExtendsFile = path.join(remotePath, extendsPath);
+      const localExtendsFile = path.join(tempDir, extendsPath);
+
+      // Ensure parent directory exists
+      await mkdir(path.dirname(localExtendsFile), { recursive: true });
+
+      const raw = await this.filesystem!.readFile!(remoteExtendsFile);
+      const content = typeof raw === 'string' ? raw : raw.toString('utf-8');
+      await writeFile(localExtendsFile, content, 'utf-8');
+
+      // Recurse for nested extends
+      await this.materializeExtends(
+        path.dirname(remoteExtendsFile),
+        path.dirname(localExtendsFile),
+        content,
+        depth + 1,
+      );
+    } catch {
+      // Parse error or file not found — skip
+    }
+  }
+
+  /**
+   * Shutdown all managed LSP clients and clean up temp directories.
    */
   async shutdownAll(): Promise<void> {
     await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
     this.clients.clear();
     this.initPromises.clear();
+    this.fileLocks.clear();
+
+    // Clean up temp directories used for materialized configs
+    for (const dir of this.tempDirs) {
+      try {
+        const { rm } = await import('node:fs/promises');
+        await rm(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    this.tempDirs.clear();
   }
 }

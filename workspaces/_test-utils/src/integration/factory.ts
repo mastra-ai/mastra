@@ -18,7 +18,9 @@ import { createCrossMountCopyTests } from './scenarios/cross-mount-copy';
 import { createFileSyncTests } from './scenarios/file-sync';
 import { createLargeFileHandlingTests } from './scenarios/large-file-handling';
 import { createLspDiagnosticsTests } from './scenarios/lsp-diagnostics';
+import { createLspLargeFileTests } from './scenarios/lsp-large-file';
 import { createLspPerFileRootTests } from './scenarios/lsp-per-file-root';
+import { createLspPythonTests } from './scenarios/lsp-python';
 import { createMountIsolationTests } from './scenarios/mount-isolation';
 import { createMountRoutingTests } from './scenarios/mount-routing';
 import { createMultiMountTests } from './scenarios/multi-mount';
@@ -151,6 +153,14 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     if (testScenarios.lspPerFileRoot === true) {
       createLspPerFileRootTests(getContext);
+    }
+
+    if (testScenarios.lspLargeFile === true) {
+      createLspLargeFileTests(getContext);
+    }
+
+    if (testScenarios.lspPython === true) {
+      createLspPythonTests(getContext);
     }
 
     // Composite-specific scenarios (require CompositeFilesystem with 2+ mounts)

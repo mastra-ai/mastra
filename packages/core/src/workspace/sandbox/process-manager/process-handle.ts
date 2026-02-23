@@ -159,10 +159,16 @@ export abstract class ProcessHandle {
           this.sendStdin(chunk.toString()).then(
             () => cb(),
             err => {
-              // Swallow EPIPE — the process has exited and stdin is gone.
-              // This commonly happens during LSP shutdown when buffered
-              // writes race with process termination.
-              if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
+              // Swallow EPIPE and stream-destroyed errors — the process has
+              // exited and stdin is gone. This commonly happens during LSP
+              // shutdown when buffered writes race with process termination.
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED') {
+                cb();
+                return;
+              }
+              // Also swallow errors from our own destroyed-stream guard
+              if (err?.message?.includes('stdin stream is destroyed')) {
                 cb();
                 return;
               }
