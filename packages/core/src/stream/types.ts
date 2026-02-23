@@ -720,6 +720,22 @@ export type WorkflowStreamEvent =
     })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & {
+      type: 'workflow-step-progress';
+      payload: {
+        id: string;
+        /** Number of iterations completed so far */
+        completedCount: number;
+        /** Total number of iterations */
+        totalCount: number;
+        /** Index of the iteration that just completed */
+        currentIndex: number;
+        /** Status of the iteration that just completed */
+        iterationStatus: 'success' | 'failed' | 'suspended';
+        /** Output of the iteration that just completed (if successful) */
+        iterationOutput?: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
       type: 'workflow-step-result';
       payload: {
         id: string;

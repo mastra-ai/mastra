@@ -11,9 +11,7 @@ import StepItem from "@site/src/components/StepItem";
 Use `@mastra/deployer-vercel` to deploy your Mastra server as serverless functions on Vercel. The deployer bundles your code and generates a `.vercel/output` directory conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), ready to deploy with no additional configuration.
 
 :::info
-
-If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
-
+This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 ## Before you begin
@@ -43,7 +41,7 @@ export const mastra = new Mastra({
 });
 ```
 
-## Usage
+## Deploy
 
 <Steps>
 <StepItem>
@@ -75,7 +73,7 @@ Since the Mastra server prefixes every endpoint with `/api`, you have to add it 
 
 You can now call your Mastra endpoints over HTTP.
 
-:::note
+:::warning
 Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
 :::
 

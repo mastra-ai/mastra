@@ -25,7 +25,8 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'models/',
     'docs/build-with-ai/skills.mdx',
   ],
-  packagePattern: /^@mastra\/[\w-]+$/,
+  // Allow for @mastra/* packages + mastra + create-mastra
+  packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra)$/,
   concurrency: 50,
 }
 
@@ -82,7 +83,7 @@ function validatePackagesField(
     if (!config.packagePattern.test(pkg.value)) {
       errors.push({
         type: 'invalid_packages',
-        message: `invalid package name: "${pkg.value}" (must match @mastra/*)`,
+        message: `invalid package name: "${pkg.value}" (must match @mastra/*, mastra, or create-mastra)`,
         lineNumber: pkg.lineNumber,
       })
     }

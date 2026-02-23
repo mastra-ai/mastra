@@ -1,0 +1,115 @@
+---
+title: "Reference: DatasetsManager.compareExperiments() | Datasets"
+description: "Documentation for the `DatasetsManager.compareExperiments()` method, which compares two or more experiments."
+packages:
+  - "@mastra/core"
+---
+
+# DatasetsManager.compareExperiments()
+
+**Added in:** `@mastra/core@1.4.0`
+
+Compares two or more experiments, producing per-item and per-scorer comparisons. Requires at least two experiment IDs.
+
+## Usage example
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const comparison = await mastra.datasets.compareExperiments({
+  experimentIds: ["exp-baseline", "exp-new"],
+  baselineId: "exp-baseline",
+});
+
+console.log(`Baseline: ${comparison.baselineId}`);
+
+for (const item of comparison.items) {
+  console.log(`Item ${item.itemId}:`);
+  console.log(`  Input: ${JSON.stringify(item.input)}`);
+
+  for (const [expId, result] of Object.entries(item.results)) {
+    if (result) {
+      console.log(`  ${expId}: output=${JSON.stringify(result.output)}, scores=${JSON.stringify(result.scores)}`);
+    }
+  }
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "experimentIds",
+      type: "string[]",
+      description: "Array of experiment IDs to compare. Must contain at least 2.",
+    },
+    {
+      name: "baselineId",
+      type: "string",
+      isOptional: true,
+      description: "ID of the baseline experiment. Defaults to the first ID in `experimentIds`.",
+    },
+  ]}
+/>
+
+## Returns
+
+Throws `MastraError` if fewer than 2 experiment IDs are provided.
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<object>",
+      description: "Comparison results.",
+      properties: [{
+        type: "object",
+        parameters: [
+          {
+            name: "baselineId",
+            type: "string",
+            description: "ID of the baseline experiment used for comparison.",
+          },
+          {
+            name: "items",
+            type: "Array<object>",
+            description: "Per-item comparison data.",
+            properties: [{
+              type: "object",
+              parameters: [
+                {
+                  name: "itemId",
+                  type: "string",
+                  description: "ID of the dataset item.",
+                },
+                {
+                  name: "input",
+                  type: "unknown | null",
+                  description: "Input data for the item.",
+                },
+                {
+                  name: "groundTruth",
+                  type: "unknown | null",
+                  description: "Ground truth for the item.",
+                },
+                {
+                  name: "results",
+                  type: "Record<string, { output: unknown; scores: Record<string, number | null> } | null>",
+                  description: "Results keyed by experiment ID. Each entry contains the output and scorer results for that experiment.",
+                },
+              ],
+            }],
+          },
+        ],
+      }],
+    },
+  ]}
+/>
+
+## Related
+
+- [dataset.startExperiment()](/reference/datasets/startExperiment)
+- [dataset.listExperiments()](/reference/datasets/listExperiments)

@@ -96,10 +96,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     };
   }
   async stream(route: ServerRoute, res: Response, result: { fullStream: ReadableStream }): Promise<void> {
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Transfer-Encoding', 'chunked');
-
     const streamFormat = route.streamFormat || 'stream';
+
+    if (streamFormat === 'sse') {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+    } else {
+      res.setHeader('Content-Type', 'text/plain');
+    }
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.flushHeaders();
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -136,7 +144,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -409,6 +417,24 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
+        // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+        if (params.urlParams) {
+          try {
+            params.urlParams = await this.parsePathParams(route, params.urlParams);
+          } catch (error) {
+            this.mastra.getLogger()?.error('Error parsing path params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            if (error instanceof ZodError) {
+              return res.status(400).json(formatZodError(error, 'path parameters'));
+            }
+            return res.status(400).json({
+              error: 'Invalid path parameters',
+              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            });
+          }
+        }
+
         const handlerParams = {
           ...params.urlParams,
           ...params.queryParams,
@@ -451,6 +477,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       },
     );
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      const response = await this.handleCustomRouteRequest(
+        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        req.method,
+        req.headers as Record<string, string | string[] | undefined>,
+        req.body,
+        res.locals.requestContext,
+      );
+      if (!response) return next();
+      await this.writeCustomRouteResponse(response, res);
+    });
   }
 
   registerContextMiddleware(): void {

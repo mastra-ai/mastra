@@ -77,7 +77,7 @@ export const agent = new Agent({
       name: "lastMessages",
       type: "number | false",
       description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
+        "Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.",
       isOptional: true,
       defaultValue: "10",
     },

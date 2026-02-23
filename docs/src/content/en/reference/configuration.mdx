@@ -56,10 +56,7 @@ import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  deployer: new NetlifyDeployer({
-    scope: "your-team",
-    siteId: "your-site-id",
-  }),
+  deployer: new NetlifyDeployer(),
 });
 ```
 
@@ -704,6 +701,8 @@ export const mastra = new Mastra({
 **Type:** `(err: Error, c: Context) => Response | Promise<Response>`
 
 Custom error handler called when an unhandled error occurs. Use this to customize error responses, log errors to external services like Sentry, or implement custom error formatting.
+
+This hook is supported by all server adapters. The `c` parameter provides a Hono-compatible context object — for non-Hono adapters (Koa, Express, Fastify), a shim is provided with commonly used methods like `c.json()` and `c.req.path`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";

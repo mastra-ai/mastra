@@ -19,7 +19,7 @@
  * ```
  */
 
-import type { Lifecycle, ProviderStatus } from '../lifecycle';
+import type { FilesystemLifecycle, ProviderStatus } from '../lifecycle';
 import type { FilesystemMountConfig, FilesystemIcon } from './mount';
 
 // =============================================================================
@@ -108,7 +108,7 @@ export interface CopyOptions {
 /**
  * Information about a filesystem provider's current state.
  */
-export interface FilesystemInfo {
+export interface FilesystemInfo<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Unique identifier */
   id: string;
   /** Human-readable name */
@@ -121,18 +121,10 @@ export interface FilesystemInfo {
   error?: string;
   /** Whether filesystem is read-only */
   readOnly?: boolean;
-  /** Base path (for local filesystems) */
-  basePath?: string;
   /** Icon identifier for UI display */
   icon?: FilesystemIcon;
-  /** Storage usage (if available) */
-  storage?: {
-    totalBytes?: number;
-    usedBytes?: number;
-    availableBytes?: number;
-  };
   /** Provider-specific metadata */
-  metadata?: Record<string, unknown>;
+  metadata?: TMetadata;
 }
 
 // =============================================================================
@@ -148,15 +140,13 @@ export interface FilesystemInfo {
  * All paths are absolute within the filesystem's namespace.
  * Implementations handle path normalization.
  *
- * Lifecycle methods (from Lifecycle interface) are all optional:
+ * Lifecycle methods (from FilesystemLifecycle interface) are all optional:
  * - init(): One-time setup (create directories, tables)
- * - start(): Begin operation (establish connections)
- * - stop(): Pause operation (close connections)
  * - destroy(): Clean up resources
  * - isReady(): Check if ready for operations
  * - getInfo(): Get status and metadata
  */
-export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
+export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo> {
   /** Unique identifier for this filesystem instance */
   readonly id: string;
 

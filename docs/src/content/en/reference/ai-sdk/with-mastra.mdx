@@ -75,7 +75,7 @@ const { text } = await generateText({
     {
       name: "options.memory.storage",
       type: "MemoryStorage",
-      description: "Storage adapter for message persistence (e.g., LibSQLStore, PostgresStore).",
+      description: "Memory storage domain for message persistence. Get it from a composite store using `await storage.getStore('memory')`.",
       isOptional: false,
     },
     {

@@ -1,0 +1,52 @@
+---
+title: "Reference: DatasetsManager.get() | Datasets"
+description: "Documentation for the `DatasetsManager.get()` method, which retrieves an existing dataset by ID."
+packages:
+  - "@mastra/core"
+---
+
+# DatasetsManager.get()
+
+**Added in:** `@mastra/core@1.4.0`
+
+Retrieves an existing dataset by ID. Throws a `MastraError` if the dataset does not exist.
+
+## Usage example
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+// Now use the dataset
+const details = await dataset.getDetails();
+console.log(details.name);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier of the dataset.",
+    },
+  ]}
+/>
+
+## Returns
+
+Throws `MastraError` if the dataset is not found.
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<Dataset>",
+      description: "A Dataset instance.",
+    },
+  ]}
+/>

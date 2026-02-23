@@ -422,7 +422,7 @@ export class Memory extends MastraMemory {
 
       await memoryStore.updateThread({
         id: threadId,
-        title: thread.title || 'Untitled Thread',
+        title: thread.title || '',
         metadata: {
           ...thread.metadata,
           workingMemory,
@@ -536,7 +536,7 @@ ${workingMemory}`;
 
         await memoryStore.updateThread({
           id: threadId,
-          title: thread.title || 'Untitled Thread',
+          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,
@@ -1354,6 +1354,33 @@ Notes:
       await this.embedClonedMessages(result.clonedMessages, config);
     }
 
+    // Copy working memory from source thread to cloned thread.
+    // Thread-scoped: always copy since each thread has its own working memory.
+    // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
+    if (config.workingMemory?.enabled) {
+      const scope = config.workingMemory.scope || 'resource';
+      const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
+      const sourceResourceId = sourceThread?.resourceId;
+      const shouldCopy =
+        scope === 'thread' || (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId);
+
+      if (shouldCopy) {
+        const sourceWm = await this.getWorkingMemory({
+          threadId: args.sourceThreadId,
+          resourceId: sourceResourceId,
+          memoryConfig,
+        });
+        if (sourceWm) {
+          await this.updateWorkingMemory({
+            threadId: result.thread.id,
+            resourceId: result.thread.resourceId,
+            workingMemory: sourceWm,
+            memoryConfig,
+          });
+        }
+      }
+    }
+
     return result;
   }
 
@@ -1688,6 +1715,7 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
+            instruction: omConfig.observation.instruction,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1698,6 +1726,7 @@ Notes:
             providerOptions: omConfig.reflection.providerOptions,
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
+            instruction: omConfig.reflection.instruction,
           }
         : undefined,
     });

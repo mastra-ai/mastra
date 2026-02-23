@@ -1,29 +1,17 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { assertNoDuplicateParts } from '../test-utils';
-
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
 function saveAndErrorTests(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
 
   beforeEach(() => {
     if (version === 'v1') {
-      openaiModel = openai('gpt-4o');
       dummyModel = new MockLanguageModelV1({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -39,7 +27,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         }),
       });
     } else {
-      openaiModel = openai_v5('gpt-4o');
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -237,263 +224,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
     });
 
     describe('generate', () => {
-      // Processors need prepareStep and onStepFinish to be able to have MessageHistory processor save partial messages. Or we need message list in processOutputStream
-      it.skip('should rescue partial messages (including tool calls) if generate is aborted/interrupted', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        let savedMessages: any[] = [];
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          savedMessages.push(...args[0].messages);
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const errorTool = createTool({
-          id: 'errorTool',
-          description: 'Always throws an error.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async () => {
-            throw new Error('Tool failed!');
-          },
-        });
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async input => ({ output: input.input }),
-        });
-
-        const agent = new Agent({
-          id: 'partial-rescue-agent-generate',
-          name: 'Partial Rescue Agent Generate',
-          instructions:
-            'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { errorTool, echoTool },
-        });
-        agent.__setLogger(noopLogger);
-
-        let stepCount = 0;
-        let caught = false;
-        try {
-          if (version === 'v1') {
-            await agent.generateLegacy(
-              'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-              {
-                threadId: 'thread-partial-rescue-generate',
-                resourceId: 'resource-partial-rescue-generate',
-                experimental_continueSteps: true,
-                savePerStep: true,
-                onStepFinish: (result: any) => {
-                  if (result.toolCalls && result.toolCalls.length > 1) {
-                    throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                  }
-                  stepCount++;
-                  if (stepCount === 2) {
-                    throw new Error('Simulated error in onStepFinish');
-                  }
-                },
-              },
-            );
-          } else {
-            await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              memory: {
-                thread: 'thread-partial-rescue-generate',
-                resource: 'resource-partial-rescue-generate',
-              },
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
-              },
-            });
-          }
-        } catch (err: any) {
-          caught = true;
-          expect(err.message).toMatch(/Simulated error in onStepFinish/i);
-        }
-
-        expect(caught).toBe(true);
-
-        // After interruption, check what was saved
-        const result = await mockMemory.recall({
-          threadId: 'thread-partial-rescue-generate',
-          resourceId: 'resource-partial-rescue-generate',
-        });
-        const messages = result.messages;
-
-        // User message should be saved
-        expect(messages.find(m => m.role === 'user')).toBeTruthy();
-        // At least one assistant message (could be partial) should be saved
-        expect(messages.find(m => m.role === 'assistant')).toBeTruthy();
-        // At least one tool call (echoTool or errorTool) should be saved if the model got that far
-        const assistantWithToolInvocation = messages.find(
-          m =>
-            m.role === 'assistant' &&
-            m.content &&
-            Array.isArray(m.content.parts) &&
-            m.content.parts.some(
-              part =>
-                part.type === 'tool-invocation' &&
-                part.toolInvocation &&
-                (part.toolInvocation.toolName === 'echoTool' || part.toolInvocation.toolName === 'errorTool'),
-            ),
-        );
-        expect(assistantWithToolInvocation).toBeTruthy();
-        // There should be at least one save call (user and partial assistant/tool)
-        expect(saveCallCount).toBeGreaterThanOrEqual(1);
-      });
-
-      // Processors need prepareStep and onStepFinish to be able to have MessageHistory processor save partial messages. Or we need message list in processOutputStream
-      it.skip('should incrementally save messages across steps and tool calls', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async input => ({ output: input.input }),
-        });
-
-        const agent = new Agent({
-          id: 'test-agent-generate',
-          name: 'Test Agent Generate',
-          instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { echoTool },
-        });
-
-        if (version === 'v1') {
-          await agent.generateLegacy('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo-generate',
-            resourceId: 'resource-echo-generate',
-            savePerStep: true,
-          });
-        } else {
-          await agent.generate('Echo: Please echo this long message and explain why.', {
-            memory: {
-              thread: 'thread-echo-generate',
-              resource: 'resource-echo-generate',
-            },
-            savePerStep: true,
-          });
-        }
-
-        expect(saveCallCount).toBeGreaterThan(1);
-        const result = await mockMemory.recall({
-          threadId: 'thread-echo-generate',
-          resourceId: 'resource-echo-generate',
-        });
-        const messages = result.messages;
-        expect(messages.length).toBeGreaterThan(0);
-
-        const assistantMsg = messages.find(m => m.role === 'assistant');
-        expect(assistantMsg).toBeDefined();
-        assertNoDuplicateParts(assistantMsg!.content.parts);
-
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
-        expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
-      }, 500000);
-
-      // Processors need prepareStep and onStepFinish to be able to have MessageHistory processor save partial messages. Or we need message list in processOutputStream
-      it.skip('should incrementally save messages with multiple tools and multi-step generation', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async input => ({ output: input.input }),
-        });
-
-        const uppercaseTool = createTool({
-          id: 'uppercaseTool',
-          description: 'Converts input to uppercase.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async input => ({ output: input.input.toUpperCase() }),
-        });
-
-        const agent = new Agent({
-          id: 'test-agent-multi-generate',
-          name: 'Test Agent Multi Generate',
-          instructions: [
-            'If the user prompt contains "Echo:", call the echoTool.',
-            'If the user prompt contains "Uppercase:", call the uppercaseTool.',
-            'If both are present, call both tools and explain the results.',
-            'Be verbose in your response.',
-          ].join(' '),
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { echoTool, uppercaseTool },
-        });
-
-        if (version === 'v1') {
-          await agent.generateLegacy(
-            'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-            {
-              threadId: 'thread-multi-generate',
-              resourceId: 'resource-multi-generate',
-              savePerStep: true,
-            },
-          );
-        } else {
-          await agent.generate(
-            'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-            {
-              memory: {
-                thread: 'thread-multi-generate',
-                resource: 'resource-multi-generate',
-              },
-              savePerStep: true,
-            },
-          );
-        }
-        expect(saveCallCount).toBeGreaterThan(1);
-        const result = await mockMemory.recall({
-          threadId: 'thread-multi-generate',
-          resourceId: 'resource-multi-generate',
-        });
-        const messages = result.messages;
-        expect(messages.length).toBeGreaterThan(0);
-        const assistantMsg = messages.find(m => m.role === 'assistant');
-        expect(assistantMsg).toBeDefined();
-        assertNoDuplicateParts(assistantMsg!.content.parts);
-
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
-        expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
-      }, 500000);
-
       it('should persist the full message after a successful run', async () => {
         const mockMemory = new MockMemory();
         const agent = new Agent({
@@ -911,78 +641,53 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
-      // Helper to create a model that calls a non-existent tool
-      function createModelWithNonExistentToolCall() {
-        return new MockLanguageModelV2({
-          doGenerate: async () => ({
-            content: [
-              { type: 'tool-call', toolCallId: '123', toolName: 'nonExistentTool', input: '{"input": "test"}' },
-            ],
-            finishReason: 'tool-calls',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            warnings: [],
-          }),
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              {
-                type: 'tool-call',
-                toolCallId: 'call-1',
-                toolCallType: 'function',
-                toolName: 'nonExistentTool', // This tool doesn't exist in the agent's tools
-                input: '{"input": "test"}',
-              },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      }
-
-      // Helper to create an agent with a tool that exists but the model will call a non-existent one
-      function createAgentWithMismatchedTool(model: MockLanguageModelV2) {
-        const existingTool = createTool({
-          id: 'existingTool',
-          description: 'A tool that exists',
-          inputSchema: z.object({ input: z.string() }),
-          execute: async () => ({ result: 'success' }),
+      it('should throw correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
         });
 
-        return new Agent({
-          id: 'test-tool-not-found-error',
-          name: 'Test Tool Not Found Error',
-          model,
+        const agent = new Agent({
+          id: 'test-throw-generate',
+          name: 'Test Throw Generate',
+          model: errorModel,
           instructions: 'You are a helpful assistant.',
-          tools: { existingTool },
         });
-      }
-
-      it('should throw correct error message in generate when workflow step fails (e.g. tool not found)', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
 
         let caughtError: Error | null = null;
         try {
-          await agent.generate('Please use a tool');
+          await agent.generate('Please use a tool', { modelSettings: { maxRetries: 0 } });
         } catch (err: any) {
           caughtError = err;
         }
 
         expect(caughtError).toBeDefined();
         expect(caughtError).toBeInstanceOf(Error);
-        // The error should contain the actual error message, not "promise 'text' was not resolved"
-        expect(caughtError!.message).toMatch(/Tool nonExistentTool not found/i);
-        expect(caughtError!.message).not.toMatch(/promise.*was not resolved/i);
+        expect(caughtError!.message).toMatch(/Model generation failed/i);
       });
 
-      it('should have correct error in output.error and fullStream error chunk when workflow step fails in stream', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
+      it('should have correct error in output.error and fullStream error chunk when model throws in stream', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
 
-        const output = await agent.stream('Please use a tool');
+        const agent = new Agent({
+          id: 'test-error-stream',
+          name: 'Test Error Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const output = await agent.stream('Please use a tool', { modelSettings: { maxRetries: 0 } });
 
         let errorChunk: any;
         for await (const chunk of output.fullStream) {
@@ -995,21 +700,32 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(errorChunk).toBeDefined();
         expect(errorChunk.payload.error).toBeDefined();
         expect(errorChunk.payload.error).toBeInstanceOf(Error);
-        expect((errorChunk.payload.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((errorChunk.payload.error as Error).message).not.toMatch(/promise.*was not resolved/i);
+        expect((errorChunk.payload.error as Error).message).toMatch(/Model stream failed/i);
 
         // Verify output.error has correct error
         expect(output.error).toBeInstanceOf(Error);
-        expect((output.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((output.error as Error).message).not.toMatch(/promise.*was not resolved/i);
+        expect((output.error as Error).message).toMatch(/Model stream failed/i);
 
         // Verify they are the same instance
         expect(output.error).toBe(errorChunk.payload.error);
       });
 
-      it('should call onError with correct error in generate when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
+      it('should call onError with correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-generate',
+          name: 'Test OnError Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
 
         let onErrorCalled = false;
         let onErrorArg: string | Error | null = null;
@@ -1020,6 +736,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
               onErrorCalled = true;
               onErrorArg = error;
             },
+            modelSettings: { maxRetries: 0 },
           });
         } catch {
           // Expected to throw
@@ -1027,13 +744,25 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         expect(onErrorCalled).toBe(true);
         expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model generation failed/i);
       });
 
-      it('should call onError with correct error in stream when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
+      it('should call onError with correct error in stream when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-stream',
+          name: 'Test OnError Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
 
         let onErrorCalled = false;
         let onErrorArg: string | Error | null = null;
@@ -1043,6 +772,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             onErrorCalled = true;
             onErrorArg = error;
           },
+          modelSettings: { maxRetries: 0 },
         });
 
         // Consume the stream to trigger the error
@@ -1052,8 +782,130 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         expect(onErrorCalled).toBe(true);
         expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      // Helper to create a model that calls a tool which will throw during execution
+      function createModelWithFailingToolCall() {
+        return new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'tool-call', toolCallId: '123', toolName: 'failingTool', input: '{"input": "test"}' }],
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'response-1',
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolCallType: 'function',
+                toolName: 'failingTool',
+                input: '{"input": "test"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        });
+      }
+
+      // Helper to create an agent with a tool that throws during execution
+      function createAgentWithFailingTool(model: MockLanguageModelV2) {
+        const failingTool = createTool({
+          id: 'failingTool',
+          description: 'A tool that throws during execution',
+          inputSchema: z.object({ input: z.string() }),
+          execute: async () => {
+            throw new Error('Tool execution failed');
+          },
+        });
+
+        return new Agent({
+          id: 'test-tool-execution-error',
+          name: 'Test Tool Execution Error',
+          model,
+          instructions: 'You are a helpful assistant.',
+          tools: { failingTool },
+        });
+      }
+
+      it('should not throw in generate when tool execution fails (error returned to model)', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        // Tool execution failures bail the workflow but don't throw
+        const result = await agent.generate('Please use a tool');
+        expect(result).toBeDefined();
+      });
+
+      it('should not emit error chunks in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        const output = await agent.stream('Please use a tool');
+
+        const errorChunks: any[] = [];
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunks.push(chunk);
+          }
+        }
+
+        // Tool execution failures go through bail(), not the error path
+        expect(errorChunks.length).toBe(0);
+      });
+
+      it('should not call onError in generate when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        await agent.generate('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
+      });
+
+      it('should not call onError in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
+        for await (const _ of output.fullStream) {
+          // Just consume
+        }
+
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
       });
     });
 
@@ -1185,51 +1037,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
-      });
-    });
-    describe(`${version} - stream destructuring support`, () => {
-      it('should support destructuring of stream properties and methods', async () => {
-        const agent = new Agent({
-          id: 'test-destructuring',
-          name: 'Test Destructuring',
-          model: openaiModel,
-          instructions: 'You are a helpful assistant.',
-        });
-
-        const result = await agent.stream('Say hello');
-
-        // Test destructuring of various properties
-        const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;
-
-        // These should all work without throwing errors
-        try {
-          // Test async method
-          await consumeStream();
-
-          // Test promise getters
-          const textResult = await text;
-          expect(typeof textResult).toBe('string');
-
-          const usageResult = await usage;
-          expect(usageResult).toBeDefined();
-
-          const toolCallsResult = await toolCalls;
-          expect(Array.isArray(toolCallsResult)).toBe(true);
-
-          const finishReasonResult = await finishReason;
-          expect(finishReasonResult).toBeDefined();
-
-          const requestResult = await request;
-          expect(requestResult).toBeDefined();
-
-          // Test stream getters (just check they exist without consuming)
-          expect(fullStream).toBeDefined();
-          expect(textStream).toBeDefined();
-        } catch (error) {
-          // If this fails before the fix, we expect it to throw
-          console.error('Destructuring test failed:', error);
-          throw error;
-        }
       });
     });
   }

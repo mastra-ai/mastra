@@ -121,6 +121,44 @@ app.listen(3000, () => {
   ]}
 />
 
+## Error handling
+
+The Koa adapter propagates errors from route handlers up through Koa's middleware chain, following Koa's standard error handling pattern. This means you can use regular Koa error-handling middleware:
+
+```typescript title="server.ts"
+const app = new Koa();
+app.use(bodyParser());
+
+// Your error middleware catches errors from Mastra route handlers
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    ctx.status = err.status || 500;
+    ctx.body = { error: err.message };
+    // Log, report to Sentry, etc.
+  }
+});
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+```
+
+The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it is called before the error propagates to middleware, and its response is used directly:
+
+```typescript title="src/mastra/index.ts"
+const mastra = new Mastra({
+  server: {
+    onError: (err, c) => {
+      console.error('Unhandled error:', err);
+      return c.json({ error: err.message }, 500);
+    },
+  },
+});
+```
+
+When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention.
+
 ## Manual initialization
 
 For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/server/server-adapters#manual-initialization) for details.

@@ -2,11 +2,12 @@ import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { Workspace } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, FileEntry, FileStat } from '@mastra/core/workspace';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
 import { createTestServerContext } from './test-utils';
 import {
+  LIST_WORKSPACES_ROUTE,
   GET_WORKSPACE_ROUTE,
   WORKSPACE_FS_READ_ROUTE,
   WORKSPACE_FS_WRITE_ROUTE,
@@ -21,6 +22,12 @@ import {
   WORKSPACE_LIST_SKILL_REFERENCES_ROUTE,
   WORKSPACE_GET_SKILL_REFERENCE_ROUTE,
   WORKSPACE_SEARCH_SKILLS_ROUTE,
+  WORKSPACE_SKILLS_SH_SEARCH_ROUTE,
+  WORKSPACE_SKILLS_SH_POPULAR_ROUTE,
+  WORKSPACE_SKILLS_SH_PREVIEW_ROUTE,
+  WORKSPACE_SKILLS_SH_INSTALL_ROUTE,
+  WORKSPACE_SKILLS_SH_REMOVE_ROUTE,
+  WORKSPACE_SKILLS_SH_UPDATE_ROUTE,
 } from './workspace';
 
 // =============================================================================
@@ -255,6 +262,73 @@ function createMastra(workspace?: Workspace): Mastra {
 // =============================================================================
 
 describe('Workspace Handlers', () => {
+  // ===========================================================================
+  // LIST_WORKSPACES_ROUTE
+  // ===========================================================================
+  describe('LIST_WORKSPACES_ROUTE', () => {
+    it('should return empty list when no workspaces registered', async () => {
+      const mastra = createMastra();
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toEqual([]);
+    });
+
+    it('should list workspaces from registry', async () => {
+      const workspace = createWorkspace('ws-1', { name: 'My Workspace', bm25: true });
+      const mastra = createMastra(workspace);
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0]).toMatchObject({
+        id: 'ws-1',
+        name: 'My Workspace',
+        source: 'mastra',
+        capabilities: {
+          hasFilesystem: true,
+          hasSandbox: false,
+          canBM25: true,
+          canVector: false,
+          canHybrid: false,
+          hasSkills: false,
+        },
+        safety: {
+          readOnly: false,
+        },
+      });
+    });
+
+    it('should report readOnly in safety', async () => {
+      const workspace = createWorkspace('ro-ws', { name: 'Read Only', readOnly: true });
+      const mastra = createMastra(workspace);
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0].safety.readOnly).toBe(true);
+    });
+
+    it('should report hasSkills when skills are configured', async () => {
+      const skills = createMockSkills();
+      const workspace = createWorkspace('sk-ws', { name: 'Skills Workspace', skills });
+      const mastra = createMastra(workspace);
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0].capabilities.hasSkills).toBe(true);
+    });
+  });
+
   // ===========================================================================
   // GET_WORKSPACE_ROUTE
   // ===========================================================================
@@ -1139,6 +1213,948 @@ describe('Workspace Handlers', () => {
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: undefined });
       expect(skills.list).toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // Skills.sh Proxy Routes
+  // ===========================================================================
+
+  describe('WORKSPACE_SKILLS_SH_SEARCH_ROUTE', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('should proxy search to skills.sh API and return mapped results', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skills: [
+            {
+              skillId: 'sk-1',
+              name: 'code-review',
+              installs: 42,
+              source: 'github',
+              owner: 'o',
+              repo: 'r',
+              githubUrl: '',
+              displayName: 'Code Review',
+            },
+            {
+              skillId: 'sk-2',
+              name: 'api-design',
+              installs: 10,
+              source: 'github',
+              owner: 'o',
+              repo: 'r',
+              githubUrl: '',
+              displayName: 'API Design',
+            },
+          ],
+          total: 2,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        }),
+      });
+
+      const result = await WORKSPACE_SKILLS_SH_SEARCH_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        q: 'code',
+        limit: 10,
+      });
+
+      expect(result.query).toBe('code');
+      expect(result.searchType).toBe('query');
+      expect(result.count).toBe(2);
+      expect(result.skills).toHaveLength(2);
+      expect(result.skills[0]).toEqual({ id: 'sk-1', name: 'code-review', installs: 42, topSource: 'github' });
+    });
+
+    it('should throw 502 when skills.sh API returns error', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      await expect(
+        WORKSPACE_SKILLS_SH_SEARCH_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          q: 'test',
+          limit: 10,
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_SEARCH_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          q: 'test',
+          limit: 10,
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(502);
+      }
+    });
+
+    it('should encode query parameter in URL', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ skills: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }),
+      });
+
+      await WORKSPACE_SKILLS_SH_SEARCH_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        q: 'hello world & more',
+        limit: 5,
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('hello%20world%20%26%20more'),
+        expect.any(Object),
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('pageSize=5'), expect.any(Object));
+    });
+  });
+
+  describe('WORKSPACE_SKILLS_SH_POPULAR_ROUTE', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('should return popular skills with pagination', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skills: [
+            {
+              skillId: 'sk-1',
+              name: 'popular-skill',
+              installs: 100,
+              source: 'github',
+              owner: 'o',
+              repo: 'r',
+              githubUrl: '',
+              displayName: 'Popular',
+            },
+          ],
+          total: 50,
+        }),
+      });
+
+      const result = await WORKSPACE_SKILLS_SH_POPULAR_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(result.count).toBe(50);
+      expect(result.limit).toBe(10);
+      expect(result.offset).toBe(0);
+      expect(result.skills).toHaveLength(1);
+      expect(result.skills[0]).toEqual({ id: 'sk-1', name: 'popular-skill', installs: 100, topSource: 'github' });
+    });
+
+    it('should calculate page from offset', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ skills: [], total: 0 }),
+      });
+
+      await WORKSPACE_SKILLS_SH_POPULAR_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        limit: 10,
+        offset: 20,
+      });
+
+      // offset=20, limit=10 -> page = floor(20/10) + 1 = 3
+      expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('page=3'), expect.any(Object));
+    });
+
+    it('should throw 502 when API returns error', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      });
+
+      await expect(
+        WORKSPACE_SKILLS_SH_POPULAR_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          limit: 10,
+          offset: 0,
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_POPULAR_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          limit: 10,
+          offset: 0,
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(502);
+      }
+    });
+  });
+
+  describe('WORKSPACE_SKILLS_SH_PREVIEW_ROUTE', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('should return skill content preview', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          instructions: '# Code Review\n\nReview code for quality.',
+          raw: '---\nname: code-review\n---\n# Code Review',
+        }),
+      });
+
+      const result = await WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        owner: 'mastra-ai',
+        repo: 'skills',
+        path: 'code-review',
+      });
+
+      expect(result.content).toBe('# Code Review\n\nReview code for quality.');
+    });
+
+    it('should fall back to raw content when instructions is empty', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          instructions: '',
+          raw: '---\nname: my-skill\n---\nRaw content here',
+        }),
+      });
+
+      const result = await WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+        ...createTestServerContext({ mastra: createMastra() }),
+        workspaceId: 'test-workspace',
+        owner: 'owner',
+        repo: 'repo',
+        path: 'my-skill',
+      });
+
+      expect(result.content).toBe('---\nname: my-skill\n---\nRaw content here');
+    });
+
+    it('should throw 404 when skill not found on API', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+
+      await expect(
+        WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          path: 'nonexistent',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          path: 'nonexistent',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should throw 404 when content is empty', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ instructions: '', raw: '' }),
+      });
+
+      await expect(
+        WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          path: 'empty-skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_PREVIEW_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          path: 'empty-skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+  });
+
+  // ===========================================================================
+  // Skills.sh Install/Remove/Update Routes
+  // ===========================================================================
+
+  describe('WORKSPACE_SKILLS_SH_INSTALL_ROUTE', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('should install skill by fetching files and writing to filesystem', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'code-review',
+          owner: 'mastra-ai',
+          repo: 'skills',
+          branch: 'main',
+          files: [
+            { path: 'SKILL.md', content: '# Code Review Skill', encoding: 'utf-8' },
+            { path: 'references/guide.md', content: '# Guide', encoding: 'utf-8' },
+          ],
+        }),
+      });
+
+      const files = new Map<string, string>();
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        owner: 'mastra-ai',
+        repo: 'skills',
+        skillName: 'code-review',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.skillName).toBe('code-review');
+      expect(result.installedPath).toBe('.agents/skills/code-review');
+      // 2 skill files + 1 .meta.json
+      expect(result.filesWritten).toBe(3);
+
+      // Verify files were written
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith(
+        '.agents/skills/code-review/SKILL.md',
+        '# Code Review Skill',
+      );
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith(
+        '.agents/skills/code-review/references/guide.md',
+        '# Guide',
+      );
+      // Metadata file
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith(
+        '.agents/skills/code-review/.meta.json',
+        expect.stringContaining('"skillName": "code-review"'),
+      );
+    });
+
+    it('should handle base64-encoded files', async () => {
+      const base64Content = Buffer.from('binary content').toString('base64');
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'my-skill',
+          owner: 'owner',
+          repo: 'repo',
+          branch: 'main',
+          files: [{ path: 'image.png', content: base64Content, encoding: 'base64' }],
+        }),
+      });
+
+      const files = new Map<string, string>();
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        owner: 'owner',
+        repo: 'repo',
+        skillName: 'my-skill',
+      });
+
+      expect(result.success).toBe(true);
+      // Buffer should have been passed for base64 content
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith(
+        '.agents/skills/my-skill/image.png',
+        expect.any(Buffer),
+      );
+    });
+
+    it('should throw 404 when workspace not found', async () => {
+      const mastra = createMastra();
+
+      await expect(
+        WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const workspace = createWorkspace('test-workspace', { readOnly: true });
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+      }
+    });
+
+    it('should throw 404 when skill not found on API', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'missing',
+          owner: 'owner',
+          repo: 'repo',
+          branch: 'main',
+          files: [],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'missing',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'missing',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should reject path traversal in skill name from API response', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: '../../../etc', // malicious skillId from API
+          owner: 'owner',
+          repo: 'repo',
+          branch: 'main',
+          files: [{ path: 'SKILL.md', content: 'evil', encoding: 'utf-8' }],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'evil-skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'evil-skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(400);
+      }
+    });
+
+    it('should reject path traversal in file paths from API response', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'legit-skill',
+          owner: 'owner',
+          repo: 'repo',
+          branch: 'main',
+          files: [{ path: '../../etc/passwd', content: 'evil', encoding: 'utf-8' }],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'legit-skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_INSTALL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          owner: 'owner',
+          repo: 'repo',
+          skillName: 'legit-skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(400);
+      }
+    });
+  });
+
+  describe('WORKSPACE_SKILLS_SH_REMOVE_ROUTE', () => {
+    it('should remove skill directory', async () => {
+      const files = new Map([
+        ['.agents/skills/my-skill/SKILL.md', '# My Skill'],
+        ['.agents/skills/my-skill/.meta.json', '{}'],
+      ]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'my-skill',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.skillName).toBe('my-skill');
+      expect(result.removedPath).toBe('.agents/skills/my-skill');
+      expect(workspace.filesystem!.rmdir).toHaveBeenCalledWith('.agents/skills/my-skill', { recursive: true });
+    });
+
+    it.todo('should use skill path from discovery for glob-discovered skills', async () => {
+      const files = new Map([['/custom/path/skills/web-design/SKILL.md', '# Web Design']]);
+      const skills = createMockSkills();
+      skills.get = vi.fn(async () => ({
+        name: 'web-design',
+        path: '/custom/path/skills/web-design',
+        description: 'Web design skill',
+        instructions: 'Design web pages',
+      }));
+      const workspace = createWorkspace('test-workspace', { files, skills });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'web-design',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.removedPath).toBe('/custom/path/skills/web-design');
+      expect(workspace.filesystem!.rmdir).toHaveBeenCalledWith('/custom/path/skills/web-design', { recursive: true });
+    });
+
+    it('should fall back to SKILLS_SH_DIR when skill not in discovery', async () => {
+      const files = new Map([['.agents/skills/fallback-skill/SKILL.md', '# Fallback']]);
+      const skills = createMockSkills();
+      skills.get = vi.fn(async () => null);
+      const workspace = createWorkspace('test-workspace', { files, skills });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'fallback-skill',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.removedPath).toBe('.agents/skills/fallback-skill');
+    });
+
+    it('should throw 404 when workspace not found', async () => {
+      const mastra = createMastra();
+
+      await expect(
+        WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const workspace = createWorkspace('test-workspace', { readOnly: true });
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+      }
+    });
+
+    it('should throw 404 when skill not found on filesystem', async () => {
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'nonexistent',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'nonexistent',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should reject invalid skill names (path traversal)', async () => {
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: '../../../etc',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: '../../../etc',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(400);
+      }
+    });
+  });
+
+  describe('WORKSPACE_SKILLS_SH_UPDATE_ROUTE', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('should update a single skill by re-fetching from API', async () => {
+      const metaJson = JSON.stringify({
+        skillName: 'code-review',
+        owner: 'mastra-ai',
+        repo: 'skills',
+        branch: 'main',
+        installedAt: '2025-01-01T00:00:00Z',
+      });
+      const files = new Map<string, string>([
+        ['.agents/skills/code-review/SKILL.md', '# Old Content'],
+        ['.agents/skills/code-review/.meta.json', metaJson],
+      ]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'code-review',
+          owner: 'mastra-ai',
+          repo: 'skills',
+          branch: 'main',
+          files: [{ path: 'SKILL.md', content: '# Updated Content', encoding: 'utf-8' }],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'code-review',
+      });
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].skillName).toBe('code-review');
+      expect(result.updated[0].success).toBe(true);
+      // 1 skill file + 1 updated .meta.json
+      expect(result.updated[0].filesWritten).toBe(2);
+
+      // Verify new content was written
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith(
+        '.agents/skills/code-review/SKILL.md',
+        '# Updated Content',
+      );
+    });
+
+    it('should update all skills when skillName is omitted', async () => {
+      const meta1 = JSON.stringify({ skillName: 'skill-a', owner: 'o', repo: 'r', branch: 'main', installedAt: '' });
+      const meta2 = JSON.stringify({ skillName: 'skill-b', owner: 'o', repo: 'r', branch: 'main', installedAt: '' });
+      const files = new Map<string, string>([
+        ['.agents/skills/skill-a/SKILL.md', '# A'],
+        ['.agents/skills/skill-a/.meta.json', meta1],
+        ['.agents/skills/skill-b/SKILL.md', '# B'],
+        ['.agents/skills/skill-b/.meta.json', meta2],
+      ]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'updated',
+          owner: 'o',
+          repo: 'r',
+          branch: 'main',
+          files: [{ path: 'SKILL.md', content: '# Updated', encoding: 'utf-8' }],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: undefined,
+      });
+
+      expect(result.updated).toHaveLength(2);
+      expect(result.updated.every(u => u.success)).toBe(true);
+    });
+
+    it('should return empty result when no skills directory exists', async () => {
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: undefined,
+      });
+
+      expect(result.updated).toEqual([]);
+    });
+
+    it('should handle individual skill update failure gracefully', async () => {
+      const metaJson = JSON.stringify({
+        skillName: 'broken-skill',
+        owner: 'o',
+        repo: 'r',
+        branch: 'main',
+        installedAt: '',
+      });
+      const files = new Map<string, string>([
+        ['.agents/skills/broken-skill/SKILL.md', '# Broken'],
+        ['.agents/skills/broken-skill/.meta.json', metaJson],
+      ]);
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'broken-skill',
+      });
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].success).toBe(false);
+      expect(result.updated[0].error).toBeDefined();
+    });
+
+    it('should throw 404 when workspace not found', async () => {
+      const mastra = createMastra();
+
+      await expect(
+        WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(404);
+      }
+    });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const workspace = createWorkspace('test-workspace', { readOnly: true });
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          skillName: 'skill',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+      }
+    });
+
+    it('should handle skill with missing .meta.json', async () => {
+      const files = new Map<string, string>([['.agents/skills/no-meta/SKILL.md', '# No Meta']]);
+
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'no-meta',
+      });
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].success).toBe(false);
+      expect(result.updated[0].error).toBeDefined();
+    });
+
+    it('should handle API returning no files for a skill', async () => {
+      const metaJson = JSON.stringify({
+        skillName: 'empty',
+        owner: 'o',
+        repo: 'r',
+        branch: 'main',
+        installedAt: '',
+      });
+      const files = new Map<string, string>([['.agents/skills/empty-skill/.meta.json', metaJson]]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skillId: 'empty',
+          owner: 'o',
+          repo: 'r',
+          branch: 'main',
+          files: [],
+        }),
+      });
+
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_SKILLS_SH_UPDATE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'empty-skill',
+      });
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].success).toBe(false);
+      expect(result.updated[0].error).toBe('No files found in skill directory');
     });
   });
 });

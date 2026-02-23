@@ -7,7 +7,7 @@ export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesyste
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
-export { MastraFilesystem } from './filesystem';
+export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
 export { MastraSandbox } from './sandbox';
 
 // Errors
@@ -25,7 +25,27 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools, resolveToolConfig, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
+export {
+  createWorkspaceTools,
+  resolveToolConfig,
+  type WorkspaceToolConfig,
+  type WorkspaceToolsConfig,
+  // Individual standalone tools
+  readFileTool,
+  writeFileTool,
+  editFileTool,
+  listFilesTool,
+  deleteFileTool,
+  fileStatTool,
+  mkdirTool,
+  searchTool,
+  indexContentTool,
+  executeCommandTool,
+  // Helpers
+  requireWorkspace,
+  requireFilesystem,
+  requireSandbox,
+} from './tools';
 
 // Lifecycle
 export * from './lifecycle';
@@ -67,6 +87,16 @@ export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from '
 // Constants
 export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
 
+// Glob Utilities
+export {
+  isGlobPattern,
+  extractGlobBase,
+  createGlobMatcher,
+  matchGlob,
+  type GlobMatcher,
+  type GlobMatcherOptions,
+} from './glob';
+
 // Skills
 export type {
   SkillFormat,
@@ -78,3 +108,15 @@ export type {
   SkillsResolver,
   SkillsContext,
 } from './skills';
+
+// Skill Publishing
+export type { SkillPublishResult } from './skills';
+export { collectSkillForPublish, publishSkillFromSource } from './skills';
+
+// Skill Source
+export type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skills';
+export { LocalSkillSource } from './skills';
+
+// Versioned Skill Sources
+export { VersionedSkillSource } from './skills';
+export { CompositeVersionedSkillSource, type VersionedSkillEntry } from './skills';

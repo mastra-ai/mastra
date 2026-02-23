@@ -1,0 +1,206 @@
+---
+title: "Datasets Overview | Datasets"
+description: "Manage versioned test data, run experiments against agents and workflows, and track results over time."
+packages:
+  - "@mastra/core"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Datasets Overview
+
+**Added in:** `@mastra/core@1.4.0`
+
+Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
+
+## Usage
+
+### Configure storage
+
+Configure storage in your Mastra instance. Datasets require a storage adapter that provides the `datasets` domain:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "my-store",
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+### Accessing the datasets API
+
+All dataset operations are available through `mastra.datasets`:
+
+```typescript
+const datasets = mastra.datasets;
+
+// Create a dataset
+const dataset = await datasets.create({ name: "my-dataset" });
+
+// Retrieve an existing dataset
+const existing = await datasets.get({ id: "dataset-id" });
+
+// List all datasets
+const { datasets: all } = await datasets.list();
+```
+
+:::info
+
+Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
+
+:::
+
+## Creating a dataset
+
+Call [`create()`](/reference/datasets/create) with a name and optional description:
+
+```typescript title="src/mastra/datasets/create-dataset.ts"
+import { mastra } from "../index";
+
+const dataset = await mastra.datasets.create({
+  name: "translation-pairs",
+  description: "English to Spanish translation test cases",
+});
+
+console.log(dataset.id); // auto-generated UUID
+```
+
+### Defining schemas
+
+You can enforce the shape of `input` and `groundTruth` by passing Zod schemas. Mastra converts them to JSON Schema at creation time:
+
+```typescript title="src/mastra/datasets/create-with-schema.ts"
+import { z } from "zod";
+import { mastra } from "../index";
+
+const dataset = await mastra.datasets.create({
+  name: "translation-pairs",
+  inputSchema: z.object({
+    text: z.string(),
+    sourceLang: z.string(),
+    targetLang: z.string(),
+  }),
+  groundTruthSchema: z.object({
+    translation: z.string(),
+  }),
+});
+```
+
+Items that don't match the schema are rejected at insert time.
+
+## Adding items
+
+Use [`addItem()`](/reference/datasets/addItem) for a single item or [`addItems()`](/reference/datasets/addItems) to insert in bulk:
+
+```typescript title="src/mastra/datasets/add-items.ts"
+// Single item
+await dataset.addItem({
+  input: { text: "Hello", sourceLang: "en", targetLang: "es" },
+  groundTruth: { translation: "Hola" },
+});
+
+// Bulk insert
+await dataset.addItems({
+  items: [
+    {
+      input: { text: "Goodbye", sourceLang: "en", targetLang: "es" },
+      groundTruth: { translation: "Adiós" },
+    },
+    {
+      input: { text: "Thank you", sourceLang: "en", targetLang: "es" },
+      groundTruth: { translation: "Gracias" },
+    },
+  ],
+});
+```
+
+## Updating and deleting items
+
+[`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) let you modify or remove existing items by `itemId`:
+
+```typescript title="src/mastra/datasets/update-delete.ts"
+await dataset.updateItem({
+  itemId: "item-abc-123",
+  groundTruth: { translation: "¡Hola!" },
+});
+
+await dataset.deleteItem({ itemId: "item-abc-123" });
+
+await dataset.deleteItems({ itemIds: ["item-1", "item-2"] });
+```
+
+## Listing and searching items
+
+[`listItems()`](/reference/datasets/listItems) supports pagination and full-text search:
+
+```typescript title="src/mastra/datasets/list-items.ts"
+// Paginated list
+const { items, pagination } = await dataset.listItems({
+  page: 0,
+  perPage: 50,
+});
+
+// Full-text search
+const { items: matches } = await dataset.listItems({
+  search: "Hello",
+});
+
+// List items at a specific version
+const v2Items = await dataset.listItems({ version: 2 });
+```
+
+## Versioning
+
+Every mutation to a dataset's items (add, update, or delete) bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
+
+### Listing versions
+
+Use [`listVersions()`](/reference/datasets/listVersions) to see the paginated history of versions:
+
+```typescript title="src/mastra/datasets/list-versions.ts"
+const { versions, pagination } = await dataset.listVersions();
+
+for (const v of versions) {
+  console.log(`Version ${v.version} — created ${v.createdAt}`);
+}
+```
+
+### Viewing item history
+
+See how a specific item changed across versions by calling [`getItemHistory()`](/reference/datasets/getItemHistory) with the `itemId`:
+
+```typescript title="src/mastra/datasets/item-history.ts"
+const history = await dataset.getItemHistory({ itemId: "item-abc-123" });
+
+for (const row of history) {
+  console.log(`Version ${row.datasetVersion}`, row.input, row.groundTruth);
+}
+```
+
+### Pinning to a version
+
+Fetch the exact items that existed at a past version:
+
+```typescript title="src/mastra/datasets/pin-version.ts"
+const items = await dataset.listItems({ version: 2 });
+```
+
+You can also pin experiments to a version, see [running experiments](/docs/observability/datasets/running-experiments).
+
+:::info
+
+Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
+
+:::
+
+## Related
+
+- [Running experiments](/docs/observability/datasets/running-experiments)
+- [Scorers overview](/docs/evals/overview)
+- [DatasetsManager reference](/reference/datasets/datasets-manager)
+- [Dataset reference](/reference/datasets/dataset)

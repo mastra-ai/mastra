@@ -8,6 +8,7 @@ export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
+export * from './domains/datasets/index';
 export * from './ds/components/Threads';
 export * from './types';
 
@@ -53,7 +54,9 @@ export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
+export * from './ds/components/ListAndDetails';
 export * from './ds/components/MainContent';
+export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
@@ -76,6 +79,14 @@ export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/ContentBlocks';
 export * from './lib/rule-engine';
 
+// DS Components - New
+export * from './ds/components/ListAndDetails';
+export * from './ds/components/Columns';
+export * from './ds/components/CodeDiff';
+export * from './ds/components/ItemList';
+export * from './ds/components/Notice';
+export * from './ds/components/Tree';
+
 // Form utilities (AutoForm)
 export * from './lib/form';
 
@@ -96,6 +107,7 @@ export { cn } from './lib/utils';
 export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
+export * from './domains/tool-providers/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
 export * from './domains/workspace/index';

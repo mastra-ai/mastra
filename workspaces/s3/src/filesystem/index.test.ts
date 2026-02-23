@@ -17,9 +17,9 @@ import { S3Filesystem } from './index';
 
 // Mock the AWS SDK
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({
-    send: vi.fn(),
-  })),
+  S3Client: vi.fn().mockImplementation(function () {
+    return { send: vi.fn() };
+  }),
   GetObjectCommand: vi.fn(),
   PutObjectCommand: vi.fn(),
   DeleteObjectCommand: vi.fn(),
@@ -27,6 +27,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
   ListObjectsV2Command: vi.fn(),
   DeleteObjectsCommand: vi.fn(),
   HeadObjectCommand: vi.fn(),
+  HeadBucketCommand: vi.fn(),
 }));
 
 describe('S3Filesystem', () => {

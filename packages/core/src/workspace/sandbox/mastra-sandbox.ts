@@ -43,7 +43,6 @@ export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox }) => void
  * Providers extend this to add their own options while inheriting lifecycle hooks.
  */
 export interface MastraSandboxOptions {
-  name: string;
   /** Called after the sandbox reaches 'running' status */
   onStart?: SandboxLifecycleHook;
   /** Called before the sandbox stops */
@@ -123,7 +122,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   private readonly _onStop?: SandboxLifecycleHook;
   private readonly _onDestroy?: SandboxLifecycleHook;
 
-  constructor(options: MastraSandboxOptions) {
+  constructor(options: { name: string } & MastraSandboxOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
     this._onStart = options.onStart;

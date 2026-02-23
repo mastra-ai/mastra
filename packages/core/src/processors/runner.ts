@@ -13,6 +13,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ProcessorStepOutput } from './step-schema';
+import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
   ProcessInputStepResult,
@@ -202,11 +203,24 @@ export class ProcessorRunner {
 
     // Check for execution failure
     if (result.status !== 'success') {
+      // Collect error details from the workflow result and failed steps
+      const details: string[] = [];
+      if (result.status === 'failed') {
+        if (result.error) {
+          details.push(result.error.message || JSON.stringify(result.error));
+        }
+        for (const [stepId, step] of Object.entries(result.steps)) {
+          if (step.status === 'failed' && step.error?.message) {
+            details.push(`step ${stepId}: ${step.error.message}`);
+          }
+        }
+      }
+      const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
       throw new MastraError({
         category: 'USER',
         domain: 'AGENT',
         id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}`,
+        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
       });
     }
 
@@ -358,6 +372,7 @@ export class ProcessorRunner {
     requestContext?: RequestContext,
     messageList?: MessageList,
     retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -454,6 +469,7 @@ export class ProcessorRunner {
               requestContext,
               messageList,
               retryCount,
+              writer,
             });
 
             // Track output chunk and update processedPart
@@ -507,11 +523,17 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
+    writer?: ProcessorStreamWriter,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
         const reader = streamResult.fullStream.getReader();
         const processorStates = new Map<string, ProcessorState<OUTPUT>>();
+
+        // Use provided writer, or create one from the controller
+        const streamWriter = writer ?? {
+          custom: async (data: { type: string }) => controller.enqueue(data),
+        };
 
         try {
           while (true) {
@@ -529,7 +551,7 @@ export class ProcessorRunner {
               reason,
               tripwireOptions,
               processorId,
-            } = await this.processPart(value, processorStates, tracingContext);
+            } = await this.processPart(value, processorStates, tracingContext, undefined, undefined, 0, streamWriter);
 
             if (blocked) {
               // Log that part was blocked
@@ -785,8 +807,14 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
+    // Append the trailing assistant guard when the resolved model is Claude 4.6
+    const processors =
+      stepInput.model && isMaybeClaude46(stepInput.model)
+        ? [...this.inputProcessors, new TrailingAssistantGuard()]
+        : this.inputProcessors;
+
     // Run through all input processors that have processInputStep
-    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
+    for (const [index, processorOrWorkflow] of processors.entries()) {
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();

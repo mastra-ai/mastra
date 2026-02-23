@@ -76,9 +76,11 @@ const storage = new LibSQLStore({
 });
 await storage.init();
 
+const memoryStorage = await storage.getStore('memory');
+
 const model = withMastra(openai('gpt-4o'), {
   memory: {
-    storage,
+    storage: memoryStorage!,
     threadId: 'user-thread-123',
     resourceId: 'user-123',
     lastMessages: 10,
@@ -104,11 +106,13 @@ import { LibSQLStore } from '@mastra/libsql';
 const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
 await storage.init();
 
+const memoryStorage = await storage.getStore('memory');
+
 const model = withMastra(openai('gpt-4o'), {
   inputProcessors: [myGuardProcessor],
   outputProcessors: [myLoggingProcessor],
   memory: {
-    storage,
+    storage: memoryStorage!,
     threadId: 'thread-123',
     resourceId: 'user-123',
     lastMessages: 10,

@@ -181,7 +181,7 @@ export const createMastraProject = async ({
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
       validate: value => {
-        if (value.length === 0) return 'Project name cannot be empty';
+        if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
           return `A directory named "${value}" already exists. Please choose a different name.`;
         }
