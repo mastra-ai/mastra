@@ -4,7 +4,7 @@ export const course: Course = {
   courseId: 'mastra-101',
   title: 'Build Your First AI Agent with Mastra',
   description:
-    'A ~1 hour video course: build and iterate on an AI agent entirely inside Mastra Studio. Learn how agents decide what to do, when to use tools, how memory and retrieval work, and how workflows fit in.',
+    "2026 is the decade of agents. They're already in the tools engineers use every day, and teams are asking who can actually build one. Guil Hernandez, with over a decade of experience building and teaching software, walks you through how to build and ship AI agents with Mastra.\n\nYou'll build a Theme Park Companion agent that looks up parks, pulls live wait times, factors in weather, and connects to an MCP server for park hours and crowd data to make better recommendations. By the end you'll have covered agents, tools, workflows, and memory, and have an agent ready to deploy and call from your app.",
   lessons: [
     // Module 1: Getting Started
     {
