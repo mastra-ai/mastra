@@ -266,7 +266,7 @@ function CompareVersionColumn({
 
   return (
     <Column>
-      <Column.Toolbar className="flex gap-4">
+      <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
         <HistoryIcon className="w-6 h-6 opacity-50" />
         <SelectField
           label="Version"
@@ -289,9 +289,7 @@ function CompareVersionColumn({
           ) : !version || !displayItem ? (
             <div className="text-neutral4 text-sm">Version {datasetVersion} not found</div>
           ) : (
-            <>
-              <DatasetItemContent item={displayItem} Link={Link} />
-            </>
+            <DatasetItemContent item={displayItem} Link={Link} />
           )}
         </Column.Content>
       )}
