@@ -32,6 +32,7 @@ import {
   Column,
   ButtonsGroup,
   type DatasetItemVersion,
+  Chip,
 } from '@mastra/playground-ui';
 import { cn } from '@/lib/utils';
 
@@ -236,7 +237,16 @@ function CompareVersionColumn({
     const date = typeof v.updatedAt === 'string' ? new Date(v.updatedAt) : v.updatedAt;
     return {
       value: String(v.datasetVersion),
-      label: `v${v.datasetVersion} — ${format(date, 'MMM d, yyyy h:mm a')}${v.isLatest ? ' (latest)' : ''}`,
+      label: (
+        <>
+          <b>v. {v.datasetVersion}</b> - {format(date, 'MMM d, yyyy h:mm a')}
+          {v.isLatest ? (
+            <Chip color="blue" size="small">
+              Latest
+            </Chip>
+          ) : null}
+        </>
+      ),
       disabled: otherVersionNumbers.has(v.datasetVersion),
     };
   });
