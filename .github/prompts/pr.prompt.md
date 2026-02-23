@@ -9,7 +9,7 @@ The user will issue this command. You will need to do two things.
 
 ## Create a changeset using the CLI
 
-Create a changeset using the CLI. The goal of changesets are to use it for generating changelogs. Individual package changelogs will later be combined into a single changelog that is published with each release.
+Create a changeset using the CLI. The goal of changesets is to use it for generating changelogs. Individual package changelogs will later be combined into a single changelog that is published with each release.
 
 ```bash
 pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg1] [--patch pkg1]
