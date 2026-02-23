@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
@@ -21,7 +22,7 @@ interface PromptBlockPickerDialogProps {
 
 export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: PromptBlockPickerDialogProps) {
   const [search, setSearch] = useState('');
-  const { data } = useStoredPromptBlocks();
+  const { data, isLoading } = useStoredPromptBlocks();
 
   const blocks = data?.promptBlocks ?? [];
   const filtered = search
@@ -38,8 +39,15 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
     setSearch('');
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setSearch('');
+    }
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Select a prompt block</DialogTitle>
@@ -58,7 +66,12 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
               />
             </div>
 
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
+                <Spinner className="h-6 w-6" />
+                <Txt variant="ui-sm">Loading prompt blocks...</Txt>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
                 <FileText className="h-8 w-8" />
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
