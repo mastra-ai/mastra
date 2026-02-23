@@ -5,6 +5,7 @@
 
 import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
 import { bg, fg, bold } from '../theme.js';
 
 // =============================================================================
@@ -35,6 +36,8 @@ export interface ModelSelectorOptions {
   currentModelId?: string;
   /** Optional title for the selector */
   title?: string;
+  /** Optional hex color for the title background (e.g. mode color) */
+  titleColor?: string;
   /** Callback when a model is selected */
   onSelect: (model: ModelItem) => void;
   /** Callback when selection is cancelled */
@@ -56,6 +59,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
   private onCancelCallback: () => void;
   private tui: TUI;
   private title: string;
+  private titleColor?: string;
 
   // Focusable implementation
   private _focused = false;
@@ -73,6 +77,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
+    this.titleColor = options.titleColor;
     this.allModels = this.sortModels(options.models, options.currentModelId);
     this.currentModelId = options.currentModelId;
     this.onSelectCallback = options.onSelect;
@@ -84,8 +89,11 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private buildUI(): void {
-    // Title
-    this.addChild(new Text(bold(fg('accent', this.title)), 0, 0));
+    // Title — optionally with a mode-colored background
+    const titleText = this.titleColor
+      ? chalk.bgHex(this.titleColor).white.bold(` ${this.title} `)
+      : bold(fg('accent', this.title));
+    this.addChild(new Text(titleText, 0, 0));
     this.addChild(new Spacer(1));
 
     // Hint

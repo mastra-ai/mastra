@@ -210,6 +210,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'new', description: 'Start a new thread' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Configure model (global/thread/mode)' },
+    { name: 'models:pack', description: 'Switch model pack' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
     { name: 'think', description: 'Set thinking level (Anthropic)' },
@@ -246,6 +247,7 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

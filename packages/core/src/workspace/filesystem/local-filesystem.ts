@@ -8,6 +8,7 @@
 import { constants as fsConstants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
+import type { RequestContext } from '../../request-context';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -19,6 +20,8 @@ import {
   WorkspaceReadOnlyError,
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
+import type { InstructionsOption } from '../types';
+import { resolveInstructions } from '../utils';
 import type {
   FilesystemInfo,
   FileContent,
@@ -83,6 +86,16 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * ```
    */
   allowedPaths?: string[];
+  /**
+   * Custom instructions that override the default instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the default instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the default instructions and
+   *   optional request context so you can extend or customise per-request.
+   */
+  instructions?: InstructionsOption;
 }
 
 /**
@@ -114,6 +127,7 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _basePath: string;
   private readonly _contained: boolean;
   private _allowedPaths: string[];
+  private readonly _instructionsOverride?: InstructionsOption;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -156,6 +170,7 @@ export class LocalFilesystem extends MastraFilesystem {
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+    this._instructionsOverride = options.instructions;
   }
 
   private generateId(): string {
@@ -704,7 +719,11 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  getInstructions(): string {
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
+  }
+
+  private _getDefaultInstructions(): string {
     const allowedNote =
       this._allowedPaths.length > 0
         ? ` Additionally, the following paths outside basePath are accessible: ${this._allowedPaths.join(', ')}.`
