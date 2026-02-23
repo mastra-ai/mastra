@@ -83,12 +83,6 @@ Use this after starting a background command with execute_command (background: t
 
     const running = handle.exitCode === undefined;
 
-    if (!running && !shouldWait) {
-      // Process already exited and agent didn't request wait — output was
-      // already returned by kill_process. Don't dump the buffer again.
-      return `Exited (code ${handle.exitCode})`;
-    }
-
     const stdout = truncateOutput(handle.stdout, tail);
     const stderr = truncateOutput(handle.stderr, tail);
 
