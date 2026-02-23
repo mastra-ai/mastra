@@ -92,10 +92,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
       return value;
     } else if (isNull(z)(value)) {
-      return z
-        .any()
-        .optional()
-        .describe(value.description ?? 'null value');
+      return this.defaultZodNullHandler(value);
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (isUnion(z)(value)) {

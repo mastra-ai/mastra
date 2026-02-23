@@ -2,6 +2,6 @@
 "@mastra/schema-compat": patch
 ---
 
-fix(schema-compat): coerce ZodNull instead of throwing for MCP tool schemas
+Null types from MCP tool schemas no longer cause startup crashes.
 
-MCP servers using `{ "type": "null" }` in tool JSON Schemas no longer crash mastracode. ZodNull is now coerced to `z.any().optional()` across all provider compatibility layers.
+MCP servers that expose `{ "type": "null" }` in their tool JSON Schemas caused `@mastra/schema-compat` to throw on startup. These null types are now coerced to an optional schema so tools load correctly. Fixes [#13315](https://github.com/mastra-ai/mastra/issues/13315).

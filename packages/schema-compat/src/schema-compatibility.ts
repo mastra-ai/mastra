@@ -1,5 +1,6 @@
 import type { StandardJSONSchemaV1 } from '@standard-schema/spec';
 import traverse from 'json-schema-traverse';
+import { z } from 'zod';
 import type { z as zV3 } from 'zod/v3';
 import type { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -246,6 +247,17 @@ export abstract class SchemaCompatLayer {
     } else {
       return this.v3Layer.defaultZodDateHandler(value);
     }
+  }
+
+  /**
+   * Default handler for ZodNull types. Coerces z.null() to z.any().optional()
+   * so that MCP tool schemas using { "type": "null" } don't crash provider compats.
+   */
+  public defaultZodNullHandler(value: zV3.ZodNull | zV4.ZodNull): zV3.ZodType | zV4.ZodType {
+    return z
+      .any()
+      .optional()
+      .describe(value.description ?? 'null value');
   }
 
   public defaultZodOptionalHandler(

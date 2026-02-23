@@ -774,13 +774,13 @@ describe('AnthropicSchemaCompatLayer', () => {
   });
 
   describe('processZodType - ZodNull handling', () => {
-    it('should not throw on z.null() (MCP JSON Schema { "type": "null" })', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'anthropic',
-        modelId: 'claude-3-5-sonnet',
-        supportsStructuredOutputs: false,
-      };
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
 
+    it('should not throw on z.null() (MCP JSON Schema { "type": "null" })', () => {
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
 
       // z.null() should be coerced, not throw
@@ -790,12 +790,6 @@ describe('AnthropicSchemaCompatLayer', () => {
     });
 
     it('should coerce z.null() to an optional type', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'anthropic',
-        modelId: 'claude-3-5-sonnet',
-        supportsStructuredOutputs: false,
-      };
-
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
       const result = layer.processZodType(z.null());
 
@@ -803,13 +797,21 @@ describe('AnthropicSchemaCompatLayer', () => {
       expect(result.safeParse(undefined).success).toBe(true);
     });
 
-    it('should handle z.null() inside an object schema', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'anthropic',
-        modelId: 'claude-3-5-sonnet',
-        supportsStructuredOutputs: false,
-      };
+    it('should propagate custom description from z.null().describe()', () => {
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const result = layer.processZodType(z.null().describe('custom description'));
 
+      expect(result.description).toBe('custom description');
+    });
+
+    it('should use fallback description for z.null() without description', () => {
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      const result = layer.processZodType(z.null());
+
+      expect(result.description).toBe('null value');
+    });
+
+    it('should handle z.null() inside an object schema', () => {
       const schema = z.object({
         name: z.string(),
         deletedAt: z.null(),

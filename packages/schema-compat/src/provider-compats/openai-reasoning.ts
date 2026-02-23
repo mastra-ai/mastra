@@ -86,6 +86,8 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
         return processedInner.nullable();
       }
       return value;
+    } else if (isNull(z)(value)) {
+      return this.defaultZodNullHandler(value);
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isArr(z)(value)) {
@@ -111,11 +113,6 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return result;
     } else if (isNumber(z)(value)) {
       return this.defaultZodNumberHandler(value);
-    } else if (isNull(z)(value)) {
-      return z
-        .any()
-        .optional()
-        .describe(value.description ?? 'null value');
     } else if (isString(z)(value)) {
       return this.defaultZodStringHandler(value);
     } else if (isDate(z)(value)) {

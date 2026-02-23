@@ -71,6 +71,7 @@ export const SUPPORTED_ZOD_TYPES = [
   'ZodAny',
   'ZodDefault',
   'ZodNullable',
+  'ZodNull',
 ] as const;
 
 /**

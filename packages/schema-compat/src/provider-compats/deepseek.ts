@@ -28,10 +28,7 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
     if (isOptional(z)(value)) {
       return this.defaultZodOptionalHandler(value, ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber']);
     } else if (isNull(z)(value)) {
-      return z
-        .any()
-        .optional()
-        .describe(value.description ?? 'null value');
+      return this.defaultZodNullHandler(value);
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (isArr(z)(value)) {
