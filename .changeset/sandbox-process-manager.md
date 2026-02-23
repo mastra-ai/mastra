@@ -10,8 +10,8 @@ You can now spawn, monitor, and manage long-running background processes (dev se
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js');
 
-// Stream output
-const result = await handle.wait({
+// Stream output and wait for exit
+await handle.wait({
   onStdout: (data) => console.log(data),
 });
 
