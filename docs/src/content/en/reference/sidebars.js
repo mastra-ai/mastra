@@ -310,6 +310,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Harness',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/harness-class',
+          label: 'Harness Class',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [
@@ -647,59 +659,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Workspaces',
-      collapsed: true,
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'workspace/workspace-class',
-          label: 'Workspace Class',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/local-filesystem',
-          label: 'LocalFilesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/s3-filesystem',
-          label: 'S3Filesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/gcs-filesystem',
-          label: 'GCSFilesystem',
-        },
-        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
-        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
-        {
-          type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'WorkspaceFilesystem',
-        },
-        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Harness',
-      collapsed: true,
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'harness/harness-class',
-          label: 'Harness Class',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Streaming',
       collapsed: true,
       items: [
@@ -995,6 +954,41 @@ const sidebars = {
         },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Workspaces',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/workspace-class',
+          label: 'Workspace Class',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/local-filesystem',
+          label: 'LocalFilesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/s3-filesystem',
+          label: 'S3Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/gcs-filesystem',
+          label: 'GCSFilesystem',
+        },
+        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'WorkspaceFilesystem',
+        },
+        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
       ],
     },
   ],
