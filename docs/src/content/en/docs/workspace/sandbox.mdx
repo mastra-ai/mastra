@@ -14,6 +14,7 @@ Sandbox providers give agents the ability to execute shell commands. When you co
 A sandbox provider executes commands in a controlled environment:
 
 - **Command execution** - Run shell commands with arguments
+- **Background processes** - Spawn long-running processes like dev servers and watchers
 - **Working directory** - Commands run from a specific directory
 - **Environment variables** - Control what variables are available
 - **Timeouts** - Prevent long-running commands from hanging
@@ -59,12 +60,30 @@ const response = await agent.generate('Run `ls -la` in the workspace directory')
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
+## Background processes
+
+Sandbox providers can also spawn long-running background processes. Use background processes for dev servers, file watchers, REPLs, and other tasks that run continuously:
+
+```typescript
+const handle = await sandbox.processes.spawn('npm run dev', {
+  onStdout: data => console.log(data),
+})
+
+console.log(handle.pid)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+See [background processes](/docs/workspace/processes) for a full guide, or the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for API details.
+
 ## Agent tools
 
 When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for details.
 
 ## Related
 
+- [Background processes](/docs/workspace/processes)
+- [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [`LocalSandbox` reference](/reference/workspace/local-sandbox)
 - [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)
 - [`E2BSandbox` reference](/reference/workspace/e2b-sandbox)

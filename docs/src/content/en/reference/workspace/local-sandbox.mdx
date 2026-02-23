@@ -181,6 +181,11 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     type: 'string',
     description: 'The configured working directory',
   },
+  {
+    name: 'processes',
+    type: 'LocalProcessManager',
+    description: 'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
@@ -352,6 +357,27 @@ const sandbox = new LocalSandbox({
 
 Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures commands run from a consistent directory regardless of how you run your code.
 
+## Background processes
+
+`LocalSandbox` includes a built-in process manager for spawning and managing background processes. Processes run as child processes on the local machine using `child_process.spawn`.
+
+```typescript
+const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js')
+
+// Read output, send stdin, kill
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+When native isolation is enabled (`seatbelt` or `bwrap`), spawned processes are also wrapped with the same isolation backend.
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
 ## Static Methods
 
 ### `detectIsolation()`
@@ -439,6 +465,7 @@ This separation prevents sandboxed processes from reading or modifying their own
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox Interface](/reference/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Workspace Overview](/docs/workspace/overview)

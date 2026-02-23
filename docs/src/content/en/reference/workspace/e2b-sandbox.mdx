@@ -131,6 +131,11 @@ const agent = new Agent({
     type: 'boolean',
     description: 'Always true - E2B sandboxes support mounting cloud filesystems',
   },
+  {
+    name: 'processes',
+    type: 'E2BProcessManager',
+    description: 'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
@@ -255,6 +260,37 @@ Get sandbox status and resource information.
 const info = await sandbox.getInfo()
 // { id: '...', name: 'E2BSandbox', provider: 'e2b', status: 'ready', supportsMounting: true }
 ```
+
+## Background processes
+
+`E2BSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the E2B cloud sandbox using the E2B SDK's `commands.run()` with `background: true`.
+
+```typescript
+const sandbox = new E2BSandbox({ id: 'dev-sandbox' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process:
+
+```typescript
+const handle = await sandbox.processes.get(existingPid)
+if (handle) {
+  console.log(handle.stdout)
+}
+```
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Mounting Cloud Storage
 
@@ -385,6 +421,7 @@ This is optional—`gcsfuse` is installed automatically at mount time if not pre
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)

@@ -9,7 +9,20 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-The `WorkspaceSandbox` interface defines how workspaces execute commands.
+The `WorkspaceSandbox` interface defines how workspaces execute commands and manage background processes.
+
+## Properties
+
+<PropertiesTable
+  content={[
+{
+name: "processes",
+type: "SandboxProcessManager",
+description: "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
+isOptional: true,
+},
+]}
+/>
 
 ## Methods
 
@@ -131,5 +144,7 @@ const instructions = sandbox.getInstructions?.()
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
+- [Background processes](/docs/workspace/processes)
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Filesystem Interface](/reference/workspace/filesystem)

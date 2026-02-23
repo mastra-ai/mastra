@@ -1,0 +1,181 @@
+---
+title: "Background processes | Workspace"
+description: Spawn and manage long-running processes in sandbox environments.
+packages:
+  - "@mastra/core"
+---
+
+# Background processes
+
+Sandbox providers can spawn long-running background processes such as dev servers, file watchers, and REPLs. You interact with these processes through a `ProcessHandle` that lets you read output, send stdin, and kill the process.
+
+## When to use background processes
+
+Use background processes when an agent needs to:
+
+- Start a dev server and wait for it to be ready before running other commands
+- Launch a file watcher or build tool that runs continuously
+- Interact with a REPL or language server over stdin/stdout
+- Run multiple concurrent tasks in the same sandbox
+
+For one-shot commands that run to completion, use [`executeCommand`](/docs/workspace/sandbox) instead.
+
+## Quick start
+
+Create a workspace with a sandbox that supports processes. Both `LocalSandbox` and `E2BSandbox` include built-in process managers:
+
+```typescript title="src/mastra/agents/dev-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+})
+
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a development assistant.',
+  workspace,
+})
+```
+
+The sandbox's process manager is available at `sandbox.processes`. You can also use it directly in your own code:
+
+```typescript
+const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js')
+console.log('PID:', handle.pid)
+
+// Read accumulated output
+console.log(handle.stdout)
+
+// Kill the process
+await handle.kill()
+```
+
+## Spawning processes
+
+Call `spawn()` with a command string and optional options:
+
+```typescript
+const handle = await sandbox.processes.spawn('npm run dev', {
+  cwd: '/app',
+  env: { PORT: '3000' },
+})
+```
+
+The command runs in the background. `spawn()` returns a `ProcessHandle` immediately without waiting for the process to finish.
+
+## Reading output
+
+Process output is available in two ways: polling and streaming.
+
+### Polling
+
+Read accumulated stdout and stderr at any time:
+
+```typescript
+const handle = await sandbox.processes.spawn('npm run build')
+
+// Check output later
+console.log(handle.stdout)
+console.log(handle.stderr)
+```
+
+### Streaming with callbacks
+
+Pass `onStdout` and `onStderr` callbacks at spawn time to stream output as it arrives:
+
+```typescript
+const handle = await sandbox.processes.spawn('npm run dev', {
+  onStdout: data => console.log('[stdout]', data),
+  onStderr: data => console.log('[stderr]', data),
+})
+```
+
+You can also pass callbacks to `wait()` to stream output while waiting for the process to finish:
+
+```typescript
+const result = await handle.wait({
+  onStdout: data => process.stdout.write(data),
+  onStderr: data => process.stderr.write(data),
+})
+```
+
+## Waiting for completion
+
+Call `wait()` to block until the process exits:
+
+```typescript
+const handle = await sandbox.processes.spawn('npm test')
+const result = await handle.wait()
+
+console.log(result.success) // true if exit code is 0
+console.log(result.exitCode) // numeric exit code
+console.log(result.stdout) // full stdout
+console.log(result.stderr) // full stderr
+```
+
+## Sending stdin
+
+Send data to a running process's stdin:
+
+```typescript
+const handle = await sandbox.processes.spawn('node')
+
+await handle.sendStdin('console.log("hello")\n')
+await handle.sendStdin('.exit\n')
+
+const result = await handle.wait()
+console.log(result.stdout) // "hello"
+```
+
+## Listing and getting processes
+
+List all tracked processes or get a specific one by PID:
+
+```typescript
+// List all processes
+const processes = await sandbox.processes.list()
+for (const proc of processes) {
+  console.log(proc.pid, proc.running, proc.exitCode)
+}
+
+// Get a specific process
+const handle = await sandbox.processes.get(1234)
+if (handle) {
+  console.log(handle.stdout)
+}
+```
+
+## Stream interop
+
+`ProcessHandle` provides `reader` and `writer` properties for Node.js stream interop. This is useful for protocols like LSP or JSON-RPC that communicate over stdio streams:
+
+```typescript
+import {
+  createMessageConnection,
+  StreamMessageReader,
+  StreamMessageWriter,
+} from 'vscode-jsonrpc/node'
+
+const handle = await sandbox.processes.spawn('typescript-language-server --stdio')
+
+const connection = createMessageConnection(
+  new StreamMessageReader(handle.reader),
+  new StreamMessageWriter(handle.writer),
+)
+connection.listen()
+```
+
+## Related
+
+- [Sandbox overview](/docs/workspace/sandbox)
+- [`SandboxProcessManager` reference](/reference/workspace/process-manager)
+- [`LocalSandbox` reference](/reference/workspace/local-sandbox)
+- [`E2BSandbox` reference](/reference/workspace/e2b-sandbox)
