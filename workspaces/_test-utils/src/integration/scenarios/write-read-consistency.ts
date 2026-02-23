@@ -93,8 +93,10 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'API write then sandbox read is consistent',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const ctx = getContext();
+        const { workspace, getTestPath } = ctx;
 
+        if (!ctx.sandboxPathsAligned) return;
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const filePath = `${getTestPath()}/api-to-sandbox-consistency.txt`;
@@ -113,8 +115,10 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'sandbox write then API read is consistent',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const ctx = getContext();
+        const { workspace, getTestPath } = ctx;
 
+        if (!ctx.sandboxPathsAligned) return;
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const filePath = `${getTestPath()}/sandbox-to-api-consistency.txt`;

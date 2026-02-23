@@ -247,12 +247,14 @@ if (hasS3Credentials) {
   createWorkspaceIntegrationTests({
     suiteName: 'S3 CompositeFilesystem Integration',
     testTimeout: 30000,
+    sandboxPathsAligned: false,
     testScenarios: {
-      // Sandbox file tests off (LocalSandbox can't see S3 files)
+      // Sandbox file tests off (LocalSandbox can't see S3 files on disk)
       fileSync: false,
-      concurrentOperations: false,
+      // API-only scenarios
+      concurrentOperations: true,
       largeFileHandling: false,
-      writeReadConsistency: false,
+      writeReadConsistency: true,
       // Composite API scenarios
       mountRouting: true,
       crossMountApi: true,
@@ -260,6 +262,7 @@ if (hasS3Credentials) {
       mountIsolation: true,
       // LSP uses walkUpAsync with CompositeFilesystem.exists() for root resolution
       lspDiagnostics: true,
+      lspPerFileRoot: true,
     },
     createWorkspace: () => {
       const config = getS3TestConfig();
@@ -287,9 +290,13 @@ if (hasS3Credentials) {
   createWorkspaceIntegrationTests({
     suiteName: 'S3 Direct Filesystem LSP Integration',
     testTimeout: 30000,
+    sandboxPathsAligned: false,
     testScenarios: {
       fileSync: false,
+      writeReadConsistency: true,
+      concurrentOperations: true,
       lspDiagnostics: true,
+      lspPerFileRoot: true,
     },
     createWorkspace: () => {
       const config = getS3TestConfig();

@@ -83,4 +83,7 @@ export interface IntegrationTestScenarios {
 
   /** LSP diagnostics - spawn language server, get real diagnostics */
   lspDiagnostics?: boolean;
+
+  /** LSP per-file root resolution - two projects with different tsconfig settings */
+  lspPerFileRoot?: boolean;
 }

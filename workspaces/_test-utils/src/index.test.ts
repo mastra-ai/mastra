@@ -36,6 +36,7 @@ createWorkspaceIntegrationTests({
     concurrentOperations: true,
     largeFileHandling: true,
     lspDiagnostics: true,
+    lspPerFileRoot: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-contained-'));
@@ -58,6 +59,7 @@ createWorkspaceIntegrationTests({
     concurrentOperations: true,
     largeFileHandling: true,
     lspDiagnostics: true,
+    lspPerFileRoot: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-uncontained-'));
@@ -96,6 +98,7 @@ createWorkspaceIntegrationTests({
     crossMountApi: true,
     mountIsolation: true,
     lspDiagnostics: true,
+    lspPerFileRoot: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-mounts-'));
