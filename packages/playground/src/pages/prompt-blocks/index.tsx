@@ -9,7 +9,7 @@ import {
   useStoredPromptBlocks,
 } from '@mastra/playground-ui';
 import { Header, HeaderTitle, MainContentLayout, PromptBlocksTable } from '@mastra/playground-ui';
-import { BookIcon, Plus } from 'lucide-react';
+import { FileTextIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
 export default function PromptBlocks() {
@@ -24,7 +24,7 @@ export default function PromptBlocks() {
       <Header>
         <HeaderTitle>
           <Icon>
-            <BookIcon />
+            <FileTextIcon />
           </Icon>
           Prompts
         </HeaderTitle>
@@ -38,7 +38,12 @@ export default function PromptBlocks() {
               Create a prompt block
             </Button>
           )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+          <Button
+            variant="outline"
+            as={Link}
+            to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
+            target="_blank"
+          >
             <Icon>
               <DocsIcon />
             </Icon>

@@ -4,6 +4,7 @@ import {
   PackageIcon,
   GlobeIcon,
   BookIcon,
+  FileTextIcon,
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
@@ -44,7 +45,7 @@ const mainNavigation: NavSection[] = [
       {
         name: 'Prompts',
         url: '/prompts',
-        icon: <BookIcon />,
+        icon: <FileTextIcon />,
         isOnMastraPlatform: true,
       },
       {
