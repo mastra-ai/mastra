@@ -765,8 +765,12 @@ export class E2BSandbox extends MastraSandbox {
    */
   async stop(): Promise<void> {
     // Kill all background processes before stopping
-    const procs = await this.processes.list();
-    await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+    try {
+      const procs = await this.processes.list();
+      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+    } catch {
+      // Best-effort: sandbox may already be dead
+    }
 
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
@@ -789,8 +793,12 @@ export class E2BSandbox extends MastraSandbox {
   async destroy(): Promise<void> {
     if (this._sandbox) {
       // Kill all background processes
-      const procs = await this.processes.list();
-      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+      try {
+        const procs = await this.processes.list();
+        await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+      } catch {
+        // Best-effort: sandbox may already be dead
+      }
 
       // Unmount all filesystems
       // Collect keys first since unmount() mutates the map

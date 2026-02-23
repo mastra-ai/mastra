@@ -538,6 +538,7 @@ describe('Workspace Logger Integration', () => {
       // a non-zero exit code (127) rather than throwing ENOENT, so the
       // command completes normally (debug log) rather than erroring.
       expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Command completed', expect.any(Object));
+      expect(mockLogger.error).not.toHaveBeenCalled();
 
       await sandbox._destroy();
     });

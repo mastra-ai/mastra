@@ -83,6 +83,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults } = vi.hoisted(() =
     (Template.exists as any).mockResolvedValue(false);
     (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
     mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    mockSandbox.commands.list.mockResolvedValue([]);
     mockSandbox.files.write.mockResolvedValue(undefined);
     mockSandbox.files.read.mockResolvedValue('');
     mockSandbox.files.list.mockResolvedValue([]);

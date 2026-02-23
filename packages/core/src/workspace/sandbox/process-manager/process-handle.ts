@@ -146,7 +146,10 @@ export abstract class ProcessHandle {
   get reader(): Readable {
     if (!this._reader) {
       this._reader = new Readable({ read() {} });
-      void this.wait().then(() => this._reader!.push(null));
+      void this.wait().then(
+        () => this._reader!.push(null),
+        () => this._reader!.push(null),
+      );
     }
     return this._reader;
   }
