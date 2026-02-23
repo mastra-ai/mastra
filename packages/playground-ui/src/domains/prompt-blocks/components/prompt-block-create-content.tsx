@@ -1,5 +1,3 @@
-import { useRef } from 'react';
-
 import type { CreateStoredPromptBlockParams } from '@mastra/client-js';
 
 import { toast } from '@/lib/toast';
@@ -16,7 +14,6 @@ interface PromptBlockCreateContentProps {
 
 export function PromptBlockCreateContent({ onSuccess }: PromptBlockCreateContentProps) {
   const { createStoredPromptBlock } = useStoredPromptBlockMutations();
-  const formRef = useRef<HTMLFormElement | null>(null);
   const { form } = usePromptBlockEditForm();
 
   const handlePublish = async () => {
@@ -52,11 +49,10 @@ export function PromptBlockCreateContent({ onSuccess }: PromptBlockCreateContent
           form={form}
           onPublish={handlePublish}
           isSubmitting={createStoredPromptBlock.isPending}
-          formRef={formRef}
         />
       }
     >
-      <form ref={formRef} className="h-full">
+      <form className="h-full">
         <PromptBlockEditMain form={form} />
       </form>
     </AgentEditLayout>
