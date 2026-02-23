@@ -24,11 +24,13 @@
  * ```
  */
 
+import type { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
 
 import type { MountManager } from './mount-manager';
+import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
@@ -71,21 +73,58 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Get instructions describing how this sandbox works.
    * Used in tool descriptions to help agents understand execution context.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this sandbox
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 
   /**
-   * Execute a shell command.
+   * Execute a shell command and wait for it to complete.
    * Optional - if not implemented, the workspace_execute_command tool won't be available.
+   *
+   * @example
+   * ```typescript
+   * await sandbox.executeCommand('npm install');
+   *
+   * // With options
+   * await sandbox.executeCommand('npm install', [], { timeout: 60000 });
+   *
+   * // With args array (each arg is shell-quoted automatically)
+   * await sandbox.executeCommand('npm', ['install'], { timeout: 60000 });
+   * ```
+   *
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  // ---------------------------------------------------------------------------
+  // Process Management (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Process manager.
+   * Optional - if not implemented, process management tools won't be available.
+   *
+   * Provides methods to spawn long-running processes, list them, and interact
+   * with them via their {@link ProcessHandle} (kill, sendStdin, wait, read output).
+   *
+   * @example
+   * ```typescript
+   * const handle = await sandbox.processes.spawn('node server.js');
+   * console.log(handle.pid);
+   *
+   * const procs = await sandbox.processes.list();
+   * const proc = await sandbox.processes.get(handle.pid);
+   * await proc?.sendStdin('hello\n');
+   * await proc?.kill();
+   * ```
+   */
+  readonly processes?: SandboxProcessManager;
 
   // ---------------------------------------------------------------------------
   // Mounting Support (Optional)
