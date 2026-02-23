@@ -252,6 +252,24 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.args).toBeUndefined();
       }
     });
+
+    it('should preserve <|...|> patterns inside JSON string values in tool-call args', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-5',
+        toolName: 'process_text',
+        input: '{"text": "The <|endoftext|> token marks boundaries"}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ text: 'The <|endoftext|> token marks boundaries' });
+      }
+    });
   });
 
   describe('sanitizeToolCallInput', () => {
@@ -285,6 +303,16 @@ describe('convertFullStreamChunkToMastra', () => {
 
     it('should strip tokens with surrounding whitespace', () => {
       expect(sanitizeToolCallInput('{"x":1}  <|call|>  ')).toBe('{"x":1}');
+    });
+
+    it('should preserve <|...|> patterns inside JSON string values', () => {
+      const input = '{"text": "use <|call|> token"}';
+      expect(sanitizeToolCallInput(input)).toBe('{"text": "use <|call|> token"}');
+    });
+
+    it('should preserve multiple <|...|> patterns inside JSON string values', () => {
+      const input = '{"prompt": "tokens: <|endoftext|> and <|call|> are special"}';
+      expect(sanitizeToolCallInput(input)).toBe('{"prompt": "tokens: <|endoftext|> and <|call|> are special"}');
     });
   });
 

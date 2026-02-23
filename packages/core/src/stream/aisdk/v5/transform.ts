@@ -12,15 +12,31 @@ import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 /**
- * Strips LLM-specific tokens (e.g. `<|call|>`, `<|endoftext|>`, `<|end|>`) and surrounding
- * whitespace from tool-call input strings. LLMs sometimes append these internal tokens to
- * otherwise valid JSON, causing JSON.parse to fail.
+ * Sanitizes tool-call input strings for safe JSON parsing.
+ *
+ * LLMs sometimes append internal tokens like `<|call|>`, `<|endoftext|>`, or `<|end|>`
+ * to otherwise valid JSON in streamed tool-call arguments, causing JSON.parse to fail.
+ *
+ * This function first attempts JSON.parse on the original input. If parsing succeeds,
+ * the original string is returned unchanged — this avoids corrupting valid JSON payloads
+ * that legitimately contain `<|...|>` patterns inside string values.
+ *
+ * Only when the original input is not valid JSON does the function fall back to stripping
+ * `<|...|>` token patterns and surrounding whitespace via regex.
  *
  * @see https://github.com/mastra-ai/mastra/issues/13261
  * @see https://github.com/mastra-ai/mastra/issues/13185
  */
 export function sanitizeToolCallInput(input: string): string {
-  return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+  // Fast path: if input is already valid JSON, return unchanged to avoid
+  // corrupting <|...|> patterns that appear inside JSON string values.
+  try {
+    JSON.parse(input);
+    return input;
+  } catch {
+    // Input is not valid JSON — strip LLM-specific tokens and retry
+    return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+  }
 }
 
 export type StreamPart =
