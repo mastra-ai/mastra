@@ -9,28 +9,29 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleNetworkStream()
 
-Framework-agnostic handler for streaming network execution in AI SDK-compatible format. Use this function directly when you need to handle network streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature. 
+Framework-agnostic handler for streaming network execution in AI SDK-compatible format. Use this function directly when you need to handle network streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
 
 `handleNetworkStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
 Use [`networkRoute()`](/reference/ai-sdk/network-route) if you want to create a network route inside a Mastra server.
+
 ## Usage example
 
 Next.js App Router example:
 
 ```typescript title="app/api/network/route.ts"
-import { handleNetworkStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '@/src/mastra';
+import { handleNetworkStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = await req.json()
   const stream = await handleNetworkStream({
     mastra,
     agentId: 'routingAgent',
     params,
-  });
-  return createUIMessageStreamResponse({ stream });
+  })
+  return createUIMessageStreamResponse({ stream })
 }
 ```
 
@@ -38,29 +39,29 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "The Mastra instance to use for agent lookup and execution.",
-      isOptional: false,
-    },
-    {
-      name: "agentId",
-      type: "string",
-      description: "The ID of the routing agent to execute as a network.",
-      isOptional: false,
-    },
-    {
-      name: "params",
-      type: "NetworkStreamHandlerParams",
-      description: "The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.",
-      isOptional: false,
-    },
-    {
-      name: "defaultOptions",
-      type: "AgentExecutionOptions",
-      description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "mastra",
+type: "Mastra",
+description: "The Mastra instance to use for agent lookup and execution.",
+isOptional: false,
+},
+{
+name: "agentId",
+type: "string",
+description: "The ID of the routing agent to execute as a network.",
+isOptional: false,
+},
+{
+name: "params",
+type: "NetworkStreamHandlerParams",
+description: "The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.",
+isOptional: false,
+},
+{
+name: "defaultOptions",
+type: "AgentExecutionOptions",
+description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
+isOptional: true,
+},
+]}
 />

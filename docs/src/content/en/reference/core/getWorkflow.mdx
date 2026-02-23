@@ -13,18 +13,21 @@ The `.getWorkflow()` method is used to retrieve a workflow by its registration k
 
 ```typescript
 // Retrieve workflow by its registration key (recommended for type inference)
-const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRun();
+const workflow = mastra.getWorkflow('testWorkflow')
+const run = await workflow.createRun()
 
 // TypeScript will properly infer the input schema type
 await run.startAsync({
-  inputData: { /* properly typed */ }
-});
+  inputData: {
+    /* properly typed */
+  },
+})
 ```
 
 ## Type inference
 
 For best TypeScript support, use `getWorkflow()` with the workflow's **registration key** (the key used when adding the workflow to Mastra). This provides full type inference for:
+
 - Input data schemas
 - Output data schemas
 - Step results
@@ -35,33 +38,33 @@ If you need to retrieve a workflow by its `id` property instead of its registrat
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "TWorkflowId extends keyof TWorkflows",
-      description:
-        "The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
-    },
-    {
-      name: "options",
-      type: "{ serialized?: boolean }",
-      description:
-        "Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
-      optional: true,
-    },
-  ]}
+{
+name: "id",
+type: "TWorkflowId extends keyof TWorkflows",
+description:
+"The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
+},
+{
+name: "options",
+type: "{ serialized?: boolean }",
+description:
+"Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
+optional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "workflow",
-      type: "TWorkflows[TWorkflowId]",
-      description:
-        "The workflow instance with the specified ID. Throws an error if the workflow is not found.",
-    },
-  ]}
+{
+name: "workflow",
+type: "TWorkflows[TWorkflowId]",
+description:
+"The workflow instance with the specified ID. Throws an error if the workflow is not found.",
+},
+]}
 />
 
 ## Related

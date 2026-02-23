@@ -16,33 +16,33 @@ The `createHallucinationScorer()` function accepts a single options object with 
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description:
-        "Configuration for the model used to evaluate hallucination.",
-    },
-    {
-      name: "options.scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value.",
-    },
-    {
-      name: "options.context",
-      type: "string[]",
-      required: false,
-      description: "Static context strings to use as ground truth for hallucination detection.",
-    },
-    {
-      name: "options.getContext",
-      type: "(params: GetContextParams) => string[] | Promise<string[]>",
-      required: false,
-      description: "A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.",
-    },
-  ]}
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description:
+"Configuration for the model used to evaluate hallucination.",
+},
+{
+name: "options.scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value.",
+},
+{
+name: "options.context",
+type: "string[]",
+required: false,
+description: "Static context strings to use as ground truth for hallucination detection.",
+},
+{
+name: "options.getContext",
+type: "(params: GetContextParams) => string[] | Promise<string[]>",
+required: false,
+description: "A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -53,80 +53,80 @@ The `getContext` hook receives the following parameters:
 
 <PropertiesTable
   content={[
-    {
-      name: "run",
-      type: "GetContextRun",
-      description: "The scorer run containing input, output, runId, requestContext, and tracingContext.",
-    },
-    {
-      name: "results",
-      type: "Record<string, any>",
-      description: "Accumulated results from previous steps (e.g., preprocessStepResult with extracted claims).",
-    },
-    {
-      name: "score",
-      type: "number",
-      required: false,
-      description: "The computed score. Only present when called from the generateReason step.",
-    },
-    {
-      name: "step",
-      type: "'analyze' | 'generateReason'",
-      description: "Which step is calling the hook. Useful for caching context between calls.",
-    },
-  ]}
+{
+name: "run",
+type: "GetContextRun",
+description: "The scorer run containing input, output, runId, requestContext, and tracingContext.",
+},
+{
+name: "results",
+type: "Record<string, any>",
+description: "Accumulated results from previous steps (e.g., preprocessStepResult with extracted claims).",
+},
+{
+name: "score",
+type: "number",
+required: false,
+description: "The computed score. Only present when called from the generateReason step.",
+},
+{
+name: "step",
+type: "'analyze' | 'generateReason'",
+description: "Which step is calling the hook. Useful for caching context between calls.",
+},
+]}
 />
 
 ## .run() Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted claims: { claims: string[] }",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description:
-        "The prompt sent to the LLM for the preprocess step (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description:
-        "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Hallucination score (0 to scale, default 0-1).",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description:
-        "Detailed explanation of the score and identified contradictions.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description:
-        "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted claims: { claims: string[] }",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description:
+"The prompt sent to the LLM for the preprocess step (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description:
+"The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Hallucination score (0 to scale, default 0-1).",
+},
+{
+name: "reason",
+type: "string",
+description:
+"Detailed explanation of the score and identified contradictions.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description:
+"The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 ## Scoring Details
@@ -139,13 +139,13 @@ The scorer evaluates hallucination through contradiction detection and unsupport
    - Extracts statements from context
    - Identifies numerical values and dates
    - Maps statement relationships
-2. Analyzes output for hallucinations:
+1. Analyzes output for hallucinations:
    - Compares against context statements
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
    - Considers approximation context
-3. Calculates hallucination score:
+1. Calculates hallucination score:
    - Counts hallucinated statements (contradictions and unsupported claims)
    - Divides by total statements
    - Scales to configured range
@@ -183,18 +183,18 @@ A hallucination score between 0 and 1:
 Use static context when you have known ground truth to compare against:
 
 ```typescript title="src/example-static-context.ts"
-import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createHallucinationScorer({
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   options: {
     context: [
-      "The first iPhone was announced on January 9, 2007.",
-      "It was released on June 29, 2007.",
-      "Steve Jobs introduced it at Macworld.",
+      'The first iPhone was announced on January 9, 2007.',
+      'It was released on June 29, 2007.',
+      'Steve Jobs introduced it at Macworld.',
     ],
   },
-});
+})
 ```
 
 ### Dynamic Context with getContext
@@ -202,21 +202,19 @@ const scorer = createHallucinationScorer({
 Use `getContext` for live scoring scenarios where context comes from tool results:
 
 ```typescript title="src/example-dynamic-context.ts"
-import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
-import { extractToolResults } from "@mastra/evals/scorers";
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { extractToolResults } from '@mastra/evals/scorers'
 
 const scorer = createHallucinationScorer({
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   options: {
     getContext: ({ run, step }) => {
       // Extract tool results as context
-      const toolResults = extractToolResults(run.output);
-      return toolResults.map((t) =>
-        JSON.stringify({ tool: t.toolName, result: t.result })
-      );
+      const toolResults = extractToolResults(run.output)
+      return toolResults.map(t => JSON.stringify({ tool: t.toolName, result: t.result }))
     },
   },
-});
+})
 ```
 
 ### Live Scoring with Agent
@@ -224,62 +222,57 @@ const scorer = createHallucinationScorer({
 Attach the scorer to an agent for live evaluation:
 
 ```typescript title="src/example-live-scoring.ts"
-import { Agent } from "@mastra/core/agent";
-import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
-import { extractToolResults } from "@mastra/evals/scorers";
+import { Agent } from '@mastra/core/agent'
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { extractToolResults } from '@mastra/evals/scorers'
 
 const hallucinationScorer = createHallucinationScorer({
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   options: {
     getContext: ({ run }) => {
-      const toolResults = extractToolResults(run.output);
-      return toolResults.map((t) =>
-        JSON.stringify({ tool: t.toolName, result: t.result })
-      );
+      const toolResults = extractToolResults(run.output)
+      return toolResults.map(t => JSON.stringify({ tool: t.toolName, result: t.result }))
     },
   },
-});
+})
 
 const agent = new Agent({
-  name: "my-agent",
-  model: "openai/gpt-4o",
-  instructions: "You are a helpful assistant.",
+  name: 'my-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful assistant.',
   evals: {
     scorers: [hallucinationScorer],
   },
-});
+})
 ```
 
 ### Batch Evaluation with runEvals
 
 ```typescript title="src/example-batch-evals.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
 const scorer = createHallucinationScorer({
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   options: {
-    context: ["Known fact 1", "Known fact 2"],
+    context: ['Known fact 1', 'Known fact 2'],
   },
-});
+})
 
 const result = await runEvals({
-  data: [
-    { input: "Tell me about topic A" },
-    { input: "Tell me about topic B" },
-  ],
+  data: [{ input: 'Tell me about topic A' }, { input: 'Tell me about topic B' }],
   scorers: [scorer],
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
       score: scorerResults[scorer.id].score,
       reason: scorerResults[scorer.id].reason,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -49,7 +49,7 @@
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
     "shiki": "^1.29.2",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.4.1"
   },
   "peerDependencies": {
     "react": ">=19.0.0",

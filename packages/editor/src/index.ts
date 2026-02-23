@@ -15,6 +15,7 @@ import type { ToolProvider } from '@mastra/core/tool-provider';
 import {
   EditorAgentNamespace,
   EditorMCPNamespace,
+  EditorMCPServerNamespace,
   EditorPromptNamespace,
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
@@ -32,6 +33,7 @@ export {
   CrudEditorNamespace,
   EditorAgentNamespace,
   EditorMCPNamespace,
+  EditorMCPServerNamespace,
   EditorPromptNamespace,
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
@@ -73,6 +75,7 @@ export class MastraEditor implements IMastraEditor {
 
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
+  public readonly mcpServer: EditorMCPServerNamespace;
   public readonly prompt: EditorPromptNamespace;
   public readonly scorer: EditorScorerNamespace;
   public readonly workspace: EditorWorkspaceNamespace;
@@ -105,6 +108,7 @@ export class MastraEditor implements IMastraEditor {
 
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
+    this.mcpServer = new EditorMCPServerNamespace(this);
     this.prompt = new EditorPromptNamespace(this);
     this.scorer = new EditorScorerNamespace(this);
     this.workspace = new EditorWorkspaceNamespace(this);

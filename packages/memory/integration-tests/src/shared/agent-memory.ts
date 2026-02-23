@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys, agentGenerate } from '@internal/test-utils';
 import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
@@ -11,10 +16,12 @@ import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-export function getAgentMemoryTests({
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
+export async function getAgentMemoryTests({
   model,
   tools,
   reasoningModel,
@@ -23,7 +30,22 @@ export function getAgentMemoryTests({
   tools: Record<string, any>;
   reasoningModel?: MastraModelConfig;
 }) {
-  const dbFile = 'file:mastra-agent.db';
+  const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'mastra-agent.db');
+  const dbFile = `file:${dbPath}`;
+
+  beforeEach(() => {
+    const date = new Date(2026, 2, 10, 13, 56, 0);
+
+    vi.useFakeTimers({
+      now: date,
+      shouldAdvanceTime: true,
+      toFake: ['Date'],
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('Agent Memory Tests', () => {
     it(`inherits storage from Mastra instance`, async () => {
       const agent = new Agent({
@@ -196,22 +218,8 @@ export function getAgentMemoryTests({
 
       // First, create a thread and add some messages to establish history
       const thread1Id = randomUUID();
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate('Tell me about cats', {
-          memory: {
-            thread: thread1Id,
-            resource: resourceId,
-          },
-        });
-      } else {
-        await agent.generateLegacy('Tell me about cats', {
-          threadId: thread1Id,
-          resourceId,
-        });
-      }
+
+      await agentGenerate(agent, 'Tell me about cats', { threadId: thread1Id, resourceId }, model);
 
       // Verify first thread has messages
       const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
@@ -221,23 +229,12 @@ export function getAgentMemoryTests({
       // due to resource scope, even on the first message
       const thread2Id = randomUUID();
 
-      let secondResponse;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        secondResponse = await agent.generate('What did we discuss about cats?', {
-          memory: {
-            thread: thread2Id,
-            resource: resourceId,
-          },
-        });
-      } else {
-        secondResponse = await agent.generateLegacy('What did we discuss about cats?', {
-          threadId: thread2Id,
-          resourceId,
-        });
-      }
+      const secondResponse = (await agentGenerate(
+        agent,
+        'What did we discuss about cats?',
+        { threadId: thread2Id, resourceId },
+        model,
+      )) as any;
 
       // Verify that the agent was able to access cross-thread memory
       // by checking that the response references the previous conversation
@@ -280,31 +277,15 @@ export function getAgentMemoryTests({
       const resourceId = 'all-user-messages';
 
       // Send multiple user messages
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate(
-          [
-            { role: 'user', content: 'First message' },
-            { role: 'user', content: 'Second message' },
-          ],
-          {
-            memory: { thread: threadId, resource: resourceId },
-          },
-        );
-      } else {
-        await agent.generateLegacy(
-          [
-            { role: 'user', content: 'First message' },
-            { role: 'user', content: 'Second message' },
-          ],
-          {
-            threadId,
-            resourceId,
-          },
-        );
-      }
+      await agentGenerate(
+        agent,
+        [
+          { role: 'user', content: 'First message' },
+          { role: 'user', content: 'Second message' },
+        ],
+        { threadId, resourceId },
+        model,
+      );
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
@@ -324,42 +305,17 @@ export function getAgentMemoryTests({
       const threadId = randomUUID();
       const resourceId = 'assistant-responses';
       // 1. Text mode
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate([{ role: 'user', content: 'What is 2+2?' }], {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        await agent.generateLegacy([{ role: 'user', content: 'What is 2+2?' }], {
-          threadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(agent, [{ role: 'user', content: 'What is 2+2?' }], { threadId, resourceId }, model);
+
+      vi.advanceTimersByTime(100);
 
       // 2. Object/output mode
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
-          memory: { thread: threadId, resource: resourceId },
-          structuredOutput: {
-            schema: z.object({
-              result: z.string(),
-            }),
-          },
-        });
-      } else {
-        await agent.generateLegacy([{ role: 'user', content: 'Give me JSON' }], {
-          threadId,
-          resourceId,
-          output: z.object({
-            result: z.string(),
-          }),
-        });
-      }
+      await agentGenerate(
+        agent,
+        [{ role: 'user', content: 'Give me JSON' }],
+        { threadId, resourceId, output: z.object({ result: z.string() }) },
+        model,
+      );
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
@@ -385,27 +341,19 @@ export function getAgentMemoryTests({
       const contextMessageContent2 = 'This is the second context message.';
 
       // Send user messages and context messages
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate(userMessageContent, {
-          memory: { thread: threadId, resource: resourceId },
-          context: [
-            { role: 'system', content: contextMessageContent1 },
-            { role: 'user', content: contextMessageContent2 },
-          ],
-        });
-      } else {
-        await agent.generateLegacy(userMessageContent, {
+      await agentGenerate(
+        agent,
+        userMessageContent,
+        {
           threadId,
           resourceId,
           context: [
             { role: 'system', content: contextMessageContent1 },
             { role: 'user', content: contextMessageContent2 },
           ],
-        });
-      }
+        },
+        model,
+      );
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
@@ -456,20 +404,7 @@ export function getAgentMemoryTests({
         },
       ];
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agent.generate(messagesWithMetadata, {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        // Send messages with metadata
-        await agent.generateLegacy(messagesWithMetadata, {
-          threadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(agent, messagesWithMetadata, { threadId, resourceId }, model);
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
@@ -540,22 +475,12 @@ export function getAgentMemoryTests({
         const threadId = randomUUID();
         const resourceId = 'test-resource-reasoning';
 
-        let result;
-        if (
-          typeof reasoningModel === 'string' ||
-          (reasoningModel &&
-            'specificationVersion' in reasoningModel &&
-            ['v2', 'v3'].includes(reasoningModel.specificationVersion))
-        ) {
-          result = await reasoningAgent.generate('What is 2+2? Think through this carefully.', {
-            memory: { thread: threadId, resource: resourceId },
-          });
-        } else {
-          result = await reasoningAgent.generateLegacy('What is 2+2? Think through this carefully.', {
-            threadId,
-            resourceId,
-          });
-        }
+        const result = (await agentGenerate(
+          reasoningAgent,
+          'What is 2+2? Think through this carefully.',
+          { threadId, resourceId },
+          reasoningModel!,
+        )) as any;
 
         expect((result as any).reasoning.length).toBeGreaterThan(0);
         expect((result as any).reasoningText).toBeDefined();
@@ -666,20 +591,19 @@ export function getAgentMemoryTests({
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          memory: { thread: threadId, resource: resourceId },
-        });
-        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        await agentWithTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-        await agentWithTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-      }
+      await agentGenerate(
+        agentWithTitle,
+        [{ role: 'user', content: 'Hello, world!' }],
+        { threadId, resourceId },
+        model,
+      );
+      vi.advanceTimersByTime(100);
+      await agentGenerate(
+        agentWithTitle,
+        [{ role: 'user', content: 'Hello, world!' }],
+        { threadId, resourceId },
+        model,
+      );
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();
@@ -711,21 +635,14 @@ export function getAgentMemoryTests({
         requestContext.set('model', 'gpt-4o-mini');
       }
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          memory: { thread: threadId, resource: resourceId },
-          requestContext,
-        });
-      } else {
-        await agentWithDynamicModelTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], {
-          threadId,
-          resourceId,
-          requestContext,
-        });
-      }
+      await agentGenerate(
+        agentWithDynamicModelTitle,
+        [{ role: 'user', content: 'Hello, world!' }],
+        { threadId, resourceId, requestContext },
+        model,
+      );
+
+      vi.advanceTimersByTime(100);
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();
@@ -746,20 +663,9 @@ export function getAgentMemoryTests({
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          memory: { thread: threadId, resource: resourceId },
-        });
-        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        await agentNoTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-        await agentNoTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-      }
+      await agentGenerate(agentNoTitle, [{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId }, model);
+      vi.advanceTimersByTime(100);
+      await agentGenerate(agentNoTitle, [{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId }, model);
 
       const existingThread = await memoryNoTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();
@@ -806,23 +712,17 @@ export function getAgentMemoryTests({
       const resourceId = 'processor-filter-tool-message';
 
       // First, ask a question that will trigger a tool call
-      let firstResponse;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        firstResponse = await memoryProcessorAgent.generate('What is the weather in London?', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        firstResponse = await memoryProcessorAgent.generateLegacy('What is the weather in London?', {
-          threadId,
-          resourceId,
-        });
-      }
+      const firstResponse = (await agentGenerate(
+        memoryProcessorAgent,
+        'What is the weather in London?',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // The response should contain the weather.
       expect(firstResponse.text).toContain('65');
+
+      vi.advanceTimersByTime(100);
 
       // Check that tool calls were saved to memory
       const agentMemory = (await memoryProcessorAgent.getMemory())!;
@@ -835,20 +735,12 @@ export function getAgentMemoryTests({
 
       // Now, ask a follow-up question. The processor should prevent the tool call history
       // from being sent to the model.
-      let secondResponse;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        secondResponse = await memoryProcessorAgent.generate('What was the tool you just used?', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        secondResponse = await memoryProcessorAgent.generateLegacy('What was the tool you just used?', {
-          threadId,
-          resourceId,
-        });
-      }
+      const secondResponse = (await agentGenerate(
+        memoryProcessorAgent,
+        'What was the tool you just used?',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       const requestBody =
         typeof secondResponse.request.body === 'string'
@@ -944,20 +836,12 @@ export function getAgentMemoryTests({
       });
 
       // Now generate a response - this should include working memory in the LLM request
-      let response;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        response = await agent.generate('What is my favorite color?', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        response = await agent.generateLegacy('What is my favorite color?', {
-          threadId,
-          resourceId,
-        });
-      }
+      const response = (await agentGenerate(
+        agent,
+        'What is my favorite color?',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // Check the actual request body sent to the LLM
       const wmRequestBody =
@@ -1007,41 +891,25 @@ export function getAgentMemoryTests({
 
     it('should not throw error when using memory with multiple messages', async () => {
       // generate two messages in the db
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await mockStoreAgent.generate(`What's the weather in Tokyo?`, {
-          memory: { thread, resource },
-        });
-      } else {
-        await mockStoreAgent.generateLegacy(`What's the weather in Tokyo?`, {
-          threadId: thread,
-          resourceId: resource,
-        });
-      }
+      await agentGenerate(
+        mockStoreAgent,
+        `What's the weather in Tokyo?`,
+        { threadId: thread, resourceId: resource },
+        model,
+      );
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      vi.advanceTimersByTime(1000);
 
       // Will throw if the messages sent to the agent aren't cleaned up because a tool call message will be the first message sent to the agent
       // Which some providers like gemini will not allow.
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await expect(
-          mockStoreAgent.generate(`What's the weather in London?`, {
-            memory: { thread, resource },
-          }),
-        ).resolves.not.toThrow();
-      } else {
-        await expect(
-          mockStoreAgent.generateLegacy(`What's the weather in London?`, {
-            threadId: thread,
-            resourceId: resource,
-          }),
-        ).resolves.not.toThrow();
-      }
+      await expect(
+        agentGenerate(
+          mockStoreAgent,
+          `What's the weather in London?`,
+          { threadId: thread, resourceId: resource },
+          model,
+        ),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -1066,20 +934,12 @@ export function getAgentMemoryTests({
       const resourceId = 'input-processor-resource';
 
       // First message
-      let firstResponse;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        firstResponse = await inputProcessorAgent.generate('My name is Alice', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        firstResponse = await inputProcessorAgent.generateLegacy('My name is Alice', {
-          threadId,
-          resourceId,
-        });
-      }
+      const firstResponse = (await agentGenerate(
+        inputProcessorAgent,
+        'My name is Alice',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       expect(firstResponse.text).toBeDefined();
 
@@ -1087,21 +947,14 @@ export function getAgentMemoryTests({
       const { messages: messagesAfterFirst } = await inputProcessorMemory.recall({ threadId });
       expect(messagesAfterFirst.length).toBe(2); // user + assistant
 
+      vi.advanceTimersByTime(100);
       // Second message - should include history from MessageHistory input processor
-      let secondResponse;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        secondResponse = await inputProcessorAgent.generate('What is my name?', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        secondResponse = await inputProcessorAgent.generateLegacy('What is my name?', {
-          threadId,
-          resourceId,
-        });
-      }
+      const secondResponse = (await agentGenerate(
+        inputProcessorAgent,
+        'What is my name?',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // Check the actual request sent to the LLM
       const requestBody =
@@ -1162,20 +1015,12 @@ export function getAgentMemoryTests({
       const resourceId = 'guardrail-memory-test';
 
       // Generate should complete but with tripwire
-      let result;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        result = await guardrailAgent.generate('Hello, save this message!', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        result = await guardrailAgent.generateLegacy('Hello, save this message!', {
-          threadId,
-          resourceId,
-        });
-      }
+      const result = (await agentGenerate(
+        guardrailAgent,
+        'Hello, save this message!',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // Verify the guardrail triggered
       expect(result.tripwire).toBeDefined();
@@ -1217,20 +1062,12 @@ export function getAgentMemoryTests({
       const resourceId = 'passing-guardrail-memory-test';
 
       // Generate should complete normally
-      let result;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        result = await passingGuardrailAgent.generate('Hello, save this message!', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        result = await passingGuardrailAgent.generateLegacy('Hello, save this message!', {
-          threadId,
-          resourceId,
-        });
-      }
+      const result = (await agentGenerate(
+        passingGuardrailAgent,
+        'Hello, save this message!',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // Verify no tripwire
       expect(result.tripwire).toBeUndefined();
@@ -1284,20 +1121,12 @@ export function getAgentMemoryTests({
       const resourceId = 'input-guardrail-memory-test';
 
       // Generate should complete but with tripwire (no LLM call made)
-      let result;
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        result = await inputGuardrailAgent.generate('Hello, this should be blocked!', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        result = await inputGuardrailAgent.generateLegacy('Hello, this should be blocked!', {
-          threadId,
-          resourceId,
-        });
-      }
+      const result = (await agentGenerate(
+        inputGuardrailAgent,
+        'Hello, this should be blocked!',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       // Verify the guardrail triggered
       expect(result.tripwire).toBeDefined();
@@ -1342,26 +1171,9 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-test-resource';
 
       // Create a conversation in the source thread
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Hello, my name is Alice!', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-        await cloneAgent.generate('I live in New York.', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Hello, my name is Alice!', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-        await cloneAgent.generateLegacy('I live in New York.', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Hello, my name is Alice!', { threadId: sourceThreadId, resourceId }, model);
+      vi.advanceTimersByTime(100);
+      await agentGenerate(cloneAgent, 'I live in New York.', { threadId: sourceThreadId, resourceId }, model);
 
       // Verify source thread has messages
       const sourceMessages = await cloneMemory.recall({ threadId: sourceThreadId });
@@ -1394,19 +1206,7 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-custom-title-resource';
 
       // Create source thread with a message
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Test message for cloning', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Test message for cloning', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Test message for cloning', { threadId: sourceThreadId, resourceId }, model);
 
       // Clone with custom title
       const customTitle = 'My Custom Clone Title';
@@ -1424,19 +1224,8 @@ export function getAgentMemoryTests({
 
       // Create multiple messages
       for (let i = 1; i <= 3; i++) {
-        if (
-          typeof model === 'string' ||
-          ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-        ) {
-          await cloneAgent.generate(`Message number ${i}`, {
-            memory: { thread: sourceThreadId, resource: resourceId },
-          });
-        } else {
-          await cloneAgent.generateLegacy(`Message number ${i}`, {
-            threadId: sourceThreadId,
-            resourceId,
-          });
-        }
+        await agentGenerate(cloneAgent, `Message number ${i}`, { threadId: sourceThreadId, resourceId }, model);
+        vi.advanceTimersByTime(1000);
       }
 
       // Count total messages (should be 6: 3 user + 3 assistant)
@@ -1457,39 +1246,22 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-continue-resource';
 
       // Create initial conversation
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('My favorite color is blue.', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('My favorite color is blue.', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'My favorite color is blue.', { threadId: sourceThreadId, resourceId }, model);
 
       // Clone the thread
       const { thread: clonedThread } = await cloneMemory.cloneThread({
         sourceThreadId,
       });
 
+      vi.advanceTimersByTime(100);
+
       // Continue conversation on cloned thread with different info
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Actually, my favorite color is red.', {
-          memory: { thread: clonedThread.id, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Actually, my favorite color is red.', {
-          threadId: clonedThread.id,
-          resourceId,
-        });
-      }
+      await agentGenerate(
+        cloneAgent,
+        'Actually, my favorite color is red.',
+        { threadId: clonedThread.id, resourceId },
+        model,
+      );
 
       // Verify source thread is unchanged
       const sourceMessages = await cloneMemory.recall({ threadId: sourceThreadId });
@@ -1508,19 +1280,7 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-custom-id-resource';
 
       // Create source thread
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Test message', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Test message', { threadId: sourceThreadId, resourceId }, model);
 
       // Clone with custom ID
       const { thread: clonedThread } = await cloneMemory.cloneThread({
@@ -1542,19 +1302,7 @@ export function getAgentMemoryTests({
         title: 'Source Thread',
       });
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Test message', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Test message', { threadId: sourceThreadId, resourceId }, model);
 
       // Clone the thread
       const { thread: clonedThread } = await cloneMemory.cloneThread({
@@ -1582,19 +1330,7 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-list-resource';
 
       // Create source thread
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Test message', {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Test message', { threadId: sourceThreadId, resourceId }, model);
 
       // Create multiple clones
       await cloneMemory.cloneThread({ sourceThreadId, title: 'Clone 1' });
@@ -1613,19 +1349,7 @@ export function getAgentMemoryTests({
       const resourceId = 'clone-history-resource';
 
       // Create original thread
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate('Original message', {
-          memory: { thread: originalThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy('Original message', {
-          threadId: originalThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, 'Original message', { threadId: originalThreadId, resourceId }, model);
 
       // Create chain: original -> clone1 -> clone2
       const { thread: clone1 } = await cloneMemory.cloneThread({
@@ -1654,19 +1378,7 @@ export function getAgentMemoryTests({
       // Create a unique, memorable message in the source thread
       const uniqueContent = 'The ancient library of Alexandria contained countless scrolls of knowledge.';
 
-      if (
-        typeof model === 'string' ||
-        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-      ) {
-        await cloneAgent.generate(uniqueContent, {
-          memory: { thread: sourceThreadId, resource: resourceId },
-        });
-      } else {
-        await cloneAgent.generateLegacy(uniqueContent, {
-          threadId: sourceThreadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(cloneAgent, uniqueContent, { threadId: sourceThreadId, resourceId }, model);
 
       // Wait a moment for embeddings to be created
       await new Promise(resolve => setTimeout(resolve, 500));

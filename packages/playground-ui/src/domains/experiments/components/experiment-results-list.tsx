@@ -44,21 +44,26 @@ export function ExperimentResultsList({
             const isSelected = result.id === featuredResultId;
 
             return (
-              <ItemList.Row key={result.id} isSelected={isSelected}>
+              <ItemList.Row key={result.id}>
                 <ItemList.RowButton
-                  entry={entry}
-                  isSelected={isSelected}
+                  item={entry}
+                  isFeatured={isSelected}
                   columns={columns}
                   onClick={() => onResultClick(result.id)}
                 >
-                  <ItemList.TextCell>{result.itemId.slice(0, 8)}</ItemList.TextCell>
+                  <ItemList.IdCell id={result.itemId} />
+                  <ItemList.StatusCell status={hasError ? 'error' : 'success'} />
+
                   {columns.some(col => col.name === 'input') && (
-                    <ItemList.TextCell>{truncate(formatValue(result.input), 200)}</ItemList.TextCell>
+                    <ItemList.TextCell className="font-mono">
+                      {truncate(formatValue(result.input), 200)}
+                    </ItemList.TextCell>
                   )}
                   {columns.some(col => col.name === 'output') && (
-                    <ItemList.TextCell>{truncate(formatValue(result.output), 200)}</ItemList.TextCell>
+                    <ItemList.TextCell className="font-mono">
+                      {truncate(formatValue(result.output), 200)}
+                    </ItemList.TextCell>
                   )}
-                  <ItemList.StatusCell status={hasError ? 'error' : 'success'} />
                 </ItemList.RowButton>
               </ItemList.Row>
             );

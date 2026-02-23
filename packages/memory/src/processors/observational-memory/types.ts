@@ -111,12 +111,21 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
-   * Ratio (0-1) of buffered observations to activate when threshold is reached.
-   * Setting this below 1 keeps some observations in reserve for continuity.
+   * Controls how many raw message tokens to retain after activation.
+   *
+   * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
+   *   The retention floor is `messageTokens * (1 - ratio)`.
+   *   e.g. `0.8` with `messageTokens: 30000` → retain ~6000 tokens.
+   *
+   * - **Absolute (value >= 1000):** exact number of message tokens to retain.
+   *   e.g. `3000` → always aim to keep ~3000 tokens of raw message history.
+   *   Must be less than `messageTokens`.
+   *
+   * Values between 1 and 1000 are invalid.
    *
    * Requires `bufferTokens` to also be set.
    *
-   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
+   * @default 0.8 (retain ~20% of messageTokens as raw messages)
    */
   bufferActivation?: number;
 
@@ -231,6 +240,9 @@ export interface ReflectorResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**

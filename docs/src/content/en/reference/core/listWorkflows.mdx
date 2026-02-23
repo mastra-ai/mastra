@@ -12,34 +12,34 @@ The `.listWorkflows()` method is used to retrieve all workflows that have been c
 ## Usage example
 
 ```typescript
-mastra.listWorkflows();
+mastra.listWorkflows()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ serialized?: boolean }",
-      description:
-        "Optional configuration object. When `serialized` is true, returns simplified workflow objects with only the name property instead of full workflow instances.",
-      optional: true,
-    },
-  ]}
+{
+name: "options",
+type: "{ serialized?: boolean }",
+description:
+"Optional configuration object. When `serialized` is true, returns simplified workflow objects with only the name property instead of full workflow instances.",
+optional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "workflows",
-      type: "Record<string, Workflow>",
-      description:
-        "A record of all configured workflows, where keys are workflow IDs and values are workflow instances (or simplified objects if serialized is true).",
-    },
-  ]}
+{
+name: "workflows",
+type: "Record<string, Workflow>",
+description:
+"A record of all configured workflows, where keys are workflow IDs and values are workflow instances (or simplified objects if serialized is true).",
+},
+]}
 />
 
 ## Related

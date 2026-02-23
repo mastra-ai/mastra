@@ -20,27 +20,27 @@ This is useful when building custom streaming endpoints outside Mastra's provide
 Next.js App Router example:
 
 ```typescript title="app/api/chat/route.ts"
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages);
+  const { messages } = await req.json()
+  const myAgent = mastra.getAgent('weatherAgent')
+  const stream = await myAgent.stream(messages)
 
   const uiMessageStream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: "agent" })) {
-        await writer.write(part);
+      for await (const part of toAISdkStream(stream, { from: 'agent' })) {
+        await writer.write(part)
       }
     },
-  });
+  })
 
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
-  });
+  })
 }
 ```
 
@@ -53,6 +53,7 @@ Pass `messages` to `originalMessages` in `createUIMessageStream()` to avoid dupl
 ## Parameters
 
 The first parameter is the Mastra stream to convert. It can be one of:
+
 - `MastraModelOutput` - An agent stream from `agent.stream()`
 - `MastraAgentNetworkStream` - A network stream from `agent.network()`
 - `MastraWorkflowStream` or `WorkflowRunOutput` - A workflow stream
@@ -61,67 +62,67 @@ The second parameter is an options object:
 
 <PropertiesTable
   content={[
-    {
-      name: "from",
-      type: "'agent' | 'network' | 'workflow'",
-      description: "The type of Mastra stream being converted.",
-      isOptional: false,
-      defaultValue: "'agent'",
-    },
-    {
-      name: "lastMessageId",
-      type: "string",
-      description: "(Agent only) The ID of the last message in the conversation.",
-      isOptional: true,
-    },
-    {
-      name: "sendStart",
-      type: "boolean",
-      description: "(Agent only) Whether to send start events in the stream.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "sendFinish",
-      type: "boolean",
-      description: "(Agent only) Whether to send finish events in the stream.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "sendReasoning",
-      type: "boolean",
-      description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "sendSources",
-      type: "boolean",
-      description: "(Agent only) Whether to include source citations in the output.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "includeTextStreamParts",
-      type: "boolean",
-      description: "(Workflow only) Whether to include text stream parts in the output.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "messageMetadata",
-      type: "(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined",
-      description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
-      isOptional: true,
-    },
-    {
-      name: "onError",
-      type: "(error: unknown) => string",
-      description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "from",
+type: "'agent' | 'network' | 'workflow'",
+description: "The type of Mastra stream being converted.",
+isOptional: false,
+defaultValue: "'agent'",
+},
+{
+name: "lastMessageId",
+type: "string",
+description: "(Agent only) The ID of the last message in the conversation.",
+isOptional: true,
+},
+{
+name: "sendStart",
+type: "boolean",
+description: "(Agent only) Whether to send start events in the stream.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "sendFinish",
+type: "boolean",
+description: "(Agent only) Whether to send finish events in the stream.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "sendReasoning",
+type: "boolean",
+description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "sendSources",
+type: "boolean",
+description: "(Agent only) Whether to include source citations in the output.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "includeTextStreamParts",
+type: "boolean",
+description: "(Workflow only) Whether to include text stream parts in the output.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "messageMetadata",
+type: "(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined",
+description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
+isOptional: true,
+},
+{
+name: "onError",
+type: "(error: unknown) => string",
+description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
+isOptional: true,
+},
+]}
 />
 
 ## Examples
@@ -129,120 +130,120 @@ The second parameter is an options object:
 ### Converting a workflow stream
 
 ```typescript title="app/api/workflow/route.ts" {13}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 export async function POST(req: Request) {
-  const { input } = await req.json();
-  const workflow = mastra.getWorkflow("myWorkflow");
-  const run = workflow.createRun();
-  const stream = await run.stream({ inputData: input });
+  const { input } = await req.json()
+  const workflow = mastra.getWorkflow('myWorkflow')
+  const run = workflow.createRun()
+  const stream = await run.stream({ inputData: input })
 
   const uiMessageStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: "workflow" })) {
-        await writer.write(part);
+      for await (const part of toAISdkStream(stream, { from: 'workflow' })) {
+        await writer.write(part)
       }
     },
-  });
+  })
 
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
-  });
+  })
 }
 ```
 
 ### Converting a network stream
 
 ```typescript title="app/api/network/route.ts" {12}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const routingAgent = mastra.getAgent("routingAgent");
-  const stream = await routingAgent.network(messages);
+  const { messages } = await req.json()
+  const routingAgent = mastra.getAgent('routingAgent')
+  const stream = await routingAgent.network(messages)
 
   const uiMessageStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: "network" })) {
-        await writer.write(part);
+      for await (const part of toAISdkStream(stream, { from: 'network' })) {
+        await writer.write(part)
       }
     },
-  });
+  })
 
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
-  });
+  })
 }
 ```
 
 ### Converting an agent stream with reasoning enabled
 
 ```typescript title="app/api/reasoning/route.ts" {8-12,17-20}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const reasoningAgent = mastra.getAgent("reasoningAgent");
+  const { messages } = await req.json()
+  const reasoningAgent = mastra.getAgent('reasoningAgent')
   const stream = await reasoningAgent.stream(messages, {
     providerOptions: {
-      openai: { reasoningEffort: "high" },
+      openai: { reasoningEffort: 'high' },
     },
-  });
+  })
 
   const uiMessageStream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
-        from: "agent",
+        from: 'agent',
         sendReasoning: true,
       })) {
-        await writer.write(part);
+        await writer.write(part)
       }
     },
-  });
+  })
 
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
-  });
+  })
 }
 ```
 
 ### Using messageMetadata
 
 ```typescript title="app/api/chat-with-metadata/route.ts" {13-19}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages);
+  const { messages } = await req.json()
+  const myAgent = mastra.getAgent('weatherAgent')
+  const stream = await myAgent.stream(messages)
 
   const uiMessageStream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
-        from: "agent",
+        from: 'agent',
         messageMetadata: ({ part }) => ({
           timestamp: Date.now(),
           partType: part.type,
         }),
       })) {
-        await writer.write(part);
+        await writer.write(part)
       }
     },
-  });
+  })
 
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
-  });
+  })
 }
 ```
 
@@ -251,43 +252,42 @@ export async function POST(req: Request) {
 If you're using the Mastra client SDK (`@mastra/client-js`) on the client side and want to convert streams to AI SDK format:
 
 ```typescript title="client-stream-to-ai-sdk.ts" {14-23,25-35}
-import { MastraClient } from "@mastra/client-js";
-import { createUIMessageStream } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
-import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+import { MastraClient } from '@mastra/client-js'
+import { createUIMessageStream } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
+import type { ChunkType, MastraModelOutput } from '@mastra/core/stream'
 
 const client = new MastraClient({
-  baseUrl: "http://localhost:4111",
-});
+  baseUrl: 'http://localhost:4111',
+})
 
-const agent = client.getAgent("weatherAgent");
-const response = await agent.stream("What is the weather in Tokyo?");
+const agent = client.getAgent('weatherAgent')
+const response = await agent.stream('What is the weather in Tokyo?')
 
 // Convert the client SDK stream to a ReadableStream<ChunkType>
 const chunkStream = new ReadableStream<ChunkType>({
   async start(controller) {
     await response.processDataStream({
-      onChunk: async (chunk) => {
-        controller.enqueue(chunk);
+      onChunk: async chunk => {
+        controller.enqueue(chunk)
       },
-    });
-    controller.close();
+    })
+    controller.close()
   },
-});
+})
 
 // Transform to AI SDK format
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkStream(
-      chunkStream as unknown as MastraModelOutput,
-      { from: "agent" }
-    )) {
-      await writer.write(part);
+    for await (const part of toAISdkStream(chunkStream as unknown as MastraModelOutput, {
+      from: 'agent',
+    })) {
+      await writer.write(part)
     }
   },
-});
+})
 
 for await (const part of uiMessageStream) {
-  console.log(part);
+  console.log(part)
 }
 ```

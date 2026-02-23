@@ -1,0 +1,295 @@
+---
+title: "Configuration | Mastra Code"
+description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
+packages:
+  - "mastracode"
+---
+
+# Configuration
+
+Mastra Code is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
+
+## Authentication
+
+Mastra Code authenticates with AI providers through OAuth. Run `/login` in the TUI to start the flow.
+
+### Supported providers
+
+| Provider | OAuth flow | What you get |
+| - | - | - |
+| **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
+| **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+
+OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location).
+
+### Model routing
+
+For providers not covered by OAuth, Mastra Code uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
+
+```sh
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+export GOOGLE_GENERATIVE_AI_API_KEY=...
+```
+
+## MCP servers
+
+Mastra Code can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/mcp.json` | Project |
+| | `~/.mastracode/mcp.json` | Global |
+| Lowest | `.claude/settings.local.json` | Project (Claude Code compatible) |
+
+Project config overrides global config by server name. Claude Code settings are the lowest priority fallback.
+
+### MCP config format
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@my-org/mcp-server"],
+      "env": {
+        "API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+Each server entry requires a `command` field. The `args` and `env` fields are optional.
+
+On startup, Mastra Code connects to all configured servers and reports the status:
+
+```
+MCP: 2 server(s) connected, 15 tool(s)
+```
+
+Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools.
+
+## Hooks
+
+Hooks are user-configured shell commands that run at specific lifecycle events. Use hooks for custom validation, logging, notifications, or integration with external systems.
+
+### Hook config format
+
+```json title=".mastracode/hooks.json"
+{
+  "PreToolUse": [
+    {
+      "type": "command",
+      "command": "node scripts/validate-tool.js",
+      "matcher": {
+        "tool_name": "execute_command"
+      },
+      "timeout": 5000,
+      "description": "Validate shell commands before execution"
+    }
+  ],
+  "PostToolUse": [
+    {
+      "type": "command",
+      "command": "node scripts/log-tool.js",
+      "description": "Log tool usage"
+    }
+  ]
+}
+```
+
+### Hook events
+
+| Event | When it fires | Can block? |
+| - | - | - |
+| `PreToolUse` | Before a tool call executes | Yes |
+| `PostToolUse` | After a tool call completes | No |
+| `Stop` | When the agent finishes a response | Yes |
+| `UserPromptSubmit` | When the user sends a message | Yes |
+| `SessionStart` | When a session begins | No |
+| `SessionEnd` | When a session ends | No |
+| `Notification` | When the TUI fires a notification | No |
+
+### Hook I/O protocol
+
+Hook processes receive a JSON payload on stdin with context about the event:
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "execute_command",
+  "tool_input": { "command": "npm test" }
+}
+```
+
+For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can respond on stdout with a JSON object:
+
+```json
+{
+  "decision": "block",
+  "reason": "This command is not allowed"
+}
+```
+
+### Hook config locations
+
+| Priority | Path | Scope |
+| - | - | - |
+| Higher | `.mastracode/hooks.json` | Project (appended after global) |
+| Lower | `~/.mastracode/hooks.json` | Global (runs first) |
+
+Global hooks run before project hooks. For the same event, all hooks execute in order.
+
+## Custom slash commands
+
+Define reusable prompt templates as markdown files. Mastra Code scans these directories for `.md` files:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/commands/` | Project |
+| | `.claude/commands/` | Project (Claude Code compatible) |
+| | `~/.mastracode/commands/` | Global |
+| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+
+Each command file can include YAML frontmatter with `name` and `description` fields:
+
+```yaml title=".mastracode/commands/review.md"
+---
+name: review
+description: Review the current diff for issues
+---
+Review my current git diff. Look for bugs, security issues,
+and violations of the project's coding standards.
+```
+
+The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`.
+
+Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
+
+## Skills
+
+Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
+
+Mastra Code scans these directories for skills:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/skills/` | Project |
+| | `.claude/skills/` | Project (Claude Code compatible) |
+| | `~/.mastracode/skills/` | Global |
+| Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
+
+Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
+
+## Agent instructions
+
+Mastra Code loads project-specific instructions from `AGENTS.md` or `CLAUDE.md` files and injects them into the agent's system prompt. This is how you can customize the agent's behavior for your project.
+
+### Lookup order
+
+For project instructions (first match wins):
+
+1. `AGENTS.md` or `CLAUDE.md` in the project root
+1. `.claude/AGENTS.md` or `.claude/CLAUDE.md`
+1. `.mastracode/AGENTS.md` or `.mastracode/CLAUDE.md`
+
+For global instructions (first match wins):
+
+1. `~/.claude/AGENTS.md` or `~/.claude/CLAUDE.md`
+1. `~/.mastracode/AGENTS.md` or `~/.mastracode/CLAUDE.md`
+1. `~/.config/claude/AGENTS.md` or `~/.config/claude/CLAUDE.md`
+1. `~/.config/mastracode/AGENTS.md` or `~/.config/mastracode/CLAUDE.md`
+
+`AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
+
+## Database
+
+Mastra Code uses LibSQL (SQLite) for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
+
+### Database location
+
+By default, the database is stored in the platform-specific app data directory:
+
+| Platform | Path |
+| - | - |
+| macOS | `~/Library/Application Support/mastracode/mastra.db` |
+| Linux | `~/.local/share/mastracode/mastra.db` |
+| Windows | `%APPDATA%/mastracode/mastra.db` |
+
+### Remote database
+
+Connect to a remote Turso database for cross-device thread sharing:
+
+```json title=".mastracode/database.json"
+{
+  "url": "libsql://your-db.turso.io",
+  "authToken": "your-auth-token"
+}
+```
+
+### Database config resolution
+
+| Priority | Source |
+| - | - |
+| 1 | `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` environment variables |
+| 2 | `.mastracode/database.json` (project) |
+| 3 | `~/.mastracode/database.json` (global) |
+| 4 | Local file database (default) |
+
+## Observational memory
+
+[Observational memory](/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
+
+### OM scope
+
+Control whether observations are scoped to individual threads or shared across all threads for a project:
+
+| Scope | Behavior |
+| - | - |
+| `thread` (default) | Observations are private to each conversation thread |
+| `resource` | Observations are shared across all threads for the same project |
+
+Configure the scope through:
+
+1. `MASTRA_OM_SCOPE` environment variable (`"thread"` or `"resource"`)
+1. `.mastracode/database.json` → `omScope` field
+1. `~/.mastracode/database.json` → `omScope` field
+
+### OM model settings
+
+The observer and reflector models default to `google/gemini-2.5-flash`. Override them per-thread through the `/settings` panel or in the harness state.
+
+### OM thresholds
+
+| Threshold | Default | Description |
+| - | - | - |
+| Observation threshold | 30,000 tokens | Token count that triggers an observation pass |
+| Reflection threshold | 40,000 tokens | Token count that triggers a reflection pass |
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `MASTRA_DB_URL` | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
+| `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database |
+| `MASTRA_DB_PATH` | Override the local database file path |
+| `MASTRA_USER_ID` | Override the auto-detected user identity |
+| `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
+| `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
+| `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
+| `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
+
+## Resource ID override
+
+Resource IDs determine how threads are grouped. By default, Mastra Code generates one from the Git remote URL or filesystem path. Override it to share threads across repositories or isolate threads within a monorepo:
+
+```json title=".mastracode/database.json"
+{
+  "resourceId": "my-custom-project-id"
+}
+```
+
+You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.

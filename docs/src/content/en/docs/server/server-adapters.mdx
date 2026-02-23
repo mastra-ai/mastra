@@ -44,28 +44,27 @@ Install the adapter for the framework of your choice.
 
 <Tabs>
   <TabItem value="express" label="Express">
-
-```bash npm2yarn
-npm install @mastra/express@latest
-```
+    ```bash npm2yarn
+    npm install @mastra/express@latest
+    ```
   </TabItem>
+
   <TabItem value="hono" label="Hono">
-
-```bash npm2yarn
-npm install @mastra/hono@latest
-```
+    ```bash npm2yarn
+    npm install @mastra/hono@latest
+    ```
   </TabItem>
+
   <TabItem value="fastify" label="Fastify">
-
-```bash npm2yarn
-npm install @mastra/fastify@latest
-```
+    ```bash npm2yarn
+    npm install @mastra/fastify@latest
+    ```
   </TabItem>
-  <TabItem value="koa" label="Koa">
 
-```bash npm2yarn
-npm install @mastra/koa@latest
-```
+  <TabItem value="koa" label="Koa">
+    ```bash npm2yarn
+    npm install @mastra/koa@latest
+    ```
   </TabItem>
 </Tabs>
 
@@ -75,129 +74,124 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
 
 <Tabs>
   <TabItem value="express" label="Express">
+    ```typescript {8} title="src/express-server.ts"
+    import express from 'express'
+    import { MastraServer } from '@mastra/express'
+    import { mastra } from './mastra'
 
-```typescript {8} title="src/express-server.ts"
-import express from "express";
-import { MastraServer } from "@mastra/express";
-import { mastra } from "./mastra";
+    const app = express()
+    app.use(express.json())
 
-const app = express();
-app.use(express.json());
+    const server = new MastraServer({ app, mastra })
 
-const server = new MastraServer({ app, mastra });
+    await server.init()
 
-await server.init();
+    app.listen(4111, () => {
+      console.log('Server running on port 4111')
+    })
+    ```
 
-app.listen(4111, () => {
-  console.log('Server running on port 4111');
-});
-```
+    :::info
 
-:::info
+    See the [Express Adapter](/reference/server/express-adapter) documentation for full configuration options.
 
-See the [Express Adapter](/reference/server/express-adapter) documentation for full configuration options.
-
-:::
-
+    :::
   </TabItem>
+
   <TabItem value="hono" label="Hono">
+    ```typescript {8} title="src/hono-server.ts"
+    import { Hono } from 'hono'
+    import { serve } from '@hono/node-server'
+    import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
+    import { mastra } from './mastra'
 
-```typescript {8} title="src/hono-server.ts"
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import { HonoBindings, HonoVariables, MastraServer } from "@mastra/hono";
-import { mastra } from "./mastra";
+    const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
 
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+    const server = new MastraServer({ app, mastra })
 
-const server = new MastraServer({ app, mastra });
+    await server.init()
 
-await server.init();
+    serve({ fetch: app.fetch, port: 4111 }, () => {
+      console.log('Server running on port 4111')
+    })
+    ```
 
-serve({ fetch: app.fetch, port: 4111 }, () => {
-  console.log('Server running on port 4111');
-});
-```
+    :::info
 
-:::info
+    See the [Hono Adapter](/reference/server/hono-adapter) documentation for full configuration options.
 
-See the [Hono Adapter](/reference/server/hono-adapter) documentation for full configuration options.
-
-:::
-
+    :::
   </TabItem>
+
   <TabItem value="fastify" label="Fastify">
+    ```typescript {6} title="src/fastify-server.ts"
+    import Fastify from 'fastify'
+    import { MastraServer } from '@mastra/fastify'
+    import { mastra } from './mastra'
 
-```typescript {6} title="src/fastify-server.ts"
-import Fastify from 'fastify';
-import { MastraServer } from '@mastra/fastify';
-import { mastra } from './mastra';
+    const app = Fastify()
+    const server = new MastraServer({ app, mastra })
 
-const app = Fastify();
-const server = new MastraServer({ app, mastra });
+    await server.init()
 
-await server.init();
+    app.get('/health', async request => {
+      const mastraInstance = request.mastra
+      const agents = Object.keys(mastraInstance.listAgents())
+      return { status: 'ok', agents }
+    })
 
-app.get('/health', async request => {
-  const mastraInstance = request.mastra;
-  const agents = Object.keys(mastraInstance.listAgents());
-  return { status: 'ok', agents };
-});
+    const port = 4111
 
-const port = 4111;
+    app.listen({ port }, () => {
+      console.log(`Server running on http://localhost:${port}`)
+      console.log(`Try: curl http://localhost:${port}/api/agents`)
+    })
+    ```
 
-app.listen({ port }, () => {
-  console.log(`Server running on http://localhost:${port}`);
-  console.log(`Try: curl http://localhost:${port}/api/agents`);
-});
-```
+    :::info
 
-:::info
+    See the [Fastify Adapter](/reference/server/fastify-adapter) documentation for full configuration options.
 
-See the [Fastify Adapter](/reference/server/fastify-adapter) documentation for full configuration options.
-
-:::
-
+    :::
   </TabItem>
+
   <TabItem value="koa" label="Koa">
+    ```typescript {9} title="src/koa-server.ts"
+    import Koa from 'koa'
+    import bodyParser from 'koa-bodyparser'
+    import { MastraServer } from '@mastra/koa'
+    import { mastra } from './mastra'
 
-```typescript {9} title="src/koa-server.ts"
-import Koa from 'koa';
-import bodyParser from 'koa-bodyparser';
-import { MastraServer } from '@mastra/koa';
-import { mastra } from './mastra';
+    const app = new Koa()
+    app.use(bodyParser()) // Required for body parsing
 
-const app = new Koa();
-app.use(bodyParser()); // Required for body parsing
+    const server = new MastraServer({ app, mastra })
 
-const server = new MastraServer({ app, mastra });
+    await server.init()
 
-await server.init();
+    app.use(async (ctx, next) => {
+      if (ctx.path === '/health' && ctx.method === 'GET') {
+        const mastraInstance = ctx.state.mastra
+        const agents = Object.keys(mastraInstance.listAgents())
+        ctx.body = { status: 'ok', agents }
+        return
+      }
+      await next()
+    })
 
-app.use(async (ctx, next) => {
-  if (ctx.path === '/health' && ctx.method === 'GET') {
-    const mastraInstance = ctx.state.mastra;
-    const agents = Object.keys(mastraInstance.listAgents());
-    ctx.body = { status: 'ok', agents };
-    return;
-  }
-  await next();
-});
+    const port = 4111
 
-const port = 4111;
+    app.listen(port, () => {
+      console.log(`Server running on http://localhost:${port}`)
+      console.log(`Try: curl http://localhost:${port}/api/agents`)
+    })
+    ```
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-  console.log(`Try: curl http://localhost:${port}/api/agents`);
-});
-```
+    :::info
 
-:::info
+    See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
 
-See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
-
-:::
-
+    :::
   </TabItem>
 </Tabs>
 
@@ -206,14 +200,14 @@ See the [Koa Adapter](/reference/server/koa-adapter) documentation for full conf
 Calling `init()` runs three steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
 
 1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to every request. This makes Mastra available to all subsequent middleware and route handlers.
-2. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured.
-3. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
+1. `registerAuthMiddleware()`: Adds authentication and authorization middleware, but only if `server.auth` is configured in your Mastra instance. Skipped entirely if no auth is configured.
+1. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
 
 ### Manual initialization
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts"
+```typescript title="server.ts" prettier:false
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first
@@ -259,7 +253,7 @@ const server = new MastraServer({
   app,
   mastra,
   prefix: '/api/v2',
-});
+})
 ```
 
 With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes you add directly to the app are not affected by this prefix.
@@ -273,7 +267,7 @@ const server = new MastraServer({
   app,
   mastra,
   openapiPath: '/openapi.json',
-});
+})
 ```
 
 The spec is generated from the Zod schemas defined on each route and served at the specified path. It includes all Mastra routes as well as any custom routes created with `createRoute()`.
@@ -298,7 +292,7 @@ const server = new MastraServer({
   streamOptions: {
     redact: true, // Default
   },
-});
+})
 ```
 
 :::info
@@ -329,7 +323,7 @@ const server = new MastraServer({
     // Protect all methods on internal routes
     ['ALL:/api/internal/*', true],
   ]),
-});
+})
 ```
 
 :::info
@@ -344,10 +338,10 @@ After creating the adapter, you may still need access to the underlying framewor
 
 ```typescript
 // Via the MastraServer instance
-const app = server.getApp();
+const app = server.getApp()
 
 // Via the Mastra instance (available after adapter construction)
-const app = mastra.getServerApp();
+const app = mastra.getServerApp()
 ```
 
 Both methods return the same app instance. Use whichever is more convenient based on what's in scope.
@@ -361,7 +355,7 @@ When using server adapters, configuration comes from two places: the Mastra `ser
 The adapter reads these settings from `mastra.getServer()`:
 
 | Option | Description |
-|--------|-------------|
+| - | - |
 | `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 | `onError` | Custom error handler called when an unhandled error occurs in a route handler. See [server.onError](/reference/configuration#serveronerror). |
@@ -371,7 +365,7 @@ The adapter reads these settings from `mastra.getServer()`:
 These options are passed directly to the adapter constructor and are not read from the Mastra config:
 
 | Option | Description |
-|--------|-------------|
+| - | - |
 | `prefix` | Route path prefix |
 | `openapiPath` | OpenAPI spec endpoint |
 | `bodyLimitOptions` | Body size limit with custom error handler |
@@ -384,7 +378,7 @@ These options are passed directly to the adapter constructor and are not read fr
 These `server` config options are only used by `mastra build` and have no effect when using adapters directly:
 
 | Option | Used by |
-|--------|---------|
+| - | - |
 | `port`, `host` | `mastra dev`, `mastra build` |
 | `cors` | `mastra build` adds CORS middleware |
 | `timeout` | `mastra build` |
@@ -410,7 +404,7 @@ const server = new MastraServer({
   mcpOptions: {
     serverless: true,
   },
-});
+})
 ```
 
 When `serverless: true`, MCP HTTP requests run without session management, making them compatible with stateless execution environments.

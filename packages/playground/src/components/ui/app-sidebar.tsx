@@ -4,6 +4,7 @@ import {
   PackageIcon,
   GlobeIcon,
   BookIcon,
+  FileTextIcon,
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
@@ -26,6 +27,7 @@ import {
   SettingsIcon,
   MastraVersionFooter,
   useMastraPlatform,
+  useIsCmsAvailable,
   NavLink,
 } from '@mastra/playground-ui';
 
@@ -38,6 +40,12 @@ const mainNavigation: NavSection[] = [
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Prompts',
+        url: '/prompts',
+        icon: <FileTextIcon />,
         isOnMastraPlatform: true,
       },
       {
@@ -173,8 +181,14 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+
+  const cmsOnlyLinks = new Set(['/prompts']);
 
   const filterPlatformLink = (link: NavLink) => {
+    if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }

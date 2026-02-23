@@ -38,6 +38,8 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'scorers',
   'requestContextSchema',
   'mcpClients',
+  'skills',
+  'workspace',
 ] as const;
 
 // ============================================================================
@@ -159,6 +161,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    skills,
+    workspace,
     requestContextSchema,
   }) => {
     try {
@@ -209,6 +213,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           outputProcessors,
           memory,
           scorers,
+          skills,
+          workspace,
           requestContextSchema,
         } as StorageCreateAgentInput,
       });
@@ -262,6 +268,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    skills,
+    workspace,
     requestContextSchema,
   }) => {
     try {
@@ -303,6 +311,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        skills,
+        workspace,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -322,6 +332,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        skills,
+        workspace,
         requestContextSchema,
       };
 

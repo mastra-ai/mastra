@@ -13,6 +13,7 @@ import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker } from '../filesystem';
 import type { FileReadTracker } from '../filesystem';
 import type { Workspace } from '../workspace';
+import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
 import { executeCommandTool } from './execute-command';
@@ -159,7 +160,12 @@ export function createWorkspaceTools(workspace: Workspace) {
   let readTracker: FileReadTracker | undefined;
   const writeFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
   const editFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
-  if (writeFileConfig.requireReadBeforeWrite || editFileConfig.requireReadBeforeWrite) {
+  const astEditConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
+  if (
+    writeFileConfig.requireReadBeforeWrite ||
+    editFileConfig.requireReadBeforeWrite ||
+    astEditConfig.requireReadBeforeWrite
+  ) {
     readTracker = new InMemoryFileReadTracker();
   }
 
@@ -196,6 +202,14 @@ export function createWorkspaceTools(workspace: Workspace) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
     addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
+
+    // AST edit tool (only if @ast-grep/napi is available at runtime)
+    if (isAstGrepAvailable()) {
+      addTool(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT, astEditTool, {
+        requireWrite: true,
+        readTrackerMode: 'write',
+      });
+    }
   }
 
   // Search tools

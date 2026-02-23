@@ -3,6 +3,7 @@ import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } f
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
+import { workspaceSnapshotConfigSchema } from './stored-workspaces';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -107,6 +108,23 @@ const toolsConfigSchema = z.record(z.string(), toolConfigSchema);
 const mcpClientToolsConfigSchema = z.object({
   tools: z.record(z.string(), toolConfigSchema).optional(),
 });
+
+/** Per-skill config schema */
+const skillConfigSchema = z.object({
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  pin: z.string().optional(),
+  strategy: z.enum(['latest', 'live']).optional(),
+});
+
+/** Skills config: skill IDs mapped to per-skill config */
+const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
+
+/** Workspace reference: either a stored workspace ID or an inline config */
+const workspaceRefSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('id'), workspaceId: z.string() }),
+  z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+]);
 
 /**
  * Processor phase enum matching ProcessorPhase type
@@ -223,6 +241,12 @@ const snapshotConfigSchema = z.object({
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
+  skills: conditionalFieldSchema(skillsConfigSchema)
+    .optional()
+    .describe('Skill IDs mapped to per-skill config — static or conditional'),
+  workspace: conditionalFieldSchema(workspaceRefSchema)
+    .optional()
+    .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -320,6 +344,12 @@ export const storedAgentSchema = z.object({
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
+  skills: conditionalFieldSchema(skillsConfigSchema)
+    .optional()
+    .describe('Skill IDs mapped to per-skill config — static or conditional'),
+  workspace: conditionalFieldSchema(workspaceRefSchema)
+    .optional()
+    .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()

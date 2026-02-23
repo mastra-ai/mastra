@@ -16,46 +16,46 @@ Base interface for all span types.
 ```typescript
 interface BaseSpan<TType extends SpanType> {
   /** Unique span identifier */
-  id: string;
+  id: string
 
   /** OpenTelemetry-compatible trace ID (32 hex chars) */
-  traceId: string;
+  traceId: string
 
   /** Name of the span */
-  name: string;
+  name: string
 
   /** Type of the span */
-  type: TType;
+  type: TType
 
   /** When span started */
-  startTime: Date;
+  startTime: Date
 
   /** When span ended */
-  endTime?: Date;
+  endTime?: Date
 
   /** Type-specific attributes */
-  attributes?: SpanTypeMap[TType];
+  attributes?: SpanTypeMap[TType]
 
   /** User-defined metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /** Input passed at the start of the span */
-  input?: any;
+  input?: any
 
   /** Output generated at the end of the span */
-  output?: any;
+  output?: any
 
   /** Error information if span failed */
   errorInfo?: {
-    message: string;
-    id?: string;
-    domain?: string;
-    category?: string;
-    details?: Record<string, any>;
-  };
+    message: string
+    id?: string
+    domain?: string
+    category?: string
+    details?: Record<string, any>
+  }
 
   /** Is an event span? (occurs at startTime, has no endTime) */
-  isEvent: boolean;
+  isEvent: boolean
 }
 ```
 
@@ -66,19 +66,19 @@ Span interface, used internally for tracing. Extends BaseSpan with lifecycle met
 ```typescript
 interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
-  isInternal: boolean;
+  isInternal: boolean
 
   /** Parent span reference (undefined for root spans) */
-  parent?: AnySpan;
+  parent?: AnySpan
 
   /** Pointer to the ObservabilityInstance instance */
-  observabilityInstance: ObservabilityInstance;
+  observabilityInstance: ObservabilityInstance
 }
 ```
 
 ### Properties
 
-```typescript
+```typescript prettier:false
 /** Returns TRUE if the span is the root span of a trace */
 get isRootSpan(): boolean
 
@@ -96,7 +96,7 @@ exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined
 
 #### end
 
-```typescript
+```typescript prettier:false
 end(options?: EndSpanOptions<TType>): void
 ```
 
@@ -104,30 +104,30 @@ Ends the span and triggers export to configured exporters. Sets the `endTime` an
 
 <PropertiesTable
   props={[
-    {
-      name: "output",
-      type: "any",
-      description: "Final output data from the operation",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional metadata to merge",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<SpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+{
+name: "output",
+type: "any",
+description: "Final output data from the operation",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Additional metadata to merge",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<SpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### error
 
-```typescript
+```typescript prettier:false
 error(options: ErrorSpanOptions<TType>): void
 ```
 
@@ -135,36 +135,36 @@ Records an error on the span. Sets the `errorInfo` field and can optionally end 
 
 <PropertiesTable
   props={[
-    {
-      name: "error",
-      type: "Error",
-      description: "The error that occurred",
-      required: true,
-    },
-    {
-      name: "endSpan",
-      type: "boolean",
-      description: "Whether to end the span after recording the error",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional error context metadata",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<SpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+{
+name: "error",
+type: "Error",
+description: "The error that occurred",
+required: true,
+},
+{
+name: "endSpan",
+type: "boolean",
+description: "Whether to end the span after recording the error",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Additional error context metadata",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<SpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### update
 
-```typescript
+```typescript prettier:false
 update(options: UpdateSpanOptions<TType>): void
 ```
 
@@ -172,36 +172,36 @@ Updates span data while it's still active. Can modify `input`, `output`, `metada
 
 <PropertiesTable
   props={[
-    {
-      name: "input",
-      type: "any",
-      description: "Update or set input data",
-      required: false,
-    },
-    {
-      name: "output",
-      type: "any",
-      description: "Update or set output data",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Metadata to merge with existing",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<SpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+{
+name: "input",
+type: "any",
+description: "Update or set input data",
+required: false,
+},
+{
+name: "output",
+type: "any",
+description: "Update or set output data",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Metadata to merge with existing",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<SpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### createChildSpan
 
-```typescript
+```typescript prettier:false
 createChildSpan<TChildType extends SpanType>(
   options: ChildSpanOptions<TChildType>
 ): Span<TChildType>
@@ -211,42 +211,42 @@ Creates a child span under this span. Child spans track sub-operations and inher
 
 <PropertiesTable
   props={[
-    {
-      name: "type",
-      type: "TChildType",
-      description: "Type of the child span",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the child span",
-      required: true,
-    },
-    {
-      name: "attributes",
-      type: "SpanTypeMap[TChildType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Initial metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Initial input data",
-      required: false,
-    },
-  ]}
+{
+name: "type",
+type: "TChildType",
+description: "Type of the child span",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the child span",
+required: true,
+},
+{
+name: "attributes",
+type: "SpanTypeMap[TChildType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Initial metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Initial input data",
+required: false,
+},
+]}
 />
 
 #### createEventSpan
 
-```typescript
+```typescript prettier:false
 createEventSpan<TChildType extends SpanType>(
   options: ChildEventOptions<TChildType>
 ): Span<TChildType>
@@ -256,43 +256,43 @@ Creates an event span under this span. Event spans represent point-in-time occur
 
 <PropertiesTable
   props={[
-    {
-      name: "type",
-      type: "TChildType",
-      description: "Type of the event span",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the event",
-      required: true,
-    },
-    {
-      name: "attributes",
-      type: "SpanTypeMap[TChildType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Event metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Event input data",
-      required: false,
-    },
-    {
-      name: "output",
-      type: "any",
-      description: "Event output data",
-      required: false,
-    },
-  ]}
+{
+name: "type",
+type: "TChildType",
+description: "Type of the event span",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the event",
+required: true,
+},
+{
+name: "attributes",
+type: "SpanTypeMap[TChildType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Event metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Event input data",
+required: false,
+},
+{
+name: "output",
+type: "any",
+description: "Event output data",
+required: false,
+},
+]}
 />
 
 ## ExportedSpan
@@ -302,10 +302,10 @@ Exported Span interface, used for tracing exporters. A lightweight version of Sp
 ```typescript
 interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
-  parentSpanId?: string;
+  parentSpanId?: string
 
   /** TRUE if the span is the root span of a trace */
-  isRootSpan: boolean;
+  isRootSpan: boolean
 }
 ```
 
@@ -318,13 +318,13 @@ Events emitted during the span lifecycle.
 ```typescript
 enum TracingEventType {
   /** Emitted when a span is created and started */
-  SPAN_STARTED = "span_started",
+  SPAN_STARTED = 'span_started',
 
   /** Emitted when a span is updated via update() */
-  SPAN_UPDATED = "span_updated",
+  SPAN_UPDATED = 'span_updated',
 
   /** Emitted when a span is ended via end() or error() */
-  SPAN_ENDED = "span_ended",
+  SPAN_ENDED = 'span_ended',
 }
 ```
 
@@ -332,9 +332,9 @@ enum TracingEventType {
 
 ```typescript
 type TracingEvent =
-  | { type: "span_started"; exportedSpan: AnyExportedSpan }
-  | { type: "span_updated"; exportedSpan: AnyExportedSpan }
-  | { type: "span_ended"; exportedSpan: AnyExportedSpan };
+  | { type: 'span_started'; exportedSpan: AnyExportedSpan }
+  | { type: 'span_updated'; exportedSpan: AnyExportedSpan }
+  | { type: 'span_ended'; exportedSpan: AnyExportedSpan }
 ```
 
 Exporters receive these events to process and send trace data to observability platforms.
@@ -344,7 +344,7 @@ Exporters receive these events to process and send trace data to observability p
 ### AnySpan
 
 ```typescript
-type AnySpan = Span<keyof SpanTypeMap>;
+type AnySpan = Span<keyof SpanTypeMap>
 ```
 
 Union type for cases that need to handle any span type.
@@ -352,7 +352,7 @@ Union type for cases that need to handle any span type.
 ### AnyExportedSpan
 
 ```typescript
-type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
+type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>
 ```
 
 Union type for cases that need to handle any exported span type.
@@ -363,7 +363,7 @@ When tracing is disabled (sampling returns false), NO-OP spans are returned:
 
 ### NoOpSpan
 
-```typescript
+```typescript prettier:false
 class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
 ```
 

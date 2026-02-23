@@ -12,34 +12,34 @@ The `.getModel()` method retrieves the language model configured for an agent, r
 ## Usage example
 
 ```typescript
-await agent.getModel();
+await agent.getModel()
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "{ requestContext = new RequestContext() }",
-      type: "{ requestContext?: RequestContext }",
-      isOptional: true,
-      defaultValue: "new RequestContext()",
-      description: "Optional configuration object containing request context.",
-    },
-  ]}
+{
+name: "{ requestContext = new RequestContext() }",
+type: "{ requestContext?: RequestContext }",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description: "Optional configuration object containing request context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel | Promise<MastraLanguageModel>",
-      description:
-        "The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
-    },
-  ]}
+{
+name: "model",
+type: "MastraLanguageModel | Promise<MastraLanguageModel>",
+description:
+"The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
+},
+]}
 />
 
 ## Extended usage example
@@ -47,22 +47,22 @@ await agent.getModel();
 ```typescript
 await agent.getModel({
   requestContext: new RequestContext(),
-});
+})
 ```
 
 ### Options parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      isOptional: true,
-      defaultValue: "undefined",
-      description:
-        "Request Context for dependency injection and contextual information.",
-    },
-  ]}
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "undefined",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related

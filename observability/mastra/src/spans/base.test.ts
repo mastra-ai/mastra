@@ -577,6 +577,32 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it('should handle keysToStrip as a plain object (bundler compatibility)', () => {
+      const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
+      const options = {
+        ...DEFAULT_DEEP_CLEAN_OPTIONS,
+        keysToStrip: { logger: true, tracingContext: true },
+      };
+      const result = deepClean(input, options);
+      expect(result.name).toBe('test');
+      expect(result.data).toBe('keep');
+      expect(result.logger).toBeUndefined();
+      expect(result.tracingContext).toBeUndefined();
+    });
+
+    it('should handle keysToStrip as an array (bundler compatibility)', () => {
+      const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
+      const options = {
+        ...DEFAULT_DEEP_CLEAN_OPTIONS,
+        keysToStrip: ['logger', 'tracingContext'],
+      };
+      const result = deepClean(input, options);
+      expect(result.name).toBe('test');
+      expect(result.data).toBe('keep');
+      expect(result.logger).toBeUndefined();
+      expect(result.tracingContext).toBeUndefined();
+    });
+
     it('should handle max depth', () => {
       const deepObj: any = { level: 0 };
       let current = deepObj;
