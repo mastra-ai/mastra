@@ -85,14 +85,6 @@ export abstract class ProcessHandle {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
 
-  /**
-   * Whether this handle's output has been read by a consumer.
-   * Used by the process manager to avoid pruning exited processes
-   * before their output has been observed.
-   * @internal
-   */
-  accessed = false;
-
   private _stdout = '';
   private _stderr = '';
   private _stdoutListeners = new Set<(data: string) => void>();

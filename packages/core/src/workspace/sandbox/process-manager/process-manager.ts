@@ -67,7 +67,6 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.spawn = async (...args: Parameters<typeof impl.spawn>) => {
       await this.sandbox.ensureRunning();
-      this._pruneExited();
       const handle = await impl.spawn(...args);
       handle.command = args[0];
       return handle;
@@ -81,7 +80,12 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     this.get = async (...args: Parameters<typeof impl.get>) => {
       await this.sandbox.ensureRunning();
       const handle = await impl.get(...args);
-      if (handle) handle.accessed = true;
+      // Prune exited processes when their output is read — this is the
+      // only automatic cleanup path. Keeps output available until the
+      // consumer has seen it at least once.
+      if (handle?.exitCode !== undefined) {
+        this._tracked.delete(handle.pid);
+      }
       return handle;
     };
   }
@@ -100,20 +104,6 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
   async get(pid: number): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
-  }
-
-  /**
-   * Prune exited processes from the tracked map to free memory.
-   * Only removes processes that have both exited AND been accessed
-   * (via get()), so output isn't lost before the consumer reads it.
-   * Called automatically before spawning new processes.
-   */
-  protected _pruneExited(): void {
-    for (const [pid, handle] of this._tracked) {
-      if (handle.exitCode !== undefined && handle.accessed) {
-        this._tracked.delete(pid);
-      }
-    }
   }
 
   /** Kill a process by PID. Returns true if killed, false if not found. */
