@@ -113,7 +113,7 @@ defaultValue: "false",
 
 ### `appendFile(path, content)`
 
-Append content to an existing file.
+Append content to a file, creating it if it does not already exist. Parent directories are created automatically.
 
 ```typescript
 await filesystem.appendFile('/logs/app.log', 'New log entry\n')
@@ -307,8 +307,8 @@ const stat = await filesystem.stat('/docs/guide.md')
 
 ```typescript
 interface FileStat {
-  name: string
-  path: string
+  name: string // File or directory name (basename only)
+  path: string // Path relative to the filesystem basePath
   type: 'file' | 'directory'
   size: number
   createdAt: Date
