@@ -110,6 +110,7 @@ export const useDeletePromptBlockVersion = ({ blockId }: { blockId: string }) =>
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).deleteVersion(versionId, requestContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
     },
   });
 };
