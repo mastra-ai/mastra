@@ -252,8 +252,9 @@ export class LocalSandbox extends MastraSandbox {
    * Build the environment object for execution.
    * Always includes PATH by default (needed for finding executables).
    * Merges the sandbox's configured env with any additional env from the command.
+   * @internal Used by LocalProcessManager.
    */
-  private buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     return {
       PATH: process.env.PATH, // Always include PATH for finding executables
       ...this.env,
@@ -406,8 +407,9 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Wrap a command with the configured isolation backend.
+   * @internal Used by LocalProcessManager for background process isolation.
    */
-  private wrapCommandForIsolation(command: string): { command: string; args: string[] } {
+  wrapCommandForIsolation(command: string): { command: string; args: string[] } {
     if (this._isolation === 'none') {
       return { command, args: [] };
     }

@@ -115,14 +115,19 @@ class LocalProcessHandle extends ProcessHandle {
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const cwd = options.cwd ?? this.sandbox.workingDirectory;
-    const env = {
-      PATH: process.env.PATH,
-      ...this.env,
-      ...options.env,
-    };
+    const env = this.sandbox.buildEnv(options.env);
+    const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
-    // detached: true creates a new process group so we can kill the entire tree
-    const proc = childProcess.spawn(command, { cwd, env, shell: true, detached: true });
+    // detached: true creates a new process group so we can kill the entire tree.
+    // Non-isolated: use shell mode so the host shell interprets the command string.
+    // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
+    // sandbox, so we spawn the wrapper binary directly.
+    const proc = childProcess.spawn(wrapped.command, wrapped.args, {
+      cwd,
+      env,
+      shell: this.sandbox.isolation === 'none',
+      detached: true,
+    });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
     this._tracked.set(handle.pid, handle);
     return handle;
