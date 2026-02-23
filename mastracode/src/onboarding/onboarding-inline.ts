@@ -283,10 +283,22 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private renderModePack(): void {
     const packs = this.options.modePacks;
+    const hasProviderPack = packs.some(p => !p.id.startsWith('custom'));
 
-    // If no packs available (no providers configured), skip to OM
-    if (packs.length === 0) {
-      this.renderStep('omPack');
+    // No API keys and no OAuth logins — can't proceed
+    if (!hasProviderPack) {
+      const box = this.makeBox();
+      box.addChild(new Text(bold(fg('error', 'No model providers configured')), 0, 0));
+      box.addChild(new Spacer(1));
+      box.addChild(new Text(fg('text', 'To use Mastra Code you need at least one API key or OAuth login'), 0, 0));
+      box.addChild(new Text(fg('text', 'for Anthropic, OpenAI, or another supported provider.'), 0, 0));
+      box.addChild(new Spacer(1));
+      box.addChild(new Text(fg('dim', 'See https://mastra.ai/docs/models for supported providers and API key env vars.'), 0, 0));
+      box.addChild(new Spacer(1));
+      box.addChild(new Text(fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0));
+      this._finished = true;
+      // Give the TUI time to render the message before exiting
+      setTimeout(() => process.exit(1), 3000);
       return;
     }
 
