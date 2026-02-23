@@ -19,9 +19,6 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
-/** Tools that modify files, used for /diff tracking */
-const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-
 /**
  * Format a tool result for display.
  * Handles objects, strings, and other types.
@@ -161,14 +158,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     }
   }
 
-  // Track file-modifying tools for /diff command
-  if (FILE_TOOLS.includes(toolName)) {
-    const toolArgs = args as Record<string, unknown>;
-    const filePath = toolArgs?.path as string;
-    if (filePath) {
-      state.pendingFileTools.set(toolCallId, { toolName, filePath });
-    }
-  }
+  // File modification tracking is handled by the Harness display state
 }
 
 export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, partialResult: unknown): void {
@@ -324,20 +314,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     (subagentComponent as any)._pendingResult = resultText;
   }
 
-  // Track successful file modifications for /diff command
-  const pendingFile = state.pendingFileTools.get(toolCallId);
-  if (pendingFile && !isError) {
-    const existing = state.modifiedFiles.get(pendingFile.filePath);
-    if (existing) {
-      existing.operations.push(pendingFile.toolName);
-    } else {
-      state.modifiedFiles.set(pendingFile.filePath, {
-        operations: [pendingFile.toolName],
-        firstModified: new Date(),
-      });
-    }
-  }
-  state.pendingFileTools.delete(toolCallId);
+  // File modification tracking is handled by the Harness display state
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {

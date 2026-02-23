@@ -165,11 +165,6 @@ export interface TUIState {
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
   userInitiatedAbort: boolean;
 
-  // ── File tracking (for /diff) ─────────────────────────────────────────
-  modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
-  /** Map toolCallId -> { toolName, filePath } for pending tool calls that modify files */
-  pendingFileTools: Map<string, { toolName: string; filePath: string }>;
-
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
 }
@@ -250,9 +245,5 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
-
-    // File tracking
-    modifiedFiles: new Map(),
-    pendingFileTools: new Map(),
   };
 }
