@@ -198,6 +198,65 @@ describe('agent_end cleanup', () => {
   });
 });
 
+describe('display_state_changed emission', () => {
+  let harness: Harness;
+  let events: HarnessEvent[];
+
+  beforeEach(() => {
+    harness = createHarness();
+    events = [];
+    harness.subscribe((event: HarnessEvent) => {
+      events.push(event);
+    });
+  });
+
+  function emit(event: HarnessEvent) {
+    (harness as any).emit(event);
+  }
+
+  it('emits display_state_changed after every non-display_state_changed event', () => {
+    emit({ type: 'agent_start' });
+    // Should get agent_start + display_state_changed
+    expect(events.length).toBe(2);
+    expect(events[0]!.type).toBe('agent_start');
+    expect(events[1]!.type).toBe('display_state_changed');
+  });
+
+  it('includes current display state reference in display_state_changed', () => {
+    emit({ type: 'agent_start' });
+    const dscEvent = events.find(e => e.type === 'display_state_changed');
+    expect(dscEvent).toBeDefined();
+    if (dscEvent?.type === 'display_state_changed') {
+      expect(dscEvent.displayState).toBe(harness.getDisplayState());
+    }
+  });
+
+  it('display state is already updated when display_state_changed fires', () => {
+    emit({ type: 'agent_start' });
+    const dscEvent = events.find(e => e.type === 'display_state_changed');
+    if (dscEvent?.type === 'display_state_changed') {
+      expect(dscEvent.displayState.isRunning).toBe(true);
+    }
+  });
+
+  it('does not emit display_state_changed for display_state_changed (no recursion)', () => {
+    // Directly dispatch a display_state_changed event — should not produce another one
+    emit({ type: 'display_state_changed', displayState: harness.getDisplayState() });
+    expect(events.length).toBe(1);
+    expect(events[0]!.type).toBe('display_state_changed');
+  });
+
+  it('emits display_state_changed for each event in a sequence', () => {
+    emit({ type: 'agent_start' });
+    emit({ type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'x' } });
+    emit({ type: 'tool_end', toolCallId: 't1', toolName: 'read_file', result: 'ok', isError: false });
+    emit({ type: 'agent_end', reason: 'complete' });
+
+    const dscEvents = events.filter(e => e.type === 'display_state_changed');
+    expect(dscEvents.length).toBe(4); // one per original event
+  });
+});
+
 describe('resetThreadDisplayState', () => {
   let harness: Harness;
 

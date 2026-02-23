@@ -1886,6 +1886,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
 
+    this.dispatchToListeners(event);
+
+    // After every event, emit display_state_changed so UIs that prefer a single
+    // subscribe-and-render pattern can do so. We dispatch directly to listeners
+    // (not through emit()) to avoid infinite recursion.
+    if (event.type !== 'display_state_changed') {
+      this.dispatchToListeners({
+        type: 'display_state_changed',
+        displayState: this.displayState,
+      });
+    }
+  }
+
+  private dispatchToListeners(event: HarnessEvent): void {
     for (const listener of this.listeners) {
       try {
         const result = listener(event);

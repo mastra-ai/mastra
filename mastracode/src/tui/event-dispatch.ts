@@ -308,10 +308,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'display_state_changed':
-      // Display state is now maintained by the Harness.
-      // UIs can read harness.getDisplayState() for canonical state.
-      // Individual event handlers above still update TUI-local state
-      // during the incremental migration period.
+      // The Harness emits this after every event with the updated display state.
+      // Use it as the single trigger for status-line re-renders since all the
+      // fields it reads (isRunning, omProgress, buffering flags) are now
+      // maintained by the Harness.
+      ectx.updateStatusLine();
       break;
   }
 }
