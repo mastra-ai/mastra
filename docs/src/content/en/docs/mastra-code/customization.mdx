@@ -26,7 +26,7 @@ const { harness, mcpManager, authStorage } = createMastraCode({
 await harness.init()
 await harness.selectOrCreateThread()
 
-harness.subscribe((event) => {
+harness.subscribe(event => {
   if (event.type === 'message_update') {
     console.log(event.message.content)
   }
@@ -48,7 +48,8 @@ import { Agent } from '@mastra/core/agent'
 const reviewAgent = new Agent({
   id: 'review-agent',
   name: 'Review Agent',
-  instructions: 'You are a code review specialist. Analyze code for bugs, security issues, and best practices.',
+  instructions:
+    'You are a code review specialist. Analyze code for bugs, security issues, and best practices.',
   model: 'anthropic/claude-sonnet-4',
 })
 
@@ -116,13 +117,15 @@ const { harness } = createMastraCode({
       id: 'explore',
       name: 'Explore',
       description: 'Read-only codebase exploration',
-      instructions: 'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
+      instructions:
+        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
     },
     {
       id: 'test-writer',
       name: 'Test Writer',
       description: 'Write tests for the specified module',
-      instructions: 'You are a test-writing specialist. Generate comprehensive tests for the given module.',
+      instructions:
+        'You are a test-writing specialist. Generate comprehensive tests for the given module.',
     },
   ],
 })
@@ -220,7 +223,7 @@ const { harness } = createMastraCode({
 ### Available state fields
 
 | Field | Type | Default | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `yolo` | `boolean` | `true` | Auto-approve all tool calls |
 | `thinkingLevel` | `string` | `"off"` | Extended thinking depth for Anthropic models |
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |

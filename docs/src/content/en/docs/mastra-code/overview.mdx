@@ -33,46 +33,36 @@ Mastra Code requires Node.js 22.13.0 or later.
 ## Get started
 
 <Steps>
+  <StepItem>
+    Install Mastra Code globally:
 
-<StepItem>
+    ```sh npm2yarn
+    npm install -g mastracode
+    ```
 
-Install Mastra Code globally:
+    Or run it with `npx`:
 
-```sh npm2yarn
-npm install -g mastracode
-```
+    ```sh npm2yarn
+    npx mastracode
+    ```
+  </StepItem>
 
-Or run it with `npx`:
+  <StepItem>
+    Navigate to your project directory and start Mastra Code:
 
-```sh npm2yarn
-npx mastracode
-```
+    ```sh
+    cd your-project
+    mastracode
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
+  </StepItem>
 
-<StepItem>
-
-Navigate to your project directory and start Mastra Code:
-
-```sh
-cd your-project
-mastracode
-```
-
-</StepItem>
-
-<StepItem>
-
-Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
-
-</StepItem>
-
-<StepItem>
-
-Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
-
-</StepItem>
-
+  <StepItem>
+    Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
+  </StepItem>
 </Steps>
 
 ## Slash commands
@@ -80,7 +70,7 @@ Type a message and press Enter. The agent responds with streaming text and can r
 Mastra Code provides built-in slash commands for managing sessions and settings:
 
 | Command | Description |
-|---|---|
+| - | - |
 | `/new` | Start a new conversation thread |
 | `/threads` | List all threads for this project |
 | `/models` | Select a different AI model |
@@ -99,7 +89,7 @@ You can also define custom slash commands as markdown files. See [Configuration]
 ## Keyboard shortcuts
 
 | Shortcut | Action |
-|---|---|
+| - | - |
 | `Ctrl+C` | Interrupt current operation |
 | `Ctrl+D` | Exit (when editor is empty) |
 | `Ctrl+T` | Toggle thinking blocks visibility |

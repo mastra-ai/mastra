@@ -21,7 +21,7 @@ Read file contents with line numbers or list directory contents. The agent uses 
 - Output is truncated if the file exceeds the token limit. Use `view_range` to read specific sections.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `path` | `string` | Yes | Path to the file or directory (relative to project root) |
 | `view_range` | `[number, number]` | No | Line range `[start, end]` to view a section of the file |
 
@@ -36,7 +36,7 @@ Edit a file by replacing an exact text match with new content. Returns Language 
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `path` | `string` | Yes | Path to the file |
 | `old_str` | `string` | Yes | Exact text to find and replace |
 | `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
@@ -55,7 +55,7 @@ Supported transformations:
 - **Selector queries**: Find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `path` | `string` | Yes | File path relative to project root |
 | `pattern` | `string` | No | AST pattern to search for (supports `$VARIABLE` placeholders) |
 | `replacement` | `string` | No | Replacement pattern (can use captured `$VARIABLES`) |
@@ -74,7 +74,7 @@ Create a new file or overwrite an existing file entirely.
 - If overwriting an existing file, the agent reads it first with `view`.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `path` | `string` | Yes | File path to write to (relative to project root) |
 | `content` | `string` | Yes | Full content to write to the file |
 
@@ -89,7 +89,7 @@ Search file contents using regular expressions. Uses ripgrep when available, fal
 - Always preferred over running `grep` or `rg` via `execute_command`.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `pattern` | `string` | Yes | Regex pattern to search for in file contents |
 | `path` | `string` | No | Directory or file to search in (relative to project root, defaults to project root) |
 | `glob` | `string` | No | Glob pattern to filter files (e.g., `"*.ts"`, `"*.{js,jsx}"`, `"test/**"`) |
@@ -106,7 +106,7 @@ Find files by name pattern using glob matching. Results are sorted by modificati
 - Always preferred over running `find` or `ls` via `execute_command`.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `pattern` | `string` | Yes | Glob pattern (e.g., `"**/*.ts"`, `"src/**/*.test.*"`, `"**/package.json"`) |
 | `path` | `string` | No | Directory to search in (relative to project root, defaults to project root) |
 
@@ -123,7 +123,7 @@ Execute a shell command in the project directory.
 - The `CI=true` environment variable is set automatically to prevent interactive prompts.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `command` | `string` | Yes | Shell command to execute |
 | `cwd` | `string` | No | Working directory (defaults to project root) |
 | `timeout` | `number` | No | Timeout in seconds (default: 30) |
@@ -133,7 +133,7 @@ Execute a shell command in the project directory.
 Request access to directories outside the project root. The user is prompted to approve or deny the request.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `path` | `string` | Yes | Absolute path to the directory needing access |
 | `reason` | `string` | Yes | Explanation of why access is needed |
 
@@ -149,7 +149,7 @@ This tool is available through two providers:
 - **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `query` | `string` | Yes | The search query |
 | `searchDepth` | `"basic" \| "advanced"` | No | Search depth (default: `"basic"`) |
 | `maxResults` | `number` | No | Maximum number of results (default: 10) |
@@ -160,7 +160,7 @@ This tool is available through two providers:
 Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
+| - | - | - | - |
 | `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
 | `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
 | `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
@@ -200,7 +200,7 @@ MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, 
 Not all tools are available in every mode:
 
 | Tool | Build | Plan | Fast |
-|---|---|---|---|
+| - | - | - | - |
 | `view` | Yes | Yes | Yes |
 | `search_content` | Yes | Yes | Yes |
 | `find_files` | Yes | Yes | Yes |
@@ -222,7 +222,7 @@ In Plan mode, `execute_command` is available but restricted to read-only command
 Tools are grouped into four categories, each with a configurable approval policy:
 
 | Category | Tools | Default policy |
-|---|---|---|
+| - | - | - |
 | **Read** | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow` |
 | **Edit** | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent` | `ask` |
 | **Execute** | `execute_command` | `ask` |

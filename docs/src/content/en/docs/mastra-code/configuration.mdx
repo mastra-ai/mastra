@@ -16,7 +16,7 @@ Mastra Code authenticates with AI providers through OAuth. Run `/login` in the T
 ### Supported providers
 
 | Provider | OAuth flow | What you get |
-|---|---|---|
+| - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
@@ -37,7 +37,7 @@ export GOOGLE_GENERATIVE_AI_API_KEY=...
 Mastra Code can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
 
 | Priority | Path | Scope |
-|---|---|---|
+| - | - | - |
 | Highest | `.mastracode/mcp.json` | Project |
 | | `~/.mastracode/mcp.json` | Global |
 | Lowest | `.claude/settings.local.json` | Project (Claude Code compatible) |
@@ -102,7 +102,7 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 ### Hook events
 
 | Event | When it fires | Can block? |
-|---|---|---|
+| - | - | - |
 | `PreToolUse` | Before a tool call executes | Yes |
 | `PostToolUse` | After a tool call completes | No |
 | `Stop` | When the agent finishes a response | Yes |
@@ -137,7 +137,7 @@ For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can res
 ### Hook config locations
 
 | Priority | Path | Scope |
-|---|---|---|
+| - | - | - |
 | Higher | `.mastracode/hooks.json` | Project (appended after global) |
 | Lower | `~/.mastracode/hooks.json` | Global (runs first) |
 
@@ -148,7 +148,7 @@ Global hooks run before project hooks. For the same event, all hooks execute in 
 Define reusable prompt templates as markdown files. Mastra Code scans these directories for `.md` files:
 
 | Priority | Path | Scope |
-|---|---|---|
+| - | - | - |
 | Highest | `.mastracode/commands/` | Project |
 | | `.claude/commands/` | Project (Claude Code compatible) |
 | | `~/.mastracode/commands/` | Global |
@@ -161,7 +161,6 @@ Each command file can include YAML frontmatter with `name` and `description` fie
 name: review
 description: Review the current diff for issues
 ---
-
 Review my current git diff. Look for bugs, security issues,
 and violations of the project's coding standards.
 ```
@@ -177,7 +176,7 @@ Skills are structured instruction files that the agent loads automatically based
 Mastra Code scans these directories for skills:
 
 | Priority | Path | Scope |
-|---|---|---|
+| - | - | - |
 | Highest | `.mastracode/skills/` | Project |
 | | `.claude/skills/` | Project (Claude Code compatible) |
 | | `~/.mastracode/skills/` | Global |
@@ -215,7 +214,7 @@ Mastra Code uses LibSQL (SQLite) for persistence. Threads, messages, state, toke
 By default, the database is stored in the platform-specific app data directory:
 
 | Platform | Path |
-|---|---|
+| - | - |
 | macOS | `~/Library/Application Support/mastracode/mastra.db` |
 | Linux | `~/.local/share/mastracode/mastra.db` |
 | Windows | `%APPDATA%/mastracode/mastra.db` |
@@ -234,7 +233,7 @@ Connect to a remote Turso database for cross-device thread sharing:
 ### Database config resolution
 
 | Priority | Source |
-|---|---|
+| - | - |
 | 1 | `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` environment variables |
 | 2 | `.mastracode/database.json` (project) |
 | 3 | `~/.mastracode/database.json` (global) |
@@ -249,15 +248,15 @@ Connect to a remote Turso database for cross-device thread sharing:
 Control whether observations are scoped to individual threads or shared across all threads for a project:
 
 | Scope | Behavior |
-|---|---|
+| - | - |
 | `thread` (default) | Observations are private to each conversation thread |
 | `resource` | Observations are shared across all threads for the same project |
 
 Configure the scope through:
 
 1. `MASTRA_OM_SCOPE` environment variable (`"thread"` or `"resource"`)
-2. `.mastracode/database.json` → `omScope` field
-3. `~/.mastracode/database.json` → `omScope` field
+1. `.mastracode/database.json` → `omScope` field
+1. `~/.mastracode/database.json` → `omScope` field
 
 ### OM model settings
 
@@ -266,14 +265,14 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 ### OM thresholds
 
 | Threshold | Default | Description |
-|---|---|---|
+| - | - | - |
 | Observation threshold | 30,000 tokens | Token count that triggers an observation pass |
 | Reflection threshold | 40,000 tokens | Token count that triggers a reflection pass |
 
 ## Environment variables
 
 | Variable | Description |
-|---|---|
+| - | - |
 | `MASTRA_DB_URL` | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
 | `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database |
 | `MASTRA_DB_PATH` | Override the local database file path |
