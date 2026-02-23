@@ -181,12 +181,12 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
-  const { isCmsAvailable } = useIsCmsAvailable();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
 
   const cmsOnlyLinks = new Set(['/prompts']);
 
   const filterPlatformLink = (link: NavLink) => {
-    if (cmsOnlyLinks.has(link.url) && !isCmsAvailable) {
+    if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
       return false;
     }
     if (isMastraPlatform) {
