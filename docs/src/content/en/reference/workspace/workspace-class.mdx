@@ -82,13 +82,31 @@ isOptional: true,
 {
 name: "autoIndexPaths",
 type: "string[]",
-description: "Paths to auto-index on init()",
+description: "Paths or glob patterns to auto-index on init(). Supports glob patterns like '**/*.md' for selective indexing.",
 isOptional: true,
 },
 {
 name: "skills",
 type: "string[] | ((context: SkillsContext) => string[] | Promise<string[]>)",
-description: "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically.",
+description: "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+isOptional: true,
+},
+{
+name: "skillSource",
+type: "SkillSource",
+description: "Custom skill source for skill discovery. When provided, this source is used instead of the workspace filesystem. Use VersionedSkillSource to serve published skill versions from a content-addressable blob store.",
+isOptional: true,
+},
+{
+name: "onMount",
+type: "OnMountHook",
+description: "Pre-mount hook called for each filesystem before mounting into a sandbox. Return false to skip mounting, or return { success: true } if the hook handled the mount. Return undefined to use the default mount behavior.",
+isOptional: true,
+},
+{
+name: "searchIndexName",
+type: "string",
+description: "Custom index name for the vector store. Must be a valid SQL identifier (start with a letter or underscore, contain only letters, numbers, or underscores, max 63 characters). Defaults to a sanitized version of '{id}_search'.",
 isOptional: true,
 },
 {
@@ -179,7 +197,7 @@ description: "Workspace name",
 {
 name: "status",
 type: "WorkspaceStatus",
-description: "'pending' | 'initializing' | 'ready' | 'error' | 'destroying' | 'destroyed'",
+description: "'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed'",
 },
 {
 name: "filesystem",
@@ -314,6 +332,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_delete` | Delete a file or directory. Supports recursive deletion for directories. |
 | `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
+| `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
 Write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode.
 

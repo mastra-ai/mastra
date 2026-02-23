@@ -13,7 +13,7 @@ A Mastra workspace gives agents a persistent environment for storing files and e
 
 A workspace supports the following features:
 
-- **[Filesystem](/docs/workspace/filesystem)**: File storage (read, write, list, delete)
+- **[Filesystem](/docs/workspace/filesystem)**: File storage (read, write, list, delete, copy, move, grep)
 - **[Sandbox](/docs/workspace/sandbox)**: Command execution (shell commands)
 - **[Search](/docs/workspace/search)**: BM25, vector, or hybrid search over indexed content
 - **[Skills](/docs/workspace/skills)**: Reusable instructions for agents
@@ -145,7 +145,7 @@ const workspace = new Workspace({
 })
 ```
 
-The agent receives file tools (`read_file`, `write_file`, `list_directory`, etc.) that operate directly against the storage provider.
+The agent receives file tools (`read_file`, `write_file`, `list_directory`, `grep`, etc.) that operate directly against the storage provider.
 
 ### Sandbox only
 

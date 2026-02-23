@@ -38,9 +38,29 @@ class LocalProcessHandle extends ProcessHandle {
     this.proc = proc;
     this.startTime = startTime;
 
+    let timedOut = false;
+    const timeoutId = options?.timeout
+      ? setTimeout(() => {
+          timedOut = true;
+          // Kill the process group so child processes are also terminated
+          try {
+            process.kill(-this.pid, 'SIGTERM');
+          } catch {
+            proc.kill('SIGTERM');
+          }
+        }, options.timeout)
+      : undefined;
+
     this.waitPromise = new Promise<CommandResult>(resolve => {
       proc.on('close', (code, signal) => {
-        this.exitCode = signal && code === null ? 128 : (code ?? 0);
+        if (timeoutId) clearTimeout(timeoutId);
+        if (timedOut) {
+          const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
+          this.emitStderr(timeoutMsg);
+          this.exitCode = 124;
+        } else {
+          this.exitCode = signal && code === null ? 128 : (code ?? 0);
+        }
         resolve({
           success: this.exitCode === 0,
           exitCode: this.exitCode,
@@ -48,10 +68,12 @@ class LocalProcessHandle extends ProcessHandle {
           stderr: this.stderr,
           executionTimeMs: Date.now() - this.startTime,
           killed: signal !== null,
+          timedOut,
         });
       });
 
       proc.on('error', err => {
+        if (timeoutId) clearTimeout(timeoutId);
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
@@ -115,14 +137,19 @@ class LocalProcessHandle extends ProcessHandle {
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const cwd = options.cwd ?? this.sandbox.workingDirectory;
-    const env = {
-      PATH: process.env.PATH,
-      ...this.env,
-      ...options.env,
-    };
+    const env = this.sandbox.buildEnv(options.env);
+    const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
-    // detached: true creates a new process group so we can kill the entire tree
-    const proc = childProcess.spawn(command, { cwd, env, shell: true, detached: true });
+    // detached: true creates a new process group so we can kill the entire tree.
+    // Non-isolated: use shell mode so the host shell interprets the command string.
+    // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
+    // sandbox, so we spawn the wrapper binary directly.
+    const proc = childProcess.spawn(wrapped.command, wrapped.args, {
+      cwd,
+      env,
+      shell: this.sandbox.isolation === 'none',
+      detached: true,
+    });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
     this._tracked.set(handle.pid, handle);
     return handle;

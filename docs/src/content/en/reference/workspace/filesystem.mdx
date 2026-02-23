@@ -111,6 +111,95 @@ defaultValue: "false",
 ]}
 />
 
+### `appendFile(path, content)`
+
+Append content to a file, creating it if it does not already exist. Parent directories are created automatically.
+
+```typescript
+await filesystem.appendFile('/logs/app.log', 'New log entry\n')
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "path",
+type: "string",
+description: "File path",
+},
+{
+name: "content",
+type: "string | Buffer",
+description: "Content to append",
+},
+]}
+/>
+
+### `copyFile(src, dest, options?)`
+
+Copy a file to a new location.
+
+```typescript
+await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "src",
+type: "string",
+description: "Source file path",
+},
+{
+name: "dest",
+type: "string",
+description: "Destination file path",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite destination if it exists",
+isOptional: true,
+defaultValue: "true",
+},
+]}
+/>
+
+### `moveFile(src, dest, options?)`
+
+Move or rename a file.
+
+```typescript
+await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "src",
+type: "string",
+description: "Source file path",
+},
+{
+name: "dest",
+type: "string",
+description: "Destination file path",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite destination if it exists",
+isOptional: true,
+defaultValue: "true",
+},
+]}
+/>
+
 ### `readdir(path, options?)`
 
 List directory contents.
@@ -127,7 +216,8 @@ interface FileEntry {
   name: string
   type: 'file' | 'directory'
   size?: number
-  modifiedAt?: Date
+  isSymlink?: boolean
+  symlinkTarget?: string
 }
 ```
 
@@ -210,18 +300,20 @@ Get file or directory metadata.
 
 ```typescript
 const stat = await filesystem.stat('/docs/guide.md')
-// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
+// { name: 'guide.md', path: '/docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
 ```
 
 **Returns:** `Promise<FileStat>`
 
 ```typescript
 interface FileStat {
+  name: string // File or directory name (basename only)
+  path: string // Path relative to the filesystem basePath
   type: 'file' | 'directory'
   size: number
-  modifiedAt: Date
   createdAt: Date
-  path: string
+  modifiedAt: Date
+  mimeType?: string
 }
 ```
 

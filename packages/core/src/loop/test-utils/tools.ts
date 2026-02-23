@@ -1086,4 +1086,96 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
     });
   });
+
+  describe('stopWhen receives toolResults', () => {
+    it('should populate toolResults on steps passed to stopWhen', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const stopWhenSteps: any[][] = [];
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'test-tool',
+                          input: '{"value":"hello"}',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          'test-tool': {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }: { value: string }) => ({ echoed: value }),
+          },
+        },
+        messageList,
+        stopWhen: ({ steps }: { steps: any[] }) => {
+          stopWhenSteps.push([...steps]);
+          return false;
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      // stopWhen should have been called (once per continued step)
+      expect(stopWhenSteps.length).toBeGreaterThanOrEqual(1);
+
+      // First call: step has tool-call + tool-result content, toolResults should be populated
+      const firstCallStep = stopWhenSteps[0]![0]!;
+      const contentToolResults = firstCallStep.content.filter((p: any) => p.type === 'tool-result');
+      expect(contentToolResults.length).toBe(1);
+      expect(firstCallStep.toolResults.length).toBe(contentToolResults.length);
+      expect(firstCallStep.toolResults[0].toolName).toBe('test-tool');
+    });
+  });
 }

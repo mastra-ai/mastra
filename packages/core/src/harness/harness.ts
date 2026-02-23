@@ -5,6 +5,7 @@ import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -859,6 +860,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     } catch {
       // OM not available or not initialized — that's fine
+    }
+  }
+
+  async getObservationalMemoryRecord(): Promise<ObservationalMemoryRecord | null> {
+    if (!this.currentThreadId) return null;
+
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      return await memoryStorage.getObservationalMemory(this.currentThreadId, this.resourceId);
+    } catch {
+      return null;
     }
   }
 

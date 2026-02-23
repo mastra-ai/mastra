@@ -83,18 +83,28 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   /**
    * Execute a shell command and wait for it to complete.
    * Optional - if not implemented, the workspace_execute_command tool won't be available.
+   *
+   * @example
+   * ```typescript
+   * // Recommended: single command string with options
+   * await sandbox.executeCommand('npm install', { timeout: 60000 });
+   *
+   * // Legacy: command + args array (use single string instead)
+   * await sandbox.executeCommand('npm', ['install'], { timeout: 60000 });
+   * ```
+   *
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   // ---------------------------------------------------------------------------
-  // Background Process Management (Optional)
+  // Process Management (Optional)
   // ---------------------------------------------------------------------------
 
   /**
-   * Background process manager.
-   * Optional - if not implemented, background process tools won't be available.
+   * Process manager.
+   * Optional - if not implemented, process management tools won't be available.
    *
    * Provides methods to spawn long-running processes, list them, and interact
    * with them via their {@link ProcessHandle} (kill, sendStdin, wait, read output).
