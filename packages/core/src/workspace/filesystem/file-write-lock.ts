@@ -72,7 +72,15 @@ export class InMemoryFileWriteLock implements FileWriteLock {
   }
 
   private normalizePath(pathStr: string): string {
-    // Normalize path: unify separators, resolve dot segments, remove trailing slash
+    // Normalize path: unify separators, resolve dot segments, remove trailing slash.
+    //
+    // Known limitations:
+    // - Case-sensitive comparison: on case-insensitive filesystems (macOS HFS+,
+    //   Windows NTFS) "Foo.txt" and "foo.txt" produce different lock keys.
+    //   Acceptable because workspace tool calls echo paths back consistently.
+    // - No base-directory resolution: "foo.txt" and "/workspace/foo.txt" are
+    //   distinct keys. Workspace tools pass paths relative to the workspace root,
+    //   so this doesn't arise in practice.
     const normalized = nodePath.posix.normalize(pathStr.replace(/\\/g, '/'));
     return normalized.replace(/\/$/, '') || '/';
   }
