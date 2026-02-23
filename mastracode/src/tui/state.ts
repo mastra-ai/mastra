@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
-import type { Harness, HarnessMessage, TokenUsage, TaskItem } from '@mastra/core/harness';
+import type { Harness, HarnessMessage, TaskItem } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
@@ -135,7 +135,6 @@ export interface TUIState {
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
-  tokenUsage: TokenUsage;
   statusLine?: Text;
   memoryStatusLine?: Text;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
@@ -234,7 +233,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Status line
     projectInfo: detectProject(process.cwd()),
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     modelAuthStatus: { hasAuth: true },
 
     // Observational Memory

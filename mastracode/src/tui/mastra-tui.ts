@@ -214,9 +214,6 @@ export class MastraTUI {
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
 
-    // Load initial token usage from harness (persisted from previous session)
-    this.state.tokenUsage = this.state.harness.getTokenUsage();
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -315,7 +312,6 @@ export class MastraTUI {
       threshold: prev.threshold,
       reflectionThreshold: prev.reflectionThreshold,
     };
-    this.state.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     this.state.bufferingMessages = false;
     this.state.bufferingObservations = false;
     updateStatusLine(this.state);

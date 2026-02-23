@@ -126,7 +126,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       ectx.syncOMThresholdsFromHarness();
-      state.tokenUsage = state.harness.getTokenUsage();
       ectx.updateStatusLine();
       // Restore tasks from thread state
       const threadState = state.harness.getState() as {

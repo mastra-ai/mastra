@@ -31,13 +31,10 @@ function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): vo
 }
 
 /**
- * Accumulate token usage from a single LLM call into the running totals.
+ * Update the status line when token usage changes.
+ * Token accumulation is handled by the Harness display state.
  */
-export function handleUsageUpdate(ctx: EventHandlerContext, usage: TokenUsage): void {
-  const { state } = ctx;
-  state.tokenUsage.promptTokens += usage.promptTokens;
-  state.tokenUsage.completionTokens += usage.completionTokens;
-  state.tokenUsage.totalTokens += usage.totalTokens;
+export function handleUsageUpdate(ctx: EventHandlerContext, _usage: TokenUsage): void {
   ctx.updateStatusLine();
 }
 
