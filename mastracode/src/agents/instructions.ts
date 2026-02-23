@@ -1,5 +1,6 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { stateSchema } from '../schema.js';
+import { getCurrentGitBranch } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
@@ -8,10 +9,12 @@ export function getDynamicInstructions({ requestContext }: { requestContext: { g
   const state = harnessContext?.state;
   const modeId = harnessContext?.modeId ?? 'build';
 
+  const projectPath = state?.projectPath ?? process.cwd();
+
   const promptCtx: PromptContext = {
-    projectPath: state?.projectPath ?? process.cwd(),
+    projectPath,
     projectName: state?.projectName ?? '',
-    gitBranch: state?.gitBranch,
+    gitBranch: getCurrentGitBranch(projectPath) ?? state?.gitBranch,
     platform: process.platform,
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,

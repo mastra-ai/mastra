@@ -76,6 +76,14 @@ function normalizeGitUrl(url: string): string {
 }
 
 /**
+ * Get the current git branch for a directory.
+ * Returns undefined if not a git repo or on error.
+ */
+export function getCurrentGitBranch(cwd: string): string | undefined {
+  return git('rev-parse --abbrev-ref HEAD', cwd);
+}
+
+/**
  * Detect project info from a directory path
  */
 export function detectProject(projectPath: string): ProjectInfo {

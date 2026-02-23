@@ -19,6 +19,7 @@ import chalk from 'chalk';
 import { parse as parsePartialJson } from 'partial-json';
 import { getOAuthProviders } from '../auth/storage.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
+import { getCurrentGitBranch } from '../utils/project.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -65,6 +66,11 @@ import { getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
 
 /** Tools that modify files, used for /diff tracking */
 const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+
+/** How often (ms) to re-check the current git branch for the status bar */
+const GIT_BRANCH_REFRESH_INTERVAL_MS = 5_000;
+let lastBranchCheckTime = 0;
+let lastBranchValue: string | undefined;
 
 // =============================================================================
 // Types
@@ -659,6 +665,13 @@ ${instructions}`,
     let displayPath = this.state.projectInfo.rootPath;
     if (homedir && displayPath.startsWith(homedir)) {
       displayPath = '~' + displayPath.slice(homedir.length);
+    }
+    // Refresh git branch periodically so the status bar stays current
+    const now = Date.now();
+    if (now - lastBranchCheckTime > GIT_BRANCH_REFRESH_INTERVAL_MS) {
+      lastBranchCheckTime = now;
+      lastBranchValue = getCurrentGitBranch(this.state.projectInfo.rootPath) ?? this.state.projectInfo.gitBranch;
+      this.state.projectInfo.gitBranch = lastBranchValue;
     }
     if (this.state.projectInfo.gitBranch) {
       displayPath = `${displayPath} (${this.state.projectInfo.gitBranch})`;
