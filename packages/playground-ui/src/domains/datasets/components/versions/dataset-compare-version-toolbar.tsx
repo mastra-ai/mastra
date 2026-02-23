@@ -1,9 +1,6 @@
 import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
 import { Column } from '@/ds/components/Columns';
 import { SelectField } from '@/ds/components/FormFields';
-import { useLinkComponent } from '@/lib/framework';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
 export interface DatasetCompareVersionToolbarProps {
@@ -27,7 +24,6 @@ export function DatasetCompareVersionToolbar({
   versionB,
   onVersionChange,
 }: DatasetCompareVersionToolbarProps) {
-  const { Link } = useLinkComponent();
   const { data: versions } = useDatasetVersions(datasetId);
 
   const options = (versions ?? []).map(v => ({
@@ -36,13 +32,11 @@ export function DatasetCompareVersionToolbar({
   }));
 
   return (
-    <Column.Toolbar>
-      <Button as={Link} to={`/datasets/${datasetId}`} variant="cta" size="default">
-        <ArrowLeft />
-        Back to Dataset
-      </Button>
+    <Column.Toolbar className="grid grid-cols-[1fr_1fr_1fr_10rem] gap-4 w-full">
+      <div />
       <SelectField
         label="Version A"
+        labelIsHidden={true}
         placeholder="Select version"
         options={options}
         value={versionA ?? ''}
@@ -52,13 +46,14 @@ export function DatasetCompareVersionToolbar({
       />
       <SelectField
         label="Version B"
-        placeholder="Select version"
+        labelIsHidden={true}
         options={options}
         value={versionB ?? ''}
         onValueChange={val => onVersionChange?.(versionA ?? '', val)}
         variant="experimental"
         size="default"
       />
+      <div />
     </Column.Toolbar>
   );
 }

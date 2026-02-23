@@ -2578,6 +2578,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "format": 2,
                     "parts": [
                       {
+                        "providerExecuted": undefined,
+                        "providerMetadata": undefined,
                         "toolInvocation": {
                           "args": {
                             "value": "value",

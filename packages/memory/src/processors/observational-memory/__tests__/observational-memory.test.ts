@@ -12,6 +12,8 @@ import {
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
 } from '../observer-agent';
 import {
   buildReflectorPrompt,
@@ -846,6 +848,61 @@ User asked about </current-task> parsing and how it works
         expect(result.currentTask).toContain('User asked about </current-task> parsing');
         expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
+    });
+  });
+
+  describe('sanitizeObservationLines', () => {
+    it('should pass through normal observations unchanged', () => {
+      const obs = '- 🔴 User asked about React\n- 🟡 Some context';
+      expect(sanitizeObservationLines(obs)).toBe(obs);
+    });
+
+    it('should truncate lines exceeding 10k characters', () => {
+      const longLine = 'x'.repeat(15_000);
+      const obs = `- 🔴 Short line\n${longLine}\n- 🟡 Another line`;
+      const result = sanitizeObservationLines(obs);
+      expect(result).toContain('- 🔴 Short line');
+      expect(result).toContain('- 🟡 Another line');
+      expect(result).toContain(' … [truncated]');
+      // The truncated line should be 10k + the suffix
+      const lines = result.split('\n');
+      expect(lines[1]!.length).toBeLessThan(11_000);
+    });
+
+    it('should handle empty input', () => {
+      expect(sanitizeObservationLines('')).toBe('');
+    });
+  });
+
+  describe('detectDegenerateRepetition', () => {
+    it('should return false for normal text', () => {
+      const text = '- 🔴 User asked about React\n- 🟡 Some context\n- 🔴 Another observation';
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should return false for short text', () => {
+      expect(detectDegenerateRepetition('hello')).toBe(false);
+    });
+
+    it('should detect repeated content patterns', () => {
+      // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100); // ~11k chars of the same block
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect extremely long single lines', () => {
+      const line = 'a'.repeat(60_000);
+      expect(detectDegenerateRepetition(line)).toBe(true);
+    });
+
+    it('should flag degenerate output in parseObserverOutput', () => {
+      const block = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, ';
+      const text = `<observations>\n${block.repeat(100)}\n</observations>`;
+      const result = parseObserverOutput(text);
+      expect(result.degenerate).toBe(true);
+      expect(result.observations).toBe('');
     });
   });
 
@@ -3438,7 +3495,7 @@ describe('Async Buffering Storage Operations', () => {
       // With activationRatio=0.5, target = 5000
       // After chunk 1: 3000 (under target, distance=2000)
       // After chunk 2: 6000 (over target, distance=1000)
-      // 6000 is closer to 5000, but since 3000 is under and 6000 is over, prefer under
+      // 6000 is closer to 5000, and since we bias over, prefer chunk 2 boundary
       await storage.updateBufferedObservations({
         id: initial.id,
         chunk: {
@@ -3483,16 +3540,15 @@ describe('Async Buffering Storage Operations', () => {
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
-      // Biased under: should activate 1 chunk (3000 tokens), leaving 2 remaining
-      expect(result.chunksActivated).toBeGreaterThanOrEqual(1);
-      expect(result.activatedCycleIds.length).toBeGreaterThanOrEqual(1);
+      // Biased over: should activate 2 chunks (6000 tokens), leaving 1 remaining
+      expect(result.chunksActivated).toBe(2);
+      expect(result.activatedCycleIds).toEqual(['cycle-1', 'cycle-2']);
+      expect(result.messageTokensActivated).toBe(6000);
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toContain('Chunk 1');
-      // Remaining chunks should still be in buffered
-      if (result.chunksActivated === 1) {
-        expect(record?.bufferedObservationChunks).toHaveLength(2);
-      }
+      expect(record?.activeObservations).toContain('Chunk 2');
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
     });
 
     it('should always activate at least one chunk when at threshold', async () => {
@@ -3581,6 +3637,193 @@ describe('Async Buffering Storage Operations', () => {
 
       expect(result.chunksActivated).toBe(1);
       expect(result.observations).toContain('Important observation about X');
+    });
+
+    it('should return suggestedContinuation and currentTask from the most recent activated chunk', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with a stale hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 observation',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion from chunk 1',
+          currentTask: 'Old task from chunk 1',
+        },
+      });
+
+      // Chunk 2: newer, with the latest hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 observation',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Latest suggestion from chunk 2',
+          currentTask: 'Current task from chunk 2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should return the hints from the most recent chunk
+      expect(result.suggestedContinuation).toBe('Latest suggestion from chunk 2');
+      expect(result.currentTask).toBe('Current task from chunk 2');
+    });
+
+    it('should return suggestedContinuation from partial activation when latest activated chunk has hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: with hints (will be activated)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Activated suggestion',
+          currentTask: 'Activated task',
+        },
+      });
+
+      // Chunk 2: with newer hints (will remain buffered)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Remaining buffered suggestion',
+          currentTask: 'Remaining buffered task',
+        },
+      });
+
+      // Activate only chunk 1 (activationRatio=0.5, target=5000, chunk1=5000 exact match)
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 0.5,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBe('Activated suggestion');
+      expect(result.currentTask).toBe('Activated task');
+    });
+
+    it('should return undefined continuation hints when chunks have no hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk without hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
+    });
+
+    it('should discard stale hints from older chunks when the most recent activated chunk has none', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 with hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion',
+          currentTask: 'Stale task',
+        },
+      });
+
+      // Chunk 2: newer, without hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 without hints',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should NOT fall back to chunk 1's stale hints
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
     });
   });
 
@@ -3920,26 +4163,6 @@ describe('Async Buffering Config Validation', () => {
     expect(om.isAsyncReflectionEnabled()).toBe(false);
   });
 
-  it('should throw if bufferActivation is out of range', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-          observation: {
-            messageTokens: 50000,
-            bufferTokens: 10000,
-            bufferActivation: 1.5,
-          },
-          reflection: {
-            observationTokens: 20000,
-            bufferActivation: 0.7,
-          },
-        }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
-  });
-
   it('should throw if bufferActivation is zero', () => {
     expect(
       () =>
@@ -3957,7 +4180,67 @@ describe('Async Buffering Config Validation', () => {
             bufferActivation: 0.7,
           },
         }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
+    ).toThrow('bufferActivation must be > 0');
+  });
+
+  it('should throw if bufferActivation is in dead zone (1, 1000)', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 1.5,
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('must be <= 1 (ratio) or >= 1000 (absolute token retention)');
+  });
+
+  it('should throw if absolute bufferActivation >= messageTokens', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 50000, // Invalid: must be < messageTokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('bufferActivation as absolute retention');
+  });
+
+  it('should accept bufferActivation > 1000 as absolute retention target', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 3000, // Valid: retain 3000 tokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).not.toThrow();
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
@@ -4576,6 +4859,69 @@ describe('Async Buffering Processor Logic', () => {
       // Next interval boundary should trigger
       expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
+
+    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      // threshold=40000, bufferTokens=4000, rampPoint=40000-4000*1.1=35600, halved=2000
+      const lockKey = 'thread:halve-test';
+
+      // Well below ramp point (35600): normal 4000 interval
+      // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
+      // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
+
+      // Still below ramp point: normal 4000 interval
+      const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
+      // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
+
+      // Above ramp point (35600): halved 2000 interval
+      // At 36000 tokens, halved interval = 2000
+      // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
+
+      // Simulate buffering at 36000
+      const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
+      // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
+      // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
+    });
+
+    it('should not halve interval when no threshold is provided', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      const lockKey = 'thread:no-threshold-test';
+      const recordAt28k = { isBufferingObservation: false, lastBufferedAtTokens: 28000 } as any;
+
+      // Without threshold, even near messageTokens limit, the normal 4000 interval is used
+      // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+    });
   });
 
   describe('shouldTriggerAsyncReflection', () => {
@@ -4818,7 +5164,7 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('swapBufferedToActive boundary selection', () => {
-    it('should prefer under-target boundary when equidistant', async () => {
+    it('should prefer over-target boundary when equidistant', async () => {
       const storage = createInMemoryStorage();
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -6248,6 +6594,9 @@ describe('Full Async Buffering Flow', () => {
       chunks: Array<{ cycleId: string; messageTokens: number; observationTokens: number; obs: string }>;
       activationRatio: number;
       messageTokensThreshold: number;
+      currentPendingTokens?: number;
+      retentionFloor?: number;
+      forceMaxActivation?: boolean;
     }) {
       const storage = createInMemoryStorage();
       const threadId = `partial-${crypto.randomUUID()}`;
@@ -6285,7 +6634,9 @@ describe('Full Async Buffering Flow', () => {
         id: recordId,
         activationRatio: opts.activationRatio,
         messageTokensThreshold: opts.messageTokensThreshold,
-        currentPendingTokens: opts.messageTokensThreshold,
+        currentPendingTokens: opts.currentPendingTokens ?? opts.messageTokensThreshold,
+        retentionFloor: opts.retentionFloor,
+        forceMaxActivation: opts.forceMaxActivation,
       });
 
       const afterRecord = await storage.getObservationalMemory(threadId, resourceId);
@@ -6323,12 +6674,12 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.6: biases under target', async () => {
+    it('uneven chunks, ratio 0.6: biases over target', async () => {
       // Chunks: 8k, 15k, 12k, 7k, 6k (total 48k). threshold=50k, ratio=0.6 → target=30k
       // After 1: 8k  (under, distance=22k)
-      // After 2: 23k (under, distance=7k)  ← best under
-      // After 3: 35k (over, distance=5k)
-      // Best under = 2 chunks (23k). Algorithm prefers under over over.
+      // After 2: 23k (under, distance=7k)
+      // After 3: 35k (over, distance=5k)  ← best over
+      // Algorithm prefers the over boundary to ensure retention target is met.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6344,26 +6695,24 @@ describe('Full Async Buffering Flow', () => {
       });
 
       // 2 chunks = 23k (under target of 30k), 3 chunks = 35k (over).
-      // Algorithm prefers the under boundary.
-      expect(result.chunksActivated).toBe(2);
-      expect(result.messageTokensActivated).toBe(23000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      // Algorithm prefers the over boundary to hit the retention target.
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(35000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(result.observations).toContain('Chunk 0');
       expect(result.observations).toContain('Chunk 1');
-      expect(result.observations).not.toContain('Chunk 2');
+      expect(result.observations).toContain('Chunk 2');
 
-      expect(remaining).toHaveLength(3);
-      expect(remaining[0].cycleId).toBe('c-2');
-      expect(remaining[1].cycleId).toBe('c-3');
-      expect(remaining[2].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].cycleId).toBe('c-3');
+      expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.4: activates fewer oldest chunks', async () => {
+    it('uneven chunks, ratio 0.4: biases over target', async () => {
       // Same uneven chunks. threshold=50k, ratio=0.4 → target=20k
       // After 1: 8k  (under, distance=12k)
-      // After 2: 23k (over, distance=3k)
-      // Best under = 1 chunk (8k). 2 chunks = 23k (over).
-      // Algorithm prefers the under boundary: 1 chunk.
+      // After 2: 23k (over, distance=3k)  ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6378,22 +6727,22 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(1);
-      expect(result.messageTokensActivated).toBe(8000);
-      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(23000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
 
-      expect(remaining).toHaveLength(4);
-      expect(remaining[0].cycleId).toBe('c-1');
+      expect(remaining).toHaveLength(3);
+      expect(remaining[0].cycleId).toBe('c-2');
     });
 
-    it('uneven chunks, high ratio 0.9: activates most but not all', async () => {
+    it('uneven chunks, high ratio 0.9: activates all when over boundary meets target', async () => {
       // Same uneven chunks (total 48k). threshold=50k, ratio=0.9 → target=45k
       // After 1: 8k  (under)
       // After 2: 23k (under)
       // After 3: 35k (under)
-      // After 4: 42k (under, distance=3k) ← best under
-      // After 5: 48k (over, distance=3k)
-      // Both boundaries at distance=3k, but algorithm prefers under.
+      // After 4: 42k (under, distance=3k)
+      // After 5: 48k (over, distance=3k) ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1' },
@@ -6408,12 +6757,11 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(4);
-      expect(result.messageTokensActivated).toBe(42000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(result.chunksActivated).toBe(5);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3', 'c-4']);
 
-      expect(remaining).toHaveLength(1);
-      expect(remaining[0].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(0);
     });
 
     it('one huge first chunk exceeds target: still activates just 1 (biased over)', async () => {
@@ -6465,6 +6813,33 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(0);
     });
 
+    it('absolute bufferActivation: equivalent to ratio when converted', async () => {
+      // threshold=50k, absolute retention=10000 → equivalent ratio = 1 - 10000/50000 = 0.8
+      // retentionFloor=10000, target=40000
+      // Chunks: 10k each, cumulative: 10k, 20k, 30k, 40k, 50k
+      // After 4: 40k (exactly on target) → activates 4
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 3' },
+        { cycleId: 'c-4', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 4' },
+      ];
+
+      // Using ratio 0.8 (equivalent of absolute 10000 with threshold 50000)
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(4);
+      expect(result.messageTokensActivated).toBe(40000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-4');
+    });
+
     it('single chunk: always activates it regardless of ratio', async () => {
       const chunks = [{ cycleId: 'c-only', messageTokens: 12000, observationTokens: 200, obs: 'The only chunk' }];
 
@@ -6477,6 +6852,187 @@ describe('Full Async Buffering Flow', () => {
       // target=15k, chunk is 12k (under) → activates it
       expect(result.chunksActivated).toBe(1);
       expect(result.activatedCycleIds).toEqual(['c-only']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: falls back to under boundary when over would exceed 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under, distance=5k)
+      // Chunk 2: 7k → cumulative 10k (over, overshoot=2k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 2000 > 1900 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 3k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 7000, observationTokens: 100, obs: 'Chunk 1: large tool output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Safeguard prevents over boundary (10k) — falls back to under (3k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(3000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('overshoot safeguard: allows over boundary when within 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under)
+      // Chunk 2: 6k → cumulative 9k (over, overshoot=1k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 1000 <= 1900 → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 1: moderate output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Over boundary (9k, overshoot=1k) is within safeguard — activates both
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: still activates over when no under boundary exists', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Single chunk: 10k (over, overshoot=2k > 1900 safeguard)
+      // No under boundary → still activates the over boundary
+      const chunks = [{ cycleId: 'c-0', messageTokens: 10000, observationTokens: 150, obs: 'Chunk 0: the only chunk' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // No under boundary exists, so over boundary is used despite exceeding safeguard
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(10000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('forceMaxActivation: bypasses overshoot safeguard to aggressively reduce context', async () => {
+      // Same scenario as the safeguard test below, but with forceMaxActivation=true.
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k > maxOvershoot=950)
+      // Without forceMaxActivation: safeguard triggers, falls back to chunk 1.
+      // With forceMaxActivation: bypasses safeguard, activates both chunks.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+        forceMaxActivation: true,
+      });
+
+      // forceMaxActivation bypasses the safeguard — activates both chunks
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
+      // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under, distance=45k)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k)
+      // maxOvershoot = 1000 * 0.95 = 950. overshoot 1000 > 950 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 2k).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+      });
+
+      // Safeguard prevents activating both (overshoot > 95% of retentionFloor),
+      // falls back to chunk 1 only (2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: falls back to under boundary when over would leave < 1000 tokens', async () => {
+      // threshold=5000, ratio=0.9 → retentionFloor=500, target=4500
+      // currentPending=5000
+      // Chunk 1: 2k (under, distance=2.5k)
+      // Chunk 2: 2.8k → cumulative 4.8k (over, overshoot=300)
+      // maxOvershoot = 500 * 0.95 = 475. overshoot 300 <= 475 → overshoot safeguard allows it
+      // BUT remainingAfterOver = 5000 - 4800 = 200 < 1000 → low-retention floor triggers
+      // Falls back to under boundary (chunk 1, 2k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 2800, observationTokens: 80, obs: 'Chunk 1: more messages' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 5000,
+      });
+
+      // Over boundary would leave only 200 tokens — falls back to under (chunk 1, 2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: allows over boundary when remaining >= 1000 tokens', async () => {
+      // threshold=10000, ratio=0.9 → retentionFloor=1000, target=9000
+      // currentPending=10000
+      // Chunk 1: 4k (under)
+      // Chunk 2: 4.5k → cumulative 8.5k (under)
+      // Chunk 3: 0.5k → cumulative 9k (over, exactly on target, overshoot=0)
+      // remainingAfterOver = 10000 - 9000 = 1000 >= 1000 → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 4000, observationTokens: 50, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 4500, observationTokens: 60, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 500, observationTokens: 20, obs: 'Chunk 2' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 10000,
+      });
+
+      // Over boundary leaves exactly 1000 tokens — allowed
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(remaining).toHaveLength(0);
     });
   });

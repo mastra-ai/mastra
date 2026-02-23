@@ -217,7 +217,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (inputData.providerExecuted) {
         return {
           ...inputData,
-          result: inputData.output,
+          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
         };
       }
 
@@ -514,6 +514,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
           }
+        }
+
+        if (args === null || args === undefined) {
+          return {
+            error: new Error(
+              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            ),
+            ...inputData,
+          };
         }
 
         const result = await tool.execute(args, toolOptions);

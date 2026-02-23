@@ -65,7 +65,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         ref={ref}
         role="treeitem"
         className={cn(
-          'group flex items-center gap-1.5 rounded-sm px-1 py-0.5',
+          'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
           'focus-within:outline-none focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring',
           className,

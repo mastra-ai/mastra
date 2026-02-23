@@ -70,7 +70,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="mb-(--ifm-leading) flex flex-col">
       {content.map((item, index) => {
         return (
           <div

@@ -16,22 +16,22 @@ When you run a workflow, the result object contains the status and any errors th
 ### Checking the result status
 
 ```typescript title="src/run-workflow.ts"
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const workflow = mastra.getWorkflow("myWorkflow");
-const run = await workflow.createRun();
-const result = await run.start({ inputData: { value: "test" } });
+const workflow = mastra.getWorkflow('myWorkflow')
+const run = await workflow.createRun()
+const result = await run.start({ inputData: { value: 'test' } })
 
 switch (result.status) {
   case 'success':
-    console.log('Workflow completed:', result.result);
-    break;
+    console.log('Workflow completed:', result.result)
+    break
   case 'failed':
-    console.error('Workflow failed:', result.error);
-    break;
+    console.error('Workflow failed:', result.error)
+    break
   case 'suspended':
-    console.log('Workflow suspended, waiting for resume');
-    break;
+    console.log('Workflow suspended, waiting for resume')
+    break
 }
 ```
 
@@ -49,13 +49,13 @@ The result object contains:
 You can inspect individual step results to understand where a failure occurred:
 
 ```typescript title="src/run-workflow.ts"
-const result = await run.start({ inputData: { value: "test" } });
+const result = await run.start({ inputData: { value: 'test' } })
 
 if (result.status === 'failed') {
   // Find which step failed
   for (const [stepId, stepResult] of Object.entries(result.steps)) {
     if (stepResult.status === 'failed') {
-      console.error(`Step ${stepId} failed:`, stepResult.error);
+      console.error(`Step ${stepId} failed:`, stepResult.error)
     }
   }
 }
@@ -70,25 +70,25 @@ For scenarios where you need to handle workflow completion without awaiting the 
 Called when a workflow completes with any status (success, failed, suspended, or tripwire):
 
 ```typescript {8-17} title="src/mastra/workflows/order-workflow.ts"
-import { createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const orderWorkflow = createWorkflow({
   id: 'order-processing',
   inputSchema: z.object({ orderId: z.string() }),
   outputSchema: z.object({ orderId: z.string(), status: z.string() }),
   options: {
-    onFinish: async (result) => {
+    onFinish: async result => {
       if (result.status === 'success') {
-        await db.updateOrderStatus(result.result.orderId, result.status);
+        await db.updateOrderStatus(result.result.orderId, result.status)
       }
       await analytics.track('workflow_completed', {
         workflowId: 'order-processing',
         status: result.status,
-      });
+      })
     },
   },
-});
+})
 ```
 
 The `onFinish` callback receives:
@@ -112,23 +112,23 @@ The `onFinish` callback receives:
 Called only when a workflow fails (status is `'failed'` or `'tripwire'`):
 
 ```typescript {8-14} title="src/mastra/workflows/payment-workflow.ts"
-import { createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const paymentWorkflow = createWorkflow({
   id: 'payment-processing',
   inputSchema: z.object({ amount: z.number() }),
   outputSchema: z.object({ transactionId: z.string() }),
   options: {
-    onError: async (errorInfo) => {
+    onError: async errorInfo => {
       await alertService.notify({
         channel: 'payments-alerts',
         message: `Payment workflow failed: ${errorInfo.error?.message}`,
-      });
-      await errorTracker.capture(errorInfo.error);
+      })
+      await errorTracker.capture(errorInfo.error)
     },
   },
-});
+})
 ```
 
 The `onError` callback receives:
@@ -151,31 +151,31 @@ The `onError` callback receives:
 You can use both callbacks together:
 
 ```typescript {8-16} title="src/mastra/workflows/pipeline-workflow.ts"
-import { createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const pipelineWorkflow = createWorkflow({
   id: 'data-pipeline',
   inputSchema: z.object({ source: z.string() }),
   outputSchema: z.object({ recordsProcessed: z.number() }),
   options: {
-    onFinish: async (result) => {
+    onFinish: async result => {
       // Always log completion
-      await logger.info('Pipeline completed', { status: result.status });
+      await logger.info('Pipeline completed', { status: result.status })
     },
-    onError: async (errorInfo) => {
+    onError: async errorInfo => {
       // Alert on failures
-      await pagerDuty.alert('Data pipeline failed', errorInfo.error);
+      await pagerDuty.alert('Data pipeline failed', errorInfo.error)
     },
   },
-});
+})
 ```
 
 ### Error handling in callbacks
 
 Errors thrown inside callbacks are caught and logged—they will not affect the workflow result or cause it to fail. This ensures that callback issues don't break your workflows in production.
 
-```typescript
+```typescript prettier:false
 options: {
   onFinish: async (result) => {
     // If this throws, it's logged but the workflow result is unchanged
@@ -192,7 +192,7 @@ Mastra has a retry mechanism for workflows or steps that fail due to transient e
 
 You can configure retries at the workflow level, which applies to all steps in the workflow:
 
-```typescript {7-10} title="src/mastra/workflows/test-workflow.ts"
+```typescript {7-10} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -213,30 +213,30 @@ export const testWorkflow = createWorkflow({
 You can configure retries for individual steps using the `retries` property. This overrides the workflow-level retry configuration for that specific step:
 
 ```typescript {16} title="src/mastra/workflows/test-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const step1 = createStep({
   execute: async () => {
-    const response = await fetch('example-url');
+    const response = await fetch('example-url')
 
     if (!response.ok) {
-      throw new Error('Error');
+      throw new Error('Error')
     }
 
     return {
-      value: ""
-    };
+      value: '',
+    }
   },
-  retries: 3
-});
+  retries: 3,
+})
 ```
 
 ## Conditional branching
 
 You can create alternative workflow paths based on the success or failure of previous steps using conditional logic:
 
-```typescript {14,18,29-32} title="src/mastra/workflows/test-workflow.ts"
+```typescript prettier:false {14,18,29-32} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -276,7 +276,7 @@ export const testWorkflow = createWorkflow({})
 
 Use `getStepResult()` to inspect a previous step’s results.
 
-```typescript {8} title="src/mastra/workflows/test-workflow.ts"
+```typescript prettier:false {8} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -297,7 +297,7 @@ const step2 = createStep({
 
 Use `bail()` in a step to exit early with a successful result. This returns the provided payload as the step output and ends workflow execution.
 
-```typescript {7} title="src/mastra/workflows/test-workflow.ts"
+```typescript prettier:false {7} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -319,7 +319,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use `throw new Error()` in a step to exit with an error.
 
-```typescript {7} title="src/mastra/workflows/test-workflow.ts"
+```typescript prettier:false {7} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -337,25 +337,25 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Monitor errors with `stream()`
+\## Monitor errors with `stream()`
 
 You can monitor workflows for errors using `stream`:
 
 ```typescript {11} title="src/test-workflow.ts"
-import { mastra } from "../src/mastra";
+import { mastra } from '../src/mastra'
 
-const workflow = mastra.getWorkflow("testWorkflow");
+const workflow = mastra.getWorkflow('testWorkflow')
 
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
 for await (const chunk of stream.stream) {
-  console.log(chunk.payload.output.stats);
+  console.log(chunk.payload.output.stats)
 }
 ```
 

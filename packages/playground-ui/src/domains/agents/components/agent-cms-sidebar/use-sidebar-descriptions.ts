@@ -17,10 +17,7 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
     const blockCount = (values.instructionBlocks ?? []).filter(b => b.content?.trim()).length;
     const instructions = blockCount === 0 ? 'Required' : pluralize(blockCount, 'block');
 
-    const toolCount =
-      Object.keys(values.tools ?? {}).length +
-      Object.keys(values.integrationTools ?? {}).length +
-      (values.mcpClients ?? []).length;
+    const toolCount = Object.keys(values.tools ?? {}).length + Object.keys(values.integrationTools ?? {}).length;
     const tools = toolCount === 0 ? 'None selected' : pluralize(toolCount, 'tool');
 
     const agentCount = Object.keys(values.agents ?? {}).length;
@@ -34,6 +31,9 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
 
     const memory = values.memory?.enabled ? 'Enabled' : 'Disabled';
 
+    const skillCount = Object.keys(values.skills ?? {}).length;
+    const skills = skillCount === 0 ? 'None selected' : pluralize(skillCount, 'skill');
+
     const variableCount = Object.keys(values.variables?.properties ?? {}).length;
     const variables = variableCount === 0 ? 'None defined' : pluralize(variableCount, 'variable');
 
@@ -44,6 +44,7 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
       agents: { description: agents, done: agentCount > 0 },
       scorers: { description: scorers, done: scorerCount > 0 },
       workflows: { description: workflows, done: workflowCount > 0 },
+      skills: { description: skills, done: skillCount > 0 },
       memory: { description: memory, done: !!values.memory?.enabled },
       variables: { description: variables, done: variableCount > 0 },
     };

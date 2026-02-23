@@ -15,35 +15,35 @@ The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/do
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this vector store instance",
-    },
-    {
-      name: "node",
-      type: "string | string[] | NodeOptions | NodeOptions[]",
-      description: "OpenSearch node URL(s) (e.g., 'http://localhost:9200')",
-    },
-    {
-      name: "auth",
-      type: "BasicAuth | BearerAuth | AwsSigv4Auth",
-      description: "Authentication configuration",
-      isOptional: true,
-    },
-    {
-      name: "ssl",
-      type: "ConnectionOptions",
-      description: "SSL/TLS configuration",
-      isOptional: true,
-    },
-    {
-      name: "compression",
-      type: "'gzip'",
-      description: "Enable gzip compression",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this vector store instance",
+},
+{
+name: "node",
+type: "string | string[] | NodeOptions | NodeOptions[]",
+description: "OpenSearch node URL(s) (e.g., 'http://localhost:9200')",
+},
+{
+name: "auth",
+type: "BasicAuth | BearerAuth | AwsSigv4Auth",
+description: "Authentication configuration",
+isOptional: true,
+},
+{
+name: "ssl",
+type: "ConnectionOptions",
+description: "SSL/TLS configuration",
+isOptional: true,
+},
+{
+name: "compression",
+type: "'gzip'",
+description: "Enable gzip compression",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -54,24 +54,24 @@ Creates a new index with the specified configuration.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "The dimension of the vectors to be stored in the index",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      description: "The distance metric to use for vector similarity",
-      defaultValue: "'cosine'",
-      isOptional: true,
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "The dimension of the vectors to be stored in the index",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+description: "The distance metric to use for vector similarity",
+defaultValue: "'cosine'",
+isOptional: true,
+},
+]}
 />
 
 ### listIndexes()
@@ -86,85 +86,85 @@ Gets information about an index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to describe",
+},
+]}
 />
 
 ### deleteIndex()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to delete",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to upsert vectors into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of vector embeddings to insert",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      description: "Array of metadata objects corresponding to each vector",
-      isOptional: true,
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      description:
-        "Optional array of IDs for the vectors. If not provided, random IDs will be generated",
-      isOptional: true,
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to upsert vectors into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of vector embeddings to insert",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+description: "Array of metadata objects corresponding to each vector",
+isOptional: true,
+},
+{
+name: "ids",
+type: "string[]",
+description:
+"Optional array of IDs for the vectors. If not provided, random IDs will be generated",
+isOptional: true,
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "The query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "The number of results to return",
-      defaultValue: "10",
-      isOptional: true,
-    },
-    {
-      name: "filter",
-      type: "VectorFilter",
-      description:
-        "Optional filter to apply to the query (MongoDB-style query syntax)",
-      isOptional: true,
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "The query vector to find similar vectors for",
+},
+{
+name: "topK",
+type: "number",
+description: "The number of results to return",
+defaultValue: "10",
+isOptional: true,
+},
+{
+name: "filter",
+type: "VectorFilter",
+description:
+"Optional filter to apply to the query (MongoDB-style query syntax)",
+isOptional: true,
+},
+]}
 />
 
 ### updateVector()
@@ -173,29 +173,29 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to update vectors in",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "The ID of the vector to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to update vectors in",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "The ID of the vector to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+description: "Object containing the vector and/or metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -204,17 +204,17 @@ Deletes a single vector by its ID from the index.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "The name of the index to delete the vector from",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "The ID of the vector to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "The name of the index to delete the vector from",
+},
+{
+name: "id",
+type: "string",
+description: "The ID of the vector to delete",
+},
+]}
 />
 
 ### deleteVectors()
@@ -223,24 +223,24 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ## Related
