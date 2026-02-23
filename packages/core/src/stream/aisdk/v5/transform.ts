@@ -163,14 +163,16 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
       if (value.input) {
         const sanitized = sanitizeToolCallInput(value.input);
-        try {
-          toolCallInput = JSON.parse(sanitized);
-        } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+        if (sanitized) {
+          try {
+            toolCallInput = JSON.parse(sanitized);
+          } catch (error) {
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: value.input,
+            });
+            toolCallInput = undefined;
+          }
         }
       }
 

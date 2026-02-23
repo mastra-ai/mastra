@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ChunkFrom } from '../../types';
 import { convertFullStreamChunkToMastra, sanitizeToolCallInput } from './transform';
 import type { StreamPart } from './transform';
@@ -269,6 +269,26 @@ describe('convertFullStreamChunkToMastra', () => {
       if (result?.type === 'tool-call') {
         expect(result.payload.args).toEqual({ text: 'The <|endoftext|> token marks boundaries' });
       }
+    });
+
+    it('should return undefined args without console.error noise when input is purely LLM tokens', () => {
+      const errorSpy = vi.spyOn(console, 'error');
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-6',
+        toolName: 'noop',
+        input: '<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toBeUndefined();
+      }
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
     });
   });
 
