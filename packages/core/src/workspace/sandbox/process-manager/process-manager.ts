@@ -80,7 +80,9 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.get = async (...args: Parameters<typeof impl.get>) => {
       await this.sandbox.ensureRunning();
-      return impl.get(...args);
+      const handle = await impl.get(...args);
+      if (handle) handle.accessed = true;
+      return handle;
     };
   }
 
@@ -102,11 +104,13 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
   /**
    * Prune exited processes from the tracked map to free memory.
+   * Only removes processes that have both exited AND been accessed
+   * (via get()), so output isn't lost before the consumer reads it.
    * Called automatically before spawning new processes.
    */
   protected _pruneExited(): void {
     for (const [pid, handle] of this._tracked) {
-      if (handle.exitCode !== undefined) {
+      if (handle.exitCode !== undefined && handle.accessed) {
         this._tracked.delete(pid);
       }
     }
