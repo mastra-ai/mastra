@@ -26,6 +26,14 @@ const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = [
   'requestContextSchema',
 ] as const;
 
+/** Computes whether a prompt block has an unpublished draft version. */
+function computeHasDraft(
+  latestVersion: { id: string } | null | undefined,
+  activeVersionId: string | null | undefined,
+): boolean {
+  return !!(latestVersion && (!activeVersionId || latestVersion.id !== activeVersionId));
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -71,8 +79,7 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
       const promptBlocks = await Promise.all(
         result.promptBlocks.map(async (block: (typeof result.promptBlocks)[number]) => {
           const latestVersion = await promptBlockStore.getLatestVersion(block.id);
-          const hasDraft = !!(latestVersion && (!block.activeVersionId || latestVersion.id !== block.activeVersionId));
-          return { ...block, hasDraft };
+          return { ...block, hasDraft: computeHasDraft(latestVersion, block.activeVersionId) };
         }),
       );
 
@@ -118,12 +125,8 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       }
 
       const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
-      const hasDraft = !!(
-        latestVersion &&
-        (!promptBlock.activeVersionId || latestVersion.id !== promptBlock.activeVersionId)
-      );
 
-      return { ...promptBlock, hasDraft };
+      return { ...promptBlock, hasDraft: computeHasDraft(latestVersion, promptBlock.activeVersionId) };
     } catch (error) {
       return handleError(error, 'Error getting stored prompt block');
     }
