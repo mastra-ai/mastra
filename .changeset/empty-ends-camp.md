@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed rendering Object type error on Experiment Result panel
+Fixed the Experiment Result panel crashing with a type error when results contained nested objects instead of plain strings.

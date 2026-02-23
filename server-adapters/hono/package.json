@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.1.4",
+  "version": "1.1.5-alpha.0",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "@internal/types-builder": "workspace:*",
     "hono": "^4.11.9",
     "@hono/node-server": "^1.19.9",

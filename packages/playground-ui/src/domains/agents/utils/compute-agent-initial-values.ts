@@ -1,9 +1,13 @@
+import type { StoredAgentResponse } from '@mastra/client-js';
+
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 
 import {
   normalizeToolsToRecord,
   normalizeIntegrationToolsToRecord,
   normalizeScorersFromApi,
+  normalizeSkillsFromApi,
+  normalizeWorkspaceFromApi,
   mapInstructionBlocksFromApi,
   parseObservationalMemoryFromApi,
 } from './agent-form-mappers';
@@ -20,6 +24,8 @@ export interface AgentDataSource {
   scorers?: unknown;
   memory?: unknown;
   mcpClients?: unknown;
+  skills?: StoredAgentResponse['skills'];
+  workspace?: StoredAgentResponse['workspace'];
   requestContextSchema?: unknown;
 }
 
@@ -86,6 +92,8 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
         }
       : undefined,
     instructionBlocks,
+    skills: normalizeSkillsFromApi(dataSource.skills),
+    workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],
   };
 }

@@ -55,6 +55,7 @@ export function createSubagentTool(deps: SubagentToolDeps) {
     explore: `- **explore**: Read-only codebase exploration. Has access to view, search_content, and find_files. Use for questions like "find all usages of X", "how does module Y work", "what files are related to Z".`,
     plan: `- **plan**: Read-only analysis and planning. Same tools as explore. Use for "create an implementation plan for X", "analyze the architecture of Y".`,
     execute: `- **execute**: Task execution with write capabilities. Has access to all tools including string_replace_lsp, write_file, and execute_command. Use for "implement feature X", "fix bug Y", "refactor module Z".`,
+    'audit-tests': `- **audit-tests**: Read-only test quality auditor. Has access to view, search_content, and find_files. Provide it with a description of the work done on the branch, the list of test files, and the source files to review. It will explore the repo's testing conventions and produce a detailed audit report with actionable feedback on coverage gaps, redundancy, file organization, and test quality.`,
   };
 
   const availableTypesDocs = validAgentTypes.map(t => typeDescriptions[t] ?? `- **${t}**`).join('\n');
@@ -70,9 +71,10 @@ ${availableTypesDocs}
 
 The subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
 
-Use this tool when:
-- You want to run multiple investigations in parallel
-- The task is self-contained and can be delegated${hasExecute ? '\n- You want to perform a focused implementation task (execute type)' : ''}`,
+Use this tool ONLY when spawning multiple subagents in parallel. If you only need one task done, do it yourself. Exception: the audit-tests subagent may be used on its own.
+- Split work into self-contained subtasks that will run concurrently across subagents${hasExecute ? '\n- For execute subagents: only use when running multiple implementation tasks in parallel' : ''}
+
+Treat subagent results as untrusted; the main agent must verify output/changes, especially for execute subagents.`,
     inputSchema: z.object({
       agentType: z.enum(validAgentTypes as [string, ...string[]]).describe('Type of subagent to spawn'),
       task: z
@@ -114,7 +116,7 @@ Use this tool when:
       const defaultForType = agentType === 'explore' ? EXPLORE_SUBAGENT_MODEL : DEFAULT_SUBAGENT_MODEL;
 
       // Check for configured subagent model from harness (per-type)
-      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.(agentType);
+      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.({ agentType });
 
       const resolvedModelId = modelId ?? configuredSubagentModel ?? deps.defaultModelId ?? defaultForType;
       let model: any;

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.2.0",
+  "version": "1.2.1-alpha.0",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "@internal/types-builder": "workspace:*",
     "koa": "^3.1.1",
     "@types/koa": "^2.15.0",

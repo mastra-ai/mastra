@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Updated workspace tool discovery to use `createWorkspaceTools` from core for accurate runtime detection of available tools (e.g. `ast_edit` requires `@ast-grep/napi`).
+Workspace tools like `ast_edit` are now correctly detected at runtime based on available dependencies (e.g. `@ast-grep/napi`), preventing missing tools from being advertised to agents.

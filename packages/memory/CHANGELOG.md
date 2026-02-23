@@ -1,5 +1,29 @@
 # @mastra/memory
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Improved conversational continuity when the message window shrinks during Observational Memory activation. The agent now preserves its suggested next response and current task across activation, so it maintains context instead of losing track of the conversation. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
+
+  Also improved the Observer to capture user messages more faithfully, reduce repetitive observations, and treat the most recent user message as the highest-priority signal.
+
+### Patch Changes
+
+- Improved Observational Memory priority handling. User messages and task completions are now always treated as high priority, ensuring the observer captures the most relevant context during conversations. ([#13329](https://github.com/mastra-ai/mastra/pull/13329))
+
+- Improved Observational Memory activation to preserve more usable context after activation. Previously, activation could leave the agent with too much or too little context depending on how chunks aligned with the retention target. ([#13305](https://github.com/mastra-ai/mastra/pull/13305))
+  - Activation now lands closer to the retention target by biasing chunk selection to slightly overshoot rather than undershoot
+  - Added safeguards to prevent activation from consuming too much context (95% ceiling and 1000-token floor)
+  - When pending tokens exceed `blockAfter`, activation now aggressively reduces context to unblock the conversation
+  - `bufferActivation` now accepts absolute token values (>= 1000) in addition to ratios (0–1), giving more precise control over when activation triggers
+
+- Observations no longer inflate token counts from degenerate LLM output. Runaway or repetitive observer/reflector output is automatically detected and retried, preventing excessive context usage after activation. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
+
+- Updated dependencies [[`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`7184d87`](https://github.com/mastra-ai/mastra/commit/7184d87c9237d26862f500ccfd0c9f9eadd38ddf), [`5caa13d`](https://github.com/mastra-ai/mastra/commit/5caa13d1b2a496e2565ab124a11de9a51ad3e3b9), [`940163f`](https://github.com/mastra-ai/mastra/commit/940163fc492401d7562301e6f106ccef4fefe06f), [`b260123`](https://github.com/mastra-ai/mastra/commit/b2601234bd093d358c92081a58f9b0befdae52b3), [`47892c8`](https://github.com/mastra-ai/mastra/commit/47892c85708eac348209f99f10f9a5f5267e11c0), [`45bb78b`](https://github.com/mastra-ai/mastra/commit/45bb78b70bd9db29678fe49476cd9f4ed01bfd0b), [`70eef84`](https://github.com/mastra-ai/mastra/commit/70eef84b8f44493598fdafa2980a0e7283415eda), [`d84e52d`](https://github.com/mastra-ai/mastra/commit/d84e52d0f6511283ddd21ed5fe7f945449d0f799), [`24b80af`](https://github.com/mastra-ai/mastra/commit/24b80af87da93bb84d389340181e17b7477fa9ca), [`608e156`](https://github.com/mastra-ai/mastra/commit/608e156def954c9604c5e3f6d9dfce3bcc7aeab0), [`2b2e157`](https://github.com/mastra-ai/mastra/commit/2b2e157a092cd597d9d3f0000d62b8bb4a7348ed), [`59d30b5`](https://github.com/mastra-ai/mastra/commit/59d30b5d0cb44ea7a1c440e7460dfb57eac9a9b5), [`453693b`](https://github.com/mastra-ai/mastra/commit/453693bf9e265ddccecef901d50da6caaea0fbc6), [`78d1c80`](https://github.com/mastra-ai/mastra/commit/78d1c808ad90201897a300af551bcc1d34458a20), [`c204b63`](https://github.com/mastra-ai/mastra/commit/c204b632d19e66acb6d6e19b11c4540dd6ad5380), [`742a417`](https://github.com/mastra-ai/mastra/commit/742a417896088220a3b5560c354c45c5ca6d88b9)]:
+  - @mastra/core@1.6.0-alpha.0
+  - @mastra/schema-compat@1.1.2-alpha.0
+
 ## 1.4.0
 
 ### Minor Changes

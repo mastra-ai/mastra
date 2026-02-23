@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.5.0",
+  "version": "0.6.0-alpha.0",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -67,11 +67,15 @@
     "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
+    "@hono/node-server": "^1.14.1",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "hono": "^4.7.10",
     "tsup": "^8.0.2",
     "typescript": "catalog:",
     "vitest": "catalog:",

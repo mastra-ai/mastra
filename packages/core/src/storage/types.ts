@@ -1249,6 +1249,10 @@ export interface SwapBufferedToActiveResult {
     messageCount: number;
     observations: string;
   }>;
+  /** Suggested continuation from the most recent activated chunk (if any) */
+  suggestedContinuation?: string;
+  /** Current task from the most recent activated chunk (if any) */
+  currentTask?: string;
 }
 
 /**
@@ -1430,6 +1434,150 @@ export type StorageListMCPClientsOutput = PaginationInfo & {
 /** Paginated list output for resolved stored MCP clients */
 export type StorageListMCPClientsResolvedOutput = PaginationInfo & {
   mcpClients: StorageResolvedMCPClientType[];
+};
+
+// ============================================
+// MCP Server Storage Types
+// ============================================
+
+/**
+ * MCP server version snapshot containing ALL configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the MCP server record.
+ *
+ * Serializable metadata from MCPServerConfig. Non-serializable fields (tools, agents, workflows)
+ * are stored as reference keys and resolved at hydration time.
+ */
+export interface StorageMCPServerSnapshotType {
+  /** Display name of the MCP server */
+  name: string;
+  /** Semantic version string */
+  version: string;
+  /** Purpose description */
+  description?: string;
+  /** Instructions describing how to use the server */
+  instructions?: string;
+  /** Repository information for the server's source code */
+  repository?: {
+    url: string;
+    type?: string;
+    directory?: string;
+  };
+  /** Release date of this server version (ISO 8601 string) */
+  releaseDate?: string;
+  /** Whether this version is the latest available */
+  isLatest?: boolean;
+  /** Canonical packaging format (e.g., 'npm', 'docker', 'pypi', 'crates') */
+  packageCanonical?: string;
+  /**
+   * Tool keys to include on this MCP server.
+   * Keys are tool IDs registered in Mastra, values provide optional config overrides.
+   */
+  tools?: Record<string, StorageToolConfig>;
+  /**
+   * Agent keys to expose as tools on this MCP server.
+   * Keys are agent IDs registered in Mastra, values provide optional config overrides.
+   */
+  agents?: Record<string, StorageToolConfig>;
+  /**
+   * Workflow keys to expose as tools on this MCP server.
+   * Keys are workflow IDs registered in Mastra, values provide optional config overrides.
+   */
+  workflows?: Record<string, StorageToolConfig>;
+}
+
+/**
+ * Thin stored MCP server record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageMCPServerSnapshotType).
+ */
+export interface StorageMCPServerType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Server status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to mcp_server_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored MCP server type that combines the thin record with version snapshot config.
+ * Returned by getMCPServerByIdResolved and listMCPServersResolved.
+ */
+export type StorageResolvedMCPServerType = StorageMCPServerType &
+  StorageMCPServerSnapshotType & {
+    resolvedVersionId?: string;
+  };
+
+/**
+ * Input for creating a new stored MCP server. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateMCPServerInput = {
+  /** Unique identifier for the MCP server */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+} & StorageMCPServerSnapshotType;
+
+/**
+ * Input for updating a stored MCP server. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateMCPServerInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+  /** FK to mcp_server_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Server status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageMCPServerSnapshotType>;
+
+export type StorageListMCPServersInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter MCP servers by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter MCP servers by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+  /**
+   * Filter MCP servers by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
+};
+
+/** Paginated list output for thin stored MCP server records */
+export type StorageListMCPServersOutput = PaginationInfo & {
+  mcpServers: StorageMCPServerType[];
+};
+
+/** Paginated list output for resolved stored MCP servers */
+export type StorageListMCPServersResolvedOutput = PaginationInfo & {
+  mcpServers: StorageResolvedMCPServerType[];
 };
 
 // ============================================
