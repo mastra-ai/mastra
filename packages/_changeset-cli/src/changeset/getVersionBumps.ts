@@ -113,7 +113,7 @@ export async function getVersionBumps(
     patch: string[];
   },
   onCancel: (message?: string) => never,
-  skipPrompt?: boolean,
+  skipPrompt: boolean,
 ): Promise<VersionBumps> {
   let versionBumps: VersionBumps = {};
 
