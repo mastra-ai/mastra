@@ -80,10 +80,12 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
   );
 
   const { form } = usePromptBlockEditForm({ initialValues });
+  const [formResetKey, setFormResetKey] = useState(0);
 
   useEffect(() => {
     if (initialValues) {
       form.reset(initialValues);
+      setFormResetKey(prev => prev + 1);
     }
   }, [initialValues, form]);
 
@@ -152,6 +154,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
           isDirty={form.formState.isDirty}
           hasDraft={hasDraft}
           formRef={formRef}
+          formResetKey={formResetKey}
           mode="edit"
         />
       }

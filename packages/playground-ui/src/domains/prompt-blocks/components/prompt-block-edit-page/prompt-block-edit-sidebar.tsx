@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 
@@ -72,8 +72,9 @@ interface PromptBlockEditSidebarProps {
   isSavingDraft?: boolean;
   isDirty?: boolean;
   hasDraft?: boolean;
-  formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
+  /** Key that changes when form is reset with new data, forces JSONSchemaForm to remount */
+  formResetKey?: number;
 }
 
 export function PromptBlockEditSidebar({
@@ -84,8 +85,8 @@ export function PromptBlockEditSidebar({
   isSavingDraft = false,
   isDirty = false,
   hasDraft = false,
-  formRef,
   mode = 'create',
+  formResetKey = 0,
 }: PromptBlockEditSidebarProps) {
   const {
     register,
@@ -153,7 +154,7 @@ export function PromptBlockEditSidebar({
             }
           />
 
-          <JSONSchemaForm.Root onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
+          <JSONSchemaForm.Root key={formResetKey} onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
             <JSONSchemaForm.FieldList>
               {(field, _index, { parentPath, depth }) => (
                 <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
