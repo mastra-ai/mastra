@@ -14,9 +14,9 @@ It offers efficient vector search with metadata filtering and hybrid search capa
 
 <b>Chroma Cloud</b>
 
-    Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, scalable and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
+Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, scalable and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
 
-    [Get started with Chroma Cloud](https://trychroma.com/signup)
+[Get started with Chroma Cloud](https://trychroma.com/signup)
 
 :::
 
@@ -24,59 +24,59 @@ It offers efficient vector search with metadata filtering and hybrid search capa
 
 <PropertiesTable
   content={[
-    {
-      name: "host",
-      type: "string",
-      isOptional: true,
-      description:
-        "The host address of the Chroma server. Defaults to 'localhost'",
-    },
-    {
-      name: "port",
-      type: "number",
-      isOptional: true,
-      description: "The port number of the Chroma server. Defaults to 8000",
-    },
-    {
-      name: "ssl",
-      type: "boolean",
-      isOptional: true,
-      description:
-        "Whether to use SSL/HTTPS for connections. Defaults to false",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      isOptional: true,
-      description: "A Chroma Cloud API key",
-    },
-    {
-      name: "tenant",
-      type: "string",
-      isOptional: true,
-      description:
-        "The tenant name in the Chroma server to connect to. Defaults to 'default_tenant' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
-    },
-    {
-      name: "database",
-      type: "string",
-      isOptional: true,
-      description:
-        "The database name to connect to. Defaults to 'default_database' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
-    },
-    {
-      name: "headers",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Additional HTTP headers to send with requests",
-    },
-    {
-      name: "fetchOptions",
-      type: "RequestInit",
-      isOptional: true,
-      description: "Additional fetch options for HTTP requests",
-    },
-  ]}
+{
+name: "host",
+type: "string",
+isOptional: true,
+description:
+"The host address of the Chroma server. Defaults to 'localhost'",
+},
+{
+name: "port",
+type: "number",
+isOptional: true,
+description: "The port number of the Chroma server. Defaults to 8000",
+},
+{
+name: "ssl",
+type: "boolean",
+isOptional: true,
+description:
+"Whether to use SSL/HTTPS for connections. Defaults to false",
+},
+{
+name: "apiKey",
+type: "string",
+isOptional: true,
+description: "A Chroma Cloud API key",
+},
+{
+name: "tenant",
+type: "string",
+isOptional: true,
+description:
+"The tenant name in the Chroma server to connect to. Defaults to 'default_tenant' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+},
+{
+name: "database",
+type: "string",
+isOptional: true,
+description:
+"The database name to connect to. Defaults to 'default_database' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+},
+{
+name: "headers",
+type: "Record<string, any>",
+isOptional: true,
+description: "Additional HTTP headers to send with requests",
+},
+{
+name: "fetchOptions",
+type: "RequestInit",
+isOptional: true,
+description: "Additional fetch options for HTTP requests",
+},
+]}
 />
 
 ## Running a Chroma Server
@@ -97,24 +97,24 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### forkIndex()
@@ -125,60 +125,60 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to fork",
-    },
-    {
-      name: "newIndexName",
-      type: "string",
-      description: "The name of the forked index",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to fork",
+},
+{
+name: "newIndexName",
+type: "string",
+description: "The name of the forked index",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-    {
-      name: "documents",
-      type: "string[]",
-      isOptional: true,
-      description:
-        "Chroma-specific: Original text documents associated with the vectors",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+{
+name: "documents",
+type: "string[]",
+isOptional: true,
+description:
+"Chroma-specific: Original text documents associated with the vectors",
+},
+]}
 />
 
 ### query()
 
 Query an index using a `queryVector`. Returns an array of semantically similar records in order of distance from the `queryVector`. Each record has the shape:
 
-```typescript
+```typescript prettier:false
 {
   id: string;
   score: number;
@@ -192,50 +192,50 @@ You can also provide the shape of your metadata to a `query` call for type infer
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-    {
-      name: "documentFilter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Chroma-specific: Filter to apply on the document content",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+{
+name: "documentFilter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Chroma-specific: Filter to apply on the document content",
+},
+]}
 />
 
 ### get()
 
 Get records from your Chroma index by IDs, metadata, and document filters. It returns an array of records of the shape:
 
-```typescript
+```typescript prettier:false
 {
   id: string;
   document?: string;
@@ -248,53 +248,53 @@ You can also provide the shape of your metadata to a `get` call for type inferen
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description:
-        "A list of record IDs to return. If not provided, all records are returned.",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters.",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-    {
-      name: "documentFilter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Chroma-specific: Filter to apply on the document content",
-    },
-    {
-      name: "limit",
-      type: "number",
-      isOptional: true,
-      defaultValue: 100,
-      description: "The maximum number of records to return",
-    },
-    {
-      name: "offset",
-      type: "number",
-      isOptional: true,
-      defaultValue: 0,
-      description:
-        "Offset for returning records. Use with `limit` to paginate results.",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description:
+"A list of record IDs to return. If not provided, all records are returned.",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters.",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+{
+name: "documentFilter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Chroma-specific: Filter to apply on the document content",
+},
+{
+name: "limit",
+type: "number",
+isOptional: true,
+defaultValue: 100,
+description: "The maximum number of records to return",
+},
+{
+name: "offset",
+type: "number",
+isOptional: true,
+defaultValue: 0,
+description:
+"Offset for returning records. Use with `limit` to paginate results.",
+},
+]}
 />
 
 ### listIndexes()
@@ -305,21 +305,21 @@ Returns an array of index names as strings.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -327,12 +327,12 @@ interface IndexStats {
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### updateVector()
@@ -341,48 +341,48 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector to update",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "ID of the vector to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update parameters",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector to update",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "ID of the vector to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "object",
+description: "Update parameters",
+},
+]}
 />
 
 The `update` object can contain:
 
 <PropertiesTable
   content={[
-    {
-      name: "vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector to replace the existing one",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to replace the existing metadata",
-    },
-  ]}
+{
+name: "vector",
+type: "number[]",
+isOptional: true,
+description: "New vector to replace the existing one",
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata to replace the existing metadata",
+},
+]}
 />
 
 Example:
@@ -392,32 +392,32 @@ Example:
 await vectorStore.updateVector({
   indexName: 'docs',
   id: 'vec_123',
-  update: { metadata: { status: 'reviewed' } }
-});
+  update: { metadata: { status: 'reviewed' } },
+})
 
 // Update by filter
 await vectorStore.updateVector({
   indexName: 'docs',
   filter: { source_id: 'manual.pdf' },
-  update: { metadata: { version: 2 } }
-});
+  update: { metadata: { version: 2 } },
+})
 ```
 
 ### deleteVector()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector to delete",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector to delete",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 ### deleteVectors()
@@ -426,24 +426,24 @@ Delete multiple vectors by IDs or by metadata filter. This method enables bulk d
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 Example:
@@ -452,25 +452,22 @@ Example:
 // Delete all chunks from a document
 await vectorStore.deleteVectors({
   indexName: 'docs',
-  filter: { source_id: 'manual.pdf' }
-});
+  filter: { source_id: 'manual.pdf' },
+})
 
 // Delete multiple vectors by ID
 await vectorStore.deleteVectors({
   indexName: 'docs',
-  ids: ['vec_1', 'vec_2', 'vec_3']
-});
+  ids: ['vec_1', 'vec_2', 'vec_3'],
+})
 
 // Delete old temporary documents
 await vectorStore.deleteVectors({
   indexName: 'docs',
   filter: {
-    $and: [
-      { bucket: 'temp' },
-      { indexed_at: { $lt: '2025-01-01' } }
-    ]
-  }
-});
+    $and: [{ bucket: 'temp' }, { indexed_at: { $lt: '2025-01-01' } }],
+  },
+})
 ```
 
 ## Response Types
@@ -479,11 +476,11 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  document?: string; // Chroma-specific: Original document if it was stored
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  document?: string // Chroma-specific: Original document if it was stored
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -494,13 +491,13 @@ The store throws typed errors that can be caught:
 ```typescript
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // Additional error context
+    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details) // Additional error context
   }
 }
 ```

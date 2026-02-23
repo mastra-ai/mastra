@@ -45,7 +45,7 @@ export function ToolsPage() {
   }, [tools]);
 
   const selectedToolIds = Object.keys(selectedTools || {});
-  const totalCount = selectedToolIds.length;
+  const totalCount = selectedToolIds.length + Object.keys(selectedIntegrationTools ?? {}).length;
 
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);

@@ -9,25 +9,32 @@ The user will issue this command. You will need to do two things.
 
 ## Create a changeset using the CLI
 
-Create a changeset using the CLI. The CLI will automatically detect changed packages and create the changeset file.
+Create a changeset using the CLI. The goal of changesets is to use it for generating changelogs. Individual package changelogs will later be combined into a single changelog that is published with each release.
 
 ```bash
-pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--patch pkg3]
+pnpm changeset -s -m "your changeset message" (--major | --minor | --patch) pkg-name
 ```
+
+For each package that has changes, run the CLI once and specify the appropriate version bump type (`--major`, `--minor`, or `--patch`) and message for that package. This will create a separate changeset file for each package, which is important for generating accurate changelogs.
 
 **Arguments:**
 
-- `-s` or `--skipPrompt` - Run non-interactively (required for automation)
-- `-m "message"` or `--message "message"` - The changeset message (required)
-- `--major @scope/pkg` - Packages that should have a major version bump
-- `--minor @scope/pkg` - Packages that should have a minor version bump
-- `--patch @scope/pkg` - Packages that should have a patch version bump (default for detected changes)
+- `-s` or `--skipPrompt`: Run non-interactively; requires at least one of `--major`, `--minor`, or `--patch` (required for automation)
+- `-m "message"` or `--message "message"`: The changeset message (required)
+- `--major pkg-name`: Packages that should have a major version bump
+- `--minor pkg-name`: Packages that should have a minor version bump
+- `--patch pkg-name`: Packages that should have a patch version bump
 
-**Version bump types:**
+**Notes:**
 
-- `patch` - Bugfixes with backward-compatible changes
-- `minor` - New features with backward-compatible changes
-- `major` - Breaking changes that are not backward-compatible
+- The bump type must be specified explicitly for each package; use `--major` or `--minor` for non-patch bumps
+- Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor mastra`
+
+**Version Bump Types:**
+
+- `patch`: Bugfixes with backward-compatible changes
+- `minor`: New features with backward-compatible changes
+- `major`: Breaking changes that are not backward-compatible
 
 **Message guidelines:**
 
@@ -42,7 +49,7 @@ pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--p
 
 If the changes span multiple packages (e.g. `@mastra/core`, `@mastra/memory`, `mastra`, so 3 packages) and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist. Example: The majority of the main feature was changed in `@mastra/memory` and only supporting changes were done in `@mastra/core` and `mastra`. Then `@mastra/memory` needs its own changeset separate from the others. You can achieve this by running the CLI multiple times and selecting the appropriate packages for each changeset.
 
-**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.
+**Important:** Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided. If you have multiple packages likely there is one or two main packages where the majority of change lives.
 
 ## Open a PR using the GitHub CLI
 

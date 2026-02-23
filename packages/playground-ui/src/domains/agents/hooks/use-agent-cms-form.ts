@@ -193,6 +193,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       // Reset form dirty state so publish can detect unsaved changes
       form.reset(values);
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       toast.success('Draft saved');
     } catch (error) {
       toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -230,6 +231,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
           queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
+          queryClient.invalidateQueries({ queryKey: ['agent', agentId] }),
           queryClient.invalidateQueries({ queryKey: ['agents'] }),
           queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
         ]);
@@ -269,7 +271,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const canPublish = useMemo(() => {
     const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
-    const instructionsDone = (watched.instructionBlocks ?? []).some(b => b.content?.trim());
+    const instructionsDone = (watched.instructionBlocks ?? []).some(
+      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+    );
     return identityDone && instructionsDone;
   }, [watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
 

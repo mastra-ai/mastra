@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {

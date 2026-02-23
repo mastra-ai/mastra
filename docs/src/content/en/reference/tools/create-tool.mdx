@@ -12,26 +12,26 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 ## Usage example
 
 ```typescript title="src/mastra/tools/reverse-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const tool = createTool({
-  id: "test-tool",
-  description: "Reverse the input string",
+  id: 'test-tool',
+  description: 'Reverse the input string',
   inputSchema: z.object({
     input: z.string(),
   }),
   outputSchema: z.object({
     output: z.string(),
   }),
-  execute: async (inputData) => {
-    const reversed = inputData.input.split("").reverse().join("");
+  execute: async inputData => {
+    const reversed = inputData.input.split('').reverse().join('')
 
     return {
       output: reversed,
-    };
+    }
   },
-});
+})
 ```
 
 ## Example with MCP Annotations
@@ -39,201 +39,201 @@ export const tool = createTool({
 When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
+  id: 'get-weather',
+  description: 'Get current weather for a location',
   inputSchema: z.object({
-    location: z.string().describe("City name or coordinates"),
+    location: z.string().describe('City name or coordinates'),
   }),
   // MCP-specific properties
   mcp: {
     // Annotations for client behavior hints
     annotations: {
-      title: "Weather Lookup",           // Human-readable display name
-      readOnlyHint: true,                // Tool doesn't modify environment
-      destructiveHint: false,            // Tool doesn't perform destructive updates
-      idempotentHint: true,              // Same args = same result
-      openWorldHint: true,               // Interacts with external API
+      title: 'Weather Lookup', // Human-readable display name
+      readOnlyHint: true, // Tool doesn't modify environment
+      destructiveHint: false, // Tool doesn't perform destructive updates
+      idempotentHint: true, // Same args = same result
+      openWorldHint: true, // Interacts with external API
     },
     // Custom metadata for client-specific functionality
     _meta: {
-      version: "1.0.0",
-      category: "weather",
+      version: '1.0.0',
+      category: 'weather',
     },
   },
-  execute: async (inputData) => {
-    const weather = await fetchWeather(inputData.location);
-    return { weather };
+  execute: async inputData => {
+    const weather = await fetchWeather(inputData.location)
+    return { weather }
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "A unique identifier for the tool.",
-      isOptional: false,
-    },
-    {
-      name: "description",
-      type: "string",
-      description:
-        "A description of what the tool does. This is used by the agent to decide when to use the tool.",
-      isOptional: false,
-    },
-    {
-      name: "inputSchema",
-      type: "Zod schema",
-      description:
-        "A Zod schema defining the expected input parameters for the tool's `execute` function.",
-      isOptional: true,
-    },
-    {
-      name: "outputSchema",
-      type: "Zod schema",
-      description:
-        "A Zod schema defining the expected output structure of the tool's `execute` function.",
-      isOptional: true,
-    },
-    {
-      name: "suspendSchema",
-      type: "Zod schema",
-      description:
-        "A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.",
-      isOptional: true,
-    },
-    {
-      name: "resumeSchema",
-      type: "Zod schema",
-      description:
-        "A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.",
-      isOptional: true,
-    },
-    {
-      name: "requireApproval",
-      type: "boolean",
-      description:
-        "When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.",
-      isOptional: true,
-    },
-    {
-      name: "mcp",
-      type: "MCPToolProperties",
-      description:
-        "MCP-specific properties for tools exposed via Model Context Protocol. Includes `annotations` (tool behavior hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) and `_meta` (arbitrary metadata passed through to MCP clients).",
-      isOptional: true,
-    },
-    {
-      name: "requestContextSchema",
-      type: "Zod schema",
-      description:
-        "A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.",
-      isOptional: true,
-    },
-    {
-      name: "execute",
-      type: "function",
-      description:
-        "The function that contains the tool's logic. It receives two parameters: the validated input data (first parameter) and an optional execution context object (second parameter) containing `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata.",
-      isOptional: false,
-      properties: [
-        {
-          parameters: [
-            {
-              name: "input",
-              type: "z.infer<TInput>",
-              description: "The validated input data based on inputSchema",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "context",
-              type: "ToolExecutionContext",
-              isOptional: true,
-              description: "Optional execution context containing metadata",
-              properties: [
-                {
-                  name: "requestContext",
-                  type: "RequestContext",
-                  isOptional: true,
-                  description:
-                    "Request Context for accessing shared state and dependencies",
-                },
-                {
-                  name: "tracingContext",
-                  type: "TracingContext",
-                  isOptional: true,
-                  description:
-                    "Tracing context for creating child spans and adding metadata",
-                },
-                {
-                  name: "abortSignal",
-                  type: "AbortSignal",
-                  isOptional: true,
-                  description: "Signal for aborting the tool execution",
-                },
-                {
-                  name: "agent",
-                  type: "AgentToolExecutionContext",
-                  isOptional: true,
-                  description: "Agent-specific context (messages, suspend, resumeData, etc.)",
-                },
-                {
-                  name: "workflow",
-                  type: "WorkflowToolExecutionContext",
-                  isOptional: true,
-                  description: "Workflow-specific context (state, setState, suspend, etc.)",
-                },
-                {
-                  name: "mcp",
-                  type: "MCPToolExecutionContext",
-                  isOptional: true,
-                  description: "MCP-specific context (elicitation, etc.)",
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "onInputStart",
-      type: "function",
-      description:
-        "Optional callback invoked when the tool call input streaming begins. Receives `toolCallId`, `messages`, and `abortSignal`.",
-      isOptional: true,
-    },
-    {
-      name: "onInputDelta",
-      type: "function",
-      description:
-        "Optional callback invoked for each incremental chunk of input text as it streams in. Receives `inputTextDelta`, `toolCallId`, `messages`, and `abortSignal`.",
-      isOptional: true,
-    },
-    {
-      name: "onInputAvailable",
-      type: "function",
-      description:
-        "Optional callback invoked when the complete tool input is available and parsed. Receives the validated `input` object, `toolCallId`, `messages`, and `abortSignal`.",
-      isOptional: true,
-    },
-    {
-      name: "onOutput",
-      type: "function",
-      description:
-        "Optional callback invoked after the tool has successfully executed and returned output. Receives the tool's `output`, `toolCallId`, `messages`, and `abortSignal`.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "A unique identifier for the tool.",
+isOptional: false,
+},
+{
+name: "description",
+type: "string",
+description:
+"A description of what the tool does. This is used by the agent to decide when to use the tool.",
+isOptional: false,
+},
+{
+name: "inputSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the expected input parameters for the tool's `execute` function.",
+isOptional: true,
+},
+{
+name: "outputSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the expected output structure of the tool's `execute` function.",
+isOptional: true,
+},
+{
+name: "suspendSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.",
+isOptional: true,
+},
+{
+name: "resumeSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.",
+isOptional: true,
+},
+{
+name: "requireApproval",
+type: "boolean",
+description:
+"When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.",
+isOptional: true,
+},
+{
+name: "mcp",
+type: "MCPToolProperties",
+description:
+"MCP-specific properties for tools exposed via Model Context Protocol. Includes `annotations` (tool behavior hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) and `_meta` (arbitrary metadata passed through to MCP clients).",
+isOptional: true,
+},
+{
+name: "requestContextSchema",
+type: "Zod schema",
+description:
+"A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.",
+isOptional: true,
+},
+{
+name: "execute",
+type: "function",
+description:
+"The function that contains the tool's logic. It receives two parameters: the validated input data (first parameter) and an optional execution context object (second parameter) containing `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata.",
+isOptional: false,
+properties: [
+{
+parameters: [
+{
+name: "input",
+type: "z.infer<TInput>",
+description: "The validated input data based on inputSchema",
+},
+],
+},
+{
+parameters: [
+{
+name: "context",
+type: "ToolExecutionContext",
+isOptional: true,
+description: "Optional execution context containing metadata",
+properties: [
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+description:
+"Request Context for accessing shared state and dependencies",
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description:
+"Tracing context for creating child spans and adding metadata",
+},
+{
+name: "abortSignal",
+type: "AbortSignal",
+isOptional: true,
+description: "Signal for aborting the tool execution",
+},
+{
+name: "agent",
+type: "AgentToolExecutionContext",
+isOptional: true,
+description: "Agent-specific context (messages, suspend, resumeData, etc.)",
+},
+{
+name: "workflow",
+type: "WorkflowToolExecutionContext",
+isOptional: true,
+description: "Workflow-specific context (state, setState, suspend, etc.)",
+},
+{
+name: "mcp",
+type: "MCPToolExecutionContext",
+isOptional: true,
+description: "MCP-specific context (elicitation, etc.)",
+},
+],
+},
+],
+},
+],
+},
+{
+name: "onInputStart",
+type: "function",
+description:
+"Optional callback invoked when the tool call input streaming begins. Receives `toolCallId`, `messages`, and `abortSignal`.",
+isOptional: true,
+},
+{
+name: "onInputDelta",
+type: "function",
+description:
+"Optional callback invoked for each incremental chunk of input text as it streams in. Receives `inputTextDelta`, `toolCallId`, `messages`, and `abortSignal`.",
+isOptional: true,
+},
+{
+name: "onInputAvailable",
+type: "function",
+description:
+"Optional callback invoked when the complete tool input is available and parsed. Receives the validated `input` object, `toolCallId`, `messages`, and `abortSignal`.",
+isOptional: true,
+},
+{
+name: "onOutput",
+type: "function",
+description:
+"Optional callback invoked after the tool has successfully executed and returned output. Receives the tool's `output`, `toolCallId`, `messages`, and `abortSignal`.",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
@@ -242,13 +242,13 @@ The `createTool()` function returns a `Tool` object.
 
 <PropertiesTable
   content={[
-    {
-      name: "Tool",
-      type: "object",
-      description:
-        "An object representing the defined tool, ready to be added to an agent.",
-    },
-  ]}
+{
+name: "Tool",
+type: "object",
+description:
+"An object representing the defined tool, ready to be added to an agent.",
+},
+]}
 />
 
 ## Tool Lifecycle Hooks
@@ -263,12 +263,12 @@ Called when tool call input streaming begins, before any input data is received.
 
 ```typescript
 export const tool = createTool({
-  id: "example-tool",
-  description: "Example tool with hooks",
+  id: 'example-tool',
+  description: 'Example tool with hooks',
   onInputStart: ({ toolCallId, messages, abortSignal }) => {
-    console.log(`Tool ${toolCallId} input streaming started`);
+    console.log(`Tool ${toolCallId} input streaming started`)
   },
-});
+})
 ```
 
 #### onInputDelta
@@ -277,12 +277,12 @@ Called for each incremental chunk of input text as it streams in. Useful for sho
 
 ```typescript
 export const tool = createTool({
-  id: "example-tool",
-  description: "Example tool with hooks",
+  id: 'example-tool',
+  description: 'Example tool with hooks',
   onInputDelta: ({ inputTextDelta, toolCallId, messages, abortSignal }) => {
-    console.log(`Received input chunk: ${inputTextDelta}`);
+    console.log(`Received input chunk: ${inputTextDelta}`)
   },
-});
+})
 ```
 
 #### onInputAvailable
@@ -291,16 +291,16 @@ Called when the complete tool input is available and has been parsed and validat
 
 ```typescript
 export const tool = createTool({
-  id: "example-tool",
-  description: "Example tool with hooks",
+  id: 'example-tool',
+  description: 'Example tool with hooks',
   inputSchema: z.object({
     city: z.string(),
   }),
   onInputAvailable: ({ input, toolCallId, messages, abortSignal }) => {
-    console.log(`Tool received complete input:`, input);
+    console.log(`Tool received complete input:`, input)
     // input is fully typed based on inputSchema
   },
-});
+})
 ```
 
 #### onOutput
@@ -309,19 +309,19 @@ Called after the tool has successfully executed and returned output. Useful for 
 
 ```typescript
 export const tool = createTool({
-  id: "example-tool",
-  description: "Example tool with hooks",
+  id: 'example-tool',
+  description: 'Example tool with hooks',
   outputSchema: z.object({
     result: z.string(),
   }),
-  execute: async (input) => {
-    return { result: "Success" };
+  execute: async input => {
+    return { result: 'Success' }
   },
   onOutput: ({ output, toolCallId, toolName, abortSignal }) => {
-    console.log(`${toolName} execution completed:`, output);
+    console.log(`${toolName} execution completed:`, output)
     // output is fully typed based on outputSchema
   },
-});
+})
 ```
 
 ### Hook Execution Order
@@ -329,10 +329,10 @@ export const tool = createTool({
 For a typical streaming tool call, the hooks are invoked in this order:
 
 1. **onInputStart** - Input streaming begins
-2. **onInputDelta** - Called multiple times as chunks arrive
-3. **onInputAvailable** - Complete input is parsed and validated
-4. Tool's **execute** function runs
-5. **onOutput** - Tool has completed successfully
+1. **onInputDelta** - Called multiple times as chunks arrive
+1. **onInputAvailable** - Complete input is parsed and validated
+1. Tool's **execute** function runs
+1. **onOutput** - Tool has completed successfully
 
 ### Hook Parameters
 
@@ -342,6 +342,7 @@ All hooks receive a parameter object with these common properties:
 - `abortSignal` (AbortSignal): Signal for detecting if the operation should be cancelled
 
 Additionally:
+
 - `onInputStart`, `onInputDelta`, and `onInputAvailable` receive `messages` (array): The conversation messages at the time of the tool call
 - `onInputDelta` receives `inputTextDelta` (string): The incremental text chunk
 - `onInputAvailable` receives `input`: The validated input data (typed according to `inputSchema`)
@@ -357,7 +358,7 @@ When exposing tools via the Model Context Protocol (MCP), you can provide annota
 
 MCP-specific properties are grouped under the `mcp` property, which includes `annotations` and `_meta`:
 
-```typescript
+```typescript prettier:false
 mcp: {
   annotations: { /* behavior hints */ },
   _meta: { /* custom metadata */ },
@@ -368,42 +369,42 @@ mcp: {
 
 <PropertiesTable
   content={[
-    {
-      name: "title",
-      type: "string",
-      description:
-        "A human-readable title for the tool. Used for display purposes in UI components.",
-      isOptional: true,
-    },
-    {
-      name: "readOnlyHint",
-      type: "boolean",
-      description:
-        "If true, the tool does not modify its environment. This hint indicates the tool only reads data and has no side effects. Defaults to false.",
-      isOptional: true,
-    },
-    {
-      name: "destructiveHint",
-      type: "boolean",
-      description:
-        "If true, the tool may perform destructive updates to its environment. If false, the tool performs only additive updates. This hint helps clients determine if confirmation should be required. Defaults to true.",
-      isOptional: true,
-    },
-    {
-      name: "idempotentHint",
-      type: "boolean",
-      description:
-        "If true, calling the tool repeatedly with the same arguments will have no additional effect on its environment. This hint indicates idempotent behavior. Defaults to false.",
-      isOptional: true,
-    },
-    {
-      name: "openWorldHint",
-      type: "boolean",
-      description:
-        "If true, this tool may interact with an 'open world' of external entities (e.g., web search, external APIs). If false, the tool's domain is closed and fully defined. Defaults to true.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "title",
+type: "string",
+description:
+"A human-readable title for the tool. Used for display purposes in UI components.",
+isOptional: true,
+},
+{
+name: "readOnlyHint",
+type: "boolean",
+description:
+"If true, the tool does not modify its environment. This hint indicates the tool only reads data and has no side effects. Defaults to false.",
+isOptional: true,
+},
+{
+name: "destructiveHint",
+type: "boolean",
+description:
+"If true, the tool may perform destructive updates to its environment. If false, the tool performs only additive updates. This hint helps clients determine if confirmation should be required. Defaults to true.",
+isOptional: true,
+},
+{
+name: "idempotentHint",
+type: "boolean",
+description:
+"If true, calling the tool repeatedly with the same arguments will have no additional effect on its environment. This hint indicates idempotent behavior. Defaults to false.",
+isOptional: true,
+},
+{
+name: "openWorldHint",
+type: "boolean",
+description:
+"If true, this tool may interact with an 'open world' of external entities (e.g., web search, external APIs). If false, the tool's domain is closed and fully defined. Defaults to true.",
+isOptional: true,
+},
+]}
 />
 
 These annotations follow the [MCP specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations) and are passed through when tools are listed via MCP.

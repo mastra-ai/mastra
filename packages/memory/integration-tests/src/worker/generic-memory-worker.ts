@@ -1,10 +1,10 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { SharedMemoryConfig } from '@mastra/core/memory';
-import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
+import type { LibSQLConfig, LibSQLStore, LibSQLVector, LibSQLVectorConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { PostgresStoreConfig } from '@mastra/pg';
-import type { UpstashConfig } from '@mastra/upstash';
+import type { PgVector, PostgresStore, PostgresStoreConfig } from '@mastra/pg';
+import type { UpstashConfig, UpstashStore, UpstashVector } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
 
 if (!parentPort) {
@@ -39,8 +39,9 @@ interface WorkerData {
 const { messages, storageType, storageConfig, vectorConfig, memoryOptions } = workerData as WorkerData;
 
 async function initializeAndRun() {
-  let store;
-  let vector;
+  let store: LibSQLStore | UpstashStore | PostgresStore;
+  let vector: LibSQLVector | UpstashVector | PgVector;
+  let teardown = () => Promise.resolve();
   try {
     switch (storageType) {
       case 'libsql':
@@ -61,6 +62,10 @@ async function initializeAndRun() {
           connectionString: (storageConfig as { connectionString: string }).connectionString,
           id: 'pg-vector',
         });
+        teardown = async () => {
+          await (store as PostgresStore).close();
+          await (vector as PgVector).disconnect();
+        };
         break;
       default:
         throw new Error(`Unsupported storageType in worker: ${storageType}`);
@@ -76,6 +81,7 @@ async function initializeAndRun() {
     for (const msgData of messages) {
       await memoryInstance.saveMessages({ messages: [msgData.originalMessage] });
     }
+    await teardown();
     parentPort!.postMessage({ success: true });
   } catch (error: any) {
     const serializableError = {
@@ -83,6 +89,7 @@ async function initializeAndRun() {
       name: error.name,
       stack: error.stack,
     };
+    await teardown();
     parentPort!.postMessage({ success: false, error: serializableError });
   }
 }
