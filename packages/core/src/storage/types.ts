@@ -3,6 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
+import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -410,10 +411,10 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  inputProcessors?: StorageConditionalField<string[]>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  outputProcessors?: StorageConditionalField<string[]>;
+  /** Processor graph for input processing — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
+  /** Processor graph for output processing — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Memory configuration object — static or conditional on request context */
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
@@ -584,6 +585,72 @@ export interface RuleGroupDepth1 {
 export interface RuleGroup {
   operator: 'AND' | 'OR';
   conditions: (Rule | RuleGroupDepth1)[];
+}
+
+// ============================================================================
+// Stored Processor Graph Types
+// ============================================================================
+
+/**
+ * A single processor step in a stored processor graph.
+ * Each step references a ProcessorProvider by ID and stores its configuration.
+ */
+export interface ProcessorGraphStep {
+  /** Unique ID for this step within the graph */
+  id: string;
+  /** The ProcessorProvider ID that created this processor */
+  providerId: string;
+  /** Configuration matching the provider's configSchema, validated at creation time */
+  config: Record<string, unknown>;
+  /** Which processor phases to enable (subset of the provider's availablePhases) */
+  enabledPhases: ProcessorPhase[];
+}
+
+/**
+ * Processor graph entry and condition types with a fixed nesting depth of 3 levels.
+ * Depth is capped to keep TypeScript and Zod/JSON-Schema types aligned
+ * (recursive types cause infinite-depth issues in JSON Schema generation).
+ *
+ * Innermost entries (depth 3) may only be step entries.
+ * Mid-level entries (depth 2) may contain step, parallel, or conditional — children limited to depth 3.
+ * Top-level entries (depth 1, exported as `ProcessorGraphEntry`) may contain step, parallel, or conditional — children limited to depth 2.
+ */
+
+/** Depth 3 (leaf): only step entries allowed */
+export type ProcessorGraphEntryDepth3 = { type: 'step'; step: ProcessorGraphStep };
+
+/** Condition at depth 2 — children are depth 3 entries */
+export interface ProcessorGraphConditionDepth2 {
+  steps: ProcessorGraphEntryDepth3[];
+  rules?: RuleGroup;
+}
+
+/** Depth 2: step, parallel, and conditional — children limited to depth 3 */
+export type ProcessorGraphEntryDepth2 =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntryDepth3[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphConditionDepth2[] };
+
+/** Condition at depth 1 — children are depth 2 entries */
+export interface ProcessorGraphCondition {
+  /** The steps to execute if this condition's rules match */
+  steps: ProcessorGraphEntryDepth2[];
+  /** Rules to evaluate against the previous step's output. If absent, this is the default branch. */
+  rules?: RuleGroup;
+}
+
+/** Depth 1 (top-level): step, parallel, and conditional — children limited to depth 2 */
+export type ProcessorGraphEntry =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntryDepth2[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphCondition[] };
+
+/**
+ * A stored processor graph representing a pipeline of processors.
+ * The entries are ordered: sequential flow is array order, with parallel/conditional branching.
+ */
+export interface StoredProcessorGraph {
+  steps: ProcessorGraphEntry[];
 }
 
 /**
@@ -1123,10 +1190,13 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Ratio controlling how much context to retain after activation (0-1 float).
+   * Normalized ratio (0-1) controlling how much context to activate.
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
    * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
-   * Chunks are selected by boundary, biased under the target.
+   * Chunks are selected by boundary, biased over the target (to ensure remaining context stays at or below the retention floor).
+   *
+   * Note: this is always a ratio. The caller resolves absolute `bufferActivation` values (> 1)
+   * into the equivalent ratio before passing to the storage layer.
    */
   activationRatio: number;
   /**
@@ -1139,6 +1209,12 @@ export interface SwapBufferedToActiveInput {
    * Used to compute how many tokens need to be removed to reach the retention floor.
    */
   currentPendingTokens: number;
+  /**
+   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
+   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
+   * aggressively reducing context is more important than preserving the retention floor.
+   */
+  forceMaxActivation?: boolean;
   /**
    * Optional timestamp to use as lastObservedAt after swap.
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
@@ -1173,6 +1249,10 @@ export interface SwapBufferedToActiveResult {
     messageCount: number;
     observations: string;
   }>;
+  /** Suggested continuation from the most recent activated chunk (if any) */
+  suggestedContinuation?: string;
+  /** Current task from the most recent activated chunk (if any) */
+  currentTask?: string;
 }
 
 /**
@@ -1354,6 +1434,150 @@ export type StorageListMCPClientsOutput = PaginationInfo & {
 /** Paginated list output for resolved stored MCP clients */
 export type StorageListMCPClientsResolvedOutput = PaginationInfo & {
   mcpClients: StorageResolvedMCPClientType[];
+};
+
+// ============================================
+// MCP Server Storage Types
+// ============================================
+
+/**
+ * MCP server version snapshot containing ALL configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the MCP server record.
+ *
+ * Serializable metadata from MCPServerConfig. Non-serializable fields (tools, agents, workflows)
+ * are stored as reference keys and resolved at hydration time.
+ */
+export interface StorageMCPServerSnapshotType {
+  /** Display name of the MCP server */
+  name: string;
+  /** Semantic version string */
+  version: string;
+  /** Purpose description */
+  description?: string;
+  /** Instructions describing how to use the server */
+  instructions?: string;
+  /** Repository information for the server's source code */
+  repository?: {
+    url: string;
+    type?: string;
+    directory?: string;
+  };
+  /** Release date of this server version (ISO 8601 string) */
+  releaseDate?: string;
+  /** Whether this version is the latest available */
+  isLatest?: boolean;
+  /** Canonical packaging format (e.g., 'npm', 'docker', 'pypi', 'crates') */
+  packageCanonical?: string;
+  /**
+   * Tool keys to include on this MCP server.
+   * Keys are tool IDs registered in Mastra, values provide optional config overrides.
+   */
+  tools?: Record<string, StorageToolConfig>;
+  /**
+   * Agent keys to expose as tools on this MCP server.
+   * Keys are agent IDs registered in Mastra, values provide optional config overrides.
+   */
+  agents?: Record<string, StorageToolConfig>;
+  /**
+   * Workflow keys to expose as tools on this MCP server.
+   * Keys are workflow IDs registered in Mastra, values provide optional config overrides.
+   */
+  workflows?: Record<string, StorageToolConfig>;
+}
+
+/**
+ * Thin stored MCP server record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageMCPServerSnapshotType).
+ */
+export interface StorageMCPServerType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Server status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to mcp_server_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored MCP server type that combines the thin record with version snapshot config.
+ * Returned by getMCPServerByIdResolved and listMCPServersResolved.
+ */
+export type StorageResolvedMCPServerType = StorageMCPServerType &
+  StorageMCPServerSnapshotType & {
+    resolvedVersionId?: string;
+  };
+
+/**
+ * Input for creating a new stored MCP server. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateMCPServerInput = {
+  /** Unique identifier for the MCP server */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+} & StorageMCPServerSnapshotType;
+
+/**
+ * Input for updating a stored MCP server. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateMCPServerInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP server */
+  metadata?: Record<string, unknown>;
+  /** FK to mcp_server_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Server status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageMCPServerSnapshotType>;
+
+export type StorageListMCPServersInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter MCP servers by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter MCP servers by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+  /**
+   * Filter MCP servers by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
+};
+
+/** Paginated list output for thin stored MCP server records */
+export type StorageListMCPServersOutput = PaginationInfo & {
+  mcpServers: StorageMCPServerType[];
+};
+
+/** Paginated list output for resolved stored MCP servers */
+export type StorageListMCPServersResolvedOutput = PaginationInfo & {
+  mcpServers: StorageResolvedMCPServerType[];
 };
 
 // ============================================

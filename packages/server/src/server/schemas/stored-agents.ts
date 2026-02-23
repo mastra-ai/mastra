@@ -3,6 +3,7 @@ import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } f
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
+import { workspaceSnapshotConfigSchema } from './stored-workspaces';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -108,6 +109,94 @@ const mcpClientToolsConfigSchema = z.object({
   tools: z.record(z.string(), toolConfigSchema).optional(),
 });
 
+/** Per-skill config schema */
+const skillConfigSchema = z.object({
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  pin: z.string().optional(),
+  strategy: z.enum(['latest', 'live']).optional(),
+});
+
+/** Skills config: skill IDs mapped to per-skill config */
+const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
+
+/** Workspace reference: either a stored workspace ID or an inline config */
+const workspaceRefSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('id'), workspaceId: z.string() }),
+  z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+]);
+
+/**
+ * Processor phase enum matching ProcessorPhase type
+ */
+const processorPhaseSchema = z.enum([
+  'processInput',
+  'processInputStep',
+  'processOutputStream',
+  'processOutputResult',
+  'processOutputStep',
+]);
+
+/**
+ * A single processor step in a stored processor graph.
+ */
+const processorGraphStepSchema = z.object({
+  id: z.string().describe('Unique ID for this step within the graph'),
+  providerId: z.string().describe('ProcessorProvider ID that creates this processor'),
+  config: z.record(z.string(), z.unknown()).describe('Configuration matching the provider configSchema'),
+  enabledPhases: z.array(processorPhaseSchema).min(1).describe('Which processor phases to enable'),
+});
+
+/**
+ * Processor graph entry schema.
+ * Simplified version of SerializedStepFlowEntry, supporting step, parallel, and conditional.
+ *
+ * Uses a fixed nesting depth (3 levels) to avoid infinite recursion
+ * when converting to JSON Schema / OpenAPI.
+ */
+
+/** Depth 3 (leaf): only step entries allowed */
+const processorGraphEntryDepth3 = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+]);
+
+/** Depth 2: step, parallel, and conditional — children limited to depth 3 */
+const processorGraphEntryDepth2 = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+  z.object({ type: z.literal('parallel'), branches: z.array(z.array(processorGraphEntryDepth3)) }),
+  z.object({
+    type: z.literal('conditional'),
+    conditions: z.array(
+      z.object({
+        steps: z.array(processorGraphEntryDepth3),
+        rules: ruleGroupSchema.optional(),
+      }),
+    ),
+  }),
+]);
+
+/** Depth 1 (top-level): step, parallel, and conditional — children limited to depth 2 */
+const processorGraphEntrySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('step'), step: processorGraphStepSchema }),
+  z.object({ type: z.literal('parallel'), branches: z.array(z.array(processorGraphEntryDepth2)) }),
+  z.object({
+    type: z.literal('conditional'),
+    conditions: z.array(
+      z.object({
+        steps: z.array(processorGraphEntryDepth2),
+        rules: ruleGroupSchema.optional(),
+      }),
+    ),
+  }),
+]);
+
+/**
+ * A stored processor graph representing a pipeline of processors.
+ */
+const storedProcessorGraphSchema = z.object({
+  steps: z.array(processorGraphEntrySchema).describe('Ordered list of processor graph entries'),
+});
+
 /**
  * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
  * These live in version snapshots, not on the thin agent record.
@@ -140,18 +229,24 @@ const snapshotConfigSchema = z.object({
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
-  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+  inputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
-  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .describe('Input processor graph — static or conditional'),
+  outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
+    .describe('Output processor graph — static or conditional'),
   memory: conditionalFieldSchema(serializedMemoryConfigSchema)
     .optional()
     .describe('Memory configuration — static or conditional'),
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
+  skills: conditionalFieldSchema(skillsConfigSchema)
+    .optional()
+    .describe('Skill IDs mapped to per-skill config — static or conditional'),
+  workspace: conditionalFieldSchema(workspaceRefSchema)
+    .optional()
+    .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -237,18 +332,24 @@ export const storedAgentSchema = z.object({
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
-  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+  inputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
-  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .describe('Input processor graph — static or conditional'),
+  outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
+    .describe('Output processor graph — static or conditional'),
   memory: conditionalFieldSchema(serializedMemoryConfigSchema)
     .optional()
     .describe('Memory configuration — static or conditional'),
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
+  skills: conditionalFieldSchema(skillsConfigSchema)
+    .optional()
+    .describe('Skill IDs mapped to per-skill config — static or conditional'),
+  workspace: conditionalFieldSchema(workspaceRefSchema)
+    .optional()
+    .describe('Workspace reference (stored ID or inline config) — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -335,6 +436,10 @@ export {
   scorerConfigSchema,
   conditionalFieldSchema,
   modelConfigSchema,
+  storedProcessorGraphSchema,
+  processorGraphStepSchema,
+  processorGraphEntrySchema,
+  processorPhaseSchema,
   toolConfigSchema,
   toolsConfigSchema,
 };

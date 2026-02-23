@@ -4,34 +4,28 @@ A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi
 
 ## Features
 
-- 🤖 **Multi-model support** - Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
-- 🔐 **OAuth login** - Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
-- 💾 **Persistent conversations** - Threads are saved per-project and resume automatically
-- 🛠️ **Coding tools** - View files, edit code, run shell commands
-- 📊 **Token tracking** - Monitor usage with persistent token counts per thread
-- 🎨 **Beautiful TUI** - Polished terminal interface with streaming responses
+- 🤖 **Multi-model support**: Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
+- 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
+- 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
+- 🛠️ **Coding tools**: View files, edit code, run shell commands
+- 📊 **Token tracking**: Monitor usage with persistent token counts per thread
+- 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
 
 ## Installation
 
-Clone the repository and install its dependencies.
+Install `mastracode` globally with your package manager of choice.
 
 ```bash
-# Clone the repository
-git clone https://github.com/mastra-ai/mastra.git
-cd mastracode
-
-# Install dependencies
-pnpm install
+npm install -g mastracode
 ```
 
-To use Mastra Code, we recommend creating an alias in your shell configuration to launch it from any directory. You have to specify the absolute path to `main.ts` and then run it with `tsx`.
+If you prefer not to install packages globally, you can use `npx`:
 
 ```bash
-# Add this to your .bashrc, .zshrc, etc.
-alias mastracode="pnpm dlx tsx /absolute/path/mastracode/src/main.ts"
+npx mastracode
 ```
 
-Lastly, start the TUI and execute the `/login` command to authenticate with your AI providers.
+Once you start `mastracode`, execute the `/login` command to authenticate with your AI providers.
 
 ## Usage
 
@@ -130,13 +124,6 @@ pnpm typecheck
 # Build
 pnpm build
 ```
-
-## Roadmap
-
-- [ ] Tool approval UI for dangerous operations
-- [ ] Streaming tool output
-- [ ] More tools (search, grep, etc.)
-- [ ] Multi-agent collaboration (network mode)
 
 ## Credits
 

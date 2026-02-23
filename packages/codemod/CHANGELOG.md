@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.0.3
+
+### Patch Changes
+
+- Update internal dependency `@clack/prompts` to v1 ([#13095](https://github.com/mastra-ai/mastra/pull/13095))
+
 ## 1.0.3-alpha.0
 
 ### Patch Changes

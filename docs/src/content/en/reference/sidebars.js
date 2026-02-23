@@ -685,6 +685,21 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Harness',
+      collapsed: true,
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/harness-class',
+          label: 'Harness Class',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Streaming',
       collapsed: true,
       items: [

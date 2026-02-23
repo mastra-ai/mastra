@@ -8,7 +8,7 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { askUserTool, createSubagentTool, submitPlanTool } from './tools';
+import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -51,7 +51,7 @@ import type {
  * })
  *
  * await harness.init()
- * await harness.sendMessage("Hello!")
+ * await harness.sendMessage({ content: "Hello!" })
  * ```
  */
 export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
@@ -190,6 +190,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
+    this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
 
@@ -263,7 +264,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Mode Management
   // ===========================================================================
 
-  getModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode<TState>[] {
     return this.config.modes;
   }
 
@@ -283,7 +284,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Switch to a different mode.
    * Aborts any in-progress generation and switches to the mode's default model.
    */
-  async switchMode(modeId: string): Promise<void> {
+  async switchMode({ modeId }: { modeId: string }): Promise<void> {
     const mode = this.config.modes.find(m => m.id === modeId);
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
@@ -294,13 +295,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
     if (currentModelId) {
-      await this.persistThreadSetting(`modeModelId_${this.currentModeId}`, currentModelId);
+      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
     }
 
     const previousModeId = this.currentModeId;
     this.currentModeId = modeId;
 
-    await this.persistThreadSetting('currentModeId', modeId);
+    await this.setThreadSetting({ key: 'currentModeId', value: modeId });
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
@@ -366,7 +367,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Switch to a different model at runtime.
    */
-  async switchModel(modelId: string, scope: 'global' | 'thread' = 'thread', modeId?: string): Promise<void> {
+  async switchModel({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
     const targetModeId = modeId ?? this.currentModeId;
 
     if (targetModeId === this.currentModeId) {
@@ -374,7 +383,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     if (scope === 'thread') {
-      await this.persistThreadSetting(`modeModelId_${targetModeId}`, modelId);
+      await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
     }
 
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
@@ -426,7 +435,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Get all available models from the provider registry with auth status.
    * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
    */
-  async getAvailableModels(): Promise<AvailableModel[]> {
+  async listAvailableModels(): Promise<AvailableModel[]> {
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -497,12 +506,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.resourceId;
   }
 
-  setResourceId(resourceId: string): void {
+  setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
   }
 
-  async createThread(title?: string): Promise<HarnessThread> {
+  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
     const now = new Date();
     const thread: HarnessThread = {
       id: this.generateId(),
@@ -522,6 +531,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       metadata[`modeModelId_${this.currentModeId}`] = modelId;
     }
 
+    // Auto-tag with projectPath from state so threads are scoped to the working directory
+    const projectPath = (this.state as any).projectPath;
+    if (projectPath) {
+      metadata.projectPath = projectPath;
+    }
+
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
       await memoryStorage.saveThread({
@@ -536,6 +551,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     }
 
+    // Acquire lock on new thread before releasing old one.
+    // If acquire fails, attempt to re-acquire the old lock before rethrowing.
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        this.config.threadLock.acquire(thread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        this.config.threadLock.release(oldThreadId);
+      }
+    }
+
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
@@ -548,7 +584,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return thread;
   }
 
-  async renameThread(title: string): Promise<void> {
+  async renameThread({ title }: { title: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -560,7 +596,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  async switchThread(threadId: string): Promise<void> {
+  async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
 
     if (this.config.storage) {
@@ -571,7 +607,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
+    // Acquire lock on new thread before releasing old one
+    this.config.threadLock?.acquire(threadId);
+
     const previousThreadId = this.currentThreadId;
+    if (previousThreadId) {
+      this.config.threadLock?.release(previousThreadId);
+    }
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
@@ -599,7 +641,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }));
   }
 
-  async persistThreadSetting(key: string, value: unknown): Promise<void> {
+  async setThreadSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -619,7 +661,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  private async removeThreadSetting(key: string): Promise<void> {
+  private async deleteThreadSetting({ key }: { key: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -866,11 +908,29 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.config.resolveModel(modelId);
   }
 
+  /**
+   * Switch the Observer model.
+   */
+  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
+    void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>);
+    await this.setThreadSetting({ key: 'observerModelId', value: modelId });
+    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
+  }
+
+  /**
+   * Switch the Reflector model.
+   */
+  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
+    void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>);
+    await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
+    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
+  }
+
   // ===========================================================================
   // Subagent Model Management
   // ===========================================================================
 
-  getSubagentModelId(agentType?: string): string | null {
+  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     const state = this.state as Record<string, unknown>;
     if (agentType) {
       const perType = state[`subagentModelId_${agentType}`];
@@ -880,10 +940,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return typeof global === 'string' ? global : null;
   }
 
-  async setSubagentModelId(modelId: string, agentType?: string): Promise<void> {
+  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
     void this.setState({ [key]: modelId } as Partial<z.infer<TState>>);
-    await this.persistThreadSetting(key, modelId);
+    await this.setThreadSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
 
@@ -891,11 +951,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Permissions
   // ===========================================================================
 
-  grantSessionCategory(category: ToolCategory): void {
+  grantSessionCategory({ category }: { category: ToolCategory }): void {
     this.sessionGrantedCategories.add(category);
   }
 
-  grantSessionTool(toolName: string): void {
+  grantSessionTool({ toolName }: { toolName: string }): void {
     this.sessionGrantedTools.add(toolName);
   }
 
@@ -906,17 +966,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     };
   }
 
-  getToolCategory(toolName: string): ToolCategory | null {
+  getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
-  setPermissionCategory(category: ToolCategory, policy: PermissionPolicy): void {
+  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.categories[category] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
   }
 
-  setPermissionTool(toolName: string, policy: PermissionPolicy): void {
+  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.tools[toolName] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
@@ -944,7 +1004,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     if (this.sessionGrantedTools.has(toolName)) return 'allow';
 
-    const category = this.getToolCategory(toolName);
+    const category = this.getToolCategory({ toolName });
     if (category) {
       if (this.sessionGrantedCategories.has(category)) return 'allow';
       const categoryPolicy = rules.categories[category];
@@ -962,7 +1022,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Send a message to the current agent.
    * Streams the response and emits events.
    */
-  async sendMessage(content: string, options?: { images?: Array<{ data: string; mimeType: string }> }): Promise<void> {
+  async sendMessage({
+    content,
+    images,
+  }: {
+    content: string;
+    images?: Array<{ data: string; mimeType: string }>;
+  }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
       this.currentThreadId = thread.id;
@@ -991,12 +1057,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (options?.images?.length) {
+      if (images?.length) {
         messageInput = {
           role: 'user',
           content: [
             { type: 'text', text: content },
-            ...options.images.map(img => ({ type: 'file', data: img.data, mediaType: img.mimeType })),
+            ...images.map((img: { data: string; mimeType: string }) => ({
+              type: 'file',
+              data: img.data,
+              mediaType: img.mimeType,
+            })),
           ],
         };
       }
@@ -1037,21 +1107,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage(next);
+        await this.sendMessage({ content: next });
       }
     }
   }
 
-  async getMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
     if (!this.currentThreadId) return [];
-    return this.getMessagesForThread(this.currentThreadId, options);
+    return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
-  async getMessagesForThread(threadId: string, options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
     const memoryStorage = await this.getMemoryStorage();
-    const limit = options?.limit;
 
     if (limit) {
       const result = await memoryStorage.listMessages({
@@ -1067,7 +1136,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return result.messages.map(msg => this.convertToHarnessMessage(msg));
   }
 
-  async getFirstUserMessageForThread(threadId: string): Promise<HarnessMessage | null> {
+  async getFirstUserMessageForThread({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
     if (!this.config.storage) return null;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1154,6 +1223,40 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             });
           }
           break;
+        case 'data-om-observation-start': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_start',
+            tokensToObserve: (data.tokensToObserve as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'data-om-observation-end': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_end',
+            tokensObserved: (data.tokensObserved as number) ?? 0,
+            observationTokens: (data.observationTokens as number) ?? 0,
+            durationMs: (data.durationMs as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+            observations: (data.observations as string) ?? undefined,
+            currentTask: (data.currentTask as string) ?? undefined,
+            suggestedResponse: (data.suggestedResponse as string) ?? undefined,
+          });
+          break;
+        }
+        case 'data-om-observation-failed': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_failed',
+            error: (data.error as string) ?? 'Unknown error',
+            tokensAttempted: (data.tokensAttempted as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        // Skip other part types (step-start, data-om-status, etc.)
       }
     }
 
@@ -1219,6 +1322,24 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             }
             this.emit({ type: 'message_update', message: { ...currentMessage } });
           }
+          break;
+        }
+
+        case 'tool-call-input-streaming-start': {
+          const { toolCallId, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_start', toolCallId, toolName });
+          break;
+        }
+
+        case 'tool-call-delta': {
+          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+          break;
+        }
+
+        case 'tool-call-input-streaming-end': {
+          const { toolCallId } = chunk.payload;
+          this.emit({ type: 'tool_input_end', toolCallId });
           break;
         }
 
@@ -1339,6 +1460,171 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
 
+        // Observational Memory data parts
+        // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
+        case 'data-om-status': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.windows) {
+            const w = d.windows;
+            const active = w.active ?? {};
+            const msgs = active.messages ?? {};
+            const obs = active.observations ?? {};
+            const buffObs = w.buffered?.observations ?? {};
+            const buffRef = w.buffered?.reflection ?? {};
+
+            this.emit({
+              type: 'om_status',
+              windows: {
+                active: {
+                  messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
+                  observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
+                },
+                buffered: {
+                  observations: {
+                    status: buffObs.status ?? 'idle',
+                    chunks: buffObs.chunks ?? 0,
+                    messageTokens: buffObs.messageTokens ?? 0,
+                    projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
+                    observationTokens: buffObs.observationTokens ?? 0,
+                  },
+                  reflection: {
+                    status: buffRef.status ?? 'idle',
+                    inputObservationTokens: buffRef.inputObservationTokens ?? 0,
+                    observationTokens: buffRef.observationTokens ?? 0,
+                  },
+                },
+              },
+              recordId: d.recordId ?? '',
+              threadId: d.threadId ?? '',
+              stepNumber: d.stepNumber ?? 0,
+              generationCount: d.generationCount ?? 0,
+            });
+          }
+          break;
+        }
+        case 'data-om-observation-start': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            if (payload.operationType === 'observation') {
+              this.emit({
+                type: 'om_observation_start',
+                cycleId: payload.cycleId,
+                operationType: payload.operationType,
+                tokensToObserve: payload.tokensToObserve ?? 0,
+              });
+            } else if (payload.operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_start',
+                cycleId: payload.cycleId,
+                tokensToReflect: payload.tokensToObserve ?? 0,
+              });
+            }
+          }
+          break;
+        }
+        case 'data-om-observation-end': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            if (payload.operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_end',
+                cycleId: payload.cycleId,
+                durationMs: payload.durationMs ?? 0,
+                compressedTokens: payload.observationTokens ?? 0,
+                observations: payload.observations,
+              });
+            } else {
+              this.emit({
+                type: 'om_observation_end',
+                cycleId: payload.cycleId,
+                durationMs: payload.durationMs ?? 0,
+                tokensObserved: payload.tokensObserved ?? 0,
+                observationTokens: payload.observationTokens ?? 0,
+                observations: payload.observations,
+                currentTask: payload.currentTask,
+                suggestedResponse: payload.suggestedResponse,
+              });
+            }
+          }
+          break;
+        }
+        case 'data-om-observation-failed': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload) {
+            if (payload.operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_failed',
+                cycleId: payload.cycleId ?? 'unknown',
+                error: payload.error ?? 'Unknown error',
+                durationMs: payload.durationMs ?? 0,
+              });
+            } else {
+              this.emit({
+                type: 'om_observation_failed',
+                cycleId: payload.cycleId ?? 'unknown',
+                error: payload.error ?? 'Unknown error',
+                durationMs: payload.durationMs ?? 0,
+              });
+            }
+          }
+          break;
+        }
+        // Async buffering lifecycle
+        case 'data-om-buffering-start': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_buffering_start',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              tokensToBuffer: payload.tokensToBuffer ?? 0,
+            });
+          }
+          break;
+        }
+        case 'data-om-buffering-end': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_buffering_end',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              tokensBuffered: payload.tokensBuffered ?? 0,
+              bufferedTokens: payload.bufferedTokens ?? 0,
+              observations: payload.observations,
+            });
+          }
+          break;
+        }
+        case 'data-om-buffering-failed': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_buffering_failed',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              error: payload.error ?? 'Unknown error',
+            });
+          }
+          break;
+        }
+        case 'data-om-activation': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_activation',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              chunksActivated: payload.chunksActivated ?? 0,
+              tokensActivated: payload.tokensActivated ?? 0,
+              observationTokens: payload.observationTokens ?? 0,
+              messagesActivated: payload.messagesActivated ?? 0,
+              generationCount: payload.generationCount ?? 0,
+            });
+          }
+          break;
+        }
+
         default:
           break;
       }
@@ -1368,21 +1654,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer(content: string): Promise<void> {
+  async steer({ content }: { content: string }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
-    await this.sendMessage(content);
+    await this.sendMessage({ content });
   }
 
   /**
    * Queue a follow-up message to be processed after the current operation completes.
    */
-  async followUp(content: string): Promise<void> {
+  async followUp({ content }: { content: string }): Promise<void> {
     if (this.isRunning()) {
       this.followUpQueue.push(content);
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage(content);
+      await this.sendMessage({ content });
     }
   }
 
@@ -1402,15 +1688,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
    */
-  resolveToolApprovalDecision(decision: 'approve' | 'decline' | 'always_allow_category'): void {
+  respondToToolApproval({ decision }: { decision: 'approve' | 'decline' | 'always_allow_category' }): void {
     if (!this.pendingApprovalResolve) return;
 
     if (decision === 'always_allow_category') {
       const tn = this.pendingApprovalToolName;
       if (tn) {
-        const category = this.getToolCategory(tn);
+        const category = this.getToolCategory({ toolName: tn });
         if (category) {
-          this.grantSessionCategory(category);
+          this.grantSessionCategory({ category });
         }
       }
       this.pendingApprovalResolve('approve');
@@ -1428,7 +1714,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending question resolver.
    * Called by agent tools (e.g., ask_user) to pause execution until the UI responds.
    */
-  registerQuestion(questionId: string, resolve: (answer: string) => void): void {
+  registerQuestion({ questionId, resolve }: { questionId: string; resolve: (answer: string) => void }): void {
     this.pendingQuestions.set(questionId, resolve);
   }
 
@@ -1436,7 +1722,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Resolve a pending question with the user's answer.
    * Called by the UI when the user responds to a question dialog.
    */
-  respondToQuestion(questionId: string, answer: string): void {
+  respondToQuestion({ questionId, answer }: { questionId: string; answer: string }): void {
     const resolve = this.pendingQuestions.get(questionId);
     if (resolve) {
       this.pendingQuestions.delete(questionId);
@@ -1448,10 +1734,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending plan approval resolver.
    * Called by agent tools (e.g., submit_plan) to pause execution until approval.
    */
-  registerPlanApproval(
-    planId: string,
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void,
-  ): void {
+  registerPlanApproval({
+    planId,
+    resolve,
+  }: {
+    planId: string;
+    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
+  }): void {
     this.pendingPlanApprovals.set(planId, resolve);
   }
 
@@ -1460,17 +1749,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * On approval: switches to the default mode, then resolves the promise.
    * On rejection: resolves with feedback (stays in current mode).
    */
-  async respondToPlanApproval(
-    planId: string,
-    response: { action: 'approved' | 'rejected'; feedback?: string },
-  ): Promise<void> {
+  async respondToPlanApproval({
+    planId,
+    response,
+  }: {
+    planId: string;
+    response: { action: 'approved' | 'rejected'; feedback?: string };
+  }): Promise<void> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await this.switchMode(defaultMode.id);
+        await this.switchMode({ modeId: defaultMode.id });
       }
     }
 
@@ -1569,6 +1861,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)
@@ -1614,9 +1908,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      registerQuestion: (questionId, resolve) => this.registerQuestion(questionId, resolve),
-      registerPlanApproval: (planId, resolve) => this.registerPlanApproval(planId, resolve),
-      getSubagentModelId: (agentType?: string) => this.getSubagentModelId(agentType),
+      registerQuestion: params => this.registerQuestion(params),
+      registerPlanApproval: params => this.registerPlanApproval(params),
+      getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
@@ -1718,7 +2012,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   registerHeartbeat(handler: HeartbeatHandler): void {
-    void this.removeHeartbeat(handler.id);
+    void this.removeHeartbeat({ id: handler.id });
 
     const run = async () => {
       try {
@@ -1737,7 +2031,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown });
   }
 
-  async removeHeartbeat(id: string): Promise<void> {
+  async removeHeartbeat({ id }: { id: string }): Promise<void> {
     const entry = this.heartbeatTimers.get(id);
     if (entry) {
       clearInterval(entry.timer);

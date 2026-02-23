@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { ScaleIcon, MoveRightIcon, XIcon } from 'lucide-react';
+import { GitCompareIcon } from 'lucide-react';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { useDatasetItemVersions, type DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
-import { Badge } from '@/ds/components/Badge';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';
 
@@ -77,33 +76,29 @@ export function DatasetItemVersionsPanel({
   const columnsToRender = isSelectionActive ? versionsListColumnsWithCheckbox : versionsListColumns;
 
   return (
-    <Column className="min-w-[20rem]">
+    <Column className="min-w-[17rem]">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
-          {/* <div className="text-sm text-neutral3 flex items-center gap-2">
-            <Badge className="text-ui-md">{selectedIds.size}</Badge>
-            <span>selected</span>
-            <MoveRightIcon />
-          </div> */}
           <ButtonsGroup>
+            <Button variant="standard" size="default" onClick={handleCancelSelection}>
+              Cancel
+            </Button>
             <ButtonWithTooltip
               variant="cta"
               size="default"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
-              tooltipContent={selectedIds.size !== 2 ? 'Select exactly 2 versions to compare' : undefined}
+              tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
+              className="grow"
             >
-              Compare Versions
+              Compare Selected
             </ButtonWithTooltip>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (
         <Column.Toolbar>
-          <Button variant="standard" size="default" onClick={handleCompareClick}>
-            <ScaleIcon /> Compare
+          <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
+            <GitCompareIcon /> Compare Versions
           </Button>
         </Column.Toolbar>
       )}
@@ -128,13 +123,7 @@ export function DatasetItemVersionsPanel({
             <ItemList.Items>
               {versions?.map((item, index) => {
                 const versionKey = String(item.datasetVersion);
-                const createdAtDate = typeof item.createdAt === 'string' ? new Date(item.createdAt) : item.createdAt;
-
-                // const entry = {
-                //   id: `version-${index}`,
-                //   version: `v${item.datasetVersion} — ${format(versionDate, 'MMM d, yyyy HH:mm')}`,
-                //   status: item.isLatest ? 'current' : '',
-                // };
+                const versionDate = typeof item.updatedAt === 'string' ? new Date(item.updatedAt) : item.updatedAt;
 
                 return (
                   <ItemList.Row
@@ -145,10 +134,13 @@ export function DatasetItemVersionsPanel({
                       <ItemList.FlexCell className="w-12 pl-4">
                         <Checkbox
                           checked={selectedIds.has(versionKey)}
+                          disabled={item.isDeleted}
                           onCheckedChange={() => {}}
                           onClick={e => {
                             e.stopPropagation();
-                            handleToggleSelection(versionKey);
+                            if (!item.isDeleted) {
+                              handleToggleSelection(versionKey);
+                            }
                           }}
                           aria-label={`Select version ${item.datasetVersion}`}
                         />
@@ -161,31 +153,26 @@ export function DatasetItemVersionsPanel({
                       onClick={() => handleVersionClick(item)}
                       className="py-3"
                     >
-                      <ItemList.FlexCell className="w-full text-neutral flex gap-4 items-baseline text-neutral3">
-                        <strong className="min-w-8">v{item.datasetVersion}</strong>
-                        <em>{createdAtDate ? format(createdAtDate, 'MMM d, yyyy HH:mm') : null}</em>
-                        {item.isLatest && (
-                          <span className="ml-auto inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-800">
-                            Latest
-                          </span>
-                        )}
-                        {/* <em>{createdAtDate ? format(createdAtDate, 'MMM d, yyyy HH:mm') : null}</em>
-                        {item.isCurrent && (
-                          <span className="ml-auto inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-800">
-                            Latest
-                          </span>
-                        )} */}
-                      </ItemList.FlexCell>
-                      {/* <ItemList.TextCell>
-                        <div className="flex gap-2 items-center justify-between w-full text-ui-sm">
-                          {entry.version}
-                          {item.isDeleted ? (
-                            <Badge variant="error">deleted</Badge>
-                          ) : (
-                            item.isLatest && <Badge>latest</Badge>
-                          )}
+                      <ItemList.FlexCell className="w-full text-neutral grid text-neutral3">
+                        <div className="flex">
+                          <strong className="min-w-11">v{item.datasetVersion}</strong>
+                          <em>{versionDate ? format(versionDate, 'MMM d, yyyy HH:mm') : null}</em>
                         </div>
-                      </ItemList.TextCell> */}
+                        {(item.isLatest || item.isDeleted) && (
+                          <div className="flex gap-2 pl-11  ">
+                            {item.isLatest && (
+                              <span className="inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-900">
+                                Latest
+                              </span>
+                            )}
+                            {item.isDeleted && (
+                              <span className="inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-red-900">
+                                Deleted
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </ItemList.FlexCell>
                     </ItemList.RowButton>
                   </ItemList.Row>
                 );

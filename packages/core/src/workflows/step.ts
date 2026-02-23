@@ -173,6 +173,7 @@ export interface Step<
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
   let result;
+
   if (typeof step === 'string') {
     result = stepResults[step];
   } else {

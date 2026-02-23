@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse, Lang } from '@ast-grep/napi';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 // Get the project root from the working directory

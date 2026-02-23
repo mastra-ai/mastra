@@ -244,14 +244,14 @@ function summarizeArgs(args: unknown): string {
   const obj = args as Record<string, unknown>;
   const parts: string[] = [];
 
-  // Special handling for todo_write tool
-  if (obj.todos && Array.isArray(obj.todos)) {
-    const todos = obj.todos as Array<{
+  // Special handling for task_write tool
+  if (obj.tasks && Array.isArray(obj.tasks)) {
+    const tasks = obj.tasks as Array<{
       content?: string;
       status?: string;
       activeForm?: string;
     }>;
-    const taskSummaries = todos.map(t => {
+    const taskSummaries = tasks.map(t => {
       const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '→' : '○';
       const content = t.content || t.activeForm || 'task';
       return `${icon} ${content}`;

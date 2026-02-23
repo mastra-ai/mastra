@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
-import { StreamMessageReader, StreamMessageWriter, createMessageConnection } from 'vscode-jsonrpc/node';
-import type { MessageConnection } from 'vscode-jsonrpc/node';
+import { StreamMessageReader, StreamMessageWriter, createMessageConnection } from 'vscode-jsonrpc/node.js';
+import type { MessageConnection } from 'vscode-jsonrpc/node.js';
 import { TextDocumentIdentifier, Position } from 'vscode-languageserver-protocol';
 import type { Diagnostic } from 'vscode-languageserver-protocol';
 import type { LSPServerInfo } from './server';

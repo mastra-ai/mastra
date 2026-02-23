@@ -210,12 +210,12 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     const agentId = await createAgentAndGetId(page);
 
-    // On edit page: nth(0) = version combobox, nth(1) = provider, nth(2) = model
+    // On edit page: nth(0) = provider, nth(1) = model
     await goToEditSubPage(page, agentId);
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
   });
 
   test('persists all identity fields (name, description, provider, model)', async ({ page }) => {
@@ -238,8 +238,8 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
   });
 });
 
@@ -328,6 +328,86 @@ test.describe('Agent Creation Persistence - Tools', () => {
     await page.waitForTimeout(2000);
 
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+  });
+});
+
+test.describe('Agent Creation Persistence - MCP Client Tools', () => {
+  /**
+   * FEATURE: MCP Client Tool Selection
+   * USER STORY: As a user, I want to select which MCP tools my agent can use
+   *             so that I can control the agent's capabilities
+   * BEHAVIOR UNDER TEST: Selected MCP tools persist after agent creation and reload
+   */
+  test('persists selected MCP client tools', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('MCP Tools');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to tools page via sidebar
+    await clickSidebarLink(page, 'Tools');
+
+    // Click "Add MCP Client" button
+    await page.getByRole('button', { name: 'Add MCP Client' }).first().click();
+
+    // Wait for the side dialog to open
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    // Fill MCP client name
+    await page.locator('#mcp-client-name').fill('Test MCP Client');
+
+    // The kitchen-sink exposes the simple-mcp-server at /api/mcp/simple-mcp-server/mcp
+    // Fill URL field (HTTP is default)
+    await page.locator('#mcp-url').fill('http://localhost:4111/api/mcp/simple-mcp-server/mcp');
+
+    // Click "Try to connect" button
+    await page.getByRole('button', { name: /try to connect/i }).click();
+
+    // Wait for tools to appear in the preview panel
+    await expect(page.getByRole('dialog').getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+
+    // The tool should have a switch - verify it's initially unchecked (default: unselected)
+    const toolSwitch = page.getByRole('dialog').getByRole('switch').first();
+    await expect(toolSwitch).not.toBeChecked();
+
+    // Toggle the tool ON
+    await toolSwitch.click();
+    await expect(toolSwitch).toBeChecked();
+
+    // Header should show "1/1 selected"
+    await expect(page.getByText(/1\/1 selected/)).toBeVisible();
+
+    // Click "Create MCP Client" button to confirm
+    await page.getByRole('button', { name: /create mcp client/i }).click();
+
+    // Wait for dialog to close
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
+
+    // The MCP client should now appear in the list
+    await expect(page.getByText('Test MCP Client')).toBeVisible();
+
+    // Create the agent
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page - navigate to tools
+    await page.goto(`/cms/agents/${agentId}/edit/tools`);
+    await page.waitForTimeout(2000);
+
+    // The MCP client should be visible
+    await expect(page.getByText('Test MCP Client')).toBeVisible({ timeout: 10000 });
+
+    // Click on the MCP client to view it
+    await page.getByText('Test MCP Client').click();
+
+    // Wait for dialog to open and connect
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    // Wait for tools to load (auto-connects in view mode)
+    await expect(page.getByRole('dialog').getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+
+    // The tool switch should still be checked (persisted selection)
+    const persistedSwitch = page.getByRole('dialog').getByRole('switch').first();
+    await expect(persistedSwitch).toBeChecked({ timeout: 5000 });
   });
 });
 
@@ -450,7 +530,6 @@ test.describe('Agent Creation Persistence - Memory', () => {
 
     // Set lastMessages
     const lastMessagesInput = page.locator('#memory-last-messages');
-    await lastMessagesInput.clear();
     await lastMessagesInput.fill('20');
 
     const agentId = await createAgentAndGetId(page);
@@ -479,9 +558,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // The switches after memory enabled are: Semantic Recall, Read Only, Observational Memory
-    // Main toggle = 0, Semantic Recall = 1, Read Only = 2, OM = 3
-    const readOnlySwitch = page.getByRole('switch').nth(2);
+    // The switches after memory enabled are: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4
+    const readOnlySwitch = page.getByRole('switch').nth(4);
     await readOnlySwitch.click();
 
     const agentId = await createAgentAndGetId(page);
@@ -493,8 +571,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // Read Only should be checked (3rd switch)
-    await expect(page.getByRole('switch').nth(2)).toBeChecked();
+    // Read Only should be checked (5th switch, index 4)
+    await expect(page.getByRole('switch').nth(4)).toBeChecked();
   });
 
   test('persists observational memory settings', async ({ page }) => {
@@ -510,8 +588,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // Enable Observational Memory (4th switch: main=0, semantic=1, readOnly=2, OM=3)
-    const omSwitch = page.getByRole('switch').nth(3);
+    // Enable Observational Memory (2nd switch: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4)
+    const omSwitch = page.getByRole('switch').nth(1);
     await omSwitch.click();
 
     // Wait for OM fields to appear
@@ -535,8 +613,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory should be enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // OM should be enabled (4th switch)
-    await expect(page.getByRole('switch').nth(3)).toBeChecked();
+    // OM should be enabled (2nd switch, index 1)
+    await expect(page.getByRole('switch').nth(1)).toBeChecked();
 
     // Scope should be resource
     await expect(page.locator('#memory-om-scope')).toContainText('Resource');
@@ -639,7 +717,6 @@ test.describe('Comprehensive Persistence Test', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
     const lastMsgInput = page.locator('#memory-last-messages');
-    await lastMsgInput.clear();
     await lastMsgInput.fill('25');
 
     // === Variables ===
@@ -655,9 +732,9 @@ test.describe('Comprehensive Persistence Test', () => {
     await goToEditSubPage(page, agentId);
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    // On edit page: nth(0) = version, nth(1) = provider, nth(2) = model
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    // On edit page: nth(0) = provider, nth(1) = model
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
 
     // === Verify Instructions ===
     await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);

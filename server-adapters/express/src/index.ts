@@ -417,6 +417,24 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
+        // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+        if (params.urlParams) {
+          try {
+            params.urlParams = await this.parsePathParams(route, params.urlParams);
+          } catch (error) {
+            this.mastra.getLogger()?.error('Error parsing path params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            if (error instanceof ZodError) {
+              return res.status(400).json(formatZodError(error, 'path parameters'));
+            }
+            return res.status(400).json({
+              error: 'Invalid path parameters',
+              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            });
+          }
+        }
+
         const handlerParams = {
           ...params.urlParams,
           ...params.queryParams,

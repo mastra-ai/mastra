@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import { execa } from 'execa';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 

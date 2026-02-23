@@ -10,9 +10,15 @@ import {
   DeleteDatasetDialog,
   useDataset,
   Button,
+  Header,
+  Breadcrumb,
+  Crumb,
+  Icon,
+  DatasetCombobox,
 } from '@mastra/playground-ui';
 import type { DatasetVersion } from '@mastra/playground-ui';
-import { Play } from 'lucide-react';
+import { Link } from 'react-router';
+import { Database, Play } from 'lucide-react';
 
 function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -55,7 +61,20 @@ function DatasetPage() {
   };
 
   return (
-    <MainContentLayout className="grid-rows-1">
+    <MainContentLayout>
+      <Header>
+        <Breadcrumb>
+          <Crumb as={Link} to="/datasets">
+            <Icon>
+              <Database />
+            </Icon>
+            Datasets
+          </Crumb>
+          <Crumb as="span" to="" isCurrent>
+            <DatasetCombobox value={datasetId} variant="ghost" />
+          </Crumb>
+        </Breadcrumb>
+      </Header>
       <MainContentContent className="content-stretch">
         <DatasetPageContent
           datasetId={datasetId}

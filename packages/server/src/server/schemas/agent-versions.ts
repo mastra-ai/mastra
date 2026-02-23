@@ -8,6 +8,7 @@ import {
   modelConfigSchema,
   toolConfigSchema,
   toolsConfigSchema,
+  storedProcessorGraphSchema,
 } from './stored-agents';
 import {
   listVersionsQuerySchema,
@@ -91,12 +92,12 @@ export const agentVersionSchema = z.object({
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
-  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+  inputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
-  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .describe('Input processor graph — static or conditional'),
+  outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
+    .describe('Output processor graph — static or conditional'),
   memory: conditionalFieldSchema(serializedMemoryConfigSchema)
     .optional()
     .describe('Memory configuration — static or conditional'),
@@ -146,4 +147,6 @@ export const restoreVersionResponseSchema = agentVersionSchema.describe(
 /**
  * Response for GET /stored/agents/:agentId/versions/compare
  */
-export const compareVersionsResponseSchema = createCompareVersionsResponseSchema(agentVersionSchema);
+export const compareVersionsResponseSchema: ReturnType<
+  typeof createCompareVersionsResponseSchema<typeof agentVersionSchema>
+> = createCompareVersionsResponseSchema(agentVersionSchema);

@@ -6,7 +6,7 @@
 import * as path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 let requestCounter = 0;
@@ -47,7 +47,7 @@ export const requestSandboxAccessTool = createTool({
       // Create a promise that resolves when the user answers in the TUI
       const answer = await new Promise<string>(resolve => {
         // Register the resolver so respondToQuestion() can resolve it
-        harnessCtx.registerQuestion!(questionId, resolve);
+        harnessCtx.registerQuestion!({ questionId, resolve });
 
         // Emit event — TUI will show the dialog
         harnessCtx.emitEvent!({

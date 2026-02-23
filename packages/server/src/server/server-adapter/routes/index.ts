@@ -13,6 +13,7 @@ import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
+import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
@@ -119,6 +120,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...STORED_WORKSPACES_ROUTES,
   ...STORED_SKILLS_ROUTES,
   ...TOOL_PROVIDER_ROUTES,
+  ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
 ];

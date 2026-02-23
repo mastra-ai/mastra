@@ -21,7 +21,7 @@ export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement
   value?: string;
   helpMsg?: string;
   errorMsg?: string;
-  options: { value: string; label: string; icon?: React.ReactNode }[];
+  options: { value: string; label: string; icon?: React.ReactNode; disabled?: boolean }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
   size?: FormElementSize | 'default';
@@ -65,12 +65,17 @@ export function SelectField({
         </label>
       </LabelWrapper>
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger id={`select-${name}`} size={size} variant={variant}>
+        <SelectTrigger
+          id={`select-${name}`}
+          size={size}
+          variant={variant}
+          className="grid grid-cols-[1fr_auto] [&>span]:truncate"
+        >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
-            <SelectItem key={option.label} value={option.value}>
+            <SelectItem key={option.label} value={option.value} disabled={option.disabled}>
               <span className="whitespace-nowrap truncate flex items-center gap-2">
                 {option.icon}
                 {option.label}

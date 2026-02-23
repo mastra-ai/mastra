@@ -374,6 +374,7 @@ The lifecycle is: **buffer → activate → remove messages → repeat**. Backgr
 Default settings:
 - `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every ~6k tokens with a 30k threshold)
 - `observation.bufferActivation: 0.8` — on activation, remove enough messages to keep only 20% of the threshold remaining
+- Buffered observations include continuation hints (`suggestedResponse`, `currentTask`) that survive activation to maintain conversational continuity
 - `reflection.bufferActivation: 0.5` — start background reflection at 50% of observation threshold
 
 To customize:

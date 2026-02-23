@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { noopLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
@@ -16,7 +16,7 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
-import { MCPManager } from './mcp/index.js';
+import { createMcpManager } from './mcp/index.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -28,12 +28,11 @@ import {
   createExecuteCommandTool,
   createWriteFileTool,
   stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
+import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
@@ -98,7 +97,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : new MCPManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
 
   // Agent
   const codeAgentInstance = new Agent({
@@ -167,8 +166,8 @@ export function createMastraCode(config?: MastraCodeConfig) {
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
-        todo_write: todoWriteTool,
-        todo_check: todoCheckTool,
+        task_write: taskWriteTool,
+        task_check: taskCheckTool,
       },
     },
   ];
@@ -233,6 +232,10 @@ export function createMastraCode(config?: MastraCodeConfig) {
       return undefined;
     },
     modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+    threadLock: {
+      acquire: acquireThreadLock,
+      release: releaseThreadLock,
+    },
   });
 
   // Sync hookManager session ID on thread changes
