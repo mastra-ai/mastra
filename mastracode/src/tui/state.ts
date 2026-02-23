@@ -22,6 +22,7 @@ import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import { defaultOMProgressState } from './components/om-progress.js';
 import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
+import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -126,6 +127,7 @@ export interface TUIState {
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
+  activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
   /** Follow-up messages sent via Ctrl+F while streaming */
   followUpComponents: UserMessageComponent[];

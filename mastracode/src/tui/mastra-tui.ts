@@ -55,6 +55,10 @@ import type { ToolResult } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { sendNotification } from './notify.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
+import { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
+import type { OnboardingResult } from '../onboarding/onboarding-inline.js';
+import { getAvailableModePacks, getAvailableOmPacks, ONBOARDING_VERSION } from '../onboarding/packs.js';
+import { loadSettings, saveSettings } from '../onboarding/settings.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState } from './state.js';
 import { getMarkdownTheme, fg, bold, theme, mastra, tintHex } from './theme.js';
@@ -87,6 +91,16 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
+      // If there's an active onboarding, route input to it
+      // (but not Ctrl+C — let that fall through to the editor so onAction('clear') fires)
+      if (this.state.activeOnboarding) {
+        if (data === '\x03') {
+          originalHandleInput(data);
+        } else {
+          this.state.activeOnboarding.handleInput(data);
+        }
+        return;
+      }
       // If there's an active plan approval, route input to it
       if (this.state.activeInlinePlanApproval) {
         this.state.activeInlinePlanApproval.handleInput(data);
@@ -124,6 +138,14 @@ export class MastraTUI {
         process.exit(0);
       }
       this.state.lastCtrlCTime = now;
+
+      if (this.state.activeOnboarding) {
+        // Cancel the onboarding wizard entirely
+        this.state.activeOnboarding.cancel();
+        this.state.activeOnboarding = undefined;
+        this.state.ui.requestRender();
+        return;
+      }
 
       if (this.state.pendingApprovalDismiss) {
         // Dismiss active approval dialog and abort
@@ -415,6 +437,9 @@ export class MastraTUI {
     if (this.state.pendingLockConflict) {
       this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
       this.state.pendingLockConflict = null;
+      // Skip onboarding when there's a lock conflict — it'll run on next clean startup
+    } else if (this.shouldShowOnboarding()) {
+      await this.showOnboarding();
     }
   }
 
@@ -932,6 +957,7 @@ ${instructions}`,
         description: 'Toggle YOLO mode (auto-approve all tools)',
       },
       { name: 'review', description: 'Review a GitHub pull request' },
+      { name: 'setup', description: 'Re-run the setup wizard' },
       { name: 'exit', description: 'Exit the TUI' },
       { name: 'help', description: 'Show available commands' },
     ];
@@ -2714,6 +2740,9 @@ ${instructions}`,
           if (answer.toLowerCase().startsWith('y')) {
             // pendingNewThread is already true — thread will be
             // created lazily on first message
+            if (this.shouldShowOnboarding()) {
+              await this.showOnboarding();
+            }
           } else {
             process.exit(0);
           }
@@ -3072,6 +3101,13 @@ ${instructions}`,
         onSelect: async (model: ModelItem) => {
           this.state.ui.hideOverlay();
           await this.state.harness.switchModel({ modelId: model.id, scope, modeId });
+          if (scope === 'global') {
+            const settings = loadSettings();
+            // Manual model override clears the active pack reference
+            settings.models.activeModelPackId = null;
+            settings.models.modeDefaults[modeId] = model.id;
+            saveSettings(settings);
+          }
           this.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
           this.updateStatusLine();
           resolve();
@@ -3228,15 +3264,12 @@ ${instructions}`,
           this.state.ui.hideOverlay();
           await this.state.harness.setSubagentModelId({ modelId: model.id, agentType });
           if (scope === 'global') {
-            if (this.state.authStorage) {
-              this.state.authStorage.setSubagentModelId(model.id, agentType);
-              this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
-            } else {
-              this.showError('Cannot persist global preference: auth storage not configured');
-            }
-          } else {
-            this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+            const settings = loadSettings();
+            const key = agentType ?? '_default';
+            settings.models.subagentModels[key] = model.id;
+            saveSettings(settings);
           }
+          this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
           resolve();
         },
         onCancel: () => {
@@ -3527,7 +3560,8 @@ ${instructions}`,
           this.state.ui.hideOverlay();
 
           // Auto-switch to the provider's default model
-          const defaultModel = this.state.authStorage?.getDefaultModelForProvider(providerId as any);
+          const { PROVIDER_DEFAULT_MODELS } = await import('../auth/storage.js');
+          const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.harness.switchModel({ modelId: defaultModel });
             this.updateStatusLine();
@@ -3546,6 +3580,250 @@ ${instructions}`,
           resolve();
         });
     });
+  }
+
+  // ===========================================================================
+  // Onboarding
+  // ===========================================================================
+
+  /**
+   * Show the interactive onboarding wizard.
+   * Returns a promise that resolves when the wizard completes or is cancelled.
+   */
+  private async showOnboarding(): Promise<void> {
+    const allProviders = getOAuthProviders();
+
+    const authProviders = allProviders.map(p => ({
+      label: p.name,
+      value: p.id,
+      loggedIn: !!this.state.authStorage?.isLoggedIn(p.id),
+    }));
+
+    // Determine which providers are accessible and how (OAuth vs API key)
+    const buildAccess = async (): Promise<import('../onboarding/packs.js').ProviderAccess> => {
+      const models = await this.state.harness.listAvailableModels();
+      const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+      const accessLevel = (provider: string, oauthId: string): import('../onboarding/packs.js').ProviderAccessLevel => {
+        if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
+        if (hasEnv(provider)) return 'apikey';
+        return false;
+      };
+      return {
+        anthropic: accessLevel('anthropic', 'anthropic'),
+        openai: accessLevel('openai', 'openai-codex'),
+        cerebras: hasEnv('cerebras') ? 'apikey' as const : false,
+        google: hasEnv('google') ? 'apikey' as const : false,
+        deepseek: hasEnv('deepseek') ? 'apikey' as const : false,
+      };
+    };
+
+    const access = await buildAccess();
+
+    // Load saved settings so we can highlight current selections when re-running
+    const savedSettings = loadSettings();
+    const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
+    const omPacks = getAvailableOmPacks(access);
+    // Translate the persisted modePackId to match the pack list IDs.
+    // When a custom pack was saved, onboarding.modePackId is 'custom' but the
+    // pack list entry uses 'custom:<name>' (e.g. 'custom:Setup').
+    let prevModePackId = savedSettings.onboarding.modePackId;
+    if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
+      prevModePackId = savedSettings.models.activeModelPackId;
+    }
+    const previous = savedSettings.onboarding.completedAt
+      ? {
+          modePackId: prevModePackId,
+          omPackId: savedSettings.onboarding.omPackId,
+          yolo: savedSettings.preferences.yolo,
+        }
+      : undefined;
+
+    return new Promise<void>(resolve => {
+      const component = new OnboardingInlineComponent({
+        tui: this.state.ui,
+        authProviders,
+        modePacks,
+        omPacks,
+        previous,
+        onComplete: async (result: OnboardingResult) => {
+          this.state.activeOnboarding = undefined;
+          await this.applyOnboardingResult(result);
+          resolve();
+        },
+        onCancel: () => {
+          this.state.activeOnboarding = undefined;
+          // Only record the skip if they haven't already completed setup —
+          // don't overwrite existing preferences when re-running /setup.
+          const settings = loadSettings();
+          if (!settings.onboarding.completedAt) {
+            settings.onboarding.skippedAt = new Date().toISOString();
+            settings.onboarding.version = ONBOARDING_VERSION;
+            saveSettings(settings);
+          }
+          resolve();
+        },
+        onLogin: (providerId: string, done: () => void) => {
+          this.performLogin(providerId).then(async () => {
+            // Re-compute packs — login may have unlocked new providers
+            const updatedAccess = await buildAccess();
+            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+            done();
+          });
+        },
+        onSelectModel: async (title: string): Promise<string | undefined> => {
+          const availableModels = await this.state.harness.listAvailableModels();
+          if (availableModels.length === 0) return undefined;
+
+          return new Promise<string | undefined>(resolveModel => {
+            const selector = new ModelSelectorComponent({
+              tui: this.state.ui,
+              models: availableModels,
+              currentModelId: undefined,
+              title,
+              onSelect: (model: ModelItem) => {
+                this.state.ui.hideOverlay();
+                resolveModel(model.id);
+              },
+              onCancel: () => {
+                this.state.ui.hideOverlay();
+                resolveModel(undefined);
+              },
+            });
+
+            this.state.ui.showOverlay(selector, {
+              width: '80%',
+              maxHeight: '60%',
+              anchor: 'center',
+            });
+            selector.focused = true;
+          });
+        },
+      });
+
+      this.state.activeOnboarding = component;
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.chatContainer.addChild(component);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
+    });
+  }
+
+  /**
+   * Apply the collected onboarding results to the harness state.
+   */
+  private async applyOnboardingResult(result: OnboardingResult): Promise<void> {
+    const harness = this.state.harness;
+
+    // Apply mode pack — switch model for each mode
+    const modePack = result.modePack;
+    const modes = harness.listModes();
+
+    for (const mode of modes) {
+      const modelId = (modePack.models as Record<string, string>)[mode.id];
+      if (modelId) {
+        // Update the in-memory mode default so new threads and mode switches use it
+        (mode as any).defaultModelId = modelId;
+
+        // Save model to thread settings for this mode
+        await harness.setThreadSetting({
+          key: `modeModelId_${mode.id}`,
+          value: modelId,
+        });
+      }
+    }
+
+    // Switch to the current mode's new model immediately
+    const currentModeId = harness.getCurrentModeId();
+    const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
+    if (currentModeModel) {
+      await harness.switchModel({ modelId: currentModeModel });
+    }
+
+    // Apply subagent defaults from the mode pack: explore→fast, plan→plan, execute→build
+    const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+    for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+      const saModelId = (modePack.models as Record<string, string>)[modeId];
+      if (saModelId) {
+        await harness.setSubagentModelId({ modelId: saModelId, agentType });
+      }
+    }
+
+    // Apply OM pack
+    const omPack = result.omPack;
+    harness.setState({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
+
+    // Apply YOLO mode
+    harness.setState({ yolo: result.yolo });
+
+    // Save everything to global settings.json
+    const settings = loadSettings();
+    settings.onboarding.completedAt = new Date().toISOString();
+    settings.onboarding.skippedAt = null;
+    settings.onboarding.version = ONBOARDING_VERSION;
+    settings.onboarding.modePackId = modePack.id;
+    settings.onboarding.omPackId = omPack.id;
+
+    // Persist model choices globally so new threads pick them up
+    const modeDefaults: Record<string, string> = {};
+    for (const mode of modes) {
+      const modelId = (modePack.models as Record<string, string>)[mode.id];
+      if (modelId) modeDefaults[mode.id] = modelId;
+    }
+
+    if (modePack.id === 'custom') {
+      // New custom pack: save as a named custom pack and reference it
+      const idx = settings.customModelPacks.findIndex(p => p.name === 'Setup');
+      const entry = { name: 'Setup', models: modeDefaults, createdAt: new Date().toISOString() };
+      if (idx >= 0) {
+        settings.customModelPacks[idx] = entry;
+      } else {
+        settings.customModelPacks.push(entry);
+      }
+      settings.models.activeModelPackId = 'custom:Setup';
+      // Also write modeDefaults as a fallback snapshot
+      settings.models.modeDefaults = modeDefaults;
+    } else if (modePack.id.startsWith('custom:')) {
+      // Re-selected a saved custom pack — reference it directly
+      settings.models.activeModelPackId = modePack.id;
+      settings.models.modeDefaults = modeDefaults;
+    } else {
+      // Built-in pack: reference by ID so models update when we ship new versions
+      settings.models.activeModelPackId = modePack.id;
+      settings.models.modeDefaults = {};
+    }
+
+    settings.models.omModelId = omPack.modelId;
+    settings.preferences.yolo = result.yolo;
+
+    // Persist subagent model defaults
+    const subagentModels: Record<string, string> = {};
+    for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+      const saModelId = (modePack.models as Record<string, string>)[modeId];
+      if (saModelId) subagentModels[agentType] = saModelId;
+    }
+    settings.models.subagentModels = subagentModels;
+
+    saveSettings(settings);
+
+    // Update status line to reflect new model
+    this.updateStatusLine();
+    await this.refreshModelAuthStatus();
+  }
+
+  /**
+   * Check if onboarding should run (first time or version upgrade).
+   * Reads from the global settings.json file, not per-thread state.
+   */
+  private shouldShowOnboarding(): boolean {
+    const settings = loadSettings();
+    const ob = settings.onboarding;
+    if (ob.completedAt || ob.skippedAt) {
+      // Already completed or skipped — only re-show on version bump
+      return ob.version < ONBOARDING_VERSION;
+    }
+    return true;
   }
 
   // ===========================================================================
@@ -3796,6 +4074,11 @@ ${modeList}`);
         return true;
       }
 
+      case 'setup': {
+        await this.showOnboarding();
+        return true;
+      }
+
       case 'exit':
         this.stop();
         process.exit(0);
@@ -3833,7 +4116,8 @@ ${modeList}`);
   /hooks    - Show/reload configured hooks
   /mcp      - Show/reload MCP server connections
   /login    - Login with OAuth provider
-  /logout   - Logout from OAuth provider${modeHelp}
+  /logout   - Logout from OAuth provider
+  /setup    - Re-run the setup wizard${modeHelp}
   /exit     - Exit the TUI
   /help     - Show this help${customCommandsHelp}
 
