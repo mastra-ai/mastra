@@ -168,7 +168,7 @@ export function DatasetItemsToolbar({
               <TooltipContent>
                 {selectionMode === 'compare-items'
                   ? selectedCount <= 2
-                    ? 'Select  2 items to compare'
+                    ? 'Select 2 items to compare'
                     : undefined
                   : selectedCount === 0
                     ? 'Select at least one item'

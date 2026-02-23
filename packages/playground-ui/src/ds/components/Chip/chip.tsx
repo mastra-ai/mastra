@@ -35,8 +35,8 @@ export const Chip = ({ color = 'gray', size = 'default', className, children, ..
         colorClasses[color],
         className,
       )}
-      {...props}
       style={{ lineHeight: 1 }}
+      {...props}
     >
       {children}
     </span>
