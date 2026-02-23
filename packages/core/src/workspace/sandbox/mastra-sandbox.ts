@@ -162,6 +162,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
         logger: this.logger,
       });
     }
+
+    // Provide a default executeCommand via processes.spawn + wait if the
+    // subclass implements processes but not executeCommand.
+    if (!this.executeCommand && this.processes) {
+      this.executeCommand = async (command, args = [], options = {}) => {
+        const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+        return this.processes!.spawn(fullCommand, options).then(handle =>
+          handle.wait({ onStdout: options.onStdout, onStderr: options.onStderr }),
+        );
+      };
+    }
   }
 
   // ---------------------------------------------------------------------------
