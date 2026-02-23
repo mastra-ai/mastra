@@ -323,11 +323,15 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'retrieved handle has accumulated stdout while still running',
         async () => {
-          // Single-process command: outputs then stays alive without forking
-          const handle = await processes.spawn(`node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`);
+          // Use onStdout to know when output has actually arrived (avoids flaky setTimeout)
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          // Wait for output to arrive
-          await new Promise(r => setTimeout(r, 100));
+          const handle = await processes.spawn(
+            `node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`,
+            { onStdout: () => gotOutput() },
+          );
+          await outputArrived;
 
           const retrieved = await processes.get(handle.pid);
           expect(retrieved).toBeDefined();
@@ -343,11 +347,16 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawn then get output then kill (tool flow)',
         async () => {
           // Simulates the full tool flow: execute_command(background:true) → get_process_output → kill_process
-          const handle = await processes.spawn(`node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`);
-          const pid = handle.pid;
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          // Wait for output
-          await new Promise(r => setTimeout(r, 100));
+          const handle = await processes.spawn(
+            `node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`,
+            { onStdout: () => gotOutput() },
+          );
+          await outputArrived;
+
+          const pid = handle.pid;
 
           // Get output via PID (simulates get_process_output tool)
           const retrieved = await processes.get(pid);
