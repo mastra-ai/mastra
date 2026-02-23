@@ -10,7 +10,7 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
-import { defaultDisplayState } from './types';
+import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -1726,6 +1726,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
     this.displayState.previousTasks = [];
+    this.displayState.omProgress = defaultOMProgressState();
   }
 
   /**
@@ -1916,6 +1917,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       case 'agent_end':
         ds.isRunning = false;
         ds.pendingApproval = null;
+        ds.pendingQuestion = null;
+        ds.pendingPlanApproval = null;
+        // Mark any still-running tools as errored (handles abort mid-run)
+        for (const [, tool] of ds.activeTools) {
+          if (tool.status === 'running' || tool.status === 'streaming_input') {
+            tool.status = 'error';
+          }
+        }
         ds.activeSubagents = new Map();
         break;
 

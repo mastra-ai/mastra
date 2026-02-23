@@ -2,22 +2,29 @@
 '@mastra/core': minor
 ---
 
-Added HarnessDisplayState — a canonical display state maintained by the Harness class. Any UI can now call harness.getDisplayState() to get a read-only snapshot of what to display, instead of interpreting 35+ raw event types individually.
+Added `HarnessDisplayState` so any UI can read a single state snapshot instead of handling 35+ individual events.
 
-**New types:** HarnessDisplayState, ActiveToolState, ActiveSubagentState, OMProgressState, OMStatus, OMBufferedStatus
+**Why:** Previously, every UI (TUI, web, desktop) had to subscribe to dozens of granular Harness events and independently reconstruct what to display. This led to duplicated state tracking and inconsistencies across UI implementations. Now the Harness maintains a single canonical display state that any UI can read.
 
-**New method:** getDisplayState() — returns a read-only snapshot of the current display state
-
-**New event:** display_state_changed — emitted alongside every other event after display state is updated
-
-**Example usage:**
+**Before:** UIs subscribed to raw events and built up display state locally:
 
 ```ts
-import { Harness } from '@mastra/core/harness';
+harness.subscribe((event) => {
+  if (event.type === 'agent_start') localState.isRunning = true;
+  if (event.type === 'agent_end') localState.isRunning = false;
+  if (event.type === 'tool_start') localState.tools.set(event.toolCallId, ...);
+  // ... 30+ more event types to handle
+});
+```
+
+**After:** UIs read a single snapshot from the Harness:
+
+```ts
 import type { HarnessDisplayState } from '@mastra/core/harness';
 
-harness.subscribe(event => {
+harness.subscribe((event) => {
   const ds: HarnessDisplayState = harness.getDisplayState();
   // ds.isRunning, ds.tokenUsage, ds.omProgress, ds.activeTools, etc.
+  renderUI(ds);
 });
 ```

@@ -152,3 +152,78 @@ describe('Display state OMProgressState', () => {
     expect(omp).toHaveProperty('stepNumber');
   });
 });
+
+describe('agent_end cleanup', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    harness = createHarness();
+  });
+
+  function emit(event: HarnessEvent) {
+    (harness as any).emit(event);
+  }
+
+  it('clears pendingQuestion on agent_end', () => {
+    emit({ type: 'ask_question', questionId: 'q1', question: 'What?', options: [] });
+    expect(harness.getDisplayState().pendingQuestion).not.toBeNull();
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    expect(harness.getDisplayState().pendingQuestion).toBeNull();
+  });
+
+  it('clears pendingPlanApproval on agent_end', () => {
+    emit({ type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '# Plan' });
+    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
+  });
+
+  it('marks running tools as error on agent_end', () => {
+    emit({ type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'test.ts' } });
+    expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('running');
+
+    emit({ type: 'agent_end', reason: 'aborted' });
+    expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('error');
+  });
+
+  it('does not change completed tools on agent_end', () => {
+    emit({ type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'test.ts' } });
+    emit({ type: 'tool_end', toolCallId: 't1', toolName: 'read_file', result: 'ok', isError: false });
+    expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('completed');
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    expect(harness.getDisplayState().activeTools.get('t1')?.status).toBe('completed');
+  });
+});
+
+describe('resetThreadDisplayState', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    harness = createHarness();
+  });
+
+  function emit(event: HarnessEvent) {
+    (harness as any).emit(event);
+  }
+
+  it('resets omProgress on thread_created', () => {
+    // Mutate omProgress via an om_observation_start event
+    emit({ type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
+    expect(harness.getDisplayState().omProgress.status).toBe('observing');
+
+    emit({ type: 'thread_created', threadId: 'new-thread', title: 'New' });
+    expect(harness.getDisplayState().omProgress.status).toBe('idle');
+    expect(harness.getDisplayState().omProgress.pendingTokens).toBe(0);
+  });
+
+  it('resets omProgress on thread_changed', () => {
+    emit({ type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
+    expect(harness.getDisplayState().omProgress.status).toBe('observing');
+
+    emit({ type: 'thread_changed', threadId: 'other-thread', title: 'Other' });
+    expect(harness.getDisplayState().omProgress.status).toBe('idle');
+  });
+});
