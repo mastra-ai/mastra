@@ -2209,8 +2209,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       result = await doGenerate();
       parsed = parseObserverOutput(result.text);
       if (parsed.degenerate) {
-        omDebug(`[OM:callObserver] degenerate repetition on retry, returning empty observations`);
-        return { observations: '' };
+        omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
+        throw new Error('Observer produced degenerate output after retry');
       }
     }
 
@@ -2299,12 +2299,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       result = await doGenerate();
       parsed = parseMultiThreadObserverOutput(result.text);
       if (parsed.degenerate) {
-        omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, returning empty`);
-        const emptyResults = new Map<string, { observations: string }>();
-        for (const threadId of threadOrder) {
-          emptyResults.set(threadId, { observations: '' });
-        }
-        return { results: emptyResults };
+        omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
+        throw new Error('Multi-thread observer produced degenerate output after retry');
       }
     }
 
@@ -2470,6 +2466,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       // If compression succeeded or we've exhausted all levels, stop
       if (!parsed.degenerate && (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)) {
+        break;
+      }
+
+      // Guard against infinite loop: if degenerate persists at maxLevel, stop
+      if (parsed.degenerate && currentLevel >= maxLevel) {
+        omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
         break;
       }
 
@@ -4554,7 +4556,7 @@ ${formattedMessages}
       { requestContext },
     );
 
-    // If the observer returned empty observations (e.g., degenerate output), skip buffering
+    // If the observer returned empty observations, skip buffering
     if (!result.observations) {
       omDebug(`[OM:doAsyncBufferedObservation] empty observations returned, skipping buffer storage`);
       return;

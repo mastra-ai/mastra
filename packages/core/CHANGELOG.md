@@ -1,5 +1,391 @@
 # @mastra/core
 
+## 1.6.0
+
+### Minor Changes
+
+- Added Processor Providers — a new system for configuring and hydrating processors on stored agents. Define custom processor types with config schemas, available phases, and a factory method, then compose them into serializable processor graphs that support sequential, parallel, and conditional execution. ([#13219](https://github.com/mastra-ai/mastra/pull/13219))
+
+  **Example — custom processor provider:**
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+
+  // Built-in processors (token-limiter, unicode-normalizer, etc.) are registered automatically.
+  // Only register custom providers for your own processors:
+  const editor = new MastraEditor({
+    processorProviders: {
+      'my-custom-filter': myCustomFilterProvider,
+    },
+  });
+  ```
+
+  **Example — stored agent with a processor graph:**
+
+  ```ts
+  const agentConfig = {
+    inputProcessors: {
+      steps: [
+        {
+          type: 'step',
+          step: { id: 'norm', providerId: 'unicode-normalizer', config: {}, enabledPhases: ['processInput'] },
+        },
+        {
+          type: 'step',
+          step: {
+            id: 'limit',
+            providerId: 'token-limiter',
+            config: { limit: 4000 },
+            enabledPhases: ['processInput', 'processOutputStream'],
+          },
+        },
+      ],
+    },
+  };
+  ```
+
+- Added AST edit tool (`workspace_ast_edit`) for intelligent code transformations using AST analysis. Supports renaming identifiers, adding/removing/merging imports, and pattern-based find-and-replace with metavariable substitution. Automatically available when `@ast-grep/napi` is installed in the project. ([#13233](https://github.com/mastra-ai/mastra/pull/13233))
+
+  **Example:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/my/project' }),
+  });
+  const tools = createWorkspaceTools(workspace);
+
+  // Rename all occurrences of an identifier
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/utils.ts',
+    transform: 'rename',
+    targetName: 'oldName',
+    newName: 'newName',
+  });
+
+  // Add an import (merges into existing imports from the same module)
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/app.ts',
+    transform: 'add-import',
+    importSpec: { module: 'react', names: ['useState', 'useEffect'] },
+  });
+
+  // Pattern-based replacement with metavariables
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/app.ts',
+    pattern: 'console.log($ARG)',
+    replacement: 'logger.debug($ARG)',
+  });
+  ```
+
+- Added streaming tool argument previews across all tool renderers. Tool names, file paths, and commands now appear immediately as the model generates them, rather than waiting for the complete tool call. ([#13328](https://github.com/mastra-ai/mastra/pull/13328))
+  - **Generic tools** show live key/value argument previews as args stream in
+  - **Edit tool** renders a bordered diff preview as soon as `old_str` and `new_str` are available, even before the tool result arrives
+  - **Write tool** streams syntax-highlighted file content in a bordered box while args arrive
+  - **Find files** shows the glob pattern in the pending header
+  - **Task write** streams items directly into the pinned task list component in real-time
+
+  All tools use partial JSON parsing to progressively display argument information. This is enabled automatically for all Harness-based agents — no configuration required.
+
+- Added MCP server storage and editor support. MCP server configurations can now be persisted in storage and managed through the editor CMS. The editor's `mcpServer` namespace provides full CRUD operations and automatically hydrates stored configs into running `MCPServer` instances by resolving tool, agent, and workflow references from the Mastra registry. ([#13285](https://github.com/mastra-ai/mastra/pull/13285))
+
+  ```ts
+  const editor = new MastraEditor();
+  const mastra = new Mastra({
+    tools: { getWeather: weatherTool, calculate: calculatorTool },
+    storage: new LibSQLStore({ url: ':memory:' }),
+    editor,
+  });
+
+  // Store an MCP server config referencing tools by ID
+  const server = await editor.mcpServer.create({
+    id: 'my-server',
+    name: 'My MCP Server',
+    version: '1.0.0',
+    tools: { getWeather: {}, calculate: { description: 'Custom description' } },
+  });
+
+  // Retrieve — automatically hydrates into a real MCPServer with resolved tools
+  const mcp = await editor.mcpServer.getById('my-server');
+  const tools = mcp.tools(); // { getWeather: ..., calculate: ... }
+  ```
+
+- **@mastra/core:** Added optional `threadLock` callbacks to `HarnessConfig` for preventing concurrent thread access across processes. The Harness calls `acquire`/`release` during `selectOrCreateThread`, `createThread`, and `switchThread` when configured. Locking is opt-in — when `threadLock` is not provided, behavior is unchanged. ([#13334](https://github.com/mastra-ai/mastra/pull/13334))
+
+  ```ts
+  const harness = new Harness({
+    id: 'my-harness',
+    storage: myStore,
+    modes: [{ id: 'default', agent: myAgent }],
+    threadLock: {
+      acquire: threadId => acquireThreadLock(threadId),
+      release: threadId => releaseThreadLock(threadId),
+    },
+  });
+  ```
+
+  **mastracode:** Wires the existing filesystem-based thread lock (`thread-lock.ts`) into the new `threadLock` config, restoring the concurrent access protection that was lost during the monorepo migration.
+
+- Refactored all Harness class methods to accept object parameters instead of positional arguments, and standardized method naming. ([#13353](https://github.com/mastra-ai/mastra/pull/13353))
+
+  **Why:** Positional arguments make call sites harder to read, especially for methods with optional middle parameters or multiple string arguments. Object parameters are self-documenting and easier to extend without breaking changes.
+  - Methods returning arrays use `list` prefix (`listModes`, `listAvailableModels`, `listMessages`, `listMessagesForThread`)
+  - `persistThreadSetting` → `setThreadSetting`
+  - `resolveToolApprovalDecision` → `respondToToolApproval` (consistent with `respondToQuestion` / `respondToPlanApproval`)
+  - `setPermissionCategory` → `setPermissionForCategory`
+  - `setPermissionTool` → `setPermissionForTool`
+
+  **Before:**
+
+  ```typescript
+  await harness.switchMode('build');
+  await harness.sendMessage('Hello', { images });
+  const modes = harness.getModes();
+  const models = await harness.getAvailableModels();
+  harness.resolveToolApprovalDecision('approve');
+  ```
+
+  **After:**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  await harness.sendMessage({ content: 'Hello', images });
+  const modes = harness.listModes();
+  const models = await harness.listAvailableModels();
+  harness.respondToToolApproval({ decision: 'approve' });
+  ```
+
+  The `HarnessRequestContext` interface methods (`registerQuestion`, `registerPlanApproval`, `getSubagentModelId`) are also updated to use object parameters.
+
+- Added `task_write` and `task_check` as built-in Harness tools. These tools are automatically injected into every agent call, allowing agents to track structured task lists without manual tool registration. ([#13344](https://github.com/mastra-ai/mastra/pull/13344))
+
+  ```ts
+  // Agents can call task_write to create/update a task list
+  await tools['task_write'].execute({
+    tasks: [
+      { content: 'Fix authentication bug', status: 'in_progress', activeForm: 'Fixing authentication bug' },
+      { content: 'Add unit tests', status: 'pending', activeForm: 'Adding unit tests' },
+    ],
+  });
+
+  // Agents can call task_check to verify all tasks are complete before finishing
+  await tools['task_check'].execute({});
+  // Returns: { completed: 1, inProgress: 0, pending: 1, allDone: false, incomplete: [...] }
+  ```
+
+### Patch Changes
+
+- Fixed duplicate Vercel AI Gateway configuration that could cause incorrect API key resolution. Removed a redundant override that conflicted with the upstream models.dev registry. ([#13291](https://github.com/mastra-ai/mastra/pull/13291))
+
+- Fixed Vercel AI Gateway failing when using the model router string format (e.g. `vercel/openai/gpt-oss-120b`). The provider registry was overriding `createGateway`'s base URL with an incorrect value, causing API requests to hit the wrong endpoint. Removed the URL override so the AI SDK uses its own correct default. Closes #13280. ([#13287](https://github.com/mastra-ai/mastra/pull/13287))
+
+- Fixed recursive schema warnings for processor graph entries by unrolling to a fixed depth of 3 levels, matching the existing rule group pattern ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
+
+- Fixed Observational Memory status not updating during conversations. The harness was missing streaming handlers for OM data chunks (status, observation start/end, buffering, activation), so the TUI never received real-time OM progress updates. Also added switchObserverModel and switchReflectorModel methods so changing OM models properly emits events to subscribers. ([#13330](https://github.com/mastra-ai/mastra/pull/13330))
+
+- Fixed thread resuming in git worktrees. Previously, starting mastracode in a new worktree would resume a thread from another worktree of the same repo. Threads are now auto-tagged with the project path and filtered on resume so each worktree gets its own thread scope. ([#13343](https://github.com/mastra-ai/mastra/pull/13343))
+
+- Fixed a crash where the Node.js process would terminate with an unhandled TypeError when an LLM stream encountered an error. The ReadableStreamDefaultController would throw "Controller is already closed" when chunks were enqueued after a downstream consumer cancelled or terminated the stream. All controller.enqueue(), controller.close(), and controller.error() calls now check if the controller is still open before attempting operations. (https://github.com/mastra-ai/mastra/issues/13107) ([#13142](https://github.com/mastra-ai/mastra/pull/13142))
+
+- Added `suggestedContinuation` and `currentTask` fields to the in-memory storage adapter's Observational Memory activation result, aligning it with the persistent storage implementations. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
+
+- Fixed provider-executed tools (e.g. Anthropic web_search) causing stream bail when called in parallel with regular tools. The tool-call-step now provides a fallback result for provider-executed tools whose output was not propagated, preventing the mapping step from misidentifying them as pending HITL interactions. Fixes #13125. ([#13126](https://github.com/mastra-ai/mastra/pull/13126))
+
+- Updated dependencies [[`7184d87`](https://github.com/mastra-ai/mastra/commit/7184d87c9237d26862f500ccfd0c9f9eadd38ddf)]:
+  - @mastra/schema-compat@1.1.2
+
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added Processor Providers — a new system for configuring and hydrating processors on stored agents. Define custom processor types with config schemas, available phases, and a factory method, then compose them into serializable processor graphs that support sequential, parallel, and conditional execution. ([#13219](https://github.com/mastra-ai/mastra/pull/13219))
+
+  **Example — custom processor provider:**
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+
+  // Built-in processors (token-limiter, unicode-normalizer, etc.) are registered automatically.
+  // Only register custom providers for your own processors:
+  const editor = new MastraEditor({
+    processorProviders: {
+      'my-custom-filter': myCustomFilterProvider,
+    },
+  });
+  ```
+
+  **Example — stored agent with a processor graph:**
+
+  ```ts
+  const agentConfig = {
+    inputProcessors: {
+      steps: [
+        {
+          type: 'step',
+          step: { id: 'norm', providerId: 'unicode-normalizer', config: {}, enabledPhases: ['processInput'] },
+        },
+        {
+          type: 'step',
+          step: {
+            id: 'limit',
+            providerId: 'token-limiter',
+            config: { limit: 4000 },
+            enabledPhases: ['processInput', 'processOutputStream'],
+          },
+        },
+      ],
+    },
+  };
+  ```
+
+- Added AST edit tool (`workspace_ast_edit`) for intelligent code transformations using AST analysis. Supports renaming identifiers, adding/removing/merging imports, and pattern-based find-and-replace with metavariable substitution. Automatically available when `@ast-grep/napi` is installed in the project. ([#13233](https://github.com/mastra-ai/mastra/pull/13233))
+
+  **Example:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/my/project' }),
+  });
+  const tools = createWorkspaceTools(workspace);
+
+  // Rename all occurrences of an identifier
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/utils.ts',
+    transform: 'rename',
+    targetName: 'oldName',
+    newName: 'newName',
+  });
+
+  // Add an import (merges into existing imports from the same module)
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/app.ts',
+    transform: 'add-import',
+    importSpec: { module: 'react', names: ['useState', 'useEffect'] },
+  });
+
+  // Pattern-based replacement with metavariables
+  await tools['mastra_workspace_ast_edit'].execute({
+    path: '/src/app.ts',
+    pattern: 'console.log($ARG)',
+    replacement: 'logger.debug($ARG)',
+  });
+  ```
+
+- Added streaming tool argument previews across all tool renderers. Tool names, file paths, and commands now appear immediately as the model generates them, rather than waiting for the complete tool call. ([#13328](https://github.com/mastra-ai/mastra/pull/13328))
+  - **Generic tools** show live key/value argument previews as args stream in
+  - **Edit tool** renders a bordered diff preview as soon as `old_str` and `new_str` are available, even before the tool result arrives
+  - **Write tool** streams syntax-highlighted file content in a bordered box while args arrive
+  - **Find files** shows the glob pattern in the pending header
+  - **Task write** streams items directly into the pinned task list component in real-time
+
+  All tools use partial JSON parsing to progressively display argument information. This is enabled automatically for all Harness-based agents — no configuration required.
+
+- Added MCP server storage and editor support. MCP server configurations can now be persisted in storage and managed through the editor CMS. The editor's `mcpServer` namespace provides full CRUD operations and automatically hydrates stored configs into running `MCPServer` instances by resolving tool, agent, and workflow references from the Mastra registry. ([#13285](https://github.com/mastra-ai/mastra/pull/13285))
+
+  ```ts
+  const editor = new MastraEditor();
+  const mastra = new Mastra({
+    tools: { getWeather: weatherTool, calculate: calculatorTool },
+    storage: new LibSQLStore({ url: ':memory:' }),
+    editor,
+  });
+
+  // Store an MCP server config referencing tools by ID
+  const server = await editor.mcpServer.create({
+    id: 'my-server',
+    name: 'My MCP Server',
+    version: '1.0.0',
+    tools: { getWeather: {}, calculate: { description: 'Custom description' } },
+  });
+
+  // Retrieve — automatically hydrates into a real MCPServer with resolved tools
+  const mcp = await editor.mcpServer.getById('my-server');
+  const tools = mcp.tools(); // { getWeather: ..., calculate: ... }
+  ```
+
+- **@mastra/core:** Added optional `threadLock` callbacks to `HarnessConfig` for preventing concurrent thread access across processes. The Harness calls `acquire`/`release` during `selectOrCreateThread`, `createThread`, and `switchThread` when configured. Locking is opt-in — when `threadLock` is not provided, behavior is unchanged. ([#13334](https://github.com/mastra-ai/mastra/pull/13334))
+
+  ```ts
+  const harness = new Harness({
+    id: 'my-harness',
+    storage: myStore,
+    modes: [{ id: 'default', agent: myAgent }],
+    threadLock: {
+      acquire: threadId => acquireThreadLock(threadId),
+      release: threadId => releaseThreadLock(threadId),
+    },
+  });
+  ```
+
+  **mastracode:** Wires the existing filesystem-based thread lock (`thread-lock.ts`) into the new `threadLock` config, restoring the concurrent access protection that was lost during the monorepo migration.
+
+- Refactored all Harness class methods to accept object parameters instead of positional arguments, and standardized method naming. ([#13353](https://github.com/mastra-ai/mastra/pull/13353))
+
+  **Why:** Positional arguments make call sites harder to read, especially for methods with optional middle parameters or multiple string arguments. Object parameters are self-documenting and easier to extend without breaking changes.
+  - Methods returning arrays use `list` prefix (`listModes`, `listAvailableModels`, `listMessages`, `listMessagesForThread`)
+  - `persistThreadSetting` → `setThreadSetting`
+  - `resolveToolApprovalDecision` → `respondToToolApproval` (consistent with `respondToQuestion` / `respondToPlanApproval`)
+  - `setPermissionCategory` → `setPermissionForCategory`
+  - `setPermissionTool` → `setPermissionForTool`
+
+  **Before:**
+
+  ```typescript
+  await harness.switchMode('build');
+  await harness.sendMessage('Hello', { images });
+  const modes = harness.getModes();
+  const models = await harness.getAvailableModels();
+  harness.resolveToolApprovalDecision('approve');
+  ```
+
+  **After:**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  await harness.sendMessage({ content: 'Hello', images });
+  const modes = harness.listModes();
+  const models = await harness.listAvailableModels();
+  harness.respondToToolApproval({ decision: 'approve' });
+  ```
+
+  The `HarnessRequestContext` interface methods (`registerQuestion`, `registerPlanApproval`, `getSubagentModelId`) are also updated to use object parameters.
+
+- Added `task_write` and `task_check` as built-in Harness tools. These tools are automatically injected into every agent call, allowing agents to track structured task lists without manual tool registration. ([#13344](https://github.com/mastra-ai/mastra/pull/13344))
+
+  ```ts
+  // Agents can call task_write to create/update a task list
+  await tools['task_write'].execute({
+    tasks: [
+      { content: 'Fix authentication bug', status: 'in_progress', activeForm: 'Fixing authentication bug' },
+      { content: 'Add unit tests', status: 'pending', activeForm: 'Adding unit tests' },
+    ],
+  });
+
+  // Agents can call task_check to verify all tasks are complete before finishing
+  await tools['task_check'].execute({});
+  // Returns: { completed: 1, inProgress: 0, pending: 1, allDone: false, incomplete: [...] }
+  ```
+
+### Patch Changes
+
+- Fixed duplicate Vercel AI Gateway configuration that could cause incorrect API key resolution. Removed a redundant override that conflicted with the upstream models.dev registry. ([#13291](https://github.com/mastra-ai/mastra/pull/13291))
+
+- Fixed Vercel AI Gateway failing when using the model router string format (e.g. `vercel/openai/gpt-oss-120b`). The provider registry was overriding `createGateway`'s base URL with an incorrect value, causing API requests to hit the wrong endpoint. Removed the URL override so the AI SDK uses its own correct default. Closes #13280. ([#13287](https://github.com/mastra-ai/mastra/pull/13287))
+
+- Fixed recursive schema warnings for processor graph entries by unrolling to a fixed depth of 3 levels, matching the existing rule group pattern ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
+
+- Fixed Observational Memory status not updating during conversations. The harness was missing streaming handlers for OM data chunks (status, observation start/end, buffering, activation), so the TUI never received real-time OM progress updates. Also added switchObserverModel and switchReflectorModel methods so changing OM models properly emits events to subscribers. ([#13330](https://github.com/mastra-ai/mastra/pull/13330))
+
+- Fixed thread resuming in git worktrees. Previously, starting mastracode in a new worktree would resume a thread from another worktree of the same repo. Threads are now auto-tagged with the project path and filtered on resume so each worktree gets its own thread scope. ([#13343](https://github.com/mastra-ai/mastra/pull/13343))
+
+- Fixed a crash where the Node.js process would terminate with an unhandled TypeError when an LLM stream encountered an error. The ReadableStreamDefaultController would throw "Controller is already closed" when chunks were enqueued after a downstream consumer cancelled or terminated the stream. All controller.enqueue(), controller.close(), and controller.error() calls now check if the controller is still open before attempting operations. (https://github.com/mastra-ai/mastra/issues/13107) ([#13142](https://github.com/mastra-ai/mastra/pull/13142))
+
+- Added `suggestedContinuation` and `currentTask` fields to the in-memory storage adapter's Observational Memory activation result, aligning it with the persistent storage implementations. ([#13354](https://github.com/mastra-ai/mastra/pull/13354))
+
+- Fixed provider-executed tools (e.g. Anthropic web_search) causing stream bail when called in parallel with regular tools. The tool-call-step now provides a fallback result for provider-executed tools whose output was not propagated, preventing the mapping step from misidentifying them as pending HITL interactions. Fixes #13125. ([#13126](https://github.com/mastra-ai/mastra/pull/13126))
+
+- Updated dependencies [[`7184d87`](https://github.com/mastra-ai/mastra/commit/7184d87c9237d26862f500ccfd0c9f9eadd38ddf)]:
+  - @mastra/schema-compat@1.1.2-alpha.0
+
 ## 1.5.0
 
 ### Minor Changes

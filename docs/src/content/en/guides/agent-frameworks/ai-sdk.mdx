@@ -32,32 +32,32 @@ npm install @mastra/ai-sdk@latest
 Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
 
 ```typescript title="src/example.ts"
-import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
-import { withMastra } from '@mastra/ai-sdk';
-import type { Processor } from '@mastra/core/processors';
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
+import { withMastra } from '@mastra/ai-sdk'
+import type { Processor } from '@mastra/core/processors'
 
 const loggingProcessor: Processor<'logger'> = {
   id: 'logger',
   async processInput({ messages }) {
-    console.log('Input:', messages.length, 'messages');
-    return messages;
+    console.log('Input:', messages.length, 'messages')
+    return messages
   },
   async processOutputResult({ messages }) {
-    console.log('Output:', messages.length, 'messages');
-    return messages;
+    console.log('Output:', messages.length, 'messages')
+    return messages
   },
-};
+}
 
 const model = withMastra(openai('gpt-4o'), {
   inputProcessors: [loggingProcessor],
   outputProcessors: [loggingProcessor],
-});
+})
 
 const { text } = await generateText({
   model,
   prompt: 'What is 2 + 2?',
-});
+})
 ```
 
 ### With Memory
@@ -65,18 +65,18 @@ const { text } = await generateText({
 Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a libSQL storage backend to persist conversation history, loading the last 10 messages for context.
 
 ```typescript title="src/memory-example.ts"
-import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
-import { withMastra } from '@mastra/ai-sdk';
-import { LibSQLStore } from '@mastra/libsql';
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
+import { withMastra } from '@mastra/ai-sdk'
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
   id: 'my-app',
   url: 'file:./data.db',
-});
-await storage.init();
+})
+await storage.init()
 
-const memoryStorage = await storage.getStore('memory');
+const memoryStorage = await storage.getStore('memory')
 
 const model = withMastra(openai('gpt-4o'), {
   memory: {
@@ -85,12 +85,12 @@ const model = withMastra(openai('gpt-4o'), {
     resourceId: 'user-123',
     lastMessages: 10,
   },
-});
+})
 
 const { text } = await generateText({
   model,
   prompt: 'What did we talk about earlier?',
-});
+})
 ```
 
 ### With Processors & Memory
@@ -98,15 +98,15 @@ const { text } = await generateText({
 You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
 
 ```typescript title="src/combined-example.ts"
-import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
-import { withMastra } from '@mastra/ai-sdk';
-import { LibSQLStore } from '@mastra/libsql';
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
+import { withMastra } from '@mastra/ai-sdk'
+import { LibSQLStore } from '@mastra/libsql'
 
-const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
-await storage.init();
+const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' })
+await storage.init()
 
-const memoryStorage = await storage.getStore('memory');
+const memoryStorage = await storage.getStore('memory')
 
 const model = withMastra(openai('gpt-4o'), {
   inputProcessors: [myGuardProcessor],
@@ -117,12 +117,12 @@ const model = withMastra(openai('gpt-4o'), {
     resourceId: 'user-123',
     lastMessages: 10,
   },
-});
+})
 
 const { text } = await generateText({
   model,
   prompt: 'Hello!',
-});
+})
 ```
 
 ## Related

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/datadog",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Datadog LLM Observability exporter for Mastra - exports tracing data to Datadog's LLM Observability product",
   "type": "module",
   "main": "dist/index.js",

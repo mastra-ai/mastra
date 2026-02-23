@@ -13,8 +13,8 @@ The `MastraAuthClerk` class provides authentication for Mastra applications usin
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthClerk } from "@mastra/auth-clerk";
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   server: {
@@ -24,51 +24,51 @@ export const mastra = new Mastra({
       secretKey: process.env.CLERK_SECRET_KEY,
     }),
   },
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "publishableKey",
-      type: "string",
-      description:
-        "Your Clerk publishable key. Can be found in your Clerk Dashboard under API Keys.",
-      isOptional: true,
-      defaultValue: "process.env.CLERK_PUBLISHABLE_KEY",
-    },
-    {
-      name: "secretKey",
-      type: "string",
-      description:
-        "Your Clerk secret key. Used for server-side authentication and token verification.",
-      isOptional: true,
-      defaultValue: "process.env.CLERK_SECRET_KEY",
-    },
-    {
-      name: "jwksUri",
-      type: "string",
-      description:
-        "The JWKS URI from your Clerk application. Used to verify JWT signatures.",
-      isOptional: true,
-      defaultValue: "process.env.CLERK_JWKS_URI",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: User, request: HonoRequest) => Promise<boolean> | boolean",
-      description:
-        "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "publishableKey",
+type: "string",
+description:
+"Your Clerk publishable key. Can be found in your Clerk Dashboard under API Keys.",
+isOptional: true,
+defaultValue: "process.env.CLERK_PUBLISHABLE_KEY",
+},
+{
+name: "secretKey",
+type: "string",
+description:
+"Your Clerk secret key. Used for server-side authentication and token verification.",
+isOptional: true,
+defaultValue: "process.env.CLERK_SECRET_KEY",
+},
+{
+name: "jwksUri",
+type: "string",
+description:
+"The JWKS URI from your Clerk application. Used to verify JWT signatures.",
+isOptional: true,
+defaultValue: "process.env.CLERK_JWKS_URI",
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+},
+{
+name: "authorizeUser",
+type: "(user: User, request: HonoRequest) => Promise<boolean> | boolean",
+description:
+"Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.",
+isOptional: true,
+},
+]}
 />
 
 ## Related

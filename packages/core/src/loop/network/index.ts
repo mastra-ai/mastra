@@ -2440,6 +2440,7 @@ export async function networkLoop<OUTPUT = undefined>({
           { requestContext },
         );
       }
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       if (isComplete) {
         // Task is complete - use generatedFinalResult if LLM provided one,

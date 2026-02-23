@@ -5,8 +5,8 @@ import { transitions } from '@/ds/primitives/transitions';
 import { focusRing } from '@/ds/primitives/transitions';
 
 export type ItemListRowButtonProps = {
-  entry?: any;
-  isSelected?: boolean;
+  item?: any;
+  isFeatured?: boolean;
   children?: React.ReactNode;
   onClick?: (itemId: string) => void;
   columns?: ItemListColumn[];
@@ -15,8 +15,8 @@ export type ItemListRowButtonProps = {
 };
 
 export function ItemListRowButton({
-  entry,
-  isSelected,
+  item,
+  isFeatured,
   onClick,
   children,
   columns,
@@ -24,19 +24,20 @@ export function ItemListRowButton({
   disabled,
 }: ItemListRowButtonProps) {
   const handleClick = () => {
-    onClick?.(entry?.id);
+    onClick?.(item?.id);
   };
 
   return (
     <button
       onClick={handleClick}
       className={cn(
-        'grid w-full px-4 py-3 gap-6 text-left items-center',
+        'grid w-full px-2 gap-6 text-left items-center rounded-lg',
         transitions.colors,
         focusRing.visible,
         {
-          // hover effect only not for skeleton and selected
-          'hover:bg-surface4': entry && !isSelected && !disabled,
+          'bg-surface4': isFeatured,
+          // hover effect only not for skeleton and featured
+          'hover:bg-surface4': item && !isFeatured && !disabled,
         },
         className,
       )}

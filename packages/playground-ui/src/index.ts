@@ -85,6 +85,7 @@ export * from './ds/components/Columns';
 export * from './ds/components/CodeDiff';
 export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
+export * from './ds/components/Chip';
 export * from './ds/components/Tree';
 
 // Form utilities (AutoForm)

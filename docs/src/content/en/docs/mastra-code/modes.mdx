@@ -1,0 +1,115 @@
+---
+title: "Modes | Mastra Code"
+description: "Learn how Mastra Code's three operating modes — Build, Plan, and Fast — shape the agent's behavior, tool access, and response style."
+packages:
+  - "mastracode"
+---
+
+# Modes
+
+Mastra Code operates in one of three modes, each tailored to a different kind of task. Modes control which tools the agent has access to, how it approaches problems, and which default model it uses.
+
+Switch modes with the `/mode` slash command.
+
+## Build mode
+
+Build mode is the default. The agent has full access to all tools — reading, writing, editing files, and running shell commands.
+
+Use Build mode when you want the agent to make changes to your codebase: implementing features, fixing bugs, refactoring code, or running tests.
+
+### Working style
+
+- **Simple tasks** (typo fixes, single-file changes): The agent acts immediately without planning.
+- **Non-trivial tasks** (3+ files, architectural decisions): The agent creates a task list, works through each step, and verifies changes before moving on.
+
+### Implementation loop
+
+For each change, the agent follows this cycle:
+
+1. **Understand**: Read the relevant code and check existing conventions.
+1. **Implement**: Make the change following existing patterns.
+1. **Verify**: Run tests, type-check, or manually confirm the behavior.
+1. **Clean up**: Remove debug statements and ensure no half-done work.
+
+### Approved plans
+
+When a plan is approved in Plan mode, Mastra Code automatically switches to Build mode and injects the plan into the agent's instructions. The agent then implements the plan step by step.
+
+## Plan mode
+
+Plan mode is read-only. The agent can explore the codebase but cannot modify files or run side-effect commands.
+
+Use Plan mode when you want to analyze architecture, design an approach, or create a detailed implementation plan before writing code.
+
+### Available tools
+
+- `view`: Read files and list directories
+- `search_content`: Search file contents
+- `find_files`: Find files by pattern
+- `execute_command`: Only for read-only commands (`git status`, `git log`, `git diff`)
+
+### Plan submission
+
+When the agent finishes analyzing the codebase, it submits a structured plan using the `submit_plan` tool. The plan includes:
+
+- **Overview**: What the change does and why.
+- **Complexity estimate**: Size, risk level, and dependencies.
+- **Steps**: Specific files, changes, and rationale in dependency order.
+- **Verification**: What tests to run and what to check.
+
+After submission, you can:
+
+- **Approve**: Mastra Code switches to Build mode and begins implementation.
+- **Reject**: Stay in Plan mode.
+- **Request changes**: Provide feedback for the agent to revise and resubmit.
+
+## Fast mode
+
+Fast mode prioritizes speed and brevity. The agent uses a faster model and keeps responses short.
+
+Use Fast mode for quick lookups, simple questions, and small edits where latency matters more than depth.
+
+### Rules
+
+- Responses stay under 200 words unless the task requires more.
+- No planning phase; the agent acts directly.
+- For general programming questions, the agent answers from knowledge without searching the codebase.
+- For project-specific questions, the agent reads the relevant code and answers concisely.
+
+## Default models
+
+Each mode has a default model that's selected when you switch to it:
+
+| Mode | Default model |
+| - | - |
+| Build | `anthropic/claude-opus-4-6` |
+| Plan | `openai/gpt-5.2-codex` |
+| Fast | `cerebras/zai-glm-4.7` |
+
+Override the model for any mode using the `/models` command. Per-mode model selections persist to the thread, so switching back to a mode restores the last model you used in it.
+
+:::note
+
+Visit [`createMastraCode()` reference](/reference/mastra-code/createMastraCode) for details on configuring custom modes and default models.
+
+:::
+
+## Subagents
+
+In Build mode, the agent can spawn subagents to parallelize work. Subagents run as focused, independent tasks with their own tool access:
+
+| Subagent | Access | Use case |
+| - | - | - |
+| **Explore** | Read-only | "Find all usages of X", "How does module Y work" |
+| **Plan** | Read-only | "Create an implementation plan for X", "Analyze the architecture of Y" |
+| **Execute** | Read + write | "Implement feature X", "Fix bug Y", "Refactor module Z" |
+
+The parent agent spawns subagents only when multiple tasks can run in parallel. For a single task, the agent handles it directly. Subagent outputs are treated as untrusted — the parent agent verifies results before moving on.
+
+## Thinking level
+
+For Anthropic models that support extended thinking, you can control the thinking depth through the `/settings` panel. Options range from `off` (no thinking) to higher levels that enable more detailed reasoning at the cost of additional latency and tokens.
+
+## YOLO mode
+
+YOLO mode auto-approves all tool calls without prompting. It's enabled by default and can be toggled through `/settings`. When disabled, Mastra Code prompts for approval before executing write operations or shell commands, based on the [permission system](/docs/mastra-code/tools#permission-system).

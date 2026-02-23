@@ -83,9 +83,9 @@ export function ExperimentResultsListAndDetails({ results, isLoading }: Experime
 
   const resultsListColumns = [
     { name: 'itemId', label: 'Item ID', size: '5rem' },
+    { name: 'status', label: 'Status', size: '3rem' },
     ...(!featuredResultId ? [{ name: 'input', label: 'Input', size: '1fr' }] : []),
     ...(!featuredResultId ? [{ name: 'output', label: 'Output', size: '1fr' }] : []),
-    { name: 'status', label: 'Status', size: '3rem' },
   ];
 
   return (

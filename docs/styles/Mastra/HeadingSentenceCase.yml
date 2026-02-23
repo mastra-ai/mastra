@@ -1,0 +1,7 @@
+extends: capitalization
+message: "Use sentence-case for headings: '%s'."
+level: warning
+scope: heading
+match: $sentence
+indicators:
+  - ':'
