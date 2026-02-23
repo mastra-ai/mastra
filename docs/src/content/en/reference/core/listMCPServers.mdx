@@ -17,25 +17,29 @@ const server1 = new MCPServer({
   id: 'server-one',
   name: 'Server One',
   version: '1.0.0',
-  tools: { /* ... */ },
-});
+  tools: {
+    /* ... */
+  },
+})
 
 const server2 = new MCPServer({
   id: 'server-two',
   name: 'Server Two',
   version: '1.0.0',
-  tools: { /* ... */ },
-});
+  tools: {
+    /* ... */
+  },
+})
 
 export const mastra = new Mastra({
   mcpServers: {
-    firstServer: server1,   // Registry key: 'firstServer'
-    secondServer: server2,  // Registry key: 'secondServer'
+    firstServer: server1, // Registry key: 'firstServer'
+    secondServer: server2, // Registry key: 'secondServer'
   },
-});
+})
 
 // List all registered servers
-const servers = mastra.listMCPServers();
+const servers = mastra.listMCPServers()
 // Returns: { firstServer: MCPServerBase, secondServer: MCPServerBase }
 ```
 
@@ -47,13 +51,13 @@ This method does not accept any parameters.
 
 <PropertiesTable
   content={[
-    {
-      name: "servers",
-      type: "Record<string, MCPServerBase> | undefined",
-      description:
-        "A record of all registered MCP server instances, where keys are the registry keys (from mcpServers configuration) and values are MCPServerBase instances, or undefined if no servers are registered.",
-    },
-  ]}
+{
+name: "servers",
+type: "Record<string, MCPServerBase> | undefined",
+description:
+"A record of all registered MCP server instances, where keys are the registry keys (from mcpServers configuration) and values are MCPServerBase instances, or undefined if no servers are registered.",
+},
+]}
 />
 
 ## Related Methods

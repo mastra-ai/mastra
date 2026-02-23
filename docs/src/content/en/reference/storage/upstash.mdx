@@ -28,39 +28,39 @@ npm install @mastra/upstash@latest
 ## Usage
 
 ```typescript
-import { UpstashStore } from "@mastra/upstash";
+import { UpstashStore } from '@mastra/upstash'
 
 const storage = new UpstashStore({
   id: 'upstash-storage',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "url",
-      type: "string",
-      description: "Upstash Redis URL",
-      isOptional: false,
-    },
-    {
-      name: "token",
-      type: "string",
-      description: "Upstash Redis authentication token",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Key prefix for all stored items",
-      isOptional: true,
-      defaultValue: "mastra:",
-    },
-  ]}
+{
+name: "url",
+type: "string",
+description: "Upstash Redis URL",
+isOptional: false,
+},
+{
+name: "token",
+type: "string",
+description: "Upstash Redis authentication token",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Key prefix for all stored items",
+isOptional: true,
+defaultValue: "mastra:",
+},
+]}
 />
 
 ## Additional Notes
@@ -105,16 +105,16 @@ For optimal performance:
 To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
 
 ```typescript title="src/mastra/agents/example-upstash-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { UpstashStore } from "@mastra/upstash";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { UpstashStore } from '@mastra/upstash'
 
 export const upstashAgent = new Agent({
-  id: "upstash-agent",
-  name: "Upstash Agent",
+  id: 'upstash-agent',
+  name: 'Upstash Agent',
   instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -125,7 +125,7 @@ export const upstashAgent = new Agent({
       generateTitle: true, // Explicitly enable automatic title generation
     },
   }),
-});
+})
 ```
 
 ### Using the agent
@@ -133,23 +133,23 @@ export const upstashAgent = new Agent({
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
 ```typescript title="src/test-upstash-agent.ts"
-import "dotenv/config";
+import 'dotenv/config'
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123'
+const resourceId = 'user-456'
 
-const agent = mastra.getAgent("upstashAgent");
+const agent = mastra.getAgent('upstashAgent')
 
-const message = await agent.stream("My name is Mastra", {
+const message = await agent.stream('My name is Mastra', {
   memory: {
     thread: threadId,
     resource: resourceId,
   },
-});
+})
 
-await message.textStream.pipeTo(new WritableStream());
+await message.textStream.pipeTo(new WritableStream())
 
 const stream = await agent.stream("What's my name?", {
   memory: {
@@ -163,9 +163,9 @@ const stream = await agent.stream("What's my name?", {
       messageRange: 2,
     },
   },
-});
+})
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
+  process.stdout.write(chunk)
 }
 ```

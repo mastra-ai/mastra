@@ -15,7 +15,7 @@ Default implementation of the ObservabilityInstance interface.
 
 ### Constructor
 
-```typescript
+```typescript prettier:false
 new DefaultObservabilityInstance(config: ObservabilityInstanceConfig)
 ```
 
@@ -33,7 +33,7 @@ Base class for custom ObservabilityInstance implementations.
 
 #### getConfig
 
-```typescript
+```typescript prettier:false
 getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
 ```
 
@@ -41,7 +41,7 @@ Returns the current observability configuration.
 
 #### getExporters
 
-```typescript
+```typescript prettier:false
 getExporters(): readonly ObservabilityExporter[]
 ```
 
@@ -49,7 +49,7 @@ Returns all configured exporters.
 
 #### getSpanOutputProcessors
 
-```typescript
+```typescript prettier:false
 getSpanOutputProcessors(): readonly SpanOutputProcessor[]
 ```
 
@@ -57,7 +57,7 @@ Returns all configured span output processors.
 
 #### getLogger
 
-```typescript
+```typescript prettier:false
 getLogger(): IMastraLogger
 ```
 
@@ -65,7 +65,7 @@ Returns the logger instance for exporters and other components.
 
 #### startSpan
 
-```typescript
+```typescript prettier:false
 startSpan<TType extends SpanType>(
   options: StartSpanOptions<TType>
 ): Span<TType>
@@ -75,54 +75,54 @@ Start a new span of a specific SpanType. Creates the root span of a trace if no 
 
 <PropertiesTable
   props={[
-    {
-      name: "type",
-      type: "SpanType",
-      description: "Type of span to create",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the span",
-      required: true,
-    },
-    {
-      name: "parent",
-      type: "AnySpan",
-      description: "Parent span (if not root)",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "SpanTypeMap[TType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "User-defined metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Initial input data",
-      required: false,
-    },
-    {
-      name: "customSamplerOptions",
-      type: "CustomSamplerOptions",
-      description: "Options for custom sampler",
-      required: false,
-    },
-  ]}
+{
+name: "type",
+type: "SpanType",
+description: "Type of span to create",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the span",
+required: true,
+},
+{
+name: "parent",
+type: "AnySpan",
+description: "Parent span (if not root)",
+required: false,
+},
+{
+name: "attributes",
+type: "SpanTypeMap[TType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "User-defined metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Initial input data",
+required: false,
+},
+{
+name: "customSamplerOptions",
+type: "CustomSamplerOptions",
+description: "Options for custom sampler",
+required: false,
+},
+]}
 />
 
 #### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -135,16 +135,14 @@ To create a custom ObservabilityInstance implementation, extend BaseObservabilit
 ```typescript
 class CustomObservabilityInstance extends BaseObservabilityInstance {
   constructor(config: ObservabilityInstanceConfig) {
-    super(config);
+    super(config)
     // Custom initialization
   }
 
   // Override methods as needed
-  startSpan<TType extends SpanType>(
-    options: StartSpanOptions<TType>,
-  ): Span<TType> {
+  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType> {
     // Custom span creation logic
-    return super.startSpan(options);
+    return super.startSpan(options)
   }
 }
 ```

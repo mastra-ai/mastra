@@ -24,6 +24,7 @@ Content must be indexed before it can be searched. When you index a document:
 - For vector: the content is embedded using your embedder function and stored in the vector store
 
 Each indexed document has:
+
 - **id** - A unique identifier (typically the file path)
 - **content** - The text content
 - **metadata** - Optional key-value data stored with the document
@@ -43,13 +44,13 @@ Workspaces support three search modes: BM25 keyword search, vector semantic sear
 BM25 scores documents based on term frequency and document length. It works well for exact matches and specific terminology.
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   // highlight-next-line
   bm25: true,
-});
+})
 ```
 
 For custom BM25 parameters (`k1` is term frequency saturation, `b` is document length normalization):
@@ -61,7 +62,7 @@ const workspace = new Workspace({
     k1: 1.5,
     b: 0.75,
   },
-});
+})
 ```
 
 ## Vector search
@@ -69,10 +70,10 @@ const workspace = new Workspace({
 Vector search uses embeddings to find semantically similar content. It requires a vector store and embedder function.
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { PineconeVector } from '@mastra/pinecone';
-import { embed } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { PineconeVector } from '@mastra/pinecone'
+import { embed } from 'ai'
+import { openai } from '@ai-sdk/openai'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
@@ -84,10 +85,10 @@ const workspace = new Workspace({
     const { embedding } = await embed({
       model: openai.embedding('text-embedding-3-small'),
       value: text,
-    });
-    return embedding;
+    })
+    return embedding
   },
-});
+})
 ```
 
 ## Hybrid search
@@ -100,7 +101,7 @@ const workspace = new Workspace({
   bm25: true,
   vectorStore: pineconeVector,
   embedder: embedderFn,
-});
+})
 ```
 
 ## Indexing content
@@ -111,7 +112,7 @@ Use `workspace.index()` to add content to the search index programmatically. The
 
 ```typescript
 // Basic indexing
-await workspace.index('/docs/guide.md', 'Content of the guide...');
+await workspace.index('/docs/guide.md', 'Content of the guide...')
 
 // Index with metadata for filtering or context
 await workspace.index('/docs/api.md', apiDocContent, {
@@ -119,10 +120,11 @@ await workspace.index('/docs/api.md', apiDocContent, {
     category: 'api',
     version: '2.0',
   },
-});
+})
 ```
 
 Manual indexing is useful when:
+
 - You're indexing content that doesn't come from files (e.g., database records, API responses)
 - You want to pre-process or chunk content before indexing
 - You need to add custom metadata to documents
@@ -136,9 +138,9 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
   autoIndexPaths: ['/docs', '/support/faq'],
-});
+})
 
-await workspace.init();
+await workspace.init()
 ```
 
 When `init()` is called, all files in the specified directories are read and indexed for search. The file path becomes the document ID.
@@ -152,11 +154,11 @@ Paths must be directories, not glob patterns. Use `/docs` to index all files in 
 Use `workspace.search()` to find relevant content. Results are ranked by relevance score.
 
 ```typescript
-const results = await workspace.search('password reset');
+const results = await workspace.search('password reset')
 
 for (const result of results) {
-  console.log(`${result.id}: ${result.score}`);
-  console.log(result.content);
+  console.log(`${result.id}: ${result.score}`)
+  console.log(result.content)
 }
 ```
 
@@ -170,11 +172,11 @@ const results = await workspace.search('authentication flow', {
   mode: 'hybrid',
   minScore: 0.5,
   vectorWeight: 0.5,
-});
+})
 ```
 
 | Option | Description |
-|--------|-------------|
+| - | - |
 | `topK` | Maximum number of results to return. Default: 5 |
 | `mode` | Search mode: `'bm25'`, `'vector'`, or `'hybrid'`. Defaults to the best available mode based on configuration. |
 | `minScore` | Filter out results below this score threshold (0-1). |
@@ -186,18 +188,20 @@ Each result contains:
 
 ```typescript
 interface SearchResult {
-  id: string; // Document ID (typically file path)
-  content: string; // The matching content
-  score: number; // Relevance score (0-1)
-  lineRange?: { // Lines where the match was found
-    start: number;
-    end: number;
-  };
-  metadata?: Record<string, unknown>; // Metadata stored with the document
-  scoreDetails?: { // Score breakdown (hybrid mode only)
-    vector?: number;
-    bm25?: number;
-  };
+  id: string // Document ID (typically file path)
+  content: string // The matching content
+  score: number // Relevance score (0-1)
+  lineRange?: {
+    // Lines where the match was found
+    start: number
+    end: number
+  }
+  metadata?: Record<string, unknown> // Metadata stored with the document
+  scoreDetails?: {
+    // Score breakdown (hybrid mode only)
+    vector?: number
+    bm25?: number
+  }
 }
 ```
 
@@ -211,7 +215,7 @@ interface SearchResult {
 ### When to use each mode
 
 | Mode | Best for | Example queries |
-|------|----------|-----------------|
+| - | - | - |
 | `bm25` | Exact terms, technical queries, code | "useState hook", "404 error", "config.yaml" |
 | `vector` | Conceptual queries, natural language | "how to handle user authentication", "best practices for error handling" |
 | `hybrid` | General search, unknown query types | Most agent use cases |
