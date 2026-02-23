@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arize",
-  "version": "1.0.4-alpha.0",
+  "version": "1.0.4",
   "description": "Arize observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",

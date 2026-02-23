@@ -1,5 +1,60 @@
 # @mastra/server
 
+## 1.6.0
+
+### Minor Changes
+
+- Added Processor Providers — a new system for configuring and hydrating processors on stored agents. Define custom processor types with config schemas, available phases, and a factory method, then compose them into serializable processor graphs that support sequential, parallel, and conditional execution. ([#13219](https://github.com/mastra-ai/mastra/pull/13219))
+
+  **Example — custom processor provider:**
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+
+  // Built-in processors (token-limiter, unicode-normalizer, etc.) are registered automatically.
+  // Only register custom providers for your own processors:
+  const editor = new MastraEditor({
+    processorProviders: {
+      'my-custom-filter': myCustomFilterProvider,
+    },
+  });
+  ```
+
+  **Example — stored agent with a processor graph:**
+
+  ```ts
+  const agentConfig = {
+    inputProcessors: {
+      steps: [
+        {
+          type: 'step',
+          step: { id: 'norm', providerId: 'unicode-normalizer', config: {}, enabledPhases: ['processInput'] },
+        },
+        {
+          type: 'step',
+          step: {
+            id: 'limit',
+            providerId: 'token-limiter',
+            config: { limit: 4000 },
+            enabledPhases: ['processInput', 'processOutputStream'],
+          },
+        },
+      ],
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Added skill editing and workspace support in the agent CMS. Agents can now toggle skills on/off and associate a workspace. Fixed auto-versioning to compare against the latest draft version instead of the published one, preventing stale draft configs from being returned after saves. ([#13314](https://github.com/mastra-ai/mastra/pull/13314))
+
+- Fixed recursive schema warnings for processor graph entries by unrolling to a fixed depth of 3 levels, matching the existing rule group pattern ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
+
+- Workspace tools like `ast_edit` are now correctly detected at runtime based on available dependencies (e.g. `@ast-grep/napi`), preventing missing tools from being advertised to agents. ([#13233](https://github.com/mastra-ai/mastra/pull/13233))
+
+- Updated dependencies [[`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`5caa13d`](https://github.com/mastra-ai/mastra/commit/5caa13d1b2a496e2565ab124a11de9a51ad3e3b9), [`940163f`](https://github.com/mastra-ai/mastra/commit/940163fc492401d7562301e6f106ccef4fefe06f), [`47892c8`](https://github.com/mastra-ai/mastra/commit/47892c85708eac348209f99f10f9a5f5267e11c0), [`45bb78b`](https://github.com/mastra-ai/mastra/commit/45bb78b70bd9db29678fe49476cd9f4ed01bfd0b), [`70eef84`](https://github.com/mastra-ai/mastra/commit/70eef84b8f44493598fdafa2980a0e7283415eda), [`d84e52d`](https://github.com/mastra-ai/mastra/commit/d84e52d0f6511283ddd21ed5fe7f945449d0f799), [`24b80af`](https://github.com/mastra-ai/mastra/commit/24b80af87da93bb84d389340181e17b7477fa9ca), [`608e156`](https://github.com/mastra-ai/mastra/commit/608e156def954c9604c5e3f6d9dfce3bcc7aeab0), [`2b2e157`](https://github.com/mastra-ai/mastra/commit/2b2e157a092cd597d9d3f0000d62b8bb4a7348ed), [`59d30b5`](https://github.com/mastra-ai/mastra/commit/59d30b5d0cb44ea7a1c440e7460dfb57eac9a9b5), [`453693b`](https://github.com/mastra-ai/mastra/commit/453693bf9e265ddccecef901d50da6caaea0fbc6), [`78d1c80`](https://github.com/mastra-ai/mastra/commit/78d1c808ad90201897a300af551bcc1d34458a20), [`c204b63`](https://github.com/mastra-ai/mastra/commit/c204b632d19e66acb6d6e19b11c4540dd6ad5380), [`742a417`](https://github.com/mastra-ai/mastra/commit/742a417896088220a3b5560c354c45c5ca6d88b9)]:
+  - @mastra/core@1.6.0
+
 ## 1.6.0-alpha.0
 
 ### Minor Changes
