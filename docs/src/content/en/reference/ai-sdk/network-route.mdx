@@ -19,62 +19,62 @@ Use [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) if you ne
 This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `weatherAgent`.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { networkRoute } from "@mastra/ai-sdk";
+import { Mastra } from '@mastra/core'
+import { networkRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
       networkRoute({
-        path: "/network",
-        agent: "weatherAgent",
+        path: '/network',
+        agent: 'weatherAgent',
       }),
     ],
   },
-});
+})
 ```
 
 You can also use dynamic agent routing based on an `agentId`. The URL `/network/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { networkRoute } from "@mastra/ai-sdk";
+import { Mastra } from '@mastra/core'
+import { networkRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
       networkRoute({
-        path: "/network/:agentId",
+        path: '/network/:agentId',
       }),
     ],
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "The route path (e.g., `/network` or `/network/:agentId`). Include `:agentId` for dynamic agent routing.",
-      isOptional: false,
-      defaultValue: "'/network/:agentId'",
-    },
-    {
-      name: "agent",
-      type: "string",
-      description: "The ID of the routing agent to use for this network route. Required if the path doesn't include `:agentId`.",
-      isOptional: true,
-    },
-    {
-      name: "defaultOptions",
-      type: "AgentExecutionOptions",
-      description: "Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "The route path (e.g., `/network` or `/network/:agentId`). Include `:agentId` for dynamic agent routing.",
+isOptional: false,
+defaultValue: "'/network/:agentId'",
+},
+{
+name: "agent",
+type: "string",
+description: "The ID of the routing agent to use for this network route. Required if the path doesn't include `:agentId`.",
+isOptional: true,
+},
+{
+name: "defaultOptions",
+type: "AgentExecutionOptions",
+description: "Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.",
+isOptional: true,
+},
+]}
 />
 
 ## Additional configuration
@@ -84,19 +84,19 @@ You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-
 ```typescript
 const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   transport: new DefaultChatTransport({
-    api: "http://localhost:4111/network",
+    api: 'http://localhost:4111/network',
     prepareSendMessagesRequest({ messages }) {
       return {
         body: {
           messages,
           // Pass memory config
           memory: {
-            thread: "user-1",
-            resource: "user-1",
+            thread: 'user-1',
+            resource: 'user-1',
           },
         },
-      };
+      }
     },
   }),
-});
+})
 ```

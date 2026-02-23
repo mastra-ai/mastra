@@ -11,8 +11,6 @@ export { createGlobTool } from './glob';
 export { createWriteFileTool } from './write';
 export { createSubagentTool } from './subagent';
 export type { SubagentToolDeps } from './subagent';
-export { todoWriteTool } from './todo';
-export type { TodoItem } from './todo';
-export { todoCheckTool } from './todo-check';
+
 export { astSmartEditTool } from './ast-smart-edit';
 export { requestSandboxAccessTool } from './request-sandbox-access';

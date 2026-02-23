@@ -55,38 +55,29 @@ Use your monorepo tool to run the build command from the correct package. There'
 Examples:
 
 <Tabs>
-<TabItem value="npm" label="npm">
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm run build --workspace=apps/api
+    ```
+  </TabItem>
 
-```bash
-npm run build --workspace=apps/api
-```
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm --filter api run build
+    ```
+  </TabItem>
 
-</TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn workspace api build
+    ```
+  </TabItem>
 
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm --filter api run build
-```
-
-</TabItem>
-
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn workspace api build
-```
-
-</TabItem>
-
-<TabItem value="turborepo" label="Turborepo">
-
-```bash
-turbo run build --filter=api
-```
-
-</TabItem>
-
+  <TabItem value="turborepo" label="Turborepo">
+    ```bash
+    turbo run build --filter=api
+    ```
+  </TabItem>
 </Tabs>
 
 Your package's `build` script should run `mastra build`:
@@ -111,9 +102,9 @@ For most setups, this works without configuration. If you encounter issues with 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
   bundler: {
-    transpilePackages: ["@my-org/utils"],
+    transpilePackages: ['@my-org/utils'],
   },
-});
+})
 ```
 
 ## Environment variables
@@ -144,6 +135,7 @@ Keep dependencies consistent to avoid version conflicts and build errors:
 ### Workspace package not found
 
 If Mastra can't resolve a workspace package, ensure:
+
 - The package is listed in your `package.json` dependencies
 - Your lockfile is up to date (`pnpm install`, `npm install`, etc.)
 - The package has a valid `main` or `exports` field in its `package.json`
@@ -151,6 +143,7 @@ If Mastra can't resolve a workspace package, ensure:
 ### TypeScript errors from workspace packages
 
 If you see type errors from uncompiled workspace packages, either:
+
 - Build the package first (recommended for faster Mastra builds)
 - Add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages) in your Mastra config
 

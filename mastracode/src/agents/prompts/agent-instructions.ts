@@ -1,6 +1,6 @@
 /**
- * Load project and global agent instruction files (AGENT.md, CLAUDE.md).
- * Prefers AGENT.md over CLAUDE.md when both exist at the same location.
+ * Load project and global agent instruction files (AGENTS.md, CLAUDE.md).
+ * Prefers AGENTS.md over CLAUDE.md when multiple exist at the same location.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 // Filenames to check, in order of preference
-const INSTRUCTION_FILES = ['AGENT.md', 'CLAUDE.md'];
+const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
 
 // Locations to scan (relative to project root or home)
 const PROJECT_LOCATIONS = [
@@ -27,7 +27,7 @@ interface InstructionSource {
 
 /**
  * Find the first existing instruction file at a given base path.
- * Prefers AGENT.md over CLAUDE.md.
+ * Prefers AGENTS.md over CLAUDE.md.
  */
 function findInstructionFile(basePath: string): string | null {
   for (const filename of INSTRUCTION_FILES) {

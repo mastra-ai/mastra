@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { GitCompareIcon } from 'lucide-react';
+import { BanIcon, ClockIcon, GitCompareIcon } from 'lucide-react';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -20,7 +20,6 @@ export interface DatasetItemVersionsPanelProps {
 }
 
 const versionsListColumns = [{ name: 'version', label: 'Item Version History', size: '1fr' }];
-const versionsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '1.25rem' }, ...versionsListColumns];
 
 /**
  * Panel showing dataset item version history.
@@ -73,10 +72,8 @@ export function DatasetItemVersionsPanel({
     }
   };
 
-  const columnsToRender = isSelectionActive ? versionsListColumnsWithCheckbox : versionsListColumns;
-
   return (
-    <Column className="min-w-[17rem]">
+    <Column className="min-w-[14rem]">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
@@ -91,33 +88,35 @@ export function DatasetItemVersionsPanel({
               tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
               className="grow"
             >
-              Compare Selected
+              Compare
             </ButtonWithTooltip>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (
-        <Column.Toolbar>
-          <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
-            <GitCompareIcon /> Compare Versions
-          </Button>
-        </Column.Toolbar>
+        <>
+          {(versions || []).length > 1 && (
+            <Column.Toolbar>
+              <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
+                <GitCompareIcon /> Compare Ver.
+              </Button>
+            </Column.Toolbar>
+          )}
+        </>
       )}
 
       {isLoading ? (
         <DatasetItemVersionsListSkeleton />
       ) : (
         <ItemList>
-          <div className="grid grid-rows-[1fr_auto] gap-4">
-            <ItemList.Header columns={columnsToRender}>
-              {columnsToRender.map(col =>
-                col.name === 'checkbox' ? (
-                  <ItemList.FlexCell key={col.name}>.</ItemList.FlexCell>
-                ) : (
-                  <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-                ),
-              )}
-            </ItemList.Header>
-          </div>
+          <ItemList.Header columns={versionsListColumns}>
+            {versionsListColumns.map(col =>
+              col.name === 'checkbox' ? (
+                <ItemList.Cell key={col.name}>.</ItemList.Cell>
+              ) : (
+                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+              ),
+            )}
+          </ItemList.Header>
 
           <ItemList.Scroller>
             <ItemList.Items>
@@ -128,10 +127,10 @@ export function DatasetItemVersionsPanel({
                 return (
                   <ItemList.Row
                     key={String(item.datasetVersion)}
-                    isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
+                    isSelected={isSelectionActive && selectedIds.has(versionKey)}
                   >
                     {isSelectionActive && (
-                      <ItemList.FlexCell className="w-12 pl-4">
+                      <ItemList.Cell className="w-12 pl-2 ">
                         <Checkbox
                           checked={selectedIds.has(versionKey)}
                           disabled={item.isDeleted}
@@ -144,35 +143,21 @@ export function DatasetItemVersionsPanel({
                           }}
                           aria-label={`Select version ${item.datasetVersion}`}
                         />
-                      </ItemList.FlexCell>
+                      </ItemList.Cell>
                     )}
                     <ItemList.RowButton
-                      entry={item}
+                      item={item}
                       columns={versionsListColumns}
-                      isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
+                      isFeatured={isVersionSelected(item)}
                       onClick={() => handleVersionClick(item)}
-                      className="py-3"
+                      className="py-2"
                     >
-                      <ItemList.FlexCell className="w-full text-neutral grid text-neutral3">
-                        <div className="flex">
-                          <strong className="min-w-11">v{item.datasetVersion}</strong>
-                          <em>{versionDate ? format(versionDate, 'MMM d, yyyy HH:mm') : null}</em>
-                        </div>
-                        {(item.isLatest || item.isDeleted) && (
-                          <div className="flex gap-2 pl-11  ">
-                            {item.isLatest && (
-                              <span className="inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-900">
-                                Latest
-                              </span>
-                            )}
-                            {item.isDeleted && (
-                              <span className="inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-red-900">
-                                Deleted
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </ItemList.FlexCell>
+                      <ItemList.VersionCell
+                        version={item.datasetVersion}
+                        date={versionDate}
+                        isLatest={item.isLatest}
+                        isDeleted={item.isDeleted}
+                      />
                     </ItemList.RowButton>
                   </ItemList.Row>
                 );

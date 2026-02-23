@@ -1,9 +1,13 @@
-import { format } from 'date-fns';
-import { SearchCodeIcon, BanIcon } from 'lucide-react';
 import type { DatasetItem } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
+import { Chip, cn } from '@/index';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { ArrowRightIcon, BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 
 export interface DatasetCompareVersionsListProps {
+  datasetId: string;
+  versionA: number;
+  versionB: number;
   allItems: Array<{ id: string; createdAt: Date }>;
   itemsAMap: Map<string, DatasetItem>;
   itemsBMap: Map<string, DatasetItem>;
@@ -11,17 +15,68 @@ export interface DatasetCompareVersionsListProps {
 }
 
 const columns = [
-  { name: 'id', label: 'ID', size: '10rem' },
-  { name: 'versionA', label: 'Version A', size: '13rem' },
-  { name: 'versionB', label: 'Version B', size: '13rem' },
-  { name: 'status', label: 'Status', size: '7rem' },
-  { name: 'date', label: 'Created', size: '7rem' },
-  { name: 'compare', label: 'Compare', size: '4rem' },
+  { name: 'id', label: 'ID', size: '1fr' },
+  { name: 'versionA', label: 'Version A', size: '1fr' },
+  { name: 'versionB', label: 'Version B', size: '1fr' },
+  { name: 'compare', label: 'Compare', size: '10rem' },
 ];
 
-function formatVersion(item?: DatasetItem): string {
-  if (!item) return '-';
-  return `v${item.datasetVersion}`;
+const versionInfoConfig = {
+  added: {
+    color: 'blue' as const,
+    borderColor: 'border-blue-900',
+    icon: <PlusIcon />,
+    tooltip: 'Added in this version',
+  },
+  changed: {
+    color: 'orange' as const,
+    borderColor: 'border-yellow-900',
+    icon: <PenIcon />,
+    tooltip: 'Changed in this version',
+  },
+  same: {
+    color: 'green' as const,
+    borderColor: 'border-green-900',
+    icon: <EqualIcon />,
+    tooltip: 'Same in both versions',
+  },
+};
+
+function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip?: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <BanIcon
+          className={cn('text-neutral3/40 w-5 h-5', {
+            'text-red-900': red,
+          })}
+        />
+      </TooltipTrigger>
+      {tooltip && <TooltipContent>{tooltip}</TooltipContent>}
+    </Tooltip>
+  );
+}
+
+function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoConfig; version?: number }) {
+  if (!variant) {
+    return <span className="text-ui-md text-neutral4">v. {version}</span>;
+  }
+  const { color, icon, tooltip } = versionInfoConfig[variant];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="grid grid-cols-[1fr_auto]">
+          {version !== undefined && (
+            <span className="pr-3 text-ui-md text-neutral4 min-w-16 flex justify-end">v. {version}</span>
+          )}
+          <Chip color={color} size="small">
+            {icon}
+          </Chip>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function getStatus(itemA?: DatasetItem, itemB?: DatasetItem): string {
@@ -32,59 +87,89 @@ function getStatus(itemA?: DatasetItem, itemB?: DatasetItem): string {
 }
 
 export function DatasetCompareVersionsList({
+  datasetId,
+  versionA,
+  versionB,
   allItems,
   itemsAMap,
   itemsBMap,
-  onItemClick,
 }: DatasetCompareVersionsListProps) {
+  const isANewer = versionA > versionB;
   return (
     <ItemList>
-      <ItemList.Header columns={columns}>
-        {columns.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
         <ItemList.Items>
-          {allItems.map(({ id, createdAt }) => {
+          {allItems.map(({ id }) => {
             const itemA = itemsAMap.get(id);
             const itemB = itemsBMap.get(id);
             const status = getStatus(itemA, itemB);
 
             return (
-              <ItemList.Row key={id}>
-                <ItemList.RowButton
-                  columns={columns}
-                  entry={{ id }}
-                  onClick={status === 'changed' ? () => onItemClick?.(id, itemA, itemB) : undefined}
-                  disabled={status !== 'changed'}
-                >
-                  <ItemList.TextCell>{id}</ItemList.TextCell>
-                  {status !== 'same' ? (
-                    <>
-                      <ItemList.TextCell className="justify-center flex">
-                        v{itemA?.datasetVersion || ''}
-                      </ItemList.TextCell>
-                      <ItemList.TextCell className="justify-center flex">
-                        v{itemB?.datasetVersion || ''}
-                      </ItemList.TextCell>
-                    </>
-                  ) : (
-                    <ItemList.TextCell className="col-span-2 justify-center flex">
-                      v{itemB?.datasetVersion || ''}
-                    </ItemList.TextCell>
-                  )}
-                  <ItemList.TextCell>{status}</ItemList.TextCell>
-                  <ItemList.TextCell>{format(createdAt, 'MMM dd')}</ItemList.TextCell>
-                  <ItemList.FlexCell className="justify-center">
-                    {status === 'changed' ? (
-                      <SearchCodeIcon className="w-5 h-5 opacity-50" />
+              <ItemList.Row key={id} columns={columns}>
+                <ItemList.IdCell id={id} isShortened={false} />
+                {status !== 'same' ? (
+                  <>
+                    {itemA?.datasetVersion ? (
+                      <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="gap-2">
+                        {!itemB && isANewer ? (
+                          <VersionInfo variant="added" version={itemA.datasetVersion} />
+                        ) : status === 'changed' && isANewer ? (
+                          <VersionInfo variant="changed" version={itemA.datasetVersion} />
+                        ) : (
+                          <VersionInfo version={itemA.datasetVersion} />
+                        )}
+                      </ItemList.LinkCell>
                     ) : (
-                      <BanIcon className="w-4 h-4 opacity-30" />
+                      <ItemList.Cell>
+                        <EmptyCell
+                          red={isANewer}
+                          tooltip={isANewer ? 'Deleted in this version' : 'Not present in this version'}
+                        />
+                      </ItemList.Cell>
                     )}
-                  </ItemList.FlexCell>
-                </ItemList.RowButton>
+                    {itemB?.datasetVersion ? (
+                      <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="gap-2">
+                        {!itemA && !isANewer ? (
+                          <VersionInfo variant="added" version={itemB.datasetVersion} />
+                        ) : status === 'changed' && !isANewer ? (
+                          <VersionInfo variant="changed" version={itemB.datasetVersion} />
+                        ) : (
+                          <VersionInfo version={itemB.datasetVersion} />
+                        )}
+                      </ItemList.LinkCell>
+                    ) : (
+                      <ItemList.Cell>
+                        <EmptyCell
+                          red={!isANewer}
+                          tooltip={!isANewer ? 'Deleted in this version' : 'Not present in this version'}
+                        />
+                      </ItemList.Cell>
+                    )}
+                  </>
+                ) : (
+                  <ItemList.LinkCell href={`/datasets/${datasetId}/items/${id}`} className="col-span-2 gap-2">
+                    <VersionInfo variant="same" version={itemB?.datasetVersion} />
+                  </ItemList.LinkCell>
+                )}
+
+                {status === 'changed' ? (
+                  <ItemList.LinkCell
+                    href={`/datasets/${datasetId}/items/${id}/versions?ids=${itemA?.datasetVersion},${itemB?.datasetVersion}`}
+                  >
+                    Compare
+                  </ItemList.LinkCell>
+                ) : (
+                  <ItemList.Cell>
+                    <EmptyCell
+                      tooltip={
+                        <>
+                          Comparing is available
+                          <br /> only for changed items
+                        </>
+                      }
+                    />
+                  </ItemList.Cell>
+                )}
               </ItemList.Row>
             );
           })}

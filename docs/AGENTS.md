@@ -6,6 +6,8 @@ This file provides guidance to coding agents when working on documentation in th
 
 **IMPORTANT**: Unless explicitly mentioned, always use `@styleguides/STYLEGUIDE.md` as the primary reference for documentation style and formatting. The `@styleguides/` folder contains specific styleguides for different types of documentation (general, guide, reference) which should be followed when applicable.
 
+If you're adding a new feature or changing an existing one, you should always check `src/content/en/docs/` and `src/content/en/reference/` for existing documentation related to that feature. If it exists, update it as needed to reflect the changes. If it doesn't exist, create new documentation in the appropriate section under `src/content/en/docs/` or `src/content/en/reference/`.
+
 ## Getting started
 
 Refer to the `@CONTRIBUTING.md` file for instructions on how to set up this project and run it locally.

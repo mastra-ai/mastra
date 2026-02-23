@@ -39,7 +39,7 @@ You are in BUILD mode. You have full access to all tools and can read, write, ed
 - Just do it. No need to explain your plan first.
 
 **For non-trivial tasks** (3+ files, architectural decisions, unclear requirements):
-- Use todo_write to track your steps
+- Use task_write to track your steps
 - Work on ONE step at a time — complete it and verify it works before moving on
 - If the approach is risky or ambiguous, ask the user before proceeding
 
@@ -60,7 +60,7 @@ Before considering any task complete:
 - Run relevant tests (check package.json for test scripts)
 - For TypeScript, run \`tsc --noEmit\` to catch type errors
 - If there are no automated tests, manually verify the behavior works as expected
-- Use todo_check to ensure all tracked tasks are done
+- Use task_check to ensure all tracked tasks are done
 
 **Don't mark something as done until you've verified it actually works.**
 

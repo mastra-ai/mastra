@@ -15,19 +15,19 @@ Observational Memory (OM) is Mastra's memory system for long-context agentic mem
 ## Usage
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: true,
     },
   }),
-});
+})
 ```
 
 ## Configuration
@@ -36,198 +36,198 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
 
 <PropertiesTable
   content={[
-    {
-      name: "enabled",
-      type: "boolean",
-      description:
-        "Enable or disable Observational Memory. When omitted from a config object, defaults to `true`. Only `enabled: false` explicitly disables it.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "model",
-      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
-      description:
-        "Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `\"default\"` to explicitly use the default model (`google/gemini-2.5-flash`).",
-      isOptional: true,
-      defaultValue: "'google/gemini-2.5-flash' (when using observationalMemory: true)",
-    },
-    {
-      name: "scope",
-      type: "'resource' | 'thread'",
-      description:
-        "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` (experimental) shares observations across all threads for a resource, enabling cross-conversation memory.",
-      isOptional: true,
-      defaultValue: "'thread'",
-    },
-    {
-      name: "shareTokenBudget",
-      type: "boolean",
-      description:
-        "Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. **Note:** `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "observation",
-      type: "ObservationalMemoryObservationConfig",
-      description:
-        "Configuration for the observation step. Controls when the Observer agent runs and how it behaves.",
-      isOptional: true,
-    },
-    {
-      name: "reflection",
-      type: "ObservationalMemoryReflectionConfig",
-      description:
-        "Configuration for the reflection step. Controls when the Reflector agent runs and how it behaves.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "enabled",
+type: "boolean",
+description:
+"Enable or disable Observational Memory. When omitted from a config object, defaults to `true`. Only `enabled: false` explicitly disables it.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "model",
+type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+description:
+"Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `\"default\"` to explicitly use the default model (`google/gemini-2.5-flash`).",
+isOptional: true,
+defaultValue: "'google/gemini-2.5-flash' (when using observationalMemory: true)",
+},
+{
+name: "scope",
+type: "'resource' | 'thread'",
+description:
+"Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` (experimental) shares observations across all threads for a resource, enabling cross-conversation memory.",
+isOptional: true,
+defaultValue: "'thread'",
+},
+{
+name: "shareTokenBudget",
+type: "boolean",
+description:
+"Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. **Note:** `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "observation",
+type: "ObservationalMemoryObservationConfig",
+description:
+"Configuration for the observation step. Controls when the Observer agent runs and how it behaves.",
+isOptional: true,
+},
+{
+name: "reflection",
+type: "ObservationalMemoryReflectionConfig",
+description:
+"Configuration for the reflection step. Controls when the Reflector agent runs and how it behaves.",
+isOptional: true,
+},
+]}
 />
 
 ### Observation config
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
-      description:
-        "Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
-      isOptional: true,
-    },
-    {
-      name: "instruction",
-      type: "string",
-      description:
-        "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
-      isOptional: true,
-    },
-    {
-      name: "messageTokens",
-      type: "number",
-      description:
-        "Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called.",
-      isOptional: true,
-      defaultValue: "30000",
-    },
-    {
-      name: "maxTokensPerBatch",
-      type: "number",
-      description:
-        "Maximum tokens per batch when observing multiple threads in resource scope. Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.",
-      isOptional: true,
-      defaultValue: "10000",
-    },
-    {
-      name: "modelSettings",
-      type: "ObservationalMemoryModelSettings",
-      description:
-        "Model settings for the Observer agent.",
-      isOptional: true,
-      defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
-    },
-    {
-      name: "bufferTokens",
-      type: "number | false",
-      description:
-        "Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. Set to `false` to explicitly disable all async buffering (both observation and reflection).",
-      isOptional: true,
-      defaultValue: "0.2",
-    },
-    {
-      name: "bufferActivation",
-      type: "number",
-      description:
-        "Ratio (0-1) controlling how much of the message window to retain after activation. For example, `0.8` means activate enough to keep only 20% of `messageTokens` remaining. Higher values remove more message history per activation.",
-      isOptional: true,
-      defaultValue: "0.8",
-    },
-    {
-      name: "blockAfter",
-      type: "number",
-      description:
-        "Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
-      isOptional: true,
-      defaultValue: "1.2 (when bufferTokens is set)",
-    },
-  ]}
+{
+name: "model",
+type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+description:
+"Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
+isOptional: true,
+},
+{
+name: "instruction",
+type: "string",
+description:
+"Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
+isOptional: true,
+},
+{
+name: "messageTokens",
+type: "number",
+description:
+"Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called.",
+isOptional: true,
+defaultValue: "30000",
+},
+{
+name: "maxTokensPerBatch",
+type: "number",
+description:
+"Maximum tokens per batch when observing multiple threads in resource scope. Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.",
+isOptional: true,
+defaultValue: "10000",
+},
+{
+name: "modelSettings",
+type: "ObservationalMemoryModelSettings",
+description:
+"Model settings for the Observer agent.",
+isOptional: true,
+defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+},
+{
+name: "bufferTokens",
+type: "number | false",
+description:
+"Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. Set to `false` to explicitly disable all async buffering (both observation and reflection).",
+isOptional: true,
+defaultValue: "0.2",
+},
+{
+name: "bufferActivation",
+type: "number",
+description:
+"Ratio (0-1) controlling how much of the message window to retain after activation. For example, `0.8` means activate enough to keep only 20% of `messageTokens` remaining. Higher values remove more message history per activation.",
+isOptional: true,
+defaultValue: "0.8",
+},
+{
+name: "blockAfter",
+type: "number",
+description:
+"Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
+isOptional: true,
+defaultValue: "1.2 (when bufferTokens is set)",
+},
+]}
 />
 
 ### Reflection config
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
-      description:
-        "Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
-      isOptional: true,
-    },
-    {
-      name: "instruction",
-      type: "string",
-      description:
-        "Custom instruction appended to the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information.",
-      isOptional: true,
-    },
-    {
-      name: "observationTokens",
-      type: "number",
-      description:
-        "Token count of observations that triggers reflection. When observation tokens exceed this threshold, the Reflector agent is called to condense them.",
-      isOptional: true,
-      defaultValue: "40000",
-    },
-    {
-      name: "modelSettings",
-      type: "ObservationalMemoryModelSettings",
-      description:
-        "Model settings for the Reflector agent.",
-      isOptional: true,
-      defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
-    },
-    {
-      name: "bufferActivation",
-      type: "number",
-      description:
-        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.",
-      isOptional: true,
-      defaultValue: "0.5",
-    },
-    {
-      name: "blockAfter",
-      type: "number",
-      description:
-        "Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.",
-      isOptional: true,
-      defaultValue: "1.2 (when bufferActivation is set)",
-    },
-  ]}
+{
+name: "model",
+type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+description:
+"Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
+isOptional: true,
+},
+{
+name: "instruction",
+type: "string",
+description:
+"Custom instruction appended to the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information.",
+isOptional: true,
+},
+{
+name: "observationTokens",
+type: "number",
+description:
+"Token count of observations that triggers reflection. When observation tokens exceed this threshold, the Reflector agent is called to condense them.",
+isOptional: true,
+defaultValue: "40000",
+},
+{
+name: "modelSettings",
+type: "ObservationalMemoryModelSettings",
+description:
+"Model settings for the Reflector agent.",
+isOptional: true,
+defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
+},
+{
+name: "bufferActivation",
+type: "number",
+description:
+"Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.",
+isOptional: true,
+defaultValue: "0.5",
+},
+{
+name: "blockAfter",
+type: "number",
+description:
+"Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.",
+isOptional: true,
+defaultValue: "1.2 (when bufferActivation is set)",
+},
+]}
 />
 
 ### Model settings
 
 <PropertiesTable
   content={[
-    {
-      name: "temperature",
-      type: "number",
-      description:
-        "Temperature for generation. Lower values produce more consistent output.",
-      isOptional: true,
-      defaultValue: "0.3",
-    },
-    {
-      name: "maxOutputTokens",
-      type: "number",
-      description:
-        "Maximum output tokens. Set high to prevent truncation of observations.",
-      isOptional: true,
-      defaultValue: "100000",
-    },
-  ]}
+{
+name: "temperature",
+type: "number",
+description:
+"Temperature for generation. Lower values produce more consistent output.",
+isOptional: true,
+defaultValue: "0.3",
+},
+{
+name: "maxOutputTokens",
+type: "number",
+description:
+"Maximum output tokens. Set high to prevent truncation of observations.",
+isOptional: true,
+defaultValue: "100000",
+},
+]}
 />
 
 ## Examples
@@ -235,18 +235,18 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
 ### Resource scope with custom thresholds (experimental)
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: "google/gemini-2.5-flash",
-        scope: "resource",
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
         observation: {
           messageTokens: 20_000,
         },
@@ -256,19 +256,19 @@ export const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 ### Shared token budget
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -283,7 +283,7 @@ export const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
@@ -291,46 +291,46 @@ When `shareTokenBudget` is enabled, the total budget is `observation.messageToke
 ### Custom model
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: "openai/gpt-4o-mini",
+        model: 'openai/gpt-4o-mini',
       },
     },
   }),
-});
+})
 ```
 
 ### Different models per agent
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
         observation: {
-          model: "google/gemini-2.5-flash",
+          model: 'google/gemini-2.5-flash',
         },
         reflection: {
-          model: "openai/gpt-4o-mini",
+          model: 'openai/gpt-4o-mini',
         },
       },
     },
   }),
-});
+})
 ```
 
 ### Custom instructions
@@ -338,31 +338,31 @@ export const agent = new Agent({
 Customize what the Observer and Reflector focus on by providing custom instructions:
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "health-assistant",
-  instructions: "You are a health and wellness assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'health-assistant',
+  instructions: 'You are a health and wellness assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: "google/gemini-2.5-flash",
+        model: 'google/gemini-2.5-flash',
         observation: {
           // Focus observations on health-related preferences and goals
           instruction:
-            "Prioritize capturing user health goals, dietary restrictions, exercise preferences, and medical considerations. Avoid capturing general chit-chat.",
+            'Prioritize capturing user health goals, dietary restrictions, exercise preferences, and medical considerations. Avoid capturing general chit-chat.',
         },
         reflection: {
           // Guide reflection to consolidate health patterns
           instruction:
-            "When consolidating, group related health information together. Preserve specific metrics, dates, and medical details.",
+            'When consolidating, group related health information together. Preserve specific metrics, dates, and medical details.',
         },
       },
     },
   }),
-});
+})
 ```
 
 ### Async buffering
@@ -372,24 +372,26 @@ Async buffering is **enabled by default**. It pre-computes observations in the b
 The lifecycle is: **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
 
 Default settings:
-- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every ~6k tokens with a 30k threshold)
+
+- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
 - `observation.bufferActivation: 0.8` — on activation, remove enough messages to keep only 20% of the threshold remaining
+- Buffered observations include continuation hints (`suggestedResponse`, `currentTask`) that survive activation to maintain conversational continuity
 - `reflection.bufferActivation: 0.5` — start background reflection at 50% of observation threshold
 
 To customize:
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: "google/gemini-2.5-flash",
+        model: 'google/gemini-2.5-flash',
         observation: {
           messageTokens: 30_000,
           // Buffer every 5k tokens (runs in background)
@@ -409,12 +411,12 @@ export const agent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 To disable async buffering entirely:
 
-```typescript
+```typescript prettier:false
 observationalMemory: {
   model: "google/gemini-2.5-flash",
   observation: {
@@ -441,44 +443,44 @@ Emitted once per agent loop step, before model generation. Provides a snapshot o
 
 ```typescript
 interface DataOmStatusPart {
-  type: 'data-om-status';
+  type: 'data-om-status'
   data: {
     windows: {
       active: {
         /** Unobserved message tokens and the threshold that triggers observation */
-        messages: { tokens: number; threshold: number };
+        messages: { tokens: number; threshold: number }
         /** Observation tokens and the threshold that triggers reflection */
-        observations: { tokens: number; threshold: number };
-      };
+        observations: { tokens: number; threshold: number }
+      }
       buffered: {
         observations: {
           /** Number of buffered chunks staged for activation */
-          chunks: number;
+          chunks: number
           /** Total message tokens across all buffered chunks */
-          messageTokens: number;
+          messageTokens: number
           /** Projected message tokens that would be removed if activation happened now (based on bufferActivation ratio and chunk boundaries) */
-          projectedMessageRemoval: number;
+          projectedMessageRemoval: number
           /** Observation tokens that will be added on activation */
-          observationTokens: number;
+          observationTokens: number
           /** idle: no buffering in progress. running: background observer is working. complete: chunks are ready for activation. */
-          status: 'idle' | 'running' | 'complete';
-        };
+          status: 'idle' | 'running' | 'complete'
+        }
         reflection: {
           /** Observation tokens that were fed into the reflector (pre-compression size) */
-          inputObservationTokens: number;
+          inputObservationTokens: number
           /** Observation tokens the reflection will produce on activation (post-compression size) */
-          observationTokens: number;
+          observationTokens: number
           /** idle: no reflection buffered. running: background reflector is working. complete: reflection is ready for activation. */
-          status: 'idle' | 'running' | 'complete';
-        };
-      };
-    };
-    recordId: string;
-    threadId: string;
-    stepNumber: number;
+          status: 'idle' | 'running' | 'complete'
+        }
+      }
+    }
+    recordId: string
+    threadId: string
+    stepNumber: number
     /** Increments each time the Reflector creates a new generation */
-    generationCount: number;
-  };
+    generationCount: number
+  }
 }
 ```
 
@@ -488,22 +490,22 @@ Clients can derive percentages and post-activation estimates from the raw values
 
 ```typescript
 // Message window usage %
-const msgPercent = status.windows.active.messages.tokens
-  / status.windows.active.messages.threshold;
+const msgPercent = status.windows.active.messages.tokens / status.windows.active.messages.threshold
 
 // Observation window usage %
-const obsPercent = status.windows.active.observations.tokens
-  / status.windows.active.observations.threshold;
+const obsPercent =
+  status.windows.active.observations.tokens / status.windows.active.observations.threshold
 
 // Projected message tokens after buffered observations activate
 // Uses projectedMessageRemoval which accounts for bufferActivation ratio and chunk boundaries
-const postActivation = status.windows.active.messages.tokens
-  - status.windows.buffered.observations.projectedMessageRemoval;
+const postActivation =
+  status.windows.active.messages.tokens -
+  status.windows.buffered.observations.projectedMessageRemoval
 
 // Reflection compression ratio (when buffered reflection exists)
-const { inputObservationTokens, observationTokens } = status.windows.buffered.reflection;
+const { inputObservationTokens, observationTokens } = status.windows.buffered.reflection
 if (inputObservationTokens > 0) {
-  const compressionRatio = observationTokens / inputObservationTokens;
+  const compressionRatio = observationTokens / inputObservationTokens
 }
 ```
 
@@ -513,15 +515,15 @@ Emitted when the Observer or Reflector agent begins processing.
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Unique ID for this cycle — shared between start/end/failed markers." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Whether this is an observation or reflection operation." },
-    { name: "startedAt", type: "string", description: "ISO timestamp when processing started." },
-    { name: "tokensToObserve", type: "number", description: "Message tokens (input) being processed in this batch." },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-    { name: "threadIds", type: "string[]", description: "All thread IDs in this batch (for resource-scoped)." },
-    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of `messageTokens`, `observationTokens`, and `scope` at observation time." },
-  ]}
+{ name: "cycleId", type: "string", description: "Unique ID for this cycle — shared between start/end/failed markers." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Whether this is an observation or reflection operation." },
+{ name: "startedAt", type: "string", description: "ISO timestamp when processing started." },
+{ name: "tokensToObserve", type: "number", description: "Message tokens (input) being processed in this batch." },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+{ name: "threadIds", type: "string[]", description: "All thread IDs in this batch (for resource-scoped)." },
+{ name: "config", type: "ObservationMarkerConfig", description: "Snapshot of `messageTokens`, `observationTokens`, and `scope` at observation time." },
+]}
 />
 
 ### `data-om-observation-end`
@@ -530,18 +532,18 @@ Emitted when observation or reflection completes successfully.
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that completed." },
-    { name: "completedAt", type: "string", description: "ISO timestamp when processing completed." },
-    { name: "durationMs", type: "number", description: "Duration in milliseconds." },
-    { name: "tokensObserved", type: "number", description: "Message tokens (input) that were processed." },
-    { name: "observationTokens", type: "number", description: "Resulting observation tokens (output) after the Observer compressed them." },
-    { name: "observations", type: "string", description: "The generated observations text.", isOptional: true },
-    { name: "currentTask", type: "string", description: "Current task extracted by the Observer.", isOptional: true },
-    { name: "suggestedResponse", type: "string", description: "Suggested response extracted by the Observer.", isOptional: true },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-  ]}
+{ name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that completed." },
+{ name: "completedAt", type: "string", description: "ISO timestamp when processing completed." },
+{ name: "durationMs", type: "number", description: "Duration in milliseconds." },
+{ name: "tokensObserved", type: "number", description: "Message tokens (input) that were processed." },
+{ name: "observationTokens", type: "number", description: "Resulting observation tokens (output) after the Observer compressed them." },
+{ name: "observations", type: "string", description: "The generated observations text.", isOptional: true },
+{ name: "currentTask", type: "string", description: "Current task extracted by the Observer.", isOptional: true },
+{ name: "suggestedResponse", type: "string", description: "Suggested response extracted by the Observer.", isOptional: true },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+]}
 />
 
 ### `data-om-observation-failed`
@@ -550,16 +552,16 @@ Emitted when observation or reflection fails. The system falls back to synchrono
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
-    { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
-    { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
-    { name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted." },
-    { name: "error", type: "string", description: "Error message." },
-    { name: "observations", type: "string", description: "Any partial content available for display.", isOptional: true },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-  ]}
+{ name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
+{ name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
+{ name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
+{ name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted." },
+{ name: "error", type: "string", description: "Error message." },
+{ name: "observations", type: "string", description: "Any partial content available for display.", isOptional: true },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+]}
 />
 
 ### `data-om-buffering-start`
@@ -568,15 +570,15 @@ Emitted when async buffering begins in the background. Buffering pre-computes ob
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Unique ID for this buffering cycle." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation being buffered." },
-    { name: "startedAt", type: "string", description: "ISO timestamp when buffering started." },
-    { name: "tokensToBuffer", type: "number", description: "Message tokens (input) being buffered in this cycle." },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-    { name: "threadIds", type: "string[]", description: "All thread IDs being buffered (for resource-scoped)." },
-    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at buffering time." },
-  ]}
+{ name: "cycleId", type: "string", description: "Unique ID for this buffering cycle." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation being buffered." },
+{ name: "startedAt", type: "string", description: "ISO timestamp when buffering started." },
+{ name: "tokensToBuffer", type: "number", description: "Message tokens (input) being buffered in this cycle." },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+{ name: "threadIds", type: "string[]", description: "All thread IDs being buffered (for resource-scoped)." },
+{ name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at buffering time." },
+]}
 />
 
 ### `data-om-buffering-end`
@@ -585,16 +587,16 @@ Emitted when async buffering completes. The content is stored but not yet activa
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that was buffered." },
-    { name: "completedAt", type: "string", description: "ISO timestamp when buffering completed." },
-    { name: "durationMs", type: "number", description: "Duration in milliseconds." },
-    { name: "tokensBuffered", type: "number", description: "Message tokens (input) that were buffered." },
-    { name: "bufferedTokens", type: "number", description: "Observation tokens (output) after the Observer compressed them." },
-    { name: "observations", type: "string", description: "The buffered content.", isOptional: true },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-  ]}
+{ name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that was buffered." },
+{ name: "completedAt", type: "string", description: "ISO timestamp when buffering completed." },
+{ name: "durationMs", type: "number", description: "Duration in milliseconds." },
+{ name: "tokensBuffered", type: "number", description: "Message tokens (input) that were buffered." },
+{ name: "bufferedTokens", type: "number", description: "Observation tokens (output) after the Observer compressed them." },
+{ name: "observations", type: "string", description: "The buffered content.", isOptional: true },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+]}
 />
 
 ### `data-om-buffering-failed`
@@ -603,16 +605,16 @@ Emitted when async buffering fails. The system falls back to synchronous process
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
-    { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
-    { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
-    { name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted to buffer." },
-    { name: "error", type: "string", description: "Error message." },
-    { name: "observations", type: "string", description: "Any partial content.", isOptional: true },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-  ]}
+{ name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
+{ name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
+{ name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
+{ name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted to buffer." },
+{ name: "error", type: "string", description: "Error message." },
+{ name: "observations", type: "string", description: "Any partial content.", isOptional: true },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+]}
 />
 
 ### `data-om-activation`
@@ -621,19 +623,19 @@ Emitted when buffered observations or reflections are activated (moved into the 
 
 <PropertiesTable
   content={[
-    { name: "cycleId", type: "string", description: "Unique ID for this activation event." },
-    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of content activated." },
-    { name: "activatedAt", type: "string", description: "ISO timestamp when activation occurred." },
-    { name: "chunksActivated", type: "number", description: "Number of buffered chunks activated." },
-    { name: "tokensActivated", type: "number", description: "Message tokens (input) from activated chunks. For observation activation, these are removed from the message window. For reflection activation, this is the observation tokens that were compressed." },
-    { name: "observationTokens", type: "number", description: "Resulting observation tokens after activation." },
-    { name: "messagesActivated", type: "number", description: "Number of messages that were observed via activation." },
-    { name: "generationCount", type: "number", description: "Current reflection generation count." },
-    { name: "observations", type: "string", description: "The activated observations text.", isOptional: true },
-    { name: "recordId", type: "string", description: "The OM record ID." },
-    { name: "threadId", type: "string", description: "This thread's ID." },
-    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at activation time." },
-  ]}
+{ name: "cycleId", type: "string", description: "Unique ID for this activation event." },
+{ name: "operationType", type: "'observation' | 'reflection'", description: "Type of content activated." },
+{ name: "activatedAt", type: "string", description: "ISO timestamp when activation occurred." },
+{ name: "chunksActivated", type: "number", description: "Number of buffered chunks activated." },
+{ name: "tokensActivated", type: "number", description: "Message tokens (input) from activated chunks. For observation activation, these are removed from the message window. For reflection activation, this is the observation tokens that were compressed." },
+{ name: "observationTokens", type: "number", description: "Resulting observation tokens after activation." },
+{ name: "messagesActivated", type: "number", description: "Number of messages that were observed via activation." },
+{ name: "generationCount", type: "number", description: "Current reflection generation count." },
+{ name: "observations", type: "string", description: "The activated observations text.", isOptional: true },
+{ name: "recordId", type: "string", description: "The OM record ID." },
+{ name: "threadId", type: "string", description: "This thread's ID." },
+{ name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at activation time." },
+]}
 />
 
 ## Standalone usage
@@ -641,34 +643,34 @@ Emitted when buffered observations or reflections are activated (moved into the 
 Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/docs/agents/guardrails)).
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { ObservationalMemory } from "@mastra/memory/processors";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
+import { ObservationalMemory } from '@mastra/memory/processors'
+import { Agent } from '@mastra/core/agent'
+import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
-  id: "my-storage",
-  url: "file:./memory.db",
-});
+  id: 'my-storage',
+  url: 'file:./memory.db',
+})
 
 const om = new ObservationalMemory({
   storage: storage.stores.memory,
-  model: "google/gemini-2.5-flash",
-  scope: "resource",
+  model: 'google/gemini-2.5-flash',
+  scope: 'resource',
   observation: {
     messageTokens: 20_000,
   },
   reflection: {
     observationTokens: 60_000,
   },
-});
+})
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   inputProcessors: [om],
   outputProcessors: [om],
-});
+})
 ```
 
 ### Standalone config
@@ -677,29 +679,29 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MemoryStorage",
-      description:
-        "Storage adapter for persisting observations. Must be a MemoryStorage instance (from `MastraStorage.stores.memory`).",
-      isOptional: false,
-    },
-    {
-      name: "onDebugEvent",
-      type: "(event: ObservationDebugEvent) => void",
-      description:
-        "Debug callback for observation events. Called whenever observation-related events occur. Useful for debugging and understanding the observation flow.",
-      isOptional: true,
-    },
-    {
-      name: "obscureThreadIds",
-      type: "boolean",
-      description:
-        "When enabled, thread IDs are hashed before being included in observation context. This prevents the LLM from recognizing patterns in thread identifiers. Automatically enabled when using resource scope through the Memory class.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "storage",
+type: "MemoryStorage",
+description:
+"Storage adapter for persisting observations. Must be a MemoryStorage instance (from `MastraStorage.stores.memory`).",
+isOptional: false,
+},
+{
+name: "onDebugEvent",
+type: "(event: ObservationDebugEvent) => void",
+description:
+"Debug callback for observation events. Called whenever observation-related events occur. Useful for debugging and understanding the observation flow.",
+isOptional: true,
+},
+{
+name: "obscureThreadIds",
+type: "boolean",
+description:
+"When enabled, thread IDs are hashed before being included in observation context. This prevents the LLM from recognizing patterns in thread identifiers. Automatically enabled when using resource scope through the Memory class.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### Related

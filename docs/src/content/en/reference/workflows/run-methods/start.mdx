@@ -12,178 +12,178 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const result = await run.start({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "inputData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "outputWriter",
-      type: "(chunk: TOutput) => Promise<void>",
-      description: "Optional asynchronous function to handle output chunks as they are produced",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "currentSpan",
-              type: "Span",
-              isOptional: true,
-              description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "requestContextKeys",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "traceId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "parentSpanId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tags",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "outputOptions",
-      type: "OutputOptions",
-      isOptional: true,
-      description: "Options for output configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "includeState",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Whether to include the workflow run state in the result.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "inputData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "requestContext",
+type: "RequestContext",
+description: "Request Context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "outputWriter",
+type: "(chunk: TOutput) => Promise<void>",
+description: "Optional asynchronous function to handle output chunks as they are produced",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description:
+"Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+properties: [
+{
+parameters: [
+{
+name: "currentSpan",
+type: "Span",
+isOptional: true,
+description:
+"Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+},
+],
+},
+],
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for Tracing configuration.",
+properties: [
+{
+parameters: [
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+},
+],
+},
+{
+parameters: [
+{
+name: "requestContextKeys",
+type: "string[]",
+isOptional: true,
+description:
+"Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+},
+],
+},
+{
+parameters: [
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+},
+],
+},
+{
+parameters: [
+{
+name: "parentSpanId",
+type: "string",
+isOptional: true,
+description:
+"Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+},
+],
+},
+{
+parameters: [
+{
+name: "tags",
+type: "string[]",
+isOptional: true,
+description:
+"Tags to apply to this trace. String labels for categorizing and filtering traces.",
+},
+],
+},
+],
+},
+{
+name: "outputOptions",
+type: "OutputOptions",
+isOptional: true,
+description: "Options for output configuration.",
+properties: [
+{
+parameters: [
+{
+name: "includeState",
+type: "boolean",
+isOptional: true,
+description:
+"Whether to include the workflow run state in the result.",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description:
-        "A promise that resolves to the workflow execution result containing step outputs and status",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description:
+"A promise that resolves to the workflow execution result containing step outputs and status",
+},
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript
-import { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from '@mastra/core/request-context'
 
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
-const requestContext = new RequestContext();
-requestContext.set("variable", false);
+const requestContext = new RequestContext()
+requestContext.set('variable', false)
 
 const result = await run.start({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
   requestContext,
-});
+})
 ```
 
 ## Related

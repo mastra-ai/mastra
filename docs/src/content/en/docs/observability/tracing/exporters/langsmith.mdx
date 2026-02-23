@@ -22,8 +22,8 @@ npm install @mastra/langsmith@latest
 ### Prerequisites
 
 1. **LangSmith Account**: Sign up at [smith.langchain.com](https://smith.langchain.com)
-2. **API Key**: Generate an API key in LangSmith Settings → API Keys
-3. **Environment Variables**: Set your credentials
+1. **API Key**: Generate an API key in LangSmith Settings → API Keys
+1. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
 # Required
@@ -39,20 +39,20 @@ LANGSMITH_BASE_URL=https://api.smith.langchain.com  # For self-hosted
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LangSmithExporter } from "@mastra/langsmith";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LangSmithExporter } from '@mastra/langsmith'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       langsmith: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new LangSmithExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -60,15 +60,15 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LangSmithExporter } from "@mastra/langsmith";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LangSmithExporter } from '@mastra/langsmith'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       langsmith: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new LangSmithExporter({
             apiKey: process.env.LANGSMITH_API_KEY,
@@ -77,7 +77,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 ## Configuration Options
@@ -91,24 +91,24 @@ new LangSmithExporter({
 
   // Optional settings
   apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
-  projectName: "my-project", // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
+  projectName: 'my-project', // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
   callerOptions: {
     // HTTP client options
     timeout: 30000, // Request timeout in ms
     maxRetries: 3, // Retry attempts
   },
-  logLevel: "info", // Diagnostic logging: debug | info | warn | error
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
   // LangSmith-specific options
   hideInputs: false, // Hide input data in UI
   hideOutputs: false, // Hide output data in UI
-});
+})
 ```
 
 ### Environment Variables
 
 | Variable | Description |
-|----------|-------------|
+| - | - |
 | `LANGSMITH_API_KEY` | Your LangSmith API key (required) |
 | `LANGCHAIN_PROJECT` | Default project name for traces (optional, defaults to "default") |
 | `LANGSMITH_BASE_URL` | API URL for self-hosted instances (optional) |
@@ -124,21 +124,19 @@ You can dynamically override LangSmith settings per-span using `withLangsmithMet
 Use `withLangsmithMetadata` with `buildTracingOptions` to set LangSmith-specific options:
 
 ```typescript title="src/agents/support-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { buildTracingOptions } from "@mastra/observability";
-import { withLangsmithMetadata } from "@mastra/langsmith";
+import { Agent } from '@mastra/core/agent'
+import { buildTracingOptions } from '@mastra/observability'
+import { withLangsmithMetadata } from '@mastra/langsmith'
 
 export const supportAgent = new Agent({
-  id: "support-agent",
-  name: "support-agent",
-  instructions: "You are a helpful support agent.",
-  model: "openai/gpt-4o",
+  id: 'support-agent',
+  name: 'support-agent',
+  instructions: 'You are a helpful support agent.',
+  model: 'openai/gpt-4o',
   defaultOptions: {
-    tracingOptions: buildTracingOptions(
-      withLangsmithMetadata({ projectName: "customer-support" }),
-    ),
+    tracingOptions: buildTracingOptions(withLangsmithMetadata({ projectName: 'customer-support' })),
   },
-});
+})
 ```
 
 ### Dynamic Project Routing
@@ -146,31 +144,29 @@ export const supportAgent = new Agent({
 Use `requestContext` to route traces to different projects based on runtime conditions.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { buildTracingOptions } from "@mastra/observability";
-import { withLangsmithMetadata } from "@mastra/langsmith";
+import { Agent } from '@mastra/core/agent'
+import { buildTracingOptions } from '@mastra/observability'
+import { withLangsmithMetadata } from '@mastra/langsmith'
 
 export const supportAgent = new Agent({
-  id: "support-agent",
-  name: "support-agent",
-  instructions: "You are a helpful support agent.",
-  model: "openai/gpt-4o",
+  id: 'support-agent',
+  name: 'support-agent',
+  instructions: 'You are a helpful support agent.',
+  model: 'openai/gpt-4o',
   defaultOptions: ({ requestContext }) => {
-    const userTier = requestContext?.get("user-tier") as string;
-    const userId = requestContext?.get("user-id") as string;
+    const userTier = requestContext?.get('user-tier') as string
+    const userId = requestContext?.get('user-id') as string
 
     return {
       tracingOptions: buildTracingOptions(
         withLangsmithMetadata({
-          projectName: userTier === "enterprise"
-            ? "enterprise-traces"
-            : "standard-traces",
+          projectName: userTier === 'enterprise' ? 'enterprise-traces' : 'standard-traces',
           sessionId: userId,
         }),
       ),
-    };
+    }
   },
-});
+})
 ```
 
 ### Available Fields
@@ -178,7 +174,7 @@ export const supportAgent = new Agent({
 The `withLangsmithMetadata` helper accepts these fields:
 
 | Field | Type | Description |
-|-------|------|-------------|
+| - | - | - |
 | `projectName` | string | Override the project for this trace |
 | `sessionId` | string | Group related traces by session |
 | `sessionName` | string | Display name for the session |
