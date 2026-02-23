@@ -4,7 +4,7 @@ import { usePromptBlockVersions } from '../hooks/use-prompt-block-versions';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
