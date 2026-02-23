@@ -7,12 +7,13 @@ packages:
 
 # Amazon S3 Vectors Store
 
-> ⚠️ Amazon S3 Vectors is a Preview service.
-> Preview features may change or be removed without notice and are not covered by AWS SLAs.
-> Behavior, limits, and regional availability can change at any time.
-> This library may introduce breaking changes to stay aligned with AWS.
-
 The `S3Vectors` class provides vector search using [Amazon S3 Vectors (Preview)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html). It stores vectors in **vector buckets** and performs similarity search in **vector indexes**, with JSON-based metadata filters.
+
+:::warning
+
+Amazon S3 Vectors is a Preview service. Preview features may change or be removed without notice and are not covered by AWS SLAs. Behavior, limits, and regional availability can change at any time. This library may introduce breaking changes to stay aligned with AWS.
+
+:::
 
 ## Installation
 
@@ -198,7 +199,11 @@ description: "Whether to include vectors in the results",
 ]}
 />
 
-> **Scoring:** Results include `score = 1/(1 + distance)` so that higher is better while preserving the underlying distance ranking.
+:::note
+
+Results include `score = 1/(1 + distance)` so that higher is better while preserving the underlying distance ranking.
+
+:::
 
 ### describeIndex()
 
@@ -355,7 +360,11 @@ S3 Vectors supports a strict subset of operators and value types. The Mastra fil
 { timestamp: { $gt: new Date("2024-01-01T00:00:00Z") } }
 ```
 
-> **Non-filterable keys:** If you set `nonFilterableMetadataKeys` at index creation, those keys are stored but **cannot** be used in filters.
+:::note
+
+If you set `nonFilterableMetadataKeys` at index creation, those keys are stored but **cannot** be used in filters.
+
+:::
 
 ## Error Handling
 

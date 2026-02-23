@@ -258,7 +258,11 @@ aws dynamodb update-time-to-live \
 1. Under "Time to Live (TTL)", click "Manage TTL"
 1. Enable TTL and specify the attribute name (default: `ttl`)
 
-> **Note**: DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+:::note
+
+DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+
+:::
 
 ## AWS IAM Permissions
 

@@ -73,7 +73,11 @@ isOptional: true,
 
 The `rerankWithScorer` function accepts any `RelevanceScoreProvider` from @mastra/rag.
 
-> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+:::note
+
+For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+
+:::
 
 ### RerankerFunctionOptions
 

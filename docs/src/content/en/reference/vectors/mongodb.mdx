@@ -376,7 +376,11 @@ try {
 
 Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
 
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+:::note
+
+You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+:::
 
 This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:
