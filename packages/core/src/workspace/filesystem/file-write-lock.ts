@@ -60,18 +60,21 @@ export class InMemoryFileWriteLock implements FileWriteLock {
     const queuePromise = currentQueue
       .catch(() => {}) // Ignore errors from previous operations
       .then(async () => {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
           const result = await Promise.race([
             fn(),
-            new Promise<never>((_, rej) =>
-              setTimeout(
+            new Promise<never>((_, rej) => {
+              timeoutId = setTimeout(
                 () => rej(new Error(`write-lock timeout on "${key}" after ${this.timeoutMs}ms`)),
                 this.timeoutMs,
-              ),
-            ),
+              );
+            }),
           ]);
+          clearTimeout(timeoutId);
           resolve(result);
         } catch (error) {
+          clearTimeout(timeoutId);
           reject(error);
         }
       });
