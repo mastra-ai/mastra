@@ -38,7 +38,7 @@ export interface GlobalSettings {
     modeDefaults: Record<string, string>;
     /** Observational Memory model */
     omModelId: string | null;
-    /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5-mini" }) */
+    /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
   // Global behavior preferences

@@ -95,7 +95,7 @@ export function getAvailableModePacks(
       models: {
         build: openaiCodex,
         plan: openaiCodex,
-        fast: 'openai/gpt-5-mini',
+        fast: 'openai/gpt-5.1-codex-mini',
       },
     });
   }
@@ -154,9 +154,9 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   if (access.openai) {
     packs.push({
       id: 'openai',
-      name: 'GPT-5 Mini',
+      name: 'GPT-5.1 Codex Mini',
       description: access.openai === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key',
-      modelId: 'openai/gpt-5-mini',
+      modelId: 'openai/gpt-5.1-codex-mini',
     });
   }
 
