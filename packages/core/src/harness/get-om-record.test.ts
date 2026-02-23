@@ -87,11 +87,13 @@ describe('Harness.getObservationalMemoryRecord', () => {
 
     // Currently on thread B
     let record = await harness.getObservationalMemoryRecord();
+    expect(record).not.toBeNull();
     expect(record!.activeObservations).toBe('Thread B observations');
 
     // Switch to thread A
     await harness.switchThread({ threadId: threadA.id });
     record = await harness.getObservationalMemoryRecord();
+    expect(record).not.toBeNull();
     expect(record!.activeObservations).toBe('Thread A observations');
   });
 });
