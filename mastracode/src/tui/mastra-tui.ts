@@ -3671,7 +3671,7 @@ ${instructions}`,
             done();
           });
         },
-        onSelectModel: async (title: string): Promise<string | undefined> => {
+        onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
           const availableModels = await this.state.harness.listAvailableModels();
           if (availableModels.length === 0) return undefined;
 
@@ -3681,6 +3681,7 @@ ${instructions}`,
               models: availableModels,
               currentModelId: undefined,
               title,
+              titleColor: modeColor,
               onSelect: (model: ModelItem) => {
                 this.state.ui.hideOverlay();
                 resolveModel(model.id);

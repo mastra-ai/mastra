@@ -55,7 +55,7 @@ export interface OnboardingOptions {
   /** Called when the user requests login during onboarding. */
   onLogin: (providerId: string, done: () => void) => void;
   /** Show the model selector overlay and return the chosen model ID (or undefined on cancel). */
-  onSelectModel: (title: string) => Promise<string | undefined>;
+  onSelectModel: (title: string, modeColor?: string) => Promise<string | undefined>;
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +377,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
     for (const mode of modes) {
       const title = `Select model for ${mode.label} mode`;
-      const modelId = await this.options.onSelectModel(title);
+      const modelId = await this.options.onSelectModel(title, mode.color);
 
       if (!modelId) {
         // User cancelled — fall back to first non-custom pack (or keep current)
