@@ -98,9 +98,9 @@ export class StoredPromptBlock extends BaseResource {
     if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
 
     const queryString = queryParams.toString();
-    const contextString = requestContextQueryString(requestContext);
+    const contextString = requestContextQueryString(requestContext, queryString ? '&' : '?');
     return this.request(
-      `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+      `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions${queryString ? `?${queryString}` : ''}${contextString}`,
     );
   }
 
@@ -208,9 +208,9 @@ export class StoredPromptBlock extends BaseResource {
     queryParams.set('from', fromId);
     queryParams.set('to', toId);
 
-    const contextString = requestContextQueryString(requestContext);
+    const contextString = requestContextQueryString(requestContext, '&');
     return this.request(
-      `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/compare?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+      `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/compare?${queryParams.toString()}${contextString}`,
     );
   }
 }
