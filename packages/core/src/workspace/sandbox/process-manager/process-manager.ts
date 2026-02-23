@@ -16,7 +16,7 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
 // =============================================================================
 
 /**
- * Abstract base class for background process management in sandboxes.
+ * Abstract base class for process management in sandboxes.
  *
  * Wraps subclass overrides of `spawn()`, `list()`, and `get()` with
  * `sandbox.ensureRunning()` so the sandbox is lazily started before
@@ -84,18 +84,18 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     };
   }
 
-  /** Spawn a background process. */
+  /** Spawn a process. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     throw new Error(`${this.constructor.name} must implement spawn()`);
   }
 
-  /** List all background processes. */
+  /** List all tracked processes. */
   async list(): Promise<ProcessInfo[]> {
     throw new Error(`${this.constructor.name} must implement list()`);
   }
 
-  /** Get a handle to a background process by PID. Subclasses can override for fallback behavior. */
+  /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
   async get(pid: number): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
   }
@@ -112,7 +112,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     }
   }
 
-  /** Kill a background process by PID. Returns true if killed, false if not found. */
+  /** Kill a process by PID. Returns true if killed, false if not found. */
   async kill(pid: number): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;

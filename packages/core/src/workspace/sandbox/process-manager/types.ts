@@ -1,7 +1,7 @@
 /**
  * Process Manager Types
  *
- * Type definitions for background process management.
+ * Type definitions for process management.
  */
 
 import type { CommandOptions } from '../types';
@@ -10,7 +10,7 @@ import type { CommandOptions } from '../types';
 // Spawn Options
 // =============================================================================
 
-/** Options for spawning a background process. */
+/** Options for spawning a process. */
 export interface SpawnProcessOptions extends CommandOptions {}
 
 // =============================================================================
@@ -18,7 +18,7 @@ export interface SpawnProcessOptions extends CommandOptions {}
 // =============================================================================
 
 /**
- * Info about a tracked background process.
+ * Info about a tracked process.
  * Returned by {@link SandboxProcessManager.list}.
  */
 export interface ProcessInfo {

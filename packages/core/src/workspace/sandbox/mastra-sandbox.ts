@@ -54,7 +54,7 @@ export interface MastraSandboxOptions {
   onDestroy?: SandboxLifecycleHook;
 
   /**
-   * Background process manager for this sandbox.
+   * Process manager for this sandbox.
    *
    * When provided, the base class automatically:
    * 1. Sets the sandbox back-reference on the process manager
@@ -136,7 +136,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
-  /** Background process manager */
+  /** Process manager */
   readonly processes?: SandboxProcessManager;
 
   /** Mount manager - automatically created if subclass implements mount() */

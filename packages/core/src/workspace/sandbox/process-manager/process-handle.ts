@@ -1,7 +1,7 @@
 /**
  * Process Handle (Base Class)
  *
- * Abstract base class for background process handles.
+ * Abstract base class for process handles.
  * Manages stdout/stderr callback dispatch and provides lazy
  * reader/writer stream getters — subclasses only implement
  * the platform-specific primitives.
@@ -13,7 +13,7 @@ import type { CommandResult } from '../types';
 import type { SpawnProcessOptions } from './types';
 
 /**
- * Handle to a spawned background process.
+ * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
  * wait). The base class handles stdout/stderr accumulation, callback

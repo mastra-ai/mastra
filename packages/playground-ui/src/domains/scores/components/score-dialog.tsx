@@ -148,7 +148,10 @@ export function ScoreDialog({
           <SideDialog.CodeSection
             title={`Score: ${Number.isNaN(score?.score) ? 'n/a' : score?.score}`}
             icon={<GaugeIcon />}
-            codeStr={score?.reason || (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
+            codeStr={
+              score?.reason ||
+              (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')
+            }
             simplified={true}
           />
 
@@ -167,28 +170,40 @@ export function ScoreDialog({
           <SideDialog.CodeSection
             title="Preprocess Prompt"
             icon={<ReceiptText />}
-            codeStr={score?.preprocessPrompt || (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')}
+            codeStr={
+              score?.preprocessPrompt ||
+              (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
+            }
             simplified={true}
           />
 
           <SideDialog.CodeSection
             title="Analyze Prompt"
             icon={<ReceiptText />}
-            codeStr={score?.analyzePrompt || (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')}
+            codeStr={
+              score?.analyzePrompt ||
+              (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
+            }
             simplified={true}
           />
 
           <SideDialog.CodeSection
             title="Generate Score Prompt"
             icon={<ReceiptText />}
-            codeStr={score?.generateScorePrompt || (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')}
+            codeStr={
+              score?.generateScorePrompt ||
+              (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
+            }
             simplified={true}
           />
 
           <SideDialog.CodeSection
             title="Generate Reason Prompt"
             icon={<ReceiptText />}
-            codeStr={score?.generateReasonPrompt || (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')}
+            codeStr={
+              score?.generateReasonPrompt ||
+              (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
+            }
             simplified={true}
           />
         </Sections>

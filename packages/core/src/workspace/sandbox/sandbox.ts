@@ -99,12 +99,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   // ---------------------------------------------------------------------------
-  // Background Process Management (Optional)
+  // Process Management (Optional)
   // ---------------------------------------------------------------------------
 
   /**
-   * Background process manager.
-   * Optional - if not implemented, background process tools won't be available.
+   * Process manager.
+   * Optional - if not implemented, process management tools won't be available.
    *
    * Provides methods to spawn long-running processes, list them, and interact
    * with them via their {@link ProcessHandle} (kill, sendStdin, wait, read output).
