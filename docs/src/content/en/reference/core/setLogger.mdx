@@ -12,33 +12,33 @@ The `.setLogger()` method is used to set the logger for all components (agents, 
 ## Usage example
 
 ```typescript
-mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
+mastra.setLogger({ logger: new PinoLogger({ name: 'testLogger' }) })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ logger: TLogger }",
-      description:
-        "An object containing the logger instance to set for all components.",
-    },
-  ]}
+{
+name: "options",
+type: "{ logger: TLogger }",
+description:
+"An object containing the logger instance to set for all components.",
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
   content={[
-    {
-      name: "logger",
-      type: "TLogger",
-      description:
-        "The logger instance to set for all components (agents, workflows, etc.).",
-    },
-  ]}
+{
+name: "logger",
+type: "TLogger",
+description:
+"The logger instance to set for all components (agents, workflows, etc.).",
+},
+]}
 />
 
 ## Returns

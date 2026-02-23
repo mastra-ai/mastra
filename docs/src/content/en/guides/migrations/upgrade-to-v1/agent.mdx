@@ -225,10 +225,10 @@ const mastra = new Mastra({
   agents: {
     myAgent: agent, // key can differ from id
   },
-});
+})
 
 // Retrieve by ID
-const agent = mastra.getAgentById('my-agent');
+const agent = mastra.getAgentById('my-agent')
 ```
 
 ### Stream API responses now redact sensitive data
@@ -236,6 +236,7 @@ const agent = mastra.getAgentById('my-agent');
 The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
 
 **What's redacted:**
+
 - `request.body` containing LLM request payloads (system prompts, tool schemas)
 - `metadata.request` in step results
 - `output.steps[].request` in nested step data
@@ -412,5 +413,5 @@ await agent.stream('Hello', {
     },
     resource: 'user-456',
   },
-});
+})
 ```

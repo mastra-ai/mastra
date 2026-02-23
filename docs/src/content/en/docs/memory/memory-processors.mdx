@@ -30,14 +30,14 @@ Retrieves message history and persists new messages.
 ```typescript
 memory: new Memory({
   lastMessages: 10,
-});
+})
 ```
 
 **Mastra internally:**
 
 1. Creates a `MessageHistory` processor with `limit: 10`
-2. Adds it to the agent's input processors (runs before the LLM)
-3. Adds it to the agent's output processors (runs after the LLM)
+1. Adds it to the agent's input processors (runs before the LLM)
+1. Adds it to the agent's output processors (runs after the LLM)
 
 **What it does:**
 
@@ -47,24 +47,24 @@ memory: new Memory({
 **Example:**
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
-  instructions: "You are a helpful assistant",
+  id: 'test-agent',
+  name: 'Test Agent',
+  instructions: 'You are a helpful assistant',
   model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
-      id: "memory-store",
-      url: "file:memory.db",
+      id: 'memory-store',
+      url: 'file:memory.db',
     }),
     lastMessages: 10, // MessageHistory processor automatically added
   }),
-});
+})
 ```
 
 ### SemanticRecall
@@ -78,15 +78,15 @@ memory: new Memory({
   semanticRecall: { enabled: true },
   vector: myVectorStore,
   embedder: myEmbedder,
-});
+})
 ```
 
 **Mastra internally:**
 
 1. Creates a `SemanticRecall` processor
-2. Adds it to the agent's input processors (runs before the LLM)
-3. Adds it to the agent's output processors (runs after the LLM)
-4. Requires both a vector store and embedder to be configured
+1. Adds it to the agent's input processors (runs before the LLM)
+1. Adds it to the agent's output processors (runs after the LLM)
+1. Requires both a vector store and embedder to be configured
 
 **What it does:**
 
@@ -96,33 +96,33 @@ memory: new Memory({
 **Example:**
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { PineconeVector } from "@mastra/pinecone";
-import { OpenAIEmbedder } from "@mastra/openai";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+import { PineconeVector } from '@mastra/pinecone'
+import { OpenAIEmbedder } from '@mastra/openai'
+import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  name: "semantic-agent",
-  instructions: "You are a helpful assistant with semantic memory",
+  name: 'semantic-agent',
+  instructions: 'You are a helpful assistant with semantic memory',
   model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
-      id: "memory-store",
-      url: "file:memory.db",
+      id: 'memory-store',
+      url: 'file:memory.db',
     }),
     vector: new PineconeVector({
-      id: "memory-vector",
+      id: 'memory-vector',
       apiKey: process.env.PINECONE_API_KEY!,
     }),
     embedder: new OpenAIEmbedder({
-      model: "text-embedding-3-small",
+      model: 'text-embedding-3-small',
       apiKey: process.env.OPENAI_API_KEY!,
     }),
     semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
   }),
-});
+})
 ```
 
 ### WorkingMemory
@@ -134,14 +134,14 @@ Manages working memory state across conversations.
 ```typescript
 memory: new Memory({
   workingMemory: { enabled: true },
-});
+})
 ```
 
 **Mastra internally:**
 
 1. Creates a `WorkingMemory` processor
-2. Adds it to the agent's input processors (runs before the LLM)
-3. Requires a storage adapter to be configured
+1. Adds it to the agent's input processors (runs before the LLM)
+1. Requires a storage adapter to be configured
 
 **What it does:**
 
@@ -151,23 +151,23 @@ memory: new Memory({
 **Example:**
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  name: "working-memory-agent",
-  instructions: "You are an assistant with working memory",
+  name: 'working-memory-agent',
+  instructions: 'You are an assistant with working memory',
   model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
-      id: "memory-store",
-      url: "file:memory.db",
+      id: 'memory-store',
+      url: 'file:memory.db',
     }),
     workingMemory: { enabled: true }, // WorkingMemory processor automatically added
   }),
-});
+})
 ```
 
 ## Manual Control and Deduplication
@@ -175,32 +175,32 @@ const agent = new Agent({
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { MessageHistory } from "@mastra/core/processors";
-import { TokenLimiter } from "@mastra/core/processors";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { MessageHistory } from '@mastra/core/processors'
+import { TokenLimiter } from '@mastra/core/processors'
+import { LibSQLStore } from '@mastra/libsql'
+import { openai } from '@ai-sdk/openai'
 
 // Custom MessageHistory with different configuration
 const customMessageHistory = new MessageHistory({
-  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+  storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
   lastMessages: 20,
-});
+})
 
 const agent = new Agent({
-  name: "custom-memory-agent",
-  instructions: "You are a helpful assistant",
+  name: 'custom-memory-agent',
+  instructions: 'You are a helpful assistant',
   model: 'openai/gpt-4o',
   memory: new Memory({
-    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+    storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
     lastMessages: 10, // This would normally add MessageHistory(10)
   }),
   inputProcessors: [
     customMessageHistory, // Your custom one is used instead
     new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
   ],
-});
+})
 ```
 
 ## Processor Execution Order
@@ -214,7 +214,7 @@ Understanding the execution order is important when combining guardrails with me
 ```
 
 1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
-2. **Your input processors run AFTER**: guardrails, filters, validators
+1. **Your input processors run AFTER**: guardrails, filters, validators
 
 This means memory loads message history before your processors can validate or filter the input.
 
@@ -225,7 +225,7 @@ This means memory loads message history before your processors can validate or f
 ```
 
 1. **Your output processors run FIRST**: guardrails, filters, validators
-2. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
+1. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
 
 This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
 
@@ -242,37 +242,35 @@ Output guardrails run **before** memory processors save messages. If a guardrail
 - **No messages are persisted to storage**
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { openai } from '@ai-sdk/openai'
 
 // Output guardrail that blocks inappropriate content
 const contentBlocker = {
-  id: "content-blocker",
+  id: 'content-blocker',
   processOutputResult: async ({ messages, abort }) => {
-    const hasInappropriateContent = messages.some((msg) =>
-      containsBadContent(msg)
-    );
+    const hasInappropriateContent = messages.some(msg => containsBadContent(msg))
     if (hasInappropriateContent) {
-      abort("Content blocked by guardrail");
+      abort('Content blocked by guardrail')
     }
-    return messages;
+    return messages
   },
-};
+}
 
 const agent = new Agent({
-  name: "safe-agent",
-  instructions: "You are a helpful assistant",
+  name: 'safe-agent',
+  instructions: 'You are a helpful assistant',
   model: 'openai/gpt-4o',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs BEFORE memory saves
   outputProcessors: [contentBlocker],
-});
+})
 
 // If the guardrail aborts, nothing is saved to memory
-const result = await agent.generate("Hello");
+const result = await agent.generate('Hello')
 if (result.tripwire) {
-  console.log("Blocked:", result.tripwire.reason);
+  console.log('Blocked:', result.tripwire.reason)
   // Memory is empty - no messages were persisted
 }
 ```
@@ -289,30 +287,30 @@ Input guardrails run **after** memory processors load history. If a guardrail ab
 ```typescript
 // Input guardrail that validates user input
 const inputValidator = {
-  id: "input-validator",
+  id: 'input-validator',
   processInput: async ({ messages, abort }) => {
-    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    const lastUserMessage = messages.findLast(m => m.role === 'user')
     if (isInvalidInput(lastUserMessage)) {
-      abort("Invalid input detected");
+      abort('Invalid input detected')
     }
-    return messages;
+    return messages
   },
-};
+}
 
 const agent = new Agent({
-  name: "validated-agent",
-  instructions: "You are a helpful assistant",
+  name: 'validated-agent',
+  instructions: 'You are a helpful assistant',
   model: 'openai/gpt-4o',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs AFTER memory loads history
   inputProcessors: [inputValidator],
-});
+})
 ```
 
 ### Summary
 
 | Guardrail Type | When it runs | If it aborts |
-| -------------- | ------------ | ------------ |
+| - | - | - |
 | Input | After memory loads history | LLM not called, nothing saved |
 | Output | Before memory saves | Nothing saved to storage |
 

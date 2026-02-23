@@ -12,16 +12,16 @@ ExtractParams configures metadata extraction from document chunks using LLM anal
 ## Example
 
 ```typescript
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag'
 
-const doc = MDocument.fromText(text);
+const doc = MDocument.fromText(text)
 const chunks = await doc.chunk({
   extract: {
     title: true, // Extract titles using default settings
     summary: true, // Generate summaries using default settings
     keywords: true, // Extract keywords using default settings
   },
-});
+})
 
 // Example output:
 // chunks[0].metadata = {
@@ -37,42 +37,42 @@ The `extract` parameter accepts the following fields:
 
 <PropertiesTable
   content={[
-    {
-      name: "title",
-      type: "boolean | TitleExtractorsArgs",
-      isOptional: true,
-      description:
-        "Enable title extraction. Set to true for default settings, or provide custom configuration.",
-    },
-    {
-      name: "summary",
-      type: "boolean | SummaryExtractArgs",
-      isOptional: true,
-      description:
-        "Enable summary extraction. Set to true for default settings, or provide custom configuration.",
-    },
-    {
-      name: "questions",
-      type: "boolean | QuestionAnswerExtractArgs",
-      isOptional: true,
-      description:
-        "Enable question generation. Set to true for default settings, or provide custom configuration.",
-    },
-    {
-      name: "keywords",
-      type: "boolean | KeywordExtractArgs",
-      isOptional: true,
-      description:
-        "Enable keyword extraction. Set to true for default settings, or provide custom configuration.",
-    },
-    {
-      name: "schema",
-      type: "SchemaExtractArgs",
-      isOptional: true,
-      description:
-        "Enable structured metadata extraction using a Zod schema.",
-    },
-  ]}
+{
+name: "title",
+type: "boolean | TitleExtractorsArgs",
+isOptional: true,
+description:
+"Enable title extraction. Set to true for default settings, or provide custom configuration.",
+},
+{
+name: "summary",
+type: "boolean | SummaryExtractArgs",
+isOptional: true,
+description:
+"Enable summary extraction. Set to true for default settings, or provide custom configuration.",
+},
+{
+name: "questions",
+type: "boolean | QuestionAnswerExtractArgs",
+isOptional: true,
+description:
+"Enable question generation. Set to true for default settings, or provide custom configuration.",
+},
+{
+name: "keywords",
+type: "boolean | KeywordExtractArgs",
+isOptional: true,
+description:
+"Enable keyword extraction. Set to true for default settings, or provide custom configuration.",
+},
+{
+name: "schema",
+type: "SchemaExtractArgs",
+isOptional: true,
+description:
+"Enable structured metadata extraction using a Zod schema.",
+},
+]}
 />
 
 ## Extractor Arguments
@@ -81,196 +81,196 @@ The `extract` parameter accepts the following fields:
 
 <PropertiesTable
   content={[
-    {
-      name: "llm",
-      type: "MastraLanguageModel",
-      isOptional: true,
-      description: "AI SDK language model to use for title extraction",
-    },
-    {
-      name: "nodes",
-      type: "number",
-      isOptional: true,
-      description: "Number of title nodes to extract",
-    },
-    {
-      name: "nodeTemplate",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom prompt template for title node extraction. Must include {context} placeholder",
-    },
-    {
-      name: "combineTemplate",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom prompt template for combining titles. Must include {context} placeholder",
-    },
-  ]}
+{
+name: "llm",
+type: "MastraLanguageModel",
+isOptional: true,
+description: "AI SDK language model to use for title extraction",
+},
+{
+name: "nodes",
+type: "number",
+isOptional: true,
+description: "Number of title nodes to extract",
+},
+{
+name: "nodeTemplate",
+type: "string",
+isOptional: true,
+description:
+"Custom prompt template for title node extraction. Must include {context} placeholder",
+},
+{
+name: "combineTemplate",
+type: "string",
+isOptional: true,
+description:
+"Custom prompt template for combining titles. Must include {context} placeholder",
+},
+]}
 />
 
 ### SummaryExtractArgs
 
 <PropertiesTable
   content={[
-    {
-      name: "llm",
-      type: "MastraLanguageModel",
-      isOptional: true,
-      description: "AI SDK language model to use for summary extraction",
-    },
-    {
-      name: "summaries",
-      type: "('self' | 'prev' | 'next')[]",
-      isOptional: true,
-      description:
-        "List of summary types to generate. Can only include 'self' (current chunk), 'prev' (previous chunk), or 'next' (next chunk)",
-    },
-    {
-      name: "promptTemplate",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom prompt template for summary generation. Must include {context} placeholder",
-    },
-  ]}
+{
+name: "llm",
+type: "MastraLanguageModel",
+isOptional: true,
+description: "AI SDK language model to use for summary extraction",
+},
+{
+name: "summaries",
+type: "('self' | 'prev' | 'next')[]",
+isOptional: true,
+description:
+"List of summary types to generate. Can only include 'self' (current chunk), 'prev' (previous chunk), or 'next' (next chunk)",
+},
+{
+name: "promptTemplate",
+type: "string",
+isOptional: true,
+description:
+"Custom prompt template for summary generation. Must include {context} placeholder",
+},
+]}
 />
 
 ### QuestionAnswerExtractArgs
 
 <PropertiesTable
   content={[
-    {
-      name: "llm",
-      type: "MastraLanguageModel",
-      isOptional: true,
-      description: "AI SDK language model to use for question generation",
-    },
-    {
-      name: "questions",
-      type: "number",
-      isOptional: true,
-      description: "Number of questions to generate",
-    },
-    {
-      name: "promptTemplate",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom prompt template for question generation. Must include both {context} and {numQuestions} placeholders",
-    },
-    {
-      name: "embeddingOnly",
-      type: "boolean",
-      isOptional: true,
-      description: "If true, only generate embeddings without actual questions",
-    },
-  ]}
+{
+name: "llm",
+type: "MastraLanguageModel",
+isOptional: true,
+description: "AI SDK language model to use for question generation",
+},
+{
+name: "questions",
+type: "number",
+isOptional: true,
+description: "Number of questions to generate",
+},
+{
+name: "promptTemplate",
+type: "string",
+isOptional: true,
+description:
+"Custom prompt template for question generation. Must include both {context} and {numQuestions} placeholders",
+},
+{
+name: "embeddingOnly",
+type: "boolean",
+isOptional: true,
+description: "If true, only generate embeddings without actual questions",
+},
+]}
 />
 
 ### KeywordExtractArgs
 
 <PropertiesTable
   content={[
-    {
-      name: "llm",
-      type: "MastraLanguageModel",
-      isOptional: true,
-      description: "AI SDK language model to use for keyword extraction",
-    },
-    {
-      name: "keywords",
-      type: "number",
-      isOptional: true,
-      description: "Number of keywords to extract",
-    },
-    {
-      name: "promptTemplate",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom prompt template for keyword extraction. Must include both {context} and {maxKeywords} placeholders",
-    },
-  ]}
+{
+name: "llm",
+type: "MastraLanguageModel",
+isOptional: true,
+description: "AI SDK language model to use for keyword extraction",
+},
+{
+name: "keywords",
+type: "number",
+isOptional: true,
+description: "Number of keywords to extract",
+},
+{
+name: "promptTemplate",
+type: "string",
+isOptional: true,
+description:
+"Custom prompt template for keyword extraction. Must include both {context} and {maxKeywords} placeholders",
+},
+]}
 />
 
 ### SchemaExtractArgs
 
 <PropertiesTable
   content={[
-    {
-      name: "schema",
-      type: "ZodType",
-      isOptional: false,
-      description: "Zod schema defining the structure of the data to extract.",
-    },
-    {
-      name: "llm",
-      type: "MastraLanguageModel",
-      isOptional: true,
-      description: "AI SDK language model to use for extraction.",
-    },
-    {
-      name: "instructions",
-      type: "string",
-      isOptional: true,
-      description: "Instructions for the LLM on what to extract.",
-    },
-    {
-      name: "metadataKey",
-      type: "string",
-      isOptional: true,
-      description: "Key to nest extraction results under. If omitted, results are spread into the metadata object.",
-    },
-  ]}
+{
+name: "schema",
+type: "ZodType",
+isOptional: false,
+description: "Zod schema defining the structure of the data to extract.",
+},
+{
+name: "llm",
+type: "MastraLanguageModel",
+isOptional: true,
+description: "AI SDK language model to use for extraction.",
+},
+{
+name: "instructions",
+type: "string",
+isOptional: true,
+description: "Instructions for the LLM on what to extract.",
+},
+{
+name: "metadataKey",
+type: "string",
+isOptional: true,
+description: "Key to nest extraction results under. If omitted, results are spread into the metadata object.",
+},
+]}
 />
 
 ## Advanced Example
 
 ```typescript
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag'
 
-const doc = MDocument.fromText(text);
+const doc = MDocument.fromText(text)
 const chunks = await doc.chunk({
   extract: {
     // Title extraction with custom settings
     title: {
       nodes: 2, // Extract 2 title nodes
-      nodeTemplate: "Generate a title for this: {context}",
-      combineTemplate: "Combine these titles: {context}",
+      nodeTemplate: 'Generate a title for this: {context}',
+      combineTemplate: 'Combine these titles: {context}',
     },
 
     // Summary extraction with custom settings
     summary: {
-      summaries: ["self"], // Generate summaries for current chunk
-      promptTemplate: "Summarize this: {context}",
+      summaries: ['self'], // Generate summaries for current chunk
+      promptTemplate: 'Summarize this: {context}',
     },
 
     // Question generation with custom settings
     questions: {
       questions: 3, // Generate 3 questions
-      promptTemplate: "Generate {numQuestions} questions about: {context}",
+      promptTemplate: 'Generate {numQuestions} questions about: {context}',
       embeddingOnly: false,
     },
 
     // Keyword extraction with custom settings
     keywords: {
       keywords: 5, // Extract 5 keywords
-      promptTemplate: "Extract {maxKeywords} key terms from: {context}",
+      promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
     },
 
     // Schema extraction with Zod
     schema: {
-        schema: z.object({
-            productName: z.string(),
-            category: z.enum(["electronics", "clothing"]),
-        }),
-        instructions: "Extract product information.",
-        metadataKey: "product",
+      schema: z.object({
+        productName: z.string(),
+        category: z.enum(['electronics', 'clothing']),
+      }),
+      instructions: 'Extract product information.',
+      metadataKey: 'product',
     },
   },
-});
+})
 
 // Example output:
 // chunks[0].metadata = {
@@ -292,17 +292,17 @@ When using the `TitleExtractor`, you can group multiple chunks together for titl
 **Example:**
 
 ```ts
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag'
 
 const doc = new MDocument({
   docs: [
-    { text: "chunk 1", metadata: { docId: "docA" } },
-    { text: "chunk 2", metadata: { docId: "docA" } },
-    { text: "chunk 3", metadata: { docId: "docB" } },
+    { text: 'chunk 1', metadata: { docId: 'docA' } },
+    { text: 'chunk 2', metadata: { docId: 'docA' } },
+    { text: 'chunk 3', metadata: { docId: 'docB' } },
   ],
-  type: "text",
-});
+  type: 'text',
+})
 
-await doc.extractMetadata({ title: true });
+await doc.extractMetadata({ title: true })
 // The first two chunks will share a title, while the third chunk will be assigned a separate title.
 ```
