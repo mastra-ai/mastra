@@ -99,6 +99,11 @@ export function getDynamicWorkspace({ requestContext }: { requestContext: Reques
       workingDirectory: projectPath,
       env: process.env,
     }),
+    // Disable workspace tools — built-in tools are used instead.
+    // Workspace tools use different output formats (e.g. → separator, offset/limit params)
+    // that the TUI renderers don't fully support yet.
+    // We will update to use workspace tools very soon - just disabling until then
+    tools: { enabled: false },
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
   });
 
