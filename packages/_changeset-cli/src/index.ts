@@ -116,11 +116,27 @@ async function main() {
     // Detect changed packages
     const changedPackages = await detectChangedPackages();
 
+    // No changes detected, exit early
+    if (changedPackages.length === 0) {
+      p.outro('No changed packages detected. Exiting.');
+      process.exit(0);
+    }
+
+    // Error early if --skipPrompt is used but no --major, --minor, or --patch flags are provided
+    if (parsedArgs.skipPrompt) {
+      const hasVersionBumps = parsedArgs.major.length > 0 || parsedArgs.minor.length > 0 || parsedArgs.patch.length > 0;
+
+      if (!hasVersionBumps) {
+        p.cancel(`Please provide at least one of --major, --minor, or --patch flags when using --skipPrompt.`);
+        process.exit(1);
+      }
+    }
+
     // Prepare version bump inputs
     const versionBumpInputs = prepareVersionBumpInputs(changedPackages, parsedArgs);
 
     // Get version bumps from user
-    const versionBumps = await getVersionBumps(versionBumpInputs, onCancel, parsedArgs.skipPrompt);
+    const versionBumps = await getVersionBumps(versionBumpInputs, onCancel);
 
     // Initialize peer dependency tracking
     let updatedPeerDeps: UpdatedPeerDependencies = getDefaultUpdatedPeerDependencies();

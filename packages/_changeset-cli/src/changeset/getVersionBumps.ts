@@ -113,7 +113,6 @@ export async function getVersionBumps(
     patch: string[];
   },
   onCancel: (message?: string) => never,
-  skipPrompt: boolean,
 ): Promise<VersionBumps> {
   let versionBumps: VersionBumps = {};
 
@@ -126,19 +125,10 @@ export async function getVersionBumps(
     patch: patch.filter(pkg => packagesByName.has(pkg)),
   };
 
-  if (skipPrompt) {
-    const bumpTypes: Array<keyof PreSelectedPackages> = ['major', 'minor', 'patch'];
-    bumpTypes.forEach(bumpType => {
-      preSelectedPackages[bumpType].forEach(pkg => {
-        versionBumps[pkg] = bumpType as BumpType;
-      });
-    });
-  } else {
-    const bumpSelections = await promptForVersionBumps({ preSelectedPackages, onCancel });
+  const bumpSelections = await promptForVersionBumps({ preSelectedPackages, onCancel });
 
-    if (bumpSelections) {
-      versionBumps = processBumpSelections(bumpSelections, versionBumps);
-    }
+  if (bumpSelections) {
+    versionBumps = processBumpSelections(bumpSelections, versionBumps);
   }
 
   return versionBumps;
