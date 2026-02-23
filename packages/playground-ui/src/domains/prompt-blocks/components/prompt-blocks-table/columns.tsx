@@ -19,7 +19,7 @@ const NameCell = ({ row }: { row: Row<PromptBlockTableData> }) => {
       meta={
         <>
           {block.activeVersionId && <Badge variant="success">Published</Badge>}
-          <Badge variant={block.hasDraft || !block.activeVersionId ? 'info' : 'default'}>Draft</Badge>
+          {(block.hasDraft || !block.activeVersionId) && <Badge variant="info">Draft</Badge>}
         </>
       }
     />
