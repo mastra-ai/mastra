@@ -642,6 +642,20 @@ Load observational memory records for the current thread and emit an `om_status`
 await harness.loadOMProgress()
 ```
 
+#### `getObservationalMemoryRecord()`
+
+Return the full `ObservationalMemoryRecord` for the current thread and resource, or `null` if no thread is selected or no record exists.
+
+```typescript
+const record = await harness.getObservationalMemoryRecord();
+
+if (record) {
+  console.log(record.activeObservations);
+  console.log(record.generationCount);
+  console.log(record.observationTokenCount);
+}
+```
+
 #### `getObserverModelId()`
 
 Return the observer model ID from state or the default from `omConfig`.

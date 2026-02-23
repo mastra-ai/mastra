@@ -38,7 +38,7 @@
     "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",
     "pathe": "^2.0.3",
-    "zeroentropy": "0.1.0-alpha.6"
+    "zeroentropy": "0.1.0-alpha.7"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

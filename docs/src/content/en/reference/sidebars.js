@@ -322,6 +322,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Mastra Code',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-code/createMastraCode',
+          label: 'createMastraCode()',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [

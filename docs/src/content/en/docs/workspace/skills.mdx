@@ -75,7 +75,7 @@ const workspace = new Workspace({
 })
 ```
 
-The `skills` directory is relative to your `basePath`. You can specify multiple skill directories:
+The `skills` directory is relative to your `basePath`. You can specify multiple skill directories or use glob patterns for discovery:
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
@@ -84,6 +84,24 @@ const workspace = new Workspace({
     '/skills', // Project skills
     '/team-skills', // Shared team skills
   ],
+})
+```
+
+You can also pass a direct path to a skill directory or `SKILL.md` file:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/path/to/my-skill'],
+})
+```
+
+Glob patterns let you discover skills across nested directories:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['./**/skills'],
 })
 ```
 
@@ -126,6 +144,33 @@ const workspace = new Workspace({
   bm25: true,
 })
 ```
+
+## Custom skill source
+
+By default, skills are read from the workspace filesystem. For advanced use cases, provide a custom `skillSource` to load skills from a different backend.
+
+`VersionedSkillSource` serves published skill versions from a content-addressable blob store, so production agents use a specific published version without touching the live filesystem:
+
+```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+// highlight-next-line
+import { VersionedSkillSource } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+  // highlight-next-line
+  skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
+})
+```
+
+`VersionedSkillSource` accepts three parameters:
+
+- **`versionTree`** (`SkillVersionTree`) — A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
+- **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
+- **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
+
+When `skillSource` is provided, it is used instead of the workspace filesystem for skill discovery.
 
 ## Related
 

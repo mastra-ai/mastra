@@ -271,7 +271,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const canPublish = useMemo(() => {
     const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
-    const instructionsDone = (watched.instructionBlocks ?? []).some(b => b.content?.trim());
+    const instructionsDone = (watched.instructionBlocks ?? []).some(
+      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+    );
     return identityDone && instructionsDone;
   }, [watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
 
