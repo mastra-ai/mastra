@@ -19,17 +19,14 @@ When you ran `create-mastra`, you were asked to choose between Skills and the MC
 You may also see them at `.agents/skills/mastra/`, which is the standard location for non-editor-specific agents.
 
 Inside the skills folder:
+
 - **`SKILL.md`**: the entry point. Tells the agent what the skill is for and how to use the references
 - **`references/`**: markdown docs the agent pulls from while it helps you code. Includes setup notes, common errors, migration guidance, and more
 
 If you didn't install skills during setup, add them manually:
 
-```bash
+```bash npm2yarn
 npx skills add mastra-ai/skills
-```
-
-```bash
-pnpm dlx skills add mastra-ai/skills
 ```
 
 ## The MCP Docs Server

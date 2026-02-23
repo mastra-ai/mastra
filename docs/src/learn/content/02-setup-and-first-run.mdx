@@ -3,8 +3,8 @@ Scaffold a Mastra project, run the default Weather agent, and get familiar with 
 ## Three ways to start with Mastra
 
 1. **Integrate into an existing app**: add Mastra to your current stack. Mastra has guides for Next.js, React + Vite, SvelteKit, Astro, Nuxt, Express, and Hono
-2. **Scaffold a new project**: use `create-mastra` to generate a project with a working example agent you can run immediately
-3. **Start from a template**: use a pre-built template when you already have a specific use case in mind
+1. **Scaffold a new project**: use `create-mastra` to generate a project with a working example agent you can run immediately
+1. **Start from a template**: use a pre-built template when you already have a specific use case in mind
 
 This course uses path 2. We scaffold first, iterate in Studio, then wire into an app once the agent behavior is solid.
 
@@ -14,25 +14,18 @@ You'll need an API key from a supported model provider before running setup (Ope
 
 Run whichever package manager you use:
 
-```bash
+```bash npm2yarn
 npm create mastra@latest
-```
-
-```bash
-pnpm create mastra
-```
-
-```bash
-yarn create mastra
 ```
 
 During setup you'll be asked for a project name, source directory, model provider, and API key. You'll also choose between **Skills** (recommended) and the **MCP Docs Server**. Both are covered in a later lesson.
 
 ## Start the dev server
 
-```bash
-cd theme-park-agent
-pnpm dev
+Navigate to your new project (`theme-park-agent`) and start Mastra Studio:
+
+```bash npm2yarn
+npm run dev
 ```
 
 The terminal prints a few URLs. One is for **Mastra Studio**, another exposes a **REST API** for your agent. The REST API is what you'll eventually call from your app. For now, open Studio at `http://localhost:4111`.

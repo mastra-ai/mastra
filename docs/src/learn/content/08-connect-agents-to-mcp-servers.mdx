@@ -14,11 +14,7 @@ In Mastra, you use an `MCPClient` to connect to one or more MCP servers, then re
 
 ## Install the MCP package
 
-```bash
-pnpm add @mastra/mcp@latest
-```
-
-```bash
+```bash npm2yarn
 npm install @mastra/mcp@latest
 ```
 
@@ -33,6 +29,7 @@ The MCP server used in this lesson is **Firecrawl**. It gives the agent tools li
 ## Connecting the MCP server
 
 You create an `MCPClient` with a `servers` config block. A server can be:
+
 - **Local**: invoked with a command like `npx`
 - **Remote**: accessed over HTTP with a URL
 
