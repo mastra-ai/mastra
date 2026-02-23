@@ -137,7 +137,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
     packs.push({
       id: 'gemini',
       name: 'Gemini Flash',
-      description: 'Fast & cheap via Google API key',
+      description: access.google === 'oauth' ? 'Via Google OAuth' : 'Via Google API key',
       modelId: 'google/gemini-2.5-flash',
     });
   }
@@ -154,7 +154,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   if (access.openai) {
     packs.push({
       id: 'openai',
-      name: 'GPT-5.1 Codex Mini',
+      name: 'Codex Mini',
       description: access.openai === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key',
       modelId: 'openai/gpt-5.1-codex-mini',
     });
@@ -163,8 +163,8 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   if (access.deepseek) {
     packs.push({
       id: 'deepseek',
-      name: 'DeepSeek Chat',
-      description: 'Affordable via DeepSeek API key',
+      name: 'DeepSeek',
+      description: 'Via DeepSeek API key',
       modelId: 'deepseek/deepseek-chat',
     });
   }
