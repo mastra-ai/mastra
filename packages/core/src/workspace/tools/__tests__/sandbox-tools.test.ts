@@ -311,7 +311,7 @@ describe('get_process_output tool', () => {
     expect(result).toContain('No background process found with PID 99999');
   });
 
-  it('returns exit code for already-exited process (no wait)', async () => {
+  it('returns output and exit code for already-exited process (no wait)', async () => {
     const handle = createMockHandle({
       pid: 12,
       stdout: 'lots of output here\n',
@@ -325,8 +325,8 @@ describe('get_process_output tool', () => {
     });
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 12 }, ctx);
-    expect(result).toBe('Exited (code 0)');
-    expect(result).not.toContain('lots of output here');
+    expect(result).toContain('lots of output here');
+    expect(result).toContain('Exit code: 0');
   });
 
   it('labels stdout and stderr when both present', async () => {
