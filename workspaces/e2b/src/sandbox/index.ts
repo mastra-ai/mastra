@@ -23,9 +23,7 @@ import type {
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
-type InstructionsOption =
-  | string
-  | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
+type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
