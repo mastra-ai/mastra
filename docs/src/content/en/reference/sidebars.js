@@ -269,7 +269,7 @@ const sidebars = {
           id: 'evals/context-relevance',
           label: 'Context Relevance Scorer',
         },
-        { type: 'doc', id: 'evals/create-scorer', label: 'createScorer' },
+        { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
         { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
         { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
         {
@@ -288,7 +288,7 @@ const sidebars = {
           id: 'evals/prompt-alignment',
           label: 'Prompt Alignment Scorer',
         },
-        { type: 'doc', id: 'evals/run-evals', label: 'runEvals' },
+        { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
         {
           type: 'doc',
@@ -751,7 +751,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'vectors/s3vectors',
-          label: 'Amazon S3 Vectors Store',
+          label: 'Amazon S3 Vector Store',
         },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
