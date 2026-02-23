@@ -161,19 +161,18 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 
   const logo = fg('accent', '◆') + ' ' + bold(fg('accent', appName)) + fg('dim', ` v${version}`);
 
-  const keyStyle = (k: string) => fg('accent', k);
   const sep = fg('dim', ' · ');
-  const instructions = [
-    `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
-    `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
-    `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${state.harness.listModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
-  ].join('\n');
+  const hints = [
+    state.harness.listModes().length > 1 ? `${fg('dim', '⇧Tab')} ${fg('muted', 'mode')}` : '',
+    `${fg('dim', '/help')} ${fg('muted', 'info & shortcuts')}`,
+  ]
+    .filter(Boolean)
+    .join(sep);
 
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(
     new Text(
-      `${logo}
-${instructions}`,
+      `${logo}\n  ${hints}`,
       1,
       0,
     ),
