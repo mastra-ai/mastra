@@ -1,4 +1,5 @@
 import { Spacer } from '@mariozechner/pi-tui';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -30,6 +31,13 @@ async function showModelListForScope(
         ctx.state.ui.hideOverlay();
         try {
           await ctx.state.harness.switchModel({ modelId: model.id, scope, modeId });
+          // Persist global model override to settings.json
+          if (scope === 'global') {
+            const settings = loadSettings();
+            settings.models.activeModelPackId = null;
+            settings.models.modeDefaults[modeId] = model.id;
+            saveSettings(settings);
+          }
           ctx.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
           ctx.updateStatusLine();
         } catch (err) {

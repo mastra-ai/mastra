@@ -21,6 +21,7 @@ export function handleHelpCommand(ctx: SlashCommandContext): void {
   /resource      - Show/switch resource ID (tag for sharing)
   /skills        - List available skills
   /models    - Configure model (global/thread/mode)
+  /models:pack - Switch model pack
   /subagents - Configure subagent model defaults
   /permissions - View/manage tool approval permissions
   /settings - General settings (notifications, YOLO, thinking)
@@ -32,7 +33,8 @@ export function handleHelpCommand(ctx: SlashCommandContext): void {
   /hooks    - Show/reload configured hooks
   /mcp      - Show/reload MCP server connections
   /login    - Login with OAuth provider
-  /logout   - Logout from OAuth provider${modeHelp}
+  /logout   - Logout from OAuth provider
+  /setup    - Run the setup wizard${modeHelp}
   /exit     - Exit the TUI
   /help     - Show this help${customCommandsHelp}
 
