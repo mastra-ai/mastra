@@ -1,10 +1,10 @@
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
+import { FileTextIcon } from 'lucide-react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -42,7 +42,7 @@ export function PromptBlocksTable({ promptBlocks, isLoading }: PromptBlocksTable
 
   const table = useReactTable({
     data: filteredData,
-    columns: columns as ColumnDef<PromptBlockTableData>[],
+    columns: columns,
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -112,7 +112,7 @@ const PromptBlocksTableSkeleton = () => (
 const EmptyPromptBlocksTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
-      iconSlot={<AgentCoinIcon />}
+      iconSlot={<FileTextIcon className="h-8 w-8" />}
       titleSlot="No Prompt Blocks"
       descriptionSlot="Create reusable prompt blocks that can be referenced in your agent instructions."
       actionSlot={
@@ -121,11 +121,11 @@ const EmptyPromptBlocksTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
+          href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
           target="_blank"
         >
           <Icon>
-            <AgentCoinIcon />
+            <FileTextIcon />
           </Icon>
           Docs
         </Button>
