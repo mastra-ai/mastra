@@ -40,14 +40,21 @@ await workspace.destroy();
 | `target`              | `string`  | `DAYTONA_TARGET` env  | Runner region                  |
 | `timeout`             | `number`  | `300000`              | Default execution timeout (ms) |
 | `language`            | `string`  | `'typescript'`        | Runtime language               |
-| `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk, gpu }`   |
+| `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk }`        |
 | `env`                 | `object`  | `{}`                  | Environment variables          |
 | `labels`              | `object`  | `{}`                  | Custom metadata labels         |
 | `snapshot`            | `string`  | —                     | Pre-built snapshot ID          |
 | `ephemeral`           | `boolean` | `false`               | Auto-delete on stop            |
 | `autoStopInterval`    | `number`  | `15`                  | Minutes before auto-stop       |
 | `autoArchiveInterval` | `number`  | —                     | Minutes before archiving       |
+| `autoDeleteInterval`  | `number`  | —                     | Minutes before auto-delete     |
 | `volumes`             | `array`   | —                     | `[{ volumeId, mountPath }]`    |
+| `image`               | `string`  | —                     | Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with `resources`. Ignored when `snapshot` is set. |
+| `name`                | `string`  | —                     | Sandbox display name           |
+| `user`                | `string`  | —                     | OS user to run commands as     |
+| `public`              | `boolean` | —                     | Make port previews public      |
+| `networkBlockAll`     | `boolean` | —                     | Block all network access       |
+| `networkAllowList`    | `string`  | —                     | Comma-separated allowed hosts  |
 
 ## Direct SDK Access
 

@@ -124,10 +124,30 @@ describe('DaytonaSandbox', () => {
 
     it('stores resources config', () => {
       const sandbox = new DaytonaSandbox({
-        resources: { cpu: 2, memory: 4, disk: 20, gpu: 1 },
+        resources: { cpu: 2, memory: 4, disk: 20 },
       });
 
-      expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 20, gpu: 1 });
+      expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 20 });
+    });
+
+    it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, image', () => {
+      const sandbox = new DaytonaSandbox({
+        name: 'my-sandbox',
+        user: 'ubuntu',
+        public: true,
+        autoDeleteInterval: 60,
+        networkBlockAll: true,
+        networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+        image: 'debian:12.9',
+      });
+
+      expect((sandbox as any).sandboxName).toBe('my-sandbox');
+      expect((sandbox as any).sandboxUser).toBe('ubuntu');
+      expect((sandbox as any).sandboxPublic).toBe(true);
+      expect((sandbox as any).autoDeleteInterval).toBe(60);
+      expect((sandbox as any).networkBlockAll).toBe(true);
+      expect((sandbox as any).networkAllowList).toBe('10.0.0.0/8,192.168.0.0/16');
+      expect((sandbox as any).image).toBe('debian:12.9');
     });
 
     it('stores volume configs', () => {
@@ -248,18 +268,106 @@ describe('DaytonaSandbox', () => {
       );
     });
 
-    it('passes resources when provided', async () => {
+    it('passes new params when provided', async () => {
       const sandbox = new DaytonaSandbox({
-        resources: { cpu: 4, memory: 8 },
+        name: 'my-sandbox',
+        user: 'ubuntu',
+        public: true,
+        autoDeleteInterval: 60,
+        networkBlockAll: true,
+        networkAllowList: '10.0.0.0/8',
       });
 
       await sandbox._start();
 
       expect(mockDaytona.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          resources: { cpu: 4, memory: 8 },
+          name: 'my-sandbox',
+          user: 'ubuntu',
+          public: true,
+          autoDeleteInterval: 60,
+          networkBlockAll: true,
+          networkAllowList: '10.0.0.0/8',
         }),
       );
+    });
+
+    it('does not include undefined params in create call', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+
+      const createCall = mockDaytona.create.mock.calls[0]![0];
+      expect(createCall).not.toHaveProperty('name');
+      expect(createCall).not.toHaveProperty('user');
+      expect(createCall).not.toHaveProperty('public');
+      expect(createCall).not.toHaveProperty('autoDeleteInterval');
+      expect(createCall).not.toHaveProperty('networkBlockAll');
+      expect(createCall).not.toHaveProperty('networkAllowList');
+      expect(createCall).not.toHaveProperty('autoArchiveInterval');
+      expect(createCall).not.toHaveProperty('snapshot');
+    });
+
+    describe('CreateSandboxFromSnapshotParams vs CreateSandboxFromImageParams', () => {
+      it('uses snapshot params by default (no image, no resources)', async () => {
+        const sandbox = new DaytonaSandbox();
+
+        await sandbox._start();
+
+        const createCall = mockDaytona.create.mock.calls[0]![0];
+        expect(createCall).not.toHaveProperty('image');
+        expect(createCall).not.toHaveProperty('resources');
+      });
+
+      it('uses image params when image is set without resources', async () => {
+        const sandbox = new DaytonaSandbox({ image: 'debian:12.9' });
+
+        await sandbox._start();
+
+        const createCall = mockDaytona.create.mock.calls[0]![0];
+        expect(createCall).toHaveProperty('image', 'debian:12.9');
+        expect(createCall).not.toHaveProperty('resources');
+        expect(createCall).not.toHaveProperty('snapshot');
+      });
+
+      it('uses image params when both image and resources are set', async () => {
+        const sandbox = new DaytonaSandbox({
+          image: 'debian:12.9',
+          resources: { cpu: 4, memory: 8 },
+        });
+
+        await sandbox._start();
+
+        const createCall = mockDaytona.create.mock.calls[0]![0];
+        expect(createCall).toHaveProperty('image', 'debian:12.9');
+        expect(createCall).toHaveProperty('resources', { cpu: 4, memory: 8 });
+        expect(createCall).not.toHaveProperty('snapshot');
+      });
+
+      it('snapshot takes precedence over image + resources', async () => {
+        const sandbox = new DaytonaSandbox({
+          snapshot: 'my-snapshot',
+          image: 'debian:12.9',
+          resources: { cpu: 4, memory: 8 },
+        });
+
+        await sandbox._start();
+
+        const createCall = mockDaytona.create.mock.calls[0]![0];
+        expect(createCall).toHaveProperty('snapshot', 'my-snapshot');
+        expect(createCall).not.toHaveProperty('image');
+        expect(createCall).not.toHaveProperty('resources');
+      });
+
+      it('falls back to snapshot params when resources set without image', async () => {
+        const sandbox = new DaytonaSandbox({ resources: { cpu: 4, memory: 8 } });
+
+        await sandbox._start();
+
+        const createCall = mockDaytona.create.mock.calls[0]![0];
+        expect(createCall).not.toHaveProperty('image');
+        expect(createCall).not.toHaveProperty('resources');
+      });
     });
 
     it('passes autoArchiveInterval when provided', async () => {

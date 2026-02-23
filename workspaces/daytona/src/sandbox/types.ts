@@ -12,6 +12,4 @@ export interface DaytonaResources {
   memory?: number;
   /** Disk in GiB */
   disk?: number;
-  /** GPU count */
-  gpu?: number;
 }

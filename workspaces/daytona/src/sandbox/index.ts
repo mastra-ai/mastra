@@ -9,7 +9,7 @@
  */
 
 import { Daytona, DaytonaNotFoundError } from '@daytonaio/sdk';
-import type { CreateSandboxFromSnapshotParams, Sandbox } from '@daytonaio/sdk';
+import type { CreateSandboxFromImageParams, CreateSandboxFromSnapshotParams, Sandbox, VolumeMount } from '@daytonaio/sdk';
 import type {
   SandboxInfo,
   ExecuteCommandOptions,
@@ -19,6 +19,7 @@ import type {
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
+import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import type { DaytonaResources } from './types';
 
@@ -65,25 +66,50 @@ export interface DaytonaSandboxOptions extends MastraSandboxOptions {
   env?: Record<string, string>;
   /** Custom metadata labels */
   labels?: Record<string, string>;
-  /** Pre-built snapshot ID to create sandbox from */
+  /** Pre-built snapshot ID to create sandbox from. Takes precedence over resources/image. */
   snapshot?: string;
   /**
-   * Auto-delete sandbox on stop.
+   * Docker image to use for sandbox creation. When set, triggers image-based creation.
+   * Can optionally be combined with `resources` for custom resource allocation.
+   * Has no effect when `snapshot` is set.
+   */
+  image?: string;
+  /**
+   * Whether the sandbox should be ephemeral. If true, autoDeleteInterval will be set to 0
+   * (delete immediately on stop).
    * @default false
    */
   ephemeral?: boolean;
   /**
-   * Minutes before auto-stop (0 = disabled).
+   * Auto-stop interval in minutes (0 = disabled).
    * @default 15
    */
   autoStopInterval?: number;
-  /** Minutes before auto-archiving */
+  /**
+   * Auto-archive interval in minutes (0 = maximum interval, which is 7 days).
+   * @default 7 days
+   */
   autoArchiveInterval?: number;
   /**
    * Daytona volumes to attach at creation.
    * Volumes are configured at sandbox creation time, not mounted dynamically.
    */
-  volumes?: Array<{ volumeId: string; mountPath: string }>;
+  volumes?: Array<VolumeMount>;
+  /** Sandbox display name */
+  name?: string;
+  /** OS user to use for the sandbox */
+  user?: string;
+  /** Whether the sandbox port preview is public */
+  public?: boolean;
+  /**
+   * Auto-delete interval in minutes (negative = disabled, 0 = delete immediately on stop).
+   * @default disabled
+   */
+  autoDeleteInterval?: number;
+  /** Whether to block all network access for the sandbox */
+  networkBlockAll?: boolean;
+  /** Comma-separated list of allowed CIDR network addresses for the sandbox */
+  networkAllowList?: string;
 }
 
 // =============================================================================
@@ -96,7 +122,7 @@ export interface DaytonaSandboxOptions extends MastraSandboxOptions {
  * Features:
  * - Isolated cloud sandbox via Daytona SDK
  * - Multi-runtime support (TypeScript, JavaScript, Python)
- * - Resource configuration (CPU, memory, disk, GPU)
+ * - Resource configuration (CPU, memory, disk)
  * - Volume attachment at creation time
  * - Automatic sandbox timeout handling with retry
  *
@@ -141,10 +167,17 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly env: Record<string, string>;
   private readonly labels: Record<string, string>;
   private readonly snapshotId?: string;
+  private readonly image?: string;
   private readonly ephemeral: boolean;
   private readonly autoStopInterval?: number;
   private readonly autoArchiveInterval?: number;
-  private readonly volumeConfigs: Array<{ volumeId: string; mountPath: string }>;
+  private readonly autoDeleteInterval?: number;
+  private readonly volumeConfigs: Array<VolumeMount>;
+  private readonly sandboxName?: string;
+  private readonly sandboxUser?: string;
+  private readonly sandboxPublic?: boolean;
+  private readonly networkBlockAll?: boolean;
+  private readonly networkAllowList?: string;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
 
   constructor(options: DaytonaSandboxOptions = {}) {
@@ -157,10 +190,17 @@ export class DaytonaSandbox extends MastraSandbox {
     this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.snapshotId = options.snapshot;
+    this.image = options.image;
     this.ephemeral = options.ephemeral ?? false;
     this.autoStopInterval = options.autoStopInterval ?? 15;
     this.autoArchiveInterval = options.autoArchiveInterval;
+    this.autoDeleteInterval = options.autoDeleteInterval;
     this.volumeConfigs = options.volumes ?? [];
+    this.sandboxName = options.name;
+    this.sandboxUser = options.user;
+    this.sandboxPublic = options.public;
+    this.networkBlockAll = options.networkBlockAll;
+    this.networkAllowList = options.networkAllowList;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -214,21 +254,29 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
 
-    // Build creation params with SDK type for compile-time safety
-    const createParams: CreateSandboxFromSnapshotParams = {
+    // Base params shared by both creation modes
+    const baseParams = compact({
       language: this.language,
       envVars: this.env,
-      labels: {
-        ...this.labels,
-        'mastra-sandbox-id': this.id,
-      },
+      labels: { ...this.labels, 'mastra-sandbox-id': this.id },
       ephemeral: this.ephemeral,
       autoStopInterval: this.autoStopInterval,
-      ...(this.autoArchiveInterval !== undefined && { autoArchiveInterval: this.autoArchiveInterval }),
-      ...(this.snapshotId && { snapshot: this.snapshotId }),
-      ...(this.volumeConfigs.length > 0 && { volumes: this.volumeConfigs }),
-      ...(this.resources && { resources: this.resources }),
-    };
+      autoArchiveInterval: this.autoArchiveInterval,
+      autoDeleteInterval: this.autoDeleteInterval,
+      volumes: this.volumeConfigs.length > 0 ? this.volumeConfigs : undefined,
+      name: this.sandboxName,
+      user: this.sandboxUser,
+      public: this.sandboxPublic,
+      networkBlockAll: this.networkBlockAll,
+      networkAllowList: this.networkAllowList,
+    });
+
+    // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.
+    // Resources without image fall back to snapshot-based creation (resources are ignored).
+    const createParams: CreateSandboxFromSnapshotParams | CreateSandboxFromImageParams =
+      this.image && !this.snapshotId
+        ? (compact({ ...baseParams, image: this.image, resources: this.resources }) satisfies CreateSandboxFromImageParams)
+        : (compact({ ...baseParams, snapshot: this.snapshotId }) satisfies CreateSandboxFromSnapshotParams);
 
     // Create sandbox
     this._sandbox = await this._daytona.create(createParams);
