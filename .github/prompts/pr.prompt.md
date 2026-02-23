@@ -12,7 +12,7 @@ The user will issue this command. You will need to do two things.
 Create a changeset using the CLI. The goal of changesets is to use it for generating changelogs. Individual package changelogs will later be combined into a single changelog that is published with each release.
 
 ```bash
-pnpm changeset -s -m "your changeset message" (--major | --minor | --patch) `@scope/pkg
+pnpm changeset -s -m "your changeset message" (--major | --minor | --patch) @scope/pkg
 ```
 
 For each package that has changes, run the CLI once and specify the appropriate version bump type (`--major`, `--minor`, or `--patch`) and message for that package. This will create a separate changeset file for each package, which is important for generating accurate changelogs.
