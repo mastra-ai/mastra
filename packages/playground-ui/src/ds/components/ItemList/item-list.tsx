@@ -8,9 +8,13 @@ import { ItemListMessage } from './item-list-message';
 import { ItemListNextPageLoading } from './item-list-next-page-loading';
 import { ItemListPagination } from './item-list-pagination';
 import { ItemListItemsScroller } from './item-list-items-scroller';
+import { ItemListCell } from './item-list-cell';
 import { ItemListTextCell } from './item-list-text-cell';
 import { ItemListStatusCell } from './item-list-status-cell';
-import { ItemListFlexCell } from './item-list-flex-cell';
+import { ItemListVersionCell } from './item-list-version-cell';
+import { ItemListIdCell } from './item-list-id-cell';
+import { ItemListDateCell } from './item-list-date-cell';
+import { ItemListLinkCell } from './item-list-link-cell';
 
 export const ItemList = Object.assign(ItemListRoot, {
   Header: ItemListHeader,
@@ -22,7 +26,11 @@ export const ItemList = Object.assign(ItemListRoot, {
   Message: ItemListMessage,
   NextPageLoading: ItemListNextPageLoading,
   Pagination: ItemListPagination,
+  Cell: ItemListCell,
   TextCell: ItemListTextCell,
   StatusCell: ItemListStatusCell,
-  FlexCell: ItemListFlexCell,
+  VersionCell: ItemListVersionCell,
+  IdCell: ItemListIdCell,
+  DateCell: ItemListDateCell,
+  LinkCell: ItemListLinkCell,
 });

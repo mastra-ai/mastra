@@ -43,125 +43,116 @@ Let's understand how RAG works and how you'll implement each component.
 Your implementation will:
 
 1. Process the Transformer paper into embeddings
-2. Store them in LibSQLVector for quick retrieval
-3. Use similarity search to find relevant sections
-4. Generate accurate responses using retrieved context
+1. Store them in LibSQLVector for quick retrieval
+1. Use similarity search to find relevant sections
+1. Generate accurate responses using retrieved context
 
 ## Creating the Agent
 
 Let's define the agent's behavior, connect it to your Mastra project, and create the vector store.
 
 <Steps>
+  <StepItem title="Install additional dependencies">
+    Install additional dependencies
 
-<StepItem title="Install additional dependencies">
+    After running the [installation guide](/guides/getting-started/quickstart) you'll need to install additional dependencies:
 
-Install additional dependencies
+    ```bash npm2yarn
+    npm install @mastra/rag@latest ai
+    ```
+  </StepItem>
 
-After running the [installation guide](/guides/getting-started/quickstart) you'll need to install additional dependencies:
+  <StepItem title="Define the Agent">
+    Now you'll create your RAG-enabled research assistant. The agent uses:
 
-```bash npm2yarn
-npm install @mastra/rag@latest ai
-```
-</StepItem>
+    - A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
+    - GPT-4o-mini for understanding queries and generating responses
+    - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
-<StepItem title="Define the Agent">
+    Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
-Now you'll create your RAG-enabled research assistant. The agent uses:
+    ```ts title="src/mastra/agents/researchAgent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+    import { createVectorQueryTool } from '@mastra/rag'
 
-- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
-- GPT-4o-mini for understanding queries and generating responses
-- Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
+    // Create a tool for semantic search over the paper embeddings
+    const vectorQueryTool = createVectorQueryTool({
+      vectorStoreName: 'libSqlVector',
+      indexName: 'papers',
+      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+    })
 
-Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
+    export const researchAgent = new Agent({
+      id: 'research-agent',
+      name: 'Research Assistant',
+      instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
+        Use the provided vector query tool to find relevant information from your knowledge base,
+        and provide accurate, well-supported answers based on the retrieved content.
+        Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
+        Base your responses only on the content provided, not on general knowledge.`,
+      model: 'openai/gpt-5.1',
+      tools: {
+        vectorQueryTool,
+      },
+    })
+    ```
+  </StepItem>
 
-```ts title="src/mastra/agents/researchAgent.ts"
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { createVectorQueryTool } from "@mastra/rag";
+  <StepItem title="Create the Vector Store">
+    In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
 
-// Create a tool for semantic search over the paper embeddings
-const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "libSqlVector",
-  indexName: "papers",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
+    ```bash
+    > pwd
+    /Users/your-name/guides/research-assistant
+    ```
 
-export const researchAgent = new Agent({
-  id: "research-agent",
-  name: "Research Assistant",
-  instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
-    Use the provided vector query tool to find relevant information from your knowledge base,
-    and provide accurate, well-supported answers based on the retrieved content.
-    Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
-    Base your responses only on the content provided, not on general knowledge.`,
-  model: "openai/gpt-5.1",
-  tools: {
-    vectorQueryTool,
-  },
-});
-```
+    In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
-</StepItem>
+    ```ts title="src/mastra/index.ts" {2, 4-6, 9}
+    import { Mastra } from '@mastra/core'
+    import { LibSQLVector } from '@mastra/libsql'
 
-<StepItem title="Create the Vector Store">
+    const libSqlVector = new LibSQLVector({
+      id: 'research-vectors',
+      url: 'file:/Users/your-name/guides/research-assistant/vector.db',
+    })
 
-In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
+    export const mastra = new Mastra({
+      vectors: { libSqlVector },
+    })
+    ```
 
-```bash
-> pwd
-/Users/your-name/guides/research-assistant
-```
+    For the `url` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
-In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
+    :::note
 
-```ts title="src/mastra/index.ts" {2, 4-6, 9}
-import { Mastra } from "@mastra/core";
-import { LibSQLVector } from "@mastra/libsql";
+    For the purpose of this guide you are using a hardcoded absolute path to your
+    local libSQL file, however for production usage this won't work. You should
+    use a remote persistent database then.
 
-const libSqlVector = new LibSQLVector({
-  id: 'research-vectors',
-  url: "file:/Users/your-name/guides/research-assistant/vector.db",
-});
+    :::
+  </StepItem>
 
-export const mastra = new Mastra({
-  vectors: { libSqlVector },
-});
-```
+  <StepItem title="Register the Agent with Mastra">
+    In the `src/mastra/index.ts` file, add the agent to Mastra:
 
-For the `url` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+    ```ts title="src/mastra/index.ts" {3, 10}
+    import { Mastra } from '@mastra/core'
+    import { LibSQLVector } from '@mastra/libsql'
+    import { researchAgent } from './agents/researchAgent'
 
-:::note
+    const libSqlVector = new LibSQLVector({
+      id: 'research-vectors',
+      url: 'file:/Users/your-name/guides/research-assistant/vector.db',
+    })
 
-For the purpose of this guide you are using a hardcoded absolute path to your
-local libSQL file, however for production usage this won't work. You should
-use a remote persistent database then.
-
-:::
-
-</StepItem>
-
-<StepItem title="Register the Agent with Mastra">
-
-In the `src/mastra/index.ts` file, add the agent to Mastra:
-
-```ts title="src/mastra/index.ts" {3, 10}
-import { Mastra } from "@mastra/core";
-import { LibSQLVector } from "@mastra/libsql";
-import { researchAgent } from "./agents/researchAgent";
-
-const libSqlVector = new LibSQLVector({
-  id: 'research-vectors',
-  url: "file:/Users/your-name/guides/research-assistant/vector.db",
-});
-
-export const mastra = new Mastra({
-  agents: { researchAgent },
-  vectors: { libSqlVector },
-});
-```
-
-</StepItem>
-
+    export const mastra = new Mastra({
+      agents: { researchAgent },
+      vectors: { libSqlVector },
+    })
+    ```
+  </StepItem>
 </Steps>
 
 ## Processing documents
@@ -169,121 +160,115 @@ export const mastra = new Mastra({
 In the following steps you'll fetch the research paper, split it into smaller chunks, generate embeddings for them, and store these chunks of information into the vector database.
 
 <Steps>
+  <StepItem title="Load and Process the Paper">
+    In this step the research paper is retrieved by providing an URL, then converted to a document object, and split into smaller, manageable chunks. By splitting into chunks the processing is faster and more efficient.
 
-<StepItem title="Load and Process the Paper">
+    Create a new file `src/store.ts` and add the following:
 
-In this step the research paper is retrieved by providing an URL, then converted to a document object, and split into smaller, manageable chunks. By splitting into chunks the processing is faster and more efficient.
+    ```ts title="src/store.ts"
+    import { MDocument } from '@mastra/rag'
 
-Create a new file `src/store.ts` and add the following:
+    // Load the paper
+    const paperUrl = 'https://arxiv.org/html/1706.03762'
+    const response = await fetch(paperUrl)
+    const paperText = await response.text()
 
-```ts title="src/store.ts"
-import { MDocument } from "@mastra/rag";
+    // Create document and chunk it
+    const doc = MDocument.fromText(paperText)
+    const chunks = await doc.chunk({
+      strategy: 'recursive',
+      maxSize: 512,
+      overlap: 50,
+      separators: ['\n\n', '\n', ' '],
+    })
 
-// Load the paper
-const paperUrl = "https://arxiv.org/html/1706.03762";
-const response = await fetch(paperUrl);
-const paperText = await response.text();
+    console.log('Number of chunks:', chunks.length)
+    ```
 
-// Create document and chunk it
-const doc = MDocument.fromText(paperText);
-const chunks = await doc.chunk({
-  strategy: "recursive",
-  maxSize: 512,
-  overlap: 50,
-  separators: ["\n\n", "\n", " "],
-});
+    Run the file in your terminal:
 
-console.log("Number of chunks:", chunks.length);
-```
+    ```bash
+    npx bun src/store.ts
+    ```
 
-Run the file in your terminal:
+    You should get back this response:
 
-```bash
-npx bun src/store.ts
-```
+    ```bash
+    Number of chunks: 892
+    ```
+  </StepItem>
 
-You should get back this response:
+  <StepItem title="Create and Store Embeddings">
+    Finally, you'll prepare the content for RAG by:
 
-```bash
-Number of chunks: 892
-```
+    1. Generating embeddings for each chunk of text
+    1. Creating a vector store index to hold the embeddings
+    1. Storing both the embeddings and metadata (original text and source information) in the vector database
 
-</StepItem>
+    :::note
 
-<StepItem title="Create and Store Embeddings">
+    This metadata is crucial as it allows for returning the actual content when
+    the vector store finds relevant matches.
 
-Finally, you'll prepare the content for RAG by:
+    :::
 
-1. Generating embeddings for each chunk of text
-2. Creating a vector store index to hold the embeddings
-3. Storing both the embeddings and metadata (original text and source information) in the vector database
+    This allows the agent to efficiently search and retrieve relevant information.
 
-:::note
+    Open the `src/store.ts` file and add the following:
 
-This metadata is crucial as it allows for returning the actual content when
-the vector store finds relevant matches.
+    ```ts title="src/store.ts"
+    import { MDocument } from '@mastra/rag'
+    import { embedMany } from 'ai'
+    import { mastra } from './mastra'
 
-:::
+    // Load the paper
+    const paperUrl = 'https://arxiv.org/html/1706.03762'
+    const response = await fetch(paperUrl)
+    const paperText = await response.text()
 
-This allows the agent to efficiently search and retrieve relevant information.
+    // Create document and chunk it
+    const doc = MDocument.fromText(paperText)
+    const chunks = await doc.chunk({
+      strategy: 'recursive',
+      maxSize: 512,
+      overlap: 50,
+      separators: ['\n\n', '\n', ' '],
+    })
 
-Open the `src/store.ts` file and add the following:
+    // Generate embeddings
+    const { embeddings } = await embedMany({
+      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+      values: chunks.map(chunk => chunk.text),
+    })
 
-```ts title="src/store.ts"
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { mastra } from "./mastra";
+    // Get the vector store instance from Mastra
+    const vectorStore = mastra.getVector('libSqlVector')
 
-// Load the paper
-const paperUrl = "https://arxiv.org/html/1706.03762";
-const response = await fetch(paperUrl);
-const paperText = await response.text();
+    // Create an index for paper chunks
+    await vectorStore.createIndex({
+      indexName: 'papers',
+      dimension: 1536,
+    })
 
-// Create document and chunk it
-const doc = MDocument.fromText(paperText);
-const chunks = await doc.chunk({
-  strategy: "recursive",
-  maxSize: 512,
-  overlap: 50,
-  separators: ["\n\n", "\n", " "],
-});
+    // Store embeddings
+    await vectorStore.upsert({
+      indexName: 'papers',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({
+        text: chunk.text,
+        source: 'transformer-paper',
+      })),
+    })
+    ```
 
-// Generate embeddings
-const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
+    Lastly, you'll now need to store the embeddings by running the script again:
 
-// Get the vector store instance from Mastra
-const vectorStore = mastra.getVector("libSqlVector");
+    ```bash
+    npx bun src/store.ts
+    ```
 
-// Create an index for paper chunks
-await vectorStore.createIndex({
-  indexName: "papers",
-  dimension: 1536,
-});
-
-// Store embeddings
-await vectorStore.upsert({
-  indexName: "papers",
-  vectors: embeddings,
-  metadata: chunks.map((chunk) => ({
-    text: chunk.text,
-    source: "transformer-paper",
-  })),
-});
-```
-
-Lastly, you'll now need to store the embeddings by running the script again:
-
-```bash
-npx bun src/store.ts
-```
-
-If the operation was successful you should see no output/errors in your terminal.
-
-</StepItem>
-
+    If the operation was successful you should see no output/errors in your terminal.
+  </StepItem>
 </Steps>
 
 ## Test the Assistant
@@ -293,15 +278,14 @@ Now that the vector database has all embeddings, you can test the research assis
 Create a new file `src/ask-agent.ts` and add different types of queries:
 
 ```ts title="src/ask-agent.ts"
-import { mastra } from "./mastra";
-const agent = mastra.getAgent("researchAgent");
+import { mastra } from './mastra'
+const agent = mastra.getAgent('researchAgent')
 
 // Basic query about concepts
-const query1 =
-  "What problems does sequence modeling face with neural networks?";
-const response1 = await agent.generate(query1);
-console.log("\nQuery:", query1);
-console.log("Response:", response1.text);
+const query1 = 'What problems does sequence modeling face with neural networks?'
+const response1 = await agent.generate(query1)
+console.log('\nQuery:', query1)
+console.log('Response:', response1.text)
 ```
 
 Run the script:
@@ -324,14 +308,14 @@ Response: Sequence modeling with neural networks faces several key challenges:
 Try another question:
 
 ```ts title="src/ask-agent.ts"
-import { mastra } from "./mastra";
-const agent = mastra.getAgent("researchAgent");
+import { mastra } from './mastra'
+const agent = mastra.getAgent('researchAgent')
 
 // Query about specific findings
-const query2 = "What improvements were achieved in translation quality?";
-const response2 = await agent.generate(query2);
-console.log("\nQuery:", query2);
-console.log("Response:", response2.text);
+const query2 = 'What improvements were achieved in translation quality?'
+const response2 = await agent.generate(query2)
+console.log('\nQuery:', query2)
+console.log('Response:', response2.text)
 ```
 
 Output:

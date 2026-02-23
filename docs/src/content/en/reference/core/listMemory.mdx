@@ -14,10 +14,10 @@ The `.listMemory()` method returns all memory instances registered with the Mast
 ## Usage example
 
 ```typescript
-const memoryInstances = mastra.listMemory();
+const memoryInstances = mastra.listMemory()
 
 for (const [key, memory] of Object.entries(memoryInstances)) {
-  console.log(`Memory "${key}": ${memory.id}`);
+  console.log(`Memory "${key}": ${memory.id}`)
 }
 ```
 
@@ -29,42 +29,42 @@ This method takes no parameters.
 
 <PropertiesTable
   content={[
-    {
-      name: "memory",
-      type: "Record<string, MastraMemory>",
-      description:
-        "An object containing all registered memory instances, keyed by their registry keys.",
-    },
-  ]}
+{
+name: "memory",
+type: "Record<string, MastraMemory>",
+description:
+"An object containing all registered memory instances, keyed by their registry keys.",
+},
+]}
 />
 
 ## Example: Checking Registered Memory
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
 
 const conversationMemory = new Memory({
-  id: "conversation-memory",
-  storage: new LibSQLStore({ id: 'conversation-store', url: ":memory:" }),
-});
+  id: 'conversation-memory',
+  storage: new LibSQLStore({ id: 'conversation-store', url: ':memory:' }),
+})
 
 const analyticsMemory = new Memory({
-  id: "analytics-memory",
-  storage: new LibSQLStore({ id: 'analytics-store', url: ":memory:" }),
-});
+  id: 'analytics-memory',
+  storage: new LibSQLStore({ id: 'analytics-store', url: ':memory:' }),
+})
 
 const mastra = new Mastra({
   memory: {
     conversationMemory,
     analyticsMemory,
   },
-});
+})
 
 // List all registered memory instances
-const allMemory = mastra.listMemory();
-console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"]
+const allMemory = mastra.listMemory()
+console.log(Object.keys(allMemory)) // ["conversationMemory", "analyticsMemory"]
 ```
 
 ## Related

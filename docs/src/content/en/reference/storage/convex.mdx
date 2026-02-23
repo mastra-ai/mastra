@@ -32,7 +32,7 @@ Before using `ConvexStore`, you need to set up the Convex schema and storage han
 In `convex/schema.ts`:
 
 ```typescript
-import { defineSchema } from 'convex/server';
+import { defineSchema } from 'convex/server'
 import {
   mastraThreadsTable,
   mastraMessagesTable,
@@ -42,7 +42,7 @@ import {
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
-} from '@mastra/convex/schema';
+} from '@mastra/convex/schema'
 
 export default defineSchema({
   mastra_threads: mastraThreadsTable,
@@ -53,7 +53,7 @@ export default defineSchema({
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_documents: mastraDocumentsTable,
-});
+})
 ```
 
 ### 2. Create the Storage Handler
@@ -61,9 +61,9 @@ export default defineSchema({
 In `convex/mastra/storage.ts`:
 
 ```typescript
-import { mastraStorage } from '@mastra/convex/server';
+import { mastraStorage } from '@mastra/convex/server'
 
-export const handle = mastraStorage;
+export const handle = mastraStorage
 ```
 
 ### 3. Deploy to Convex
@@ -77,63 +77,63 @@ npx convex deploy
 ## Usage
 
 ```typescript
-import { ConvexStore } from "@mastra/convex";
+import { ConvexStore } from '@mastra/convex'
 
 const storage = new ConvexStore({
   id: 'convex-storage',
   deploymentUrl: process.env.CONVEX_URL!,
   adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "deploymentUrl",
-      type: "string",
-      description:
-        "Convex deployment URL (e.g., https://your-project.convex.cloud)",
-      isOptional: false,
-    },
-    {
-      name: "adminAuthToken",
-      type: "string",
-      description:
-        "Convex admin authentication token for backend access",
-      isOptional: false,
-    },
-    {
-      name: "storageFunction",
-      type: "string",
-      description:
-        "Path to the storage mutation function (default: 'mastra/storage:handle')",
-      isOptional: true,
-      defaultValue: "mastra/storage:handle",
-    },
-  ]}
+{
+name: "deploymentUrl",
+type: "string",
+description:
+"Convex deployment URL (e.g., https://your-project.convex.cloud)",
+isOptional: false,
+},
+{
+name: "adminAuthToken",
+type: "string",
+description:
+"Convex admin authentication token for backend access",
+isOptional: false,
+},
+{
+name: "storageFunction",
+type: "string",
+description:
+"Path to the storage mutation function (default: 'mastra/storage:handle')",
+isOptional: true,
+defaultValue: "mastra/storage:handle",
+},
+]}
 />
 
 ## Constructor Examples
 
 ```ts
-import { ConvexStore } from "@mastra/convex";
+import { ConvexStore } from '@mastra/convex'
 
 // Basic configuration
 const store = new ConvexStore({
   id: 'convex-storage',
-  deploymentUrl: "https://your-project.convex.cloud",
-  adminAuthToken: "your-admin-token",
-});
+  deploymentUrl: 'https://your-project.convex.cloud',
+  adminAuthToken: 'your-admin-token',
+})
 
 // With custom storage function path
 const storeCustom = new ConvexStore({
   id: 'convex-storage',
-  deploymentUrl: "https://your-project.convex.cloud",
-  adminAuthToken: "your-admin-token",
-  storageFunction: "custom/path:handler",
-});
+  deploymentUrl: 'https://your-project.convex.cloud',
+  adminAuthToken: 'your-admin-token',
+  storageFunction: 'custom/path:handler',
+})
 ```
 
 ## Additional Notes
@@ -142,14 +142,14 @@ const storeCustom = new ConvexStore({
 
 The storage implementation uses typed Convex tables for each Mastra domain:
 
-| Domain         | Convex Table                | Purpose              |
-| -------------- | --------------------------- | -------------------- |
-| Threads        | `mastra_threads`            | Conversation threads |
-| Messages       | `mastra_messages`           | Chat messages        |
-| Resources      | `mastra_resources`          | User working memory  |
-| Workflows      | `mastra_workflow_snapshots` | Workflow state       |
-| Scorers        | `mastra_scorers`            | Evaluation data      |
-| Fallback       | `mastra_documents`          | Unknown tables       |
+| Domain | Convex Table | Purpose |
+| - | - | - |
+| Threads | `mastra_threads` | Conversation threads |
+| Messages | `mastra_messages` | Chat messages |
+| Resources | `mastra_resources` | User working memory |
+| Workflows | `mastra_workflow_snapshots` | Workflow state |
+| Scorers | `mastra_scorers` | Evaluation data |
+| Fallback | `mastra_documents` | Unknown tables |
 
 ### Architecture
 
@@ -171,4 +171,3 @@ Set these environment variables for your deployment:
 
 - [Convex Vector Store](../vectors/convex)
 - [Convex Documentation](https://docs.convex.dev/)
-

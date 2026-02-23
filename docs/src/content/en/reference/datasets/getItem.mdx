@@ -14,45 +14,47 @@ Retrieves a single dataset item by ID, optionally at a specific dataset version.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Get latest version of an item
-const item = await dataset.getItem({ itemId: "item-id" });
+const item = await dataset.getItem({ itemId: 'item-id' })
 
 // Get item at a specific dataset version
-const versionedItem = await dataset.getItem({ itemId: "item-id", version: 2 });
+const versionedItem = await dataset.getItem({ itemId: 'item-id', version: 2 })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "itemId",
-      type: "string",
-      description: "The unique identifier of the item.",
-    },
-    {
-      name: "version",
-      type: "number",
-      isOptional: true,
-      description: "Dataset version to retrieve the item at. Defaults to the latest version.",
-    },
-  ]}
+{
+name: "itemId",
+type: "string",
+description: "The unique identifier of the item.",
+},
+{
+name: "version",
+type: "number",
+isOptional: true,
+description: "Dataset version to retrieve the item at. Defaults to the latest version.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<DatasetItem | null>",
-      description: "The dataset item, or null if not found. See dataset.addItem() for the item shape.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<DatasetItem | null>",
+description: "The dataset item, or null if not found. See dataset.addItem() for the item shape.",
+},
+]}
 />

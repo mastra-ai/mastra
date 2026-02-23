@@ -240,6 +240,9 @@ export interface ReflectorResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**

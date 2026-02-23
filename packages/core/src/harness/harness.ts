@@ -51,7 +51,7 @@ import type {
  * })
  *
  * await harness.init()
- * await harness.sendMessage("Hello!")
+ * await harness.sendMessage({ content: "Hello!" })
  * ```
  */
 export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
@@ -264,7 +264,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Mode Management
   // ===========================================================================
 
-  getModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode<TState>[] {
     return this.config.modes;
   }
 
@@ -284,7 +284,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Switch to a different mode.
    * Aborts any in-progress generation and switches to the mode's default model.
    */
-  async switchMode(modeId: string): Promise<void> {
+  async switchMode({ modeId }: { modeId: string }): Promise<void> {
     const mode = this.config.modes.find(m => m.id === modeId);
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
@@ -295,13 +295,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
     if (currentModelId) {
-      await this.persistThreadSetting(`modeModelId_${this.currentModeId}`, currentModelId);
+      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
     }
 
     const previousModeId = this.currentModeId;
     this.currentModeId = modeId;
 
-    await this.persistThreadSetting('currentModeId', modeId);
+    await this.setThreadSetting({ key: 'currentModeId', value: modeId });
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
@@ -367,7 +367,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Switch to a different model at runtime.
    */
-  async switchModel(modelId: string, scope: 'global' | 'thread' = 'thread', modeId?: string): Promise<void> {
+  async switchModel({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
     const targetModeId = modeId ?? this.currentModeId;
 
     if (targetModeId === this.currentModeId) {
@@ -375,7 +383,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     if (scope === 'thread') {
-      await this.persistThreadSetting(`modeModelId_${targetModeId}`, modelId);
+      await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
     }
 
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
@@ -427,7 +435,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Get all available models from the provider registry with auth status.
    * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
    */
-  async getAvailableModels(): Promise<AvailableModel[]> {
+  async listAvailableModels(): Promise<AvailableModel[]> {
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -498,12 +506,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.resourceId;
   }
 
-  setResourceId(resourceId: string): void {
+  setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
   }
 
-  async createThread(title?: string): Promise<HarnessThread> {
+  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
     const now = new Date();
     const thread: HarnessThread = {
       id: this.generateId(),
@@ -576,7 +584,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return thread;
   }
 
-  async renameThread(title: string): Promise<void> {
+  async renameThread({ title }: { title: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -588,7 +596,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  async switchThread(threadId: string): Promise<void> {
+  async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
 
     if (this.config.storage) {
@@ -633,7 +641,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }));
   }
 
-  async persistThreadSetting(key: string, value: unknown): Promise<void> {
+  async setThreadSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -653,7 +661,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  private async removeThreadSetting(key: string): Promise<void> {
+  private async deleteThreadSetting({ key }: { key: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -903,18 +911,18 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Switch the Observer model.
    */
-  async switchObserverModel(modelId: string): Promise<void> {
+  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
     void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>);
-    await this.persistThreadSetting('observerModelId', modelId);
+    await this.setThreadSetting({ key: 'observerModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
   }
 
   /**
    * Switch the Reflector model.
    */
-  async switchReflectorModel(modelId: string): Promise<void> {
+  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
     void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>);
-    await this.persistThreadSetting('reflectorModelId', modelId);
+    await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
   }
 
@@ -922,7 +930,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Subagent Model Management
   // ===========================================================================
 
-  getSubagentModelId(agentType?: string): string | null {
+  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     const state = this.state as Record<string, unknown>;
     if (agentType) {
       const perType = state[`subagentModelId_${agentType}`];
@@ -932,10 +940,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return typeof global === 'string' ? global : null;
   }
 
-  async setSubagentModelId(modelId: string, agentType?: string): Promise<void> {
+  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
     void this.setState({ [key]: modelId } as Partial<z.infer<TState>>);
-    await this.persistThreadSetting(key, modelId);
+    await this.setThreadSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
 
@@ -943,11 +951,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Permissions
   // ===========================================================================
 
-  grantSessionCategory(category: ToolCategory): void {
+  grantSessionCategory({ category }: { category: ToolCategory }): void {
     this.sessionGrantedCategories.add(category);
   }
 
-  grantSessionTool(toolName: string): void {
+  grantSessionTool({ toolName }: { toolName: string }): void {
     this.sessionGrantedTools.add(toolName);
   }
 
@@ -958,17 +966,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     };
   }
 
-  getToolCategory(toolName: string): ToolCategory | null {
+  getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
-  setPermissionCategory(category: ToolCategory, policy: PermissionPolicy): void {
+  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.categories[category] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
   }
 
-  setPermissionTool(toolName: string, policy: PermissionPolicy): void {
+  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.tools[toolName] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
@@ -996,7 +1004,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     if (this.sessionGrantedTools.has(toolName)) return 'allow';
 
-    const category = this.getToolCategory(toolName);
+    const category = this.getToolCategory({ toolName });
     if (category) {
       if (this.sessionGrantedCategories.has(category)) return 'allow';
       const categoryPolicy = rules.categories[category];
@@ -1014,7 +1022,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Send a message to the current agent.
    * Streams the response and emits events.
    */
-  async sendMessage(content: string, options?: { images?: Array<{ data: string; mimeType: string }> }): Promise<void> {
+  async sendMessage({
+    content,
+    images,
+  }: {
+    content: string;
+    images?: Array<{ data: string; mimeType: string }>;
+  }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
       this.currentThreadId = thread.id;
@@ -1043,12 +1057,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (options?.images?.length) {
+      if (images?.length) {
         messageInput = {
           role: 'user',
           content: [
             { type: 'text', text: content },
-            ...options.images.map(img => ({ type: 'file', data: img.data, mediaType: img.mimeType })),
+            ...images.map((img: { data: string; mimeType: string }) => ({
+              type: 'file',
+              data: img.data,
+              mediaType: img.mimeType,
+            })),
           ],
         };
       }
@@ -1089,21 +1107,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage(next);
+        await this.sendMessage({ content: next });
       }
     }
   }
 
-  async getMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
     if (!this.currentThreadId) return [];
-    return this.getMessagesForThread(this.currentThreadId, options);
+    return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
-  async getMessagesForThread(threadId: string, options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
     const memoryStorage = await this.getMemoryStorage();
-    const limit = options?.limit;
 
     if (limit) {
       const result = await memoryStorage.listMessages({
@@ -1119,7 +1136,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return result.messages.map(msg => this.convertToHarnessMessage(msg));
   }
 
-  async getFirstUserMessageForThread(threadId: string): Promise<HarnessMessage | null> {
+  async getFirstUserMessageForThread({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
     if (!this.config.storage) return null;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1637,21 +1654,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer(content: string): Promise<void> {
+  async steer({ content }: { content: string }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
-    await this.sendMessage(content);
+    await this.sendMessage({ content });
   }
 
   /**
    * Queue a follow-up message to be processed after the current operation completes.
    */
-  async followUp(content: string): Promise<void> {
+  async followUp({ content }: { content: string }): Promise<void> {
     if (this.isRunning()) {
       this.followUpQueue.push(content);
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage(content);
+      await this.sendMessage({ content });
     }
   }
 
@@ -1671,15 +1688,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
    */
-  resolveToolApprovalDecision(decision: 'approve' | 'decline' | 'always_allow_category'): void {
+  respondToToolApproval({ decision }: { decision: 'approve' | 'decline' | 'always_allow_category' }): void {
     if (!this.pendingApprovalResolve) return;
 
     if (decision === 'always_allow_category') {
       const tn = this.pendingApprovalToolName;
       if (tn) {
-        const category = this.getToolCategory(tn);
+        const category = this.getToolCategory({ toolName: tn });
         if (category) {
-          this.grantSessionCategory(category);
+          this.grantSessionCategory({ category });
         }
       }
       this.pendingApprovalResolve('approve');
@@ -1697,7 +1714,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending question resolver.
    * Called by agent tools (e.g., ask_user) to pause execution until the UI responds.
    */
-  registerQuestion(questionId: string, resolve: (answer: string) => void): void {
+  registerQuestion({ questionId, resolve }: { questionId: string; resolve: (answer: string) => void }): void {
     this.pendingQuestions.set(questionId, resolve);
   }
 
@@ -1705,7 +1722,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Resolve a pending question with the user's answer.
    * Called by the UI when the user responds to a question dialog.
    */
-  respondToQuestion(questionId: string, answer: string): void {
+  respondToQuestion({ questionId, answer }: { questionId: string; answer: string }): void {
     const resolve = this.pendingQuestions.get(questionId);
     if (resolve) {
       this.pendingQuestions.delete(questionId);
@@ -1717,10 +1734,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending plan approval resolver.
    * Called by agent tools (e.g., submit_plan) to pause execution until approval.
    */
-  registerPlanApproval(
-    planId: string,
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void,
-  ): void {
+  registerPlanApproval({
+    planId,
+    resolve,
+  }: {
+    planId: string;
+    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
+  }): void {
     this.pendingPlanApprovals.set(planId, resolve);
   }
 
@@ -1729,17 +1749,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * On approval: switches to the default mode, then resolves the promise.
    * On rejection: resolves with feedback (stays in current mode).
    */
-  async respondToPlanApproval(
-    planId: string,
-    response: { action: 'approved' | 'rejected'; feedback?: string },
-  ): Promise<void> {
+  async respondToPlanApproval({
+    planId,
+    response,
+  }: {
+    planId: string;
+    response: { action: 'approved' | 'rejected'; feedback?: string };
+  }): Promise<void> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await this.switchMode(defaultMode.id);
+        await this.switchMode({ modeId: defaultMode.id });
       }
     }
 
@@ -1885,9 +1908,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      registerQuestion: (questionId, resolve) => this.registerQuestion(questionId, resolve),
-      registerPlanApproval: (planId, resolve) => this.registerPlanApproval(planId, resolve),
-      getSubagentModelId: (agentType?: string) => this.getSubagentModelId(agentType),
+      registerQuestion: params => this.registerQuestion(params),
+      registerPlanApproval: params => this.registerPlanApproval(params),
+      getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
@@ -1989,7 +2012,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   registerHeartbeat(handler: HeartbeatHandler): void {
-    void this.removeHeartbeat(handler.id);
+    void this.removeHeartbeat({ id: handler.id });
 
     const run = async () => {
       try {
@@ -2008,7 +2031,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown });
   }
 
-  async removeHeartbeat(id: string): Promise<void> {
+  async removeHeartbeat({ id }: { id: string }): Promise<void> {
     const entry = this.heartbeatTimers.get(id);
     if (entry) {
       clearInterval(entry.timer);
