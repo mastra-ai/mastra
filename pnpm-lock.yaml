@@ -3892,8 +3892,8 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       zeroentropy:
-        specifier: 0.1.0-alpha.6
-        version: 0.1.0-alpha.6(encoding@0.1.13)
+        specifier: 0.1.0-alpha.7
+        version: 0.1.0-alpha.7(encoding@0.1.13)
     devDependencies:
       '@ai-sdk/cohere':
         specifier: ^1.2.10
@@ -23362,8 +23362,8 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
-  zeroentropy@0.1.0-alpha.6:
-    resolution: {integrity: sha512-8roJUFph+VgQ13ABYm5XmtlHvabMD5r1TA9tOKQA7MVc2h0y2JymtmoWJl4qaaHQtpFkqzJu4pNY7rLksMOWBg==}
+  zeroentropy@0.1.0-alpha.7:
+    resolution: {integrity: sha512-T17yfhO0pJZ0yj7P9STEn1/b6e+yiPdxRgHuFOjU/vXdivpOv96vmadbfYbKJoBMgoDIo/WmPXxUIcS29/Ui0w==}
 
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
@@ -45576,7 +45576,7 @@ snapshots:
       cookie: 1.1.1
       youch-core: 0.3.3
 
-  zeroentropy@0.1.0-alpha.6(encoding@0.1.13):
+  zeroentropy@0.1.0-alpha.7(encoding@0.1.13):
     dependencies:
       '@types/node': 22.19.7
       '@types/node-fetch': 2.6.13

@@ -2186,3 +2186,136 @@ export interface CompareExperimentsResponse {
     >;
   }>;
 }
+
+// ============================================================================
+// Stored Prompt Block Types
+// ============================================================================
+
+/**
+ * Stored prompt block data returned from API
+ */
+export interface StoredPromptBlockResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  hasDraft?: boolean;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  // Version snapshot config fields (resolved from active version)
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing stored prompt blocks
+ */
+export interface ListStoredPromptBlocksParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  status?: 'draft' | 'published' | 'archived';
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored prompt blocks
+ */
+export interface ListStoredPromptBlocksResponse {
+  promptBlocks: StoredPromptBlockResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored prompt block
+ */
+export interface CreateStoredPromptBlockParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a stored prompt block
+ */
+export interface UpdateStoredPromptBlockParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  content?: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Response for deleting a stored prompt block
+ */
+export interface DeleteStoredPromptBlockResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Prompt Block Version Types
+// ============================================================================
+
+export interface PromptBlockVersionResponse {
+  id: string;
+  blockId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListPromptBlockVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListPromptBlockVersionsResponse {
+  versions: PromptBlockVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreatePromptBlockVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivatePromptBlockVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeletePromptBlockVersionResponse {
+  success: boolean;
+  message: string;
+}

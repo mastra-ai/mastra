@@ -29,7 +29,7 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 /**
  * Snapshot config fields that live on prompt block version documents.
  */
-const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
 
 export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
   #connector: MongoDBConnector;
@@ -299,7 +299,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -321,7 +321,9 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
-      filter.status = status;
+      if (status) {
+        filter.status = status;
+      }
       if (authorId) {
         filter.authorId = authorId;
       }
