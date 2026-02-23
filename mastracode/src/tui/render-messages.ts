@@ -161,7 +161,6 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
 

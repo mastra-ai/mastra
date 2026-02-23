@@ -6,7 +6,6 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
   // Clear file tracking in display state (thread_created will also reset this)
   state.harness.getDisplayState().modifiedFiles.clear();

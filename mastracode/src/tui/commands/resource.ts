@@ -29,7 +29,6 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
   ctx.resetStatusLineState();
   state.ui.requestRender();

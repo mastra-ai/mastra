@@ -33,7 +33,6 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
   ctx.notify('agent_done');
@@ -73,7 +72,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.followUpComponents = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after interruption
   state.ui.requestRender();
 }
@@ -93,6 +91,5 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.followUpComponents = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after errors
 }

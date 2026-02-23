@@ -197,7 +197,6 @@ export function handleShellOutput(
  */
 export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: string, toolName: string): void {
   const { state } = ctx;
-  state.toolInputBuffers.set(toolCallId, { text: '', toolName });
 
   // Mark as seen so handleMessageUpdate doesn't create a duplicate component
   if (!state.seenToolCallIds.has(toolCallId)) {
@@ -241,12 +240,12 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  * Handle an incremental delta of tool call input arguments.
  * Buffers the partial JSON text and attempts to parse it, updating the component's args.
  */
-export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, argsTextDelta: string): void {
+export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const buffer = state.toolInputBuffers.get(toolCallId);
+  const ds = state.harness.getDisplayState();
+  const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 
-  buffer.text += argsTextDelta;
   const updatedText = buffer.text;
 
   try {
@@ -298,8 +297,8 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 /**
  * Clean up the input buffer when tool input streaming ends.
  */
-export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
-  ctx.state.toolInputBuffers.delete(toolCallId);
+export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
+  // Buffer cleanup handled by Harness display state
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {

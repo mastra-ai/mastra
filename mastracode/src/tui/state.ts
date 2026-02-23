@@ -96,8 +96,6 @@ export interface TUIState {
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
-  /** Buffer partial JSON args text per toolCallId for streaming input */
-  toolInputBuffers: Map<string, { text: string; toolName: string }>;
   /** Position hint for task_write inline rendering when streaming */
   taskWriteInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
@@ -201,7 +199,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Agent / streaming
     isInitialized: false,
     pendingTools: new Map(),
-    toolInputBuffers: new Map(),
     taskWriteInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),

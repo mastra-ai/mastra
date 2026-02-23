@@ -176,7 +176,6 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         );
       }
       state.pendingTools.clear();
-      state.toolInputBuffers.clear();
     }
 
     state.streamingComponent = undefined;
