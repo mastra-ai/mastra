@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -58,7 +58,6 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const formRef = useRef<HTMLFormElement | null>(null);
 
   const { data: versionData } = usePromptBlockVersion({
     blockId,
@@ -83,7 +82,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
   const [formResetKey, setFormResetKey] = useState(0);
 
   useEffect(() => {
-    if (initialValues) {
+    if (initialValues && !form.formState.isDirty) {
       form.reset(initialValues);
       setFormResetKey(prev => prev + 1);
     }
@@ -126,9 +125,10 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
         .getStoredPromptBlock(blockId)
         .listVersions({ sortDirection: 'DESC', perPage: 1 });
       const latestVersion = versionsResponse.versions[0];
-      if (latestVersion) {
-        await client.getStoredPromptBlock(blockId).activateVersion(latestVersion.id);
+      if (!latestVersion) {
+        throw new Error('No version found to publish');
       }
+      await client.getStoredPromptBlock(blockId).activateVersion(latestVersion.id);
 
       queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
       queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
@@ -153,7 +153,6 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
           isSavingDraft={isSavingDraft}
           isDirty={form.formState.isDirty}
           hasDraft={hasDraft}
-          formRef={formRef}
           formResetKey={formResetKey}
           mode="edit"
         />
@@ -165,7 +164,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
           <AlertDescription as="p">You are seeing a specific version of the prompt block.</AlertDescription>
         </Alert>
       )}
-      <form ref={formRef} className="h-full">
+      <form className="h-full">
         <PromptBlockEditMain form={form} />
       </form>
     </AgentEditLayout>
