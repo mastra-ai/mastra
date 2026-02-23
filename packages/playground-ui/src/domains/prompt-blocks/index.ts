@@ -5,7 +5,10 @@ export {
   PromptBlockVersionCombobox,
   type PromptBlockVersionComboboxProps,
 } from './components/prompt-block-version-combobox';
-export * from './components/prompt-block-edit-page';
+export { PromptBlockEditSidebar } from './components/prompt-block-edit-page/prompt-block-edit-sidebar';
+export { PromptBlockEditMain } from './components/prompt-block-edit-page/prompt-block-edit-main';
+export { usePromptBlockEditForm, type UsePromptBlockEditFormOptions } from './components/prompt-block-edit-page/use-prompt-block-edit-form';
+export { promptBlockFormSchema, type PromptBlockFormValues } from './components/prompt-block-edit-page/utils/form-validation';
 
 // Hooks
 export {
