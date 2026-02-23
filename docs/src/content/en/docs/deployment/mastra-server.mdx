@@ -67,6 +67,7 @@ node .mastra/output/index.mjs
 ```
 
 The `mastra start` command provides additional features:
+
 - Loads environment variables from `.env.production` and `.env`
 - Provides helpful error messages for missing modules
 - Handles process signals for graceful shutdown
@@ -92,17 +93,17 @@ The build process respects configuration in your Mastra instance. For server beh
 The build follows these steps:
 
 1. **Locates entry file**: Finds `index.ts` or `index.js` in your Mastra directory.
-2. **Discovers tools**: Scans for tool files matching `{mastraDir}/tools/**/*.{js,ts}`, excluding test files.
-3. **Analyzes dependencies**: Determines which packages to bundle vs. install externally.
-4. **Bundles code**: Uses Rollup with tree-shaking and optional source maps.
-5. **Generates server**: Creates a Hono-based HTTP server as `index.mjs`.
-6. **Installs dependencies**: Runs `npm install` in the output directory.
-7. **Copies assets**: Copies `public` folder and `.npmrc` if present.
+1. **Discovers tools**: Scans for tool files matching `{mastraDir}/tools/**/*.{js,ts}`, excluding test files.
+1. **Analyzes dependencies**: Determines which packages to bundle vs. install externally.
+1. **Bundles code**: Uses Rollup with tree-shaking and optional source maps.
+1. **Generates server**: Creates a Hono-based HTTP server as `index.mjs`.
+1. **Installs dependencies**: Runs `npm install` in the output directory.
+1. **Copies assets**: Copies `public` folder and `.npmrc` if present.
 
 ## Environment variables
 
 | Variable | Description |
-|----------|-------------|
+| - | - |
 | `PORT` | Server port (default: `4111`) |
 | `MASTRA_STUDIO_PATH` | Path to Studio build directory (default: `./playground`) |
 | `MASTRA_SKIP_DOTENV` | Skip loading `.env` files when set |
@@ -113,7 +114,7 @@ The build follows these steps:
 The built server exposes endpoints for health checks, agents, workflows, and more:
 
 | Endpoint | Description |
-|----------|-------------|
+| - | - |
 | `GET /health` | Health check endpoint, returns `200 OK` |
 | `GET /openapi.json` | OpenAPI specification (if `server.build.openAPIDocs` is enabled) |
 | `GET /swagger-ui` | Interactive API documentation (if `server.build.swaggerUI` is enabled) |

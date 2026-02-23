@@ -130,6 +130,11 @@ export class CustomEditor extends Editor {
 
     // Ctrl+F - follow-up (queue message while streaming)
     if (matchesKey(data, 'ctrl+f')) {
+      // Accept autocomplete suggestion if one is showing, so the resolved
+      // text (e.g. "/review" instead of "/rev") is read by the handler.
+      if (this.isShowingAutocomplete()) {
+        super.handleInput('\t');
+      }
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
         handler();

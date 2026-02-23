@@ -364,6 +364,52 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 
+  it('should continue when provider-executed tools are mixed with regular tools', async () => {
+    // Arrange: One regular tool with result + one provider-executed tool with fallback result
+    // This is the scenario from #13125 — after the fix in tool-call-step, provider-executed
+    // tools get a non-undefined result, so they should not trigger the bail path
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    // Act
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — both tools have results
+    expect(bail).not.toHaveBeenCalled();
+    // Should emit tool-result for both tools
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          result: { company: 'Acme' },
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-2',
+          result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        }),
+      }),
+    );
+  });
+
   it('should continue the loop when errors are a mix of tool-not-found and other errors', async () => {
     // Arrange: One tool-not-found error and one execution error
     const { ToolNotFoundError } = await import('../errors');
@@ -612,6 +658,222 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     // Loop should continue — model should see the errors and adapt
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
+  });
+
+  it('should continue and persist provider-executed result when tool-not-found co-occurs with provider-executed tool', async () => {
+    // Arrange: One hallucinated tool (ToolNotFoundError) + one provider-executed tool with result
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — tool-not-found should self-correct
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
+
+    // Should persist the provider-executed result as a separate message
+    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
+    const providerMessage = addCalls.find(([msg]: [any]) =>
+      msg.content?.parts?.some(
+        (p: any) =>
+          p.providerExecuted &&
+          p.toolInvocation?.toolName === 'web_search_20250305' &&
+          p.toolInvocation?.state === 'result',
+      ),
+    );
+    expect(providerMessage).toBeDefined();
+  });
+});
+
+describe('createLLMMappingStep provider-executed tool message filtering', () => {
+  let controller: { enqueue: ReturnType<typeof vi.fn> };
+  let messageList: MessageList;
+  let llmExecutionStep: any;
+  let bail: ReturnType<typeof vi.fn>;
+  let getStepResult: ReturnType<typeof vi.fn>;
+  let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
+
+  const createExecuteParams = (
+    inputData: ToolCallOutput[],
+  ): ExecuteFunctionParams<{}, ToolCallOutput[], any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult,
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+
+    messageList = {
+      get: {
+        all: { aiV5: { model: () => [] } },
+        input: { aiV5: { model: () => [] } },
+        response: { aiV5: { model: () => [] } },
+      },
+      add: vi.fn(),
+    } as unknown as MessageList;
+
+    llmExecutionStep = createStep({
+      id: 'test-llm-execution',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({
+        stepResult: { isContinued: true, reason: undefined },
+        metadata: {},
+      }),
+    });
+
+    bail = vi.fn(data => data);
+    getStepResult = vi.fn(() => ({
+      stepResult: { isContinued: true, reason: undefined },
+      metadata: {},
+    }));
+
+    llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: {
+          generateId: () => 'test-message-id',
+        },
+      } as any,
+      llmExecutionStep,
+    );
+  });
+
+  it('should split client-executed and provider-executed tools into separate messageList entries', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.add).toHaveBeenCalledTimes(2);
+
+    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
+
+    // First call: client-executed tools only
+    const clientMsg = addCalls[0][0];
+    const clientToolNames = clientMsg.content.parts.map((p: any) => p.toolInvocation.toolName);
+    expect(clientToolNames).toContain('get_company_info');
+    expect(clientToolNames).not.toContain('web_search_20250305');
+
+    // Second call: provider-executed tools with providerExecuted flag
+    const providerMsg = addCalls[1][0];
+    const providerParts = providerMsg.content.parts;
+    expect(providerParts).toHaveLength(1);
+    expect(providerParts[0].toolInvocation.toolName).toBe('web_search_20250305');
+    expect(providerParts[0].toolInvocation.state).toBe('result');
+    expect(providerParts[0].providerExecuted).toBe(true);
+  });
+
+  it('should add a provider-executed tool-result message to messageList to update state from call to result', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.add).toHaveBeenCalledTimes(1);
+
+    const addCall = (messageList.add as ReturnType<typeof vi.fn>).mock.calls[0];
+    const msg = addCall[0];
+    expect(msg.content.parts).toHaveLength(1);
+    expect(msg.content.parts[0].toolInvocation.state).toBe('result');
+    expect(msg.content.parts[0].toolInvocation.toolName).toBe('web_search_20250305');
+    expect(msg.content.parts[0].providerExecuted).toBe(true);
+  });
+
+  it('should emit stream chunks for provider-executed tools even though they are excluded from the client tool-result message', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Stream chunks should be emitted for BOTH tools
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-1' }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-2' }),
+      }),
+    );
   });
 });
 

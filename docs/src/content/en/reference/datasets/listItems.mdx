@@ -14,51 +14,53 @@ Lists items in the dataset. When a `version` is specified, returns all items at 
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Paginated list (default: page 0, 20 per page)
-const result = await dataset.listItems();
+const result = await dataset.listItems()
 
 // List with search
-const filtered = await dataset.listItems({ search: "TypeScript", page: 0, perPage: 10 });
+const filtered = await dataset.listItems({ search: 'TypeScript', page: 0, perPage: 10 })
 
 // List all items at a specific version
-const versionedItems = await dataset.listItems({ version: 2 });
+const versionedItems = await dataset.listItems({ version: 2 })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "version",
-      type: "number",
-      isOptional: true,
-      description: "Dataset version to list items at. When set, returns all items at that version (no pagination).",
-    },
-    {
-      name: "page",
-      type: "number",
-      isOptional: true,
-      description: "Page number for pagination. Defaults to `0`.",
-    },
-    {
-      name: "perPage",
-      type: "number",
-      isOptional: true,
-      description: "Number of items per page. Defaults to `20`.",
-    },
-    {
-      name: "search",
-      type: "string",
-      isOptional: true,
-      description: "Search string to filter items.",
-    },
-  ]}
+{
+name: "version",
+type: "number",
+isOptional: true,
+description: "Dataset version to list items at. When set, returns all items at that version (no pagination).",
+},
+{
+name: "page",
+type: "number",
+isOptional: true,
+description: "Page number for pagination. Defaults to `0`.",
+},
+{
+name: "perPage",
+type: "number",
+isOptional: true,
+description: "Number of items per page. Defaults to `20`.",
+},
+{
+name: "search",
+type: "string",
+isOptional: true,
+description: "Search string to filter items.",
+},
+]}
 />
 
 ## Returns
@@ -67,12 +69,12 @@ When `version` is specified:
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<DatasetItem[]>",
-      description: "Array of all items at the specified dataset version.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<DatasetItem[]>",
+description: "Array of all items at the specified dataset version.",
+},
+]}
 />
 
 <br />
@@ -81,50 +83,50 @@ When `version` is not specified:
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<object>",
-      description: "Paginated response.",
-      properties: [{
-        type: "object",
-        parameters: [
-          {
-            name: "items",
-            type: "DatasetItem[]",
-            description: "Array of items for the current page.",
-          },
-          {
-            name: "pagination",
-            type: "object",
-            description: "Pagination metadata.",
-            properties: [{
-              type: "object",
-              parameters: [
-                {
-                  name: "total",
-                  type: "number",
-                  description: "Total number of items.",
-                },
-                {
-                  name: "page",
-                  type: "number",
-                  description: "Current page number.",
-                },
-                {
-                  name: "perPage",
-                  type: "number | false",
-                  description: "Items per page, or `false` if unpaginated.",
-                },
-                {
-                  name: "hasMore",
-                  type: "boolean",
-                  description: "Whether more pages are available.",
-                },
-              ],
-            }],
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<object>",
+description: "Paginated response.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "items",
+type: "DatasetItem[]",
+description: "Array of items for the current page.",
+},
+{
+name: "pagination",
+type: "object",
+description: "Pagination metadata.",
+properties: [{
+type: "object",
+parameters: [
+{
+name: "total",
+type: "number",
+description: "Total number of items.",
+},
+{
+name: "page",
+type: "number",
+description: "Current page number.",
+},
+{
+name: "perPage",
+type: "number | false",
+description: "Items per page, or `false` if unpaginated.",
+},
+{
+name: "hasMore",
+type: "boolean",
+description: "Whether more pages are available.",
+},
+],
+}],
+},
+],
+}],
+},
+]}
 />

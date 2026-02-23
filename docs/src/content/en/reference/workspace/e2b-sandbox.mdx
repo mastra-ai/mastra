@@ -26,111 +26,111 @@ npm install @mastra/e2b
 Add an `E2BSandbox` to a workspace and assign it to an agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { E2BSandbox } from '@mastra/e2b';
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
   sandbox: new E2BSandbox({
     id: 'dev-sandbox',
     timeout: 60_000, // 60 second timeout (default: 5 minutes)
   }),
-});
+})
 
 const agent = new Agent({
   name: 'dev-agent',
   model: 'anthropic/claude-opus-4-5',
   workspace,
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "E2B API key. Falls back to E2B_API_KEY environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "timeout",
-      type: "number",
-      description: "Execution timeout in milliseconds",
-      isOptional: true,
-      defaultValue: "300000 (5 minutes)",
-    },
-    {
-      name: "template",
-      type: "string | TemplateBuilder | function",
-      description: "Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.",
-      isOptional: true,
-    },
-    {
-      name: "env",
-      type: "Record<string, string>",
-      description: "Environment variables to set in the sandbox",
-      isOptional: true,
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this sandbox instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "domain",
-      type: "string",
-      description: "Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.",
-      isOptional: true,
-    },
-    {
-      name: "apiUrl",
-      type: "string",
-      description: "API URL for self-hosted E2B. Falls back to E2B_API_URL env var.",
-      isOptional: true,
-    },
-    {
-      name: "accessToken",
-      type: "string",
-      description: "Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "E2B API key. Falls back to E2B_API_KEY environment variable.",
+isOptional: true,
+},
+{
+name: "timeout",
+type: "number",
+description: "Execution timeout in milliseconds",
+isOptional: true,
+defaultValue: "300000 (5 minutes)",
+},
+{
+name: "template",
+type: "string | TemplateBuilder | function",
+description: "Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.",
+isOptional: true,
+},
+{
+name: "env",
+type: "Record<string, string>",
+description: "Environment variables to set in the sandbox",
+isOptional: true,
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this sandbox instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "domain",
+type: "string",
+description: "Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.",
+isOptional: true,
+},
+{
+name: "apiUrl",
+type: "string",
+description: "API URL for self-hosted E2B. Falls back to E2B_API_URL env var.",
+isOptional: true,
+},
+{
+name: "accessToken",
+type: "string",
+description: "Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.",
+isOptional: true,
+},
+]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Sandbox instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('E2BSandbox')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('e2b')",
-    },
-    {
-      name: "status",
-      type: "ProviderStatus",
-      description: "'pending' | 'initializing' | 'ready' | 'error'",
-    },
-    {
-      name: "supportsMounting",
-      type: "boolean",
-      description: "Always true - E2B sandboxes support mounting cloud filesystems",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Sandbox instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('E2BSandbox')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('e2b')",
+},
+{
+name: "status",
+type: "ProviderStatus",
+description: "'pending' | 'initializing' | 'ready' | 'error'",
+},
+{
+name: "supportsMounting",
+type: "boolean",
+description: "Always true - E2B sandboxes support mounting cloud filesystems",
+},
+]}
 />
 
 ## Methods
@@ -140,7 +140,7 @@ const agent = new Agent({
 Initialize and start the sandbox. Creates the E2B sandbox instance and mounts any configured filesystems.
 
 ```typescript
-await sandbox.start();
+await sandbox.start()
 ```
 
 Called automatically on first command execution or by `workspace.init()`.
@@ -150,7 +150,7 @@ Called automatically on first command execution or by `workspace.init()`.
 Stop the sandbox and release resources.
 
 ```typescript
-await sandbox.stop();
+await sandbox.stop()
 ```
 
 ### `destroy()`
@@ -158,7 +158,7 @@ await sandbox.stop();
 Clean up sandbox resources completely.
 
 ```typescript
-await sandbox.destroy();
+await sandbox.destroy()
 ```
 
 ### `executeCommand(command, args?, options?)`
@@ -166,59 +166,59 @@ await sandbox.destroy();
 Execute a shell command in the sandbox.
 
 ```typescript
-const result = await sandbox.executeCommand('ls', ['-la']);
+const result = await sandbox.executeCommand('ls', ['-la'])
 const npmResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
   timeout: 60000,
   cwd: '/app',
-});
+})
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "command",
-      type: "string",
-      description: "Command to execute",
-    },
-    {
-      name: "args",
-      type: "string[]",
-      description: "Command arguments",
-      isOptional: true,
-    },
-    {
-      name: "options.timeout",
-      type: "number",
-      description: "Execution timeout in milliseconds",
-      isOptional: true,
-    },
-    {
-      name: "options.cwd",
-      type: "string",
-      description: "Working directory for the command",
-      isOptional: true,
-    },
-    {
-      name: "options.env",
-      type: "Record<string, string>",
-      description: "Additional environment variables",
-      isOptional: true,
-    },
-    {
-      name: "options.onStdout",
-      type: "(data: string) => void",
-      description: "Callback for stdout streaming",
-      isOptional: true,
-    },
-    {
-      name: "options.onStderr",
-      type: "(data: string) => void",
-      description: "Callback for stderr streaming",
-      isOptional: true,
-    },
-  ]}
+{
+name: "command",
+type: "string",
+description: "Command to execute",
+},
+{
+name: "args",
+type: "string[]",
+description: "Command arguments",
+isOptional: true,
+},
+{
+name: "options.timeout",
+type: "number",
+description: "Execution timeout in milliseconds",
+isOptional: true,
+},
+{
+name: "options.cwd",
+type: "string",
+description: "Working directory for the command",
+isOptional: true,
+},
+{
+name: "options.env",
+type: "Record<string, string>",
+description: "Additional environment variables",
+isOptional: true,
+},
+{
+name: "options.onStdout",
+type: "(data: string) => void",
+description: "Callback for stdout streaming",
+isOptional: true,
+},
+{
+name: "options.onStderr",
+type: "(data: string) => void",
+description: "Callback for stderr streaming",
+isOptional: true,
+},
+]}
 />
 
 ### `canMount(filesystem)`
@@ -226,7 +226,7 @@ const npmResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
 Check if a filesystem can be mounted into this sandbox.
 
 ```typescript
-const canMount = sandbox.canMount(s3Filesystem);
+const canMount = sandbox.canMount(s3Filesystem)
 // true for S3Filesystem and GCSFilesystem
 ```
 
@@ -235,7 +235,7 @@ const canMount = sandbox.canMount(s3Filesystem);
 Mount a filesystem into the sandbox at the specified path.
 
 ```typescript
-await sandbox.mount(s3Filesystem, '/mnt/data');
+await sandbox.mount(s3Filesystem, '/mnt/data')
 ```
 
 ### `unmount(mountPath)`
@@ -243,7 +243,7 @@ await sandbox.mount(s3Filesystem, '/mnt/data');
 Unmount a previously mounted filesystem.
 
 ```typescript
-await sandbox.unmount('/mnt/data');
+await sandbox.unmount('/mnt/data')
 ```
 
 ### `getInfo()`
@@ -251,7 +251,7 @@ await sandbox.unmount('/mnt/data');
 Get sandbox status and resource information.
 
 ```typescript
-const info = await sandbox.getInfo();
+const info = await sandbox.getInfo()
 // { id: '...', name: 'E2BSandbox', provider: 'e2b', status: 'ready', supportsMounting: true }
 ```
 
@@ -268,10 +268,10 @@ E2B sandboxes can mount S3 or GCS filesystems, making cloud storage accessible a
 The simplest way to mount filesystems is through the workspace `mounts` config:
 
 ```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { GCSFilesystem } from '@mastra/gcs';
-import { E2BSandbox } from '@mastra/e2b';
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { GCSFilesystem } from '@mastra/gcs'
+import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
   mounts: {
@@ -288,7 +288,7 @@ const workspace = new Workspace({
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 When the sandbox starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
@@ -318,7 +318,7 @@ const workspace = new Workspace({
     id: 'dev-sandbox',
     template: 'my-custom-template',
   }),
-});
+})
 ```
 
 ### Customizing the default template
@@ -328,12 +328,13 @@ Pass a function to customize the default mountable template. The function receiv
 ```typescript
 const workspace = new Workspace({
   sandbox: new E2BSandbox({
-    template: (base) => base
-      .aptInstall(['ffmpeg', 'imagemagick', 'poppler-utils'])
-      .pipInstall(['pandas', 'numpy'])
-      .npmInstall(['sharp']),
+    template: base =>
+      base
+        .aptInstall(['ffmpeg', 'imagemagick', 'poppler-utils'])
+        .pipInstall(['pandas', 'numpy'])
+        .npmInstall(['sharp']),
   }),
-});
+})
 ```
 
 The template builder supports method chaining with operations like:
@@ -352,20 +353,20 @@ See [E2B's template documentation](https://e2b.dev/docs/template/defining-templa
 The default template is built on first use and cached. For faster cold starts or to include GCS support, you can pre-build a template:
 
 ```typescript
-import { createDefaultMountableTemplate } from '@mastra/e2b';
-import { Template } from 'e2b';
+import { createDefaultMountableTemplate } from '@mastra/e2b'
+import { Template } from 'e2b'
 
 // Get the default mountable template (includes s3fs)
-const { template, id } = createDefaultMountableTemplate();
+const { template, id } = createDefaultMountableTemplate()
 
 // Build and save to E2B
-const result = await Template.build(template, id);
-console.log('Template ID:', result.templateId);
+const result = await Template.build(template, id)
+console.log('Template ID:', result.templateId)
 
 // Use this ID in your E2BSandbox config for instant startup
 const sandbox = new E2BSandbox({
   template: result.templateId,
-});
+})
 ```
 
 For faster GCS cold starts, pre-install `gcsfuse` in a custom template:
@@ -374,9 +375,9 @@ For faster GCS cold starts, pre-install `gcsfuse` in a custom template:
 const workspace = new Workspace({
   sandbox: new E2BSandbox({
     id: 'dev-sandbox',
-    template: (base) => base.aptInstall(['gcsfuse']),
+    template: base => base.aptInstall(['gcsfuse']),
   }),
-});
+})
 ```
 
 This is optional—`gcsfuse` is installed automatically at mount time if not present.
