@@ -17,10 +17,15 @@ import { createCrossMountApiTests } from './scenarios/cross-mount-api';
 import { createCrossMountCopyTests } from './scenarios/cross-mount-copy';
 import { createFileSyncTests } from './scenarios/file-sync';
 import { createLargeFileHandlingTests } from './scenarios/large-file-handling';
+import { createLspCrossFileTests } from './scenarios/lsp-cross-file';
 import { createLspDiagnosticsTests } from './scenarios/lsp-diagnostics';
+import { createLspEslintTests } from './scenarios/lsp-eslint';
+import { createLspExternalProjectTests } from './scenarios/lsp-external-project';
+import { createLspGoTests } from './scenarios/lsp-go';
 import { createLspLargeFileTests } from './scenarios/lsp-large-file';
 import { createLspPerFileRootTests } from './scenarios/lsp-per-file-root';
 import { createLspPythonTests } from './scenarios/lsp-python';
+import { createLspRustTests } from './scenarios/lsp-rust';
 import { createMountIsolationTests } from './scenarios/mount-isolation';
 import { createMountRoutingTests } from './scenarios/mount-routing';
 import { createMultiMountTests } from './scenarios/multi-mount';
@@ -161,6 +166,26 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     if (testScenarios.lspPython === true) {
       createLspPythonTests(getContext);
+    }
+
+    if (testScenarios.lspCrossFile === true) {
+      createLspCrossFileTests(getContext);
+    }
+
+    if (testScenarios.lspExternalProject === true) {
+      createLspExternalProjectTests(getContext);
+    }
+
+    if (testScenarios.lspGo === true) {
+      createLspGoTests(getContext);
+    }
+
+    if (testScenarios.lspRust === true) {
+      createLspRustTests(getContext);
+    }
+
+    if (testScenarios.lspEslint === true) {
+      createLspEslintTests(getContext);
     }
 
     // Composite-specific scenarios (require CompositeFilesystem with 2+ mounts)

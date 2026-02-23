@@ -92,4 +92,19 @@ export interface IntegrationTestScenarios {
 
   /** LSP Python diagnostics - Pyright type checking (graceful skip if not installed) */
   lspPython?: boolean;
+
+  /** LSP cross-file import diagnostics - TS server reads imports from disk */
+  lspCrossFile?: boolean;
+
+  /** LSP external project diagnostics - getDiagnostics for files outside workspace basePath */
+  lspExternalProject?: boolean;
+
+  /** LSP Go diagnostics - gopls type checking (graceful skip if not installed) */
+  lspGo?: boolean;
+
+  /** LSP Rust diagnostics - rust-analyzer type checking (graceful skip if not installed) */
+  lspRust?: boolean;
+
+  /** LSP ESLint diagnostics + getDiagnosticsMulti (graceful skip if not installed) */
+  lspEslint?: boolean;
 }

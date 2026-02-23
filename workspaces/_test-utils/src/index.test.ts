@@ -39,6 +39,10 @@ createWorkspaceIntegrationTests({
     lspPerFileRoot: true,
     lspLargeFile: true,
     lspPython: true,
+    lspCrossFile: true,
+    lspGo: true,
+    lspRust: true,
+    lspEslint: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-contained-'));
@@ -64,6 +68,11 @@ createWorkspaceIntegrationTests({
     lspPerFileRoot: true,
     lspLargeFile: true,
     lspPython: true,
+    lspCrossFile: true,
+    lspExternalProject: true,
+    lspGo: true,
+    lspRust: true,
+    lspEslint: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-local-uncontained-'));
@@ -105,6 +114,10 @@ createWorkspaceIntegrationTests({
     lspPerFileRoot: true,
     lspLargeFile: true,
     lspPython: true,
+    lspCrossFile: true,
+    lspGo: true,
+    lspRust: true,
+    lspEslint: true,
   },
   createWorkspace: () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ws-mounts-'));
@@ -122,5 +135,30 @@ createWorkspaceIntegrationTests({
         [mountBDir]: new LocalFilesystem({ basePath: mountBDir, contained: true }),
       },
     });
+  },
+});
+
+// =============================================================================
+// 4. LocalFilesystem (contained: true) with subdirectory basePath
+//
+// basePath points to a subdirectory below where tsconfig.json lives.
+// With contained: true, walkUpAsync can't see above basePath → falls back to
+// default root. Verifies LSP still returns diagnostics using default settings.
+// =============================================================================
+
+createWorkspaceIntegrationTests({
+  suiteName: 'Local Workspace (contained: true, subdirectory basePath)',
+  testTimeout: 30000,
+  testScenarios: {
+    lspDiagnostics: true,
+  },
+  createWorkspace: () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ws-local-subdir-'));
+    const srcDir = join(projectDir, 'src');
+    mkdirSync(srcDir, { recursive: true });
+    // basePath is src/ — tsconfig.json sits one level above in projectDir
+    const filesystem = new LocalFilesystem({ basePath: srcDir, contained: true });
+    const sandbox = new LocalSandbox({ workingDirectory: srcDir, env: process.env });
+    return new Workspace({ filesystem, sandbox, lsp: { diagnosticTimeout: 10000 } });
   },
 });

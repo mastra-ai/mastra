@@ -338,6 +338,29 @@ describe('LSPManager', () => {
       expect(walkUpAsync).toHaveBeenCalledWith('/s3/src', ['tsconfig.json', 'package.json'], mockFilesystem);
       await fsManager.shutdownAll();
     });
+
+    it('passes server-specific markers to walkUpAsync, not defaults', async () => {
+      const { walkUpAsync, getServersForFile } = await import('./servers');
+
+      // Mock a Go server with go.mod as the only marker
+      (getServersForFile as ReturnType<typeof vi.fn>).mockImplementationOnce(() => [
+        {
+          id: 'go',
+          name: 'Go Language Server',
+          languageIds: ['go'],
+          markers: ['go.mod'],
+          command: () => 'gopls serve',
+        },
+      ]);
+
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
+
+      await fsManager.getClient('/project/main.go');
+
+      // walkUpAsync should be called with ['go.mod'], not the default TS markers
+      expect(walkUpAsync).toHaveBeenCalledWith('/project', ['go.mod'], mockFilesystem);
+      await fsManager.shutdownAll();
+    });
   });
 
   describe('severity mapping', () => {
