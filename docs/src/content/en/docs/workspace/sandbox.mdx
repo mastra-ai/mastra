@@ -78,7 +78,13 @@ See [background processes](/docs/workspace/processes) for a full guide, or the [
 
 ## Agent tools
 
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for details.
+When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. When the sandbox includes a process manager, agents also get:
+
+- **`execute_command`** with `background: true` - Start a long-running command and get back a PID
+- **`get_process_output`** - Check stdout, stderr, and status of a background process by PID
+- **`kill_process`** - Stop a background process by PID
+
+These tools are registered automatically when `sandbox.processes` is available. See [workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full list.
 
 ## Related
 

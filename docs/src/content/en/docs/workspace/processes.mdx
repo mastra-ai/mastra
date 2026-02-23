@@ -153,6 +153,36 @@ if (handle) {
 }
 ```
 
+## Agent tools
+
+When a sandbox has a process manager, Mastra automatically gives agents three tools for background process management:
+
+| Tool | Description |
+| - | - |
+| `execute_command` with `background: true` | Start a command in the background. Returns a PID immediately. |
+| `get_process_output` | Read stdout, stderr, and exit status of a background process by PID. Supports `tail` to limit lines and `wait: true` to block until exit. |
+| `kill_process` | Kill a background process by PID. Returns the last 50 lines of output. |
+
+Output from all tools is automatically truncated to the last 200 lines (configurable via `tail`) with a 30k character safety limit.
+
+You can configure these tools through the workspace's `tools` option:
+
+```typescript
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+    [WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]: {
+      requireApproval: true,
+    },
+  },
+})
+```
+
 ## Stream interop
 
 `ProcessHandle` provides `reader` and `writer` properties for Node.js stream interop. This is useful for protocols like LSP or JSON-RPC that communicate over stdio streams:

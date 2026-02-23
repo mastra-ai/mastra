@@ -366,7 +366,9 @@ Added when a sandbox is configured:
 
 | Tool | Description |
 | - | - |
-| `mastra_workspace_execute_command` | Execute a shell command with arguments. Returns stdout, stderr, and exit code. Supports timeouts and streaming output. |
+| `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
+| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
+| `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
 ### Search tools
 
