@@ -311,5 +311,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'plan_approved':
       // Handled directly in onApprove callback to ensure proper sequencing
       break;
+
+    case 'display_state_changed':
+      // Display state is now maintained by the Harness.
+      // UIs can read harness.getDisplayState() for canonical state.
+      // Individual event handlers above still update TUI-local state
+      // during the incremental migration period.
+      break;
   }
 }

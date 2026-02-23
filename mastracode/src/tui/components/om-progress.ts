@@ -4,68 +4,13 @@
  */
 import { Container, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
+import { defaultOMProgressState } from '@mastra/core/harness';
+import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
 import { fg, mastra } from '../theme.js';
-export type OMStatus = 'idle' | 'observing' | 'reflecting';
 
-export type OMBufferedStatus = 'idle' | 'running' | 'complete';
-
-export interface OMProgressState {
-  status: OMStatus;
-  // Active window tokens/thresholds (from data-om-status)
-  pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
-  // Buffered state (from data-om-status)
-  buffered: {
-    observations: {
-      status: OMBufferedStatus;
-      chunks: number;
-      messageTokens: number;
-      projectedMessageRemoval: number;
-      observationTokens: number;
-    };
-    reflection: {
-      status: OMBufferedStatus;
-      inputObservationTokens: number;
-      observationTokens: number;
-    };
-  };
-  generationCount: number;
-  stepNumber: number;
-  cycleId?: string;
-  startTime?: number;
-}
-
-export function defaultOMProgressState(): OMProgressState {
-  return {
-    status: 'idle',
-    pendingTokens: 0,
-    threshold: 30000,
-    thresholdPercent: 0,
-    observationTokens: 0,
-    reflectionThreshold: 40000,
-    reflectionThresholdPercent: 0,
-    buffered: {
-      observations: {
-        status: 'idle',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
-      },
-      reflection: {
-        status: 'idle',
-        inputObservationTokens: 0,
-        observationTokens: 0,
-      },
-    },
-    generationCount: 0,
-    stepNumber: 0,
-  };
-}
+// Re-export types from core for backward compatibility
+export type { OMBufferedStatus, OMProgressState, OMStatus };
+export { defaultOMProgressState };
 
 /**
  * Component that displays OM progress in the status line area.

@@ -10,6 +10,8 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   state.allToolComponents = [];
   state.modifiedFiles.clear();
   state.pendingFileTools.clear();
+  // Also clear the canonical display state's file tracking
+  state.harness.getDisplayState().modifiedFiles.clear();
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }

@@ -297,8 +297,8 @@ export class MastraTUI {
    * Called after thread load to pick up per-thread threshold overrides.
    */
   private syncOMThresholdsFromHarness(): void {
-    const obsThreshold = this.state.harness.getObservationThreshold();
-    const refThreshold = this.state.harness.getReflectionThreshold();
+    const obsThreshold = this.state.harness.getObservationThreshold() ?? this.state.omProgress.threshold;
+    const refThreshold = this.state.harness.getReflectionThreshold() ?? this.state.omProgress.reflectionThreshold;
     this.state.omProgress.threshold = obsThreshold;
     this.state.omProgress.thresholdPercent =
       obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
