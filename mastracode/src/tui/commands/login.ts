@@ -1,5 +1,5 @@
 import { Spacer } from '@mariozechner/pi-tui';
-import { getOAuthProviders } from '../../auth/storage.js';
+import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import type { SlashCommandContext } from './types.js';
@@ -47,7 +47,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
       .then(async () => {
         ctx.state.ui.hideOverlay();
 
-        const defaultModel = ctx.authStorage?.getDefaultModelForProvider(providerId as any);
+        const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
         if (defaultModel) {
           await ctx.state.harness.switchModel({ modelId: defaultModel });
           ctx.updateStatusLine();
