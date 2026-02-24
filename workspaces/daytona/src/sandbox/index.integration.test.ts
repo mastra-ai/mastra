@@ -121,6 +121,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
       supportsWorkingDirectory: true,
       supportsTimeout: true,
       supportsStreaming: true,
+      supportsConcurrency: true
     },
     testTimeout: 120000,
   });

@@ -1010,7 +1010,7 @@ describe('DaytonaSandbox', () => {
       capabilities: {
         supportsMounting: false,
         supportsReconnection: true,
-        supportsConcurrency: false,
+        supportsConcurrency: true,
         supportsEnvVars: true,
         supportsWorkingDirectory: true,
         supportsTimeout: true,
