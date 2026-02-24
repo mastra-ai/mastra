@@ -28,7 +28,6 @@ Este PR integra Astro en el proyecto, añadiendo archivos de configuración y ac
 このPRは、Astroをプロジェクトに統合し、Astro開発をサポートするための設定ファイルを追加し、スクリプトを更新します。
 ```
 
-
 ## Before you begin
 
 - A Mastra project (see [Quickstart](/guides/getting-started/quickstart))
@@ -39,13 +38,12 @@ Este PR integra Astro en el proyecto, añadiendo archivos de configuración y ac
 
 The workflow needs access to your model provider API key. Add it as a repository secret in GitHub:
 
-
 1. Go to your repository on GitHub
-2. Navigate to **Settings** > **Secrets and variables** > **Actions**
-3. Click **New repository secret**
-4. Add your API key with the name `OPENAI_API_KEY` (or the appropriate key for your provider)
+1. Navigate to **Settings** > **Secrets and variables** > **Actions**
+1. Click **New repository secret**
+1. Add your API key with the name `OPENAI_API_KEY` (or the appropriate key for your provider)
 
-    ![Screenshot of repository secrets in GitHub UI](/img/guides/github-action-repository-secrets.jpg)
+   ![Screenshot of repository secrets in GitHub UI](/img/guides/github-action-repository-secrets.jpg)
 
 The workflow references this secret as `${{ secrets.OPENAI_API_KEY }}` and makes it available to the Mastra agent at runtime.
 
@@ -56,11 +54,11 @@ The PR description agent is responsible for turning a git diff into a clear, rev
 This agent receives the raw diff from a pull request. It generates descriptions in the configured languages and formats the output using emoji flags so each language section is easy to scan in the PR.
 
 ```ts title="src/mastra/agents/description-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 export const descriptionAgent = new Agent({
-  id: "description-agent",
-  name: "PR Description Agent",
+  id: 'description-agent',
+  name: 'PR Description Agent',
   instructions: `You are a helpful assistant that creates clear, concise PR descriptions.
 
 When given a git diff of changed files, you will:
@@ -101,8 +99,8 @@ Output format:
 
 - [Same changes in Japanese]
 `,
-  model: "openai/gpt-4o"
-});
+  model: 'openai/gpt-4o',
+})
 ```
 
 ### Test the agent locally
@@ -111,11 +109,11 @@ Before deploying the workflow, you can test the agent in [Mastra Studio](/docs/g
 
 1. Get a diff from any public GitHub PR by appending `.diff` to the PR URL:
 
-    ```
-    https://github.com/owner/repo/pull/123.diff
-    ```
+   ```
+   https://github.com/owner/repo/pull/123.diff
+   ```
 
-2. Open the PR Description Agent in Studio and paste the diff content with this prompt:
+1. Open the PR Description Agent in Studio and paste the diff content with this prompt:
 
 "Please create a PR description for the following changes. `<paste the diff content here>`"
 
@@ -198,30 +196,30 @@ Create a `scripts` directory inside `.github` and add a file named `generate-des
 This script reads the PR diff from `PR_DIFF_FILE`, generates a description using the Mastra agent, and writes the result to `PR_DESCRIPTION_FILE` for the workflow to publish to the pull request.
 
 ```typescript title=".github/scripts/generate-description.ts"
-import { readFileSync, writeFileSync } from "fs";
-import { mastra } from "../../src/mastra";
+import { readFileSync, writeFileSync } from 'fs'
+import { mastra } from '../../src/mastra'
 
-const agent = mastra.getAgent("descriptionAgent");
+const agent = mastra.getAgent('descriptionAgent')
 
 await agent.generate(
   `Please create a PR description for the following changes.
 
 Git diff:
 \`\`\`diff
-${readFileSync(process.env.PR_DIFF_FILE!, "utf-8")}
+${readFileSync(process.env.PR_DIFF_FILE!, 'utf-8')}
 \`\`\``,
   {
     onError: () => {
       writeFileSync(
         process.env.PR_DESCRIPTION_FILE!,
-        "This PR diff is too large to generate a description automatically."
-      );
+        'This PR diff is too large to generate a description automatically.',
+      )
     },
-    onFinish: (result) => {
-      writeFileSync(process.env.PR_DESCRIPTION_FILE!, result.text);
-    }
-  }
-);
+    onFinish: result => {
+      writeFileSync(process.env.PR_DESCRIPTION_FILE!, result.text)
+    },
+  },
+)
 ```
 
 #### The workflow script explained

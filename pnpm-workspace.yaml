@@ -29,5 +29,8 @@ catalog:
   vitest: 4.0.18
   zod: ^4.3.6
 
+onlyBuiltDependencies:
+  - "@vvago/vale"
+
 patchedDependencies:
   "@changesets/get-dependents-graph": patches/@changesets__get-dependents-graph.patch

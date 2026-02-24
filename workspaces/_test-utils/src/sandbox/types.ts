@@ -2,7 +2,7 @@
  * Types for sandbox test configuration.
  */
 
-import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
 
 /**
  * Configuration for the sandbox test suite.
@@ -11,11 +11,11 @@ export interface SandboxTestConfig {
   /** Display name for test suite */
   suiteName: string;
 
-  /** Factory to create sandbox instance for testing */
-  createSandbox: () => Promise<WorkspaceSandbox> | WorkspaceSandbox;
+  /** Factory to create sandbox instance for testing. Accepts optional overrides (e.g. env). */
+  createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
 
   /** Cleanup after tests */
-  cleanupSandbox?: (sandbox: WorkspaceSandbox) => Promise<void>;
+  cleanupSandbox?: (sandbox: MastraSandbox) => Promise<void>;
 
   /** Capability flags - skip tests for unsupported features */
   capabilities?: SandboxCapabilities;
@@ -34,6 +34,14 @@ export interface SandboxTestConfig {
    * Required for mount operation tests that actually mount filesystems.
    */
   createMountableFilesystem?: () => Promise<WorkspaceFilesystem> | WorkspaceFilesystem;
+}
+
+/**
+ * Options passed to the createSandbox factory for per-test overrides.
+ */
+export interface CreateSandboxOptions {
+  /** Environment variables to configure on the sandbox */
+  env?: Record<string, string>;
 }
 
 /**
@@ -80,4 +88,7 @@ export interface SandboxTestDomains {
 
   /** Sandbox reconnection tests */
   reconnection?: boolean;
+
+  /** Background process management tests */
+  processManagement?: boolean;
 }
