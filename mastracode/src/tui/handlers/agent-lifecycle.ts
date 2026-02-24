@@ -4,6 +4,7 @@
  */
 import { Spacer, Text } from '@mariozechner/pi-tui';
 
+import { getCurrentGitBranch } from '../../utils/project.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { theme } from '../theme.js';
 
@@ -11,6 +12,13 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
+
+  // Refresh git branch so status line reflects the current branch
+  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
+  if (freshBranch) {
+    state.projectInfo.gitBranch = freshBranch;
+  }
+
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
       ctx.updateStatusLine();
