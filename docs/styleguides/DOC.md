@@ -34,8 +34,8 @@ Optional image or diagram showing the concept at a high level.
 
 Bulleted list of the key sub-topics in this category. Each item links to the corresponding standard page and includes a short (one sentence) description:
 
-- [**Sub-topic A**](/docs/$CATEGORY/sub-topic-a) — what sub-topic A does.
-- [**Sub-topic B**](/docs/$CATEGORY/sub-topic-b) — what sub-topic B does.
+- [**Sub-topic A**](/docs/$CATEGORY/sub-topic-a): What sub-topic A does.
+- [**Sub-topic B**](/docs/$CATEGORY/sub-topic-b): What sub-topic B does.
 
 ## When to use $TOPIC
 
@@ -81,10 +81,10 @@ Memory enables your agent to remember user messages, agent replies, and tool res
 
 Mastra supports four complementary memory types:
 
-- [**Message history**](/docs/memory/message-history) — keeps recent messages from the current conversation.
-- [**Working memory**](/docs/memory/working-memory) — stores persistent, structured user data such as names and preferences.
-- [**Semantic recall**](/docs/memory/semantic-recall) — retrieves relevant messages from older conversations based on semantic meaning.
-- [**Observational memory**](/docs/memory/observational-memory) — uses background agents to maintain a dense observation log.
+- [**Message history**](/docs/memory/message-history): Keeps recent messages from the current conversation.
+- [**Working memory**](/docs/memory/working-memory): Stores persistent, structured user data such as names and preferences.
+- [**Semantic recall**](/docs/memory/semantic-recall): Retrieves relevant messages from older conversations based on semantic meaning.
+- [**Observational memory**](/docs/memory/observational-memory): Uses background agents to maintain a dense observation log.
 
 ## When to use memory
 

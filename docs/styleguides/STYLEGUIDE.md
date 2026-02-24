@@ -113,13 +113,13 @@ If you must address the reader, it is OK to use "you" and "your." In particular,
 
 Certain words and phrases are problematic in instructions:
 
-- **"You should..."** — Avoid this phrase most of the time. The reader may wonder: "Do I have to? What happens if I don't?" You _can_ use this phrase when describing what the reader should be experiencing (e.g. after a successful installation), but even then it's almost always possible to rephrase.
+- **"You should..."**: Avoid this phrase most of the time. The reader may wonder: "Do I have to? What happens if I don't?" You _can_ use this phrase when describing what the reader should be experiencing (e.g. after a successful installation), but even then it's almost always possible to rephrase.
 
   > ❌ If the installation was successful, you should see a prompt to continue.
 
   > ✅ After a successful installation, a prompt to continue will appear.
 
-- **"You can..."** — Use this phrase **only** to give permission or state that an option exists. Do not use this in general instructions that you expect the reader to follow.
+- **"You can..."**: Use this phrase **only** to give permission or state that an option exists. Do not use this in general instructions that you expect the reader to follow.
 
 ### Lead with location; end with action
 
@@ -216,9 +216,9 @@ Use lists for a group of related items, such as a complete set of configuration 
 - Use unordered (bulleted) lists when the order of the items is not important.
 - Use ordered (numbered) lists when giving steps or instructions to be followed in sequence.
 
-### Do not use emdashes in lists
+### Do not use em-dashes in lists
 
-To not use emdashes in lists, if you want to separate the concise summary from the description of a list item, use bold text and colons instead.
+To not use em-dashes in lists, if you want to separate the concise summary from the description of a list item, use bold text and colons instead.
 
 > ❌
 >
