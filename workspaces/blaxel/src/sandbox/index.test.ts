@@ -205,18 +205,18 @@ describe('BlaxelSandbox', () => {
     it('reconnects to existing sandbox by name', async () => {
       const { SandboxInstance } = await import('@blaxel/core');
 
-    // Mock finding existing sandbox
-    (SandboxInstance.get as any).mockResolvedValue({
-      ...mockSandbox,
-      status: 'DEPLOYED',
-    });
+      // Mock finding existing sandbox
+      (SandboxInstance.get as any).mockResolvedValue({
+        ...mockSandbox,
+        status: 'DEPLOYED',
+      });
 
-    const sandbox = new BlaxelSandbox({ id: 'existing-id' });
-    await sandbox._start();
+      const sandbox = new BlaxelSandbox({ id: 'existing-id' });
+      await sandbox._start();
 
-    expect(SandboxInstance.get).toHaveBeenCalledWith('existing-id');
-    // Should NOT create a new sandbox
-    expect(SandboxInstance.create).not.toHaveBeenCalled();
+      expect(SandboxInstance.get).toHaveBeenCalledWith('existing-id');
+      // Should NOT create a new sandbox
+      expect(SandboxInstance.create).not.toHaveBeenCalled();
     });
 
     it('creates new sandbox if existing one is TERMINATED', async () => {
@@ -560,12 +560,48 @@ describe('BlaxelSandbox Mount Configuration', () => {
     mockSandbox.process.exec.mockImplementation((req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('which s3fs')) {
-        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '/usr/bin/s3fs',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
       if (cmd.includes('id -u')) {
-        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '1000\n1000',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
-      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      });
     });
   });
 
@@ -591,12 +627,10 @@ describe('BlaxelSandbox Mount Configuration', () => {
     await sandbox.mount(mockFilesystem, '/data/s3');
 
     const calls = mockSandbox.process.exec.mock.calls;
-    const s3fsMountCall = calls.find(
-      (call: any[]) => {
-        const cmd = call[0]?.command || '';
-        return cmd.includes('s3fs') && cmd.includes('/data/s3') && !cmd.includes('which');
-      },
-    );
+    const s3fsMountCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('s3fs') && cmd.includes('/data/s3') && !cmd.includes('which');
+    });
 
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
@@ -632,12 +666,10 @@ describe('BlaxelSandbox Mount Configuration', () => {
     await sandbox.mount(mockFilesystem, '/data/s3-ro');
 
     const calls = mockSandbox.process.exec.mock.calls;
-    const s3fsMountCall = calls.find(
-      (call: any[]) => {
-        const cmd = call[0]?.command || '';
-        return cmd.includes('s3fs') && cmd.includes('/data/s3-ro') && !cmd.includes('which');
-      },
-    );
+    const s3fsMountCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('s3fs') && cmd.includes('/data/s3-ro') && !cmd.includes('which');
+    });
 
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
@@ -661,12 +693,48 @@ describe('BlaxelSandbox S3 Public Bucket Mount', () => {
     mockSandbox.process.exec.mockImplementation((req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('which s3fs')) {
-        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '/usr/bin/s3fs',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
       if (cmd.includes('id -u')) {
-        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '1000\n1000',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
-      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      });
     });
   });
 
@@ -689,12 +757,10 @@ describe('BlaxelSandbox S3 Public Bucket Mount', () => {
     await sandbox.mount(mockFilesystem, '/data/s3-public');
 
     const calls = mockSandbox.process.exec.mock.calls;
-    const s3fsMountCall = calls.find(
-      (call: any[]) => {
-        const cmd = call[0]?.command || '';
-        return cmd.includes('s3fs') && cmd.includes('/data/s3-public') && !cmd.includes('which');
-      },
-    );
+    const s3fsMountCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('s3fs') && cmd.includes('/data/s3-public') && !cmd.includes('which');
+    });
 
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
@@ -718,12 +784,48 @@ describe('BlaxelSandbox GCS Mount Configuration', () => {
     mockSandbox.process.exec.mockImplementation((req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('which gcsfuse')) {
-        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/gcsfuse', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '/usr/bin/gcsfuse',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
       if (cmd.includes('id -u')) {
-        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '1000\n1000',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       }
-      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      });
     });
   });
 
@@ -746,12 +848,10 @@ describe('BlaxelSandbox GCS Mount Configuration', () => {
     await sandbox.mount(mockFilesystem, '/data/gcs-auth');
 
     const calls = mockSandbox.process.exec.mock.calls;
-    const gcsfuseCall = calls.find(
-      (call: any[]) => {
-        const cmd = call[0]?.command || '';
-        return cmd.includes('gcsfuse') && cmd.includes('/data/gcs-auth') && !cmd.includes('which');
-      },
-    );
+    const gcsfuseCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('gcsfuse') && cmd.includes('/data/gcs-auth') && !cmd.includes('which');
+    });
 
     expect(gcsfuseCall).toBeDefined();
     if (gcsfuseCall) {
@@ -777,12 +877,10 @@ describe('BlaxelSandbox GCS Mount Configuration', () => {
     await sandbox.mount(mockFilesystem, '/data/gcs-anon');
 
     const calls = mockSandbox.process.exec.mock.calls;
-    const gcsfuseCall = calls.find(
-      (call: any[]) => {
-        const cmd = call[0]?.command || '';
-        return cmd.includes('gcsfuse') && cmd.includes('/data/gcs-anon') && !cmd.includes('which');
-      },
-    );
+    const gcsfuseCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('gcsfuse') && cmd.includes('/data/gcs-anon') && !cmd.includes('which');
+    });
 
     expect(gcsfuseCall).toBeDefined();
     if (gcsfuseCall) {
@@ -902,23 +1000,85 @@ describe('BlaxelSandbox Reconcile Mounts', () => {
     mockSandbox.process.exec.mockImplementation(async (req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('/proc/mounts')) {
-        return { exitCode: 0, stdout: '/data/keep\n/data/stale\n', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/keep\n/data/stale\n',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('ls /tmp/.mastra-mounts')) {
-        return { exitCode: 0, stdout: `${keepMarker}\n${staleMarker}`, stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: `${keepMarker}\n${staleMarker}`,
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('cat') && cmd.includes(keepMarker)) {
-        return { exitCode: 0, stdout: '/data/keep|hash1', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/keep|hash1',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('cat') && cmd.includes(staleMarker)) {
-        return { exitCode: 0, stdout: '/data/stale|hash2', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/stale|hash2',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
-      return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+      return {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      };
     });
 
     await sandbox.reconcileMounts(['/data/keep']);
 
-    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('fusermount'));
+    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('fusermount'),
+    );
     expect(fusermountCalls.length).toBe(1);
     expect(fusermountCalls[0][0].command).toContain('/data/stale');
   });
@@ -930,17 +1090,55 @@ describe('BlaxelSandbox Reconcile Mounts', () => {
     mockSandbox.process.exec.mockImplementation(async (req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('/proc/mounts')) {
-        return { exitCode: 0, stdout: '/data/fuse-stale\n', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/fuse-stale\n',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('ls /tmp/.mastra-mounts')) {
-        return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
-      return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+      return {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      };
     });
 
     await sandbox.reconcileMounts([]);
 
-    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('fusermount'));
+    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('fusermount'),
+    );
     expect(fusermountCalls).toHaveLength(0);
   });
 
@@ -951,17 +1149,55 @@ describe('BlaxelSandbox Reconcile Mounts', () => {
     mockSandbox.process.exec.mockImplementation(async (req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('/proc/mounts')) {
-        return { exitCode: 0, stdout: '/data/mount1\n/data/mount2\n', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/mount1\n/data/mount2\n',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('ls /tmp/.mastra-mounts')) {
-        return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
-      return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+      return {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      };
     });
 
     await sandbox.reconcileMounts(['/data/mount1', '/data/mount2']);
 
-    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('fusermount'));
+    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('fusermount'),
+    );
     expect(fusermountCalls).toHaveLength(0);
   });
 
@@ -974,15 +1210,63 @@ describe('BlaxelSandbox Reconcile Mounts', () => {
     mockSandbox.process.exec.mockImplementation(async (req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('/proc/mounts')) {
-        return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('ls /tmp/.mastra-mounts')) {
-        return { exitCode: 0, stdout: orphanMarker, stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: orphanMarker,
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('cat') && cmd.includes(orphanMarker)) {
-        return { exitCode: 0, stdout: '/data/orphaned|abc123hash', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '/data/orphaned|abc123hash',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
-      return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+      return {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      };
     });
 
     await sandbox.reconcileMounts([]);
@@ -1005,15 +1289,63 @@ describe('BlaxelSandbox Reconcile Mounts', () => {
     mockSandbox.process.exec.mockImplementation(async (req: any) => {
       const cmd = req.command || '';
       if (cmd.includes('/proc/mounts')) {
-        return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('ls /tmp/.mastra-mounts')) {
-        return { exitCode: 0, stdout: 'mount-badfile', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: 'mount-badfile',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
       if (cmd.includes('cat') && cmd.includes('mount-badfile')) {
-        return { exitCode: 0, stdout: 'garbage-content-no-pipe', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+        return {
+          exitCode: 0,
+          stdout: 'garbage-content-no-pipe',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        };
       }
-      return { exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' };
+      return {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        pid: '1',
+        status: 'completed',
+        command: cmd,
+        logs: '',
+        name: '',
+        startedAt: '',
+        completedAt: '',
+        workingDir: '',
+      };
     });
 
     await sandbox.reconcileMounts([]);
@@ -1047,7 +1379,13 @@ describe('BlaxelSandbox stop/destroy only unmount managed mounts', () => {
       name: 'FS1',
       provider: 's3',
       status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket-one', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket-one',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+      }),
     } as any;
 
     await sandbox.mount(mockFs, '/data/managed');
@@ -1056,10 +1394,14 @@ describe('BlaxelSandbox stop/destroy only unmount managed mounts', () => {
 
     await sandbox._stop();
 
-    const procMountsCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('/proc/mounts'));
+    const procMountsCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('/proc/mounts'),
+    );
     expect(procMountsCalls).toHaveLength(0);
 
-    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('fusermount'));
+    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('fusermount'),
+    );
     expect(fusermountCalls.length).toBeGreaterThanOrEqual(1);
     expect(fusermountCalls[0][0].command).toContain('/data/managed');
   });
@@ -1073,7 +1415,13 @@ describe('BlaxelSandbox stop/destroy only unmount managed mounts', () => {
       name: 'FS1',
       provider: 's3',
       status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket-one', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket-one',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+      }),
     } as any;
 
     await sandbox.mount(mockFs, '/data/managed');
@@ -1082,7 +1430,9 @@ describe('BlaxelSandbox stop/destroy only unmount managed mounts', () => {
 
     await sandbox._destroy();
 
-    const procMountsCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) => (c[0]?.command || '').includes('/proc/mounts'));
+    const procMountsCalls = mockSandbox.process.exec.mock.calls.filter((c: any[]) =>
+      (c[0]?.command || '').includes('/proc/mounts'),
+    );
     expect(procMountsCalls).toHaveLength(0);
   });
 });
@@ -1109,7 +1459,13 @@ describe('BlaxelSandbox Stop Behavior', () => {
       name: 'FS1',
       provider: 's3',
       status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket-one', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket-one',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+      }),
     } as any;
 
     const mockFilesystem2 = {
@@ -1117,7 +1473,13 @@ describe('BlaxelSandbox Stop Behavior', () => {
       name: 'FS2',
       provider: 's3',
       status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket-two', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket-two',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+      }),
     } as any;
 
     await sandbox.mount(mockFilesystem1, '/data/mount1');
@@ -1127,7 +1489,9 @@ describe('BlaxelSandbox Stop Behavior', () => {
 
     await sandbox._stop();
 
-    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((call: any[]) => (call[0]?.command || '').includes('fusermount'));
+    const fusermountCalls = mockSandbox.process.exec.mock.calls.filter((call: any[]) =>
+      (call[0]?.command || '').includes('fusermount'),
+    );
 
     expect(fusermountCalls.length).toBeGreaterThanOrEqual(2);
   });
@@ -1147,14 +1511,14 @@ describe('BlaxelSandbox Internal Methods', () => {
   });
 
   describe('isSandboxDeadError()', () => {
-    it('returns true for "not found"', () => {
-      const sandbox = new BlaxelSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('not found'))).toBe(true);
-    });
-
     it('returns true for "TERMINATED"', () => {
       const sandbox = new BlaxelSandbox();
       expect((sandbox as any).isSandboxDeadError(new Error('TERMINATED'))).toBe(true);
+    });
+
+    it('returns true for "sandbox was not found"', () => {
+      const sandbox = new BlaxelSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
     });
 
     it('returns true for "Sandbox not found"', () => {
@@ -1162,9 +1526,10 @@ describe('BlaxelSandbox Internal Methods', () => {
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
     });
 
-    it('returns true for "404"', () => {
+    it('returns false for generic "not found" errors', () => {
       const sandbox = new BlaxelSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('404'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error('File not found'))).toBe(false);
+      expect((sandbox as any).isSandboxDeadError(new Error('bucket not found'))).toBe(false);
     });
 
     it('returns false for regular errors', () => {
@@ -1207,7 +1572,19 @@ describe('BlaxelSandbox Internal Methods', () => {
         if (callCount === 1) {
           throw new Error('sandbox was not found');
         }
-        return Promise.resolve({ exitCode: 0, stdout: 'ok', stderr: '', pid: '1', status: 'completed', command: '', logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: '',
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       });
 
       const result = await sandbox.executeCommand('echo', ['test']);
@@ -1260,9 +1637,33 @@ describe('BlaxelSandbox Internal Methods', () => {
       mockSandbox.process.exec.mockImplementation((req: any) => {
         const cmd = req.command || '';
         if (cmd.includes('ls -A')) {
-          return Promise.resolve({ exitCode: 0, stdout: 'non-empty', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+          return Promise.resolve({
+            exitCode: 0,
+            stdout: 'non-empty',
+            stderr: '',
+            pid: '1',
+            status: 'completed',
+            command: cmd,
+            logs: '',
+            name: '',
+            startedAt: '',
+            completedAt: '',
+            workingDir: '',
+          });
         }
-        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '', pid: '1', status: 'completed', command: cmd, logs: '', name: '', startedAt: '', completedAt: '', workingDir: '' });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          pid: '1',
+          status: 'completed',
+          command: cmd,
+          logs: '',
+          name: '',
+          startedAt: '',
+          completedAt: '',
+          workingDir: '',
+        });
       });
 
       const mockFilesystem = {

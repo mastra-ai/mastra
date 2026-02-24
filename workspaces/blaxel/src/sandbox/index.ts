@@ -396,7 +396,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
     // Remove empty mount directory (only if empty, rmdir fails on non-empty)
     // Use || true so a non-empty or missing directory doesn't abort unmount
-    const rmdirResult = await runCommand(this._sandbox, `rmdir "${mountPath}" 2>&1 || true`);
+    const rmdirResult = await runCommand(this._sandbox, `rmdir "${mountPath}" 2>&1`);
     if (rmdirResult.exitCode === 0) {
       this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
@@ -630,9 +630,16 @@ export class BlaxelSandbox extends MastraSandbox {
    * Blaxel sandbox names must be DNS-safe (lowercase alphanumeric and hyphens).
    */
   private toSandboxName(id: string): string {
-    const name = id.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 63);
+    const name = id
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 63);
     if (!name) {
-      throw new Error(`Cannot derive a valid sandbox name from id "${id}". ID must contain at least one alphanumeric character.`);
+      throw new Error(
+        `Cannot derive a valid sandbox name from id "${id}". ID must contain at least one alphanumeric character.`,
+      );
     }
     return name;
   }
@@ -647,9 +654,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
       // Only reuse if the sandbox is actually deployed (running)
       if (existing.status === 'DEPLOYED') {
-        this.logger.debug(
-          `${LOG_PREFIX} Found existing sandbox: ${sandboxName} (status: ${existing.status})`,
-        );
+        this.logger.debug(`${LOG_PREFIX} Found existing sandbox: ${sandboxName} (status: ${existing.status})`);
         return existing;
       }
 
@@ -772,11 +777,9 @@ export class BlaxelSandbox extends MastraSandbox {
     if (!error) return false;
     const errorStr = String(error);
     return (
-      errorStr.includes('not found') ||
       errorStr.includes('TERMINATED') ||
       errorStr.includes('sandbox was not found') ||
-      errorStr.includes('Sandbox not found') ||
-      errorStr.includes('404')
+      errorStr.includes('Sandbox not found')
     );
   }
 

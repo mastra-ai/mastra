@@ -31,16 +31,16 @@ const agent = new Agent({
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | auto-generated | Unique identifier for the sandbox instance |
-| `image` | `string` | `'blaxel/py-app:latest'` | Docker image to use |
-| `memory` | `number` | `4096` | Memory allocation in MB |
-| `timeout` | `string` | `'5m'` | Sandbox TTL as a duration string (e.g. `'5m'`, `'1h'`) |
-| `env` | `Record<string, string>` | — | Environment variables to set in the sandbox |
-| `labels` | `Record<string, string>` | — | Custom labels for the sandbox |
-| `runtimes` | `SandboxRuntime[]` | `['node', 'python', 'bash']` | Supported runtimes |
-| `ports` | `Array<{ name?, target, protocol? }>` | — | Ports to expose from the sandbox |
+| Option     | Type                                  | Default                      | Description                                            |
+| ---------- | ------------------------------------- | ---------------------------- | ------------------------------------------------------ |
+| `id`       | `string`                              | auto-generated               | Unique identifier for the sandbox instance             |
+| `image`    | `string`                              | `'blaxel/py-app:latest'`     | Docker image to use                                    |
+| `memory`   | `number`                              | `4096`                       | Memory allocation in MB                                |
+| `timeout`  | `string`                              | `'5m'`                       | Sandbox TTL as a duration string (e.g. `'5m'`, `'1h'`) |
+| `env`      | `Record<string, string>`              | —                            | Environment variables to set in the sandbox            |
+| `labels`   | `Record<string, string>`              | —                            | Custom labels for the sandbox                          |
+| `runtimes` | `SandboxRuntime[]`                    | `['node', 'python', 'bash']` | Supported runtimes                                     |
+| `ports`    | `Array<{ name?, target, protocol? }>` | —                            | Ports to expose from the sandbox                       |
 
 ### Mounting Cloud Storage
 

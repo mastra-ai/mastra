@@ -352,8 +352,7 @@ describe.skipIf(!hasBlaxelCredentials || !hasGCSCredentials)('BlaxelSandbox GCS 
 
     // Verify the FUSE mount was created
     const mountsResult = await sandbox.executeCommand('mount');
-    const hasFuseMount =
-      mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
+    const hasFuseMount = mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
     expect(hasFuseMount).toBe(true);
   }, 180000);
 

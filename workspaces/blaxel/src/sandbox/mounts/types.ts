@@ -28,14 +28,6 @@ export interface MountContext {
 }
 
 /**
- * Result of a mount operation.
- */
-export interface MountOperationResult {
-  success: boolean;
-  error?: string;
-}
-
-/**
  * Validate a bucket name before interpolating into shell commands.
  * Covers S3, GCS, and S3-compatible (R2, MinIO) naming rules.
  */

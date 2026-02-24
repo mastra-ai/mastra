@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateBucketName, validateEndpoint, runCommand } from './types';
 import type { MountContext } from './types';
 
@@ -45,9 +46,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
     logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
-    logger.info(
-      `${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`,
-    );
+    logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
 
     const updateResult = await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
     if (updateResult.exitCode !== 0) {
@@ -135,7 +134,8 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
-  const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+  const quotedMountPath = shellQuote(mountPath);
+  const mountCmd = `s3fs ${config.bucket} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
