@@ -942,6 +942,16 @@ describe('LocalSandbox', () => {
       await expect(mountSandbox.mount(mockFs as any, '/tmp/bad path')).rejects.toThrow('Invalid mount path');
     });
 
+    it('should reject mount paths with path traversal segments', async () => {
+      const mockFs = makeMockFs();
+
+      await expect(mountSandbox.mount(mockFs as any, '/data/../etc')).rejects.toThrow(
+        'Path segments cannot be "." or ".."',
+      );
+      await expect(mountSandbox.mount(mockFs as any, '/./data')).rejects.toThrow('Path segments cannot be "." or ".."');
+      await expect(mountSandbox.mount(mockFs as any, '/..')).rejects.toThrow('Path segments cannot be "." or ".."');
+    });
+
     it('should return error for unsupported mount type', async () => {
       vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
 
@@ -1104,6 +1114,45 @@ describe('LocalSandbox', () => {
         expect(mountS3Spy).not.toHaveBeenCalled();
       } finally {
         await fs.unlink(path.join(markerDir, markerFilename)).catch(() => {});
+      }
+    });
+
+    it('should detect existing symlink mounts (local) with matching config', async () => {
+      vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
+
+      const mountPath = '/local-data';
+      const hostPath = path.join(mountDir, 'local-data');
+      const basePath = path.join(mountDir, 'source-dir');
+      const config = { type: 'local' as const, basePath };
+
+      // Create source directory and symlink (simulating a previous mount)
+      await fs.mkdir(basePath, { recursive: true });
+      await fs.writeFile(path.join(basePath, 'test.txt'), 'hello');
+      await fs.symlink(basePath, hostPath);
+
+      // Write a matching marker file
+      const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
+      const configHash = mountSandbox.mounts.computeConfigHash(config);
+      const markerDir = '/tmp/.mastra-mounts';
+      await fs.mkdir(markerDir, { recursive: true });
+      await fs.writeFile(path.join(markerDir, markerFilename), `${hostPath}|${configHash}`);
+
+      try {
+        const result = await mountSandbox.mount(
+          makeMockFs({
+            id: 'local-test',
+            provider: 'local',
+            getMountConfig: () => config,
+          }) as any,
+          mountPath,
+        );
+        expect(result.success).toBe(true);
+        // Symlink should still point to the source
+        const target = await fs.readlink(hostPath);
+        expect(target).toBe(basePath);
+      } finally {
+        await fs.unlink(path.join(markerDir, markerFilename)).catch(() => {});
+        await fs.unlink(hostPath).catch(() => {});
       }
     });
   });

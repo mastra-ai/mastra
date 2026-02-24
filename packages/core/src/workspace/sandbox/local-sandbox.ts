@@ -50,6 +50,10 @@ function validateMountPath(mountPath: string): void {
       `Invalid mount path: ${mountPath}. Must be an absolute path with alphanumeric, dash, dot, underscore, or slash characters only.`,
     );
   }
+  const segments = mountPath.split('/').filter(Boolean);
+  if (segments.some(seg => seg === '.' || seg === '..')) {
+    throw new Error(`Invalid mount path: ${mountPath}. Path segments cannot be "." or "..".`);
+  }
 }
 
 // =============================================================================
@@ -678,6 +682,26 @@ export class LocalSandbox extends MastraSandbox {
     const mounted = await isMountPoint(hostPath, mountCtx);
 
     if (!mounted) {
+      // Local mounts are symlinks, not FUSE mount points — check separately
+      try {
+        const stats = await fs.lstat(hostPath);
+        if (stats.isSymbolicLink() && newConfig.type === 'local') {
+          // Symlink exists — validate via marker file
+          const filename = this.mounts.markerFilename(hostPath);
+          const markerPath = `/tmp/.mastra-mounts/${filename}`;
+          const content = await fs.readFile(markerPath, 'utf-8');
+          const parsed = this.mounts.parseMarkerContent(content.trim());
+          if (parsed) {
+            const newConfigHash = this.mounts.computeConfigHash(newConfig);
+            if (parsed.path === hostPath && parsed.configHash === newConfigHash) {
+              return 'matching';
+            }
+          }
+          return 'mismatched';
+        }
+      } catch {
+        // Not a symlink or no marker — treat as not mounted
+      }
       return 'not_mounted';
     }
 
