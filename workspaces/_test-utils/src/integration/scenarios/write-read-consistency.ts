@@ -131,7 +131,7 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
         // Use printf instead of echo -n for POSIX portability (macOS sh prints -n literally)
         const writeResult = await workspace.sandbox.executeCommand('sh', [
           '-c',
-          `printf '%s' "${content}" > ${filePath}`,
+          `printf '%s' '${content}' > "${filePath}"`,
         ]);
         expect(writeResult.exitCode).toBe(0);
 

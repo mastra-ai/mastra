@@ -67,7 +67,9 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
     it(
       'uses project-specific tsconfig strict settings',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const { workspace, getTestPath, sandboxPathsAligned } = getContext();
+        if (!sandboxPathsAligned) return; // TS server must see tsconfig on disk
+
         const lsp = workspace.lsp;
         if (!lsp) return;
 

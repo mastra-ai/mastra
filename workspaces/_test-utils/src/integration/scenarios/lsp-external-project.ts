@@ -9,7 +9,7 @@
  * (sandboxPathsAligned === true).
  */
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -20,9 +20,8 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
   describe('LSP External Project Diagnostics', () => {
     let externalDir: string | undefined;
 
-    afterEach(async () => {
+    afterEach(() => {
       if (externalDir) {
-        const { rmSync } = await import('node:fs');
         try {
           rmSync(externalDir, { recursive: true, force: true });
         } catch {

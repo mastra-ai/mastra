@@ -12,6 +12,7 @@
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
+import type { LSPDiagnostic } from '@mastra/core/workspace/lsp';
 import type { TestContext } from './test-context';
 
 export function createLspEslintTests(getContext: () => TestContext): void {
@@ -89,7 +90,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         // Code with both a type error (TS) and a lint error (ESLint no-var)
         const content = 'var x: number = "hello";\n';
 
-        const diagnostics = await (lsp as any).getDiagnosticsMulti(join(testDir, 'multi.ts'), content);
+        const diagnostics: LSPDiagnostic[] = await lsp.getDiagnosticsMulti(join(testDir, 'multi.ts'), content);
 
         // Graceful skip if neither server is available
         if (diagnostics.length === 0) return;
@@ -98,20 +99,15 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         expect(diagnostics.length).toBeGreaterThan(0);
 
         // Check for type error from TS server
-        const hasTypeError = diagnostics.some(
-          (d: any) => d.severity === 'error' && d.message.includes('not assignable'),
-        );
+        const hasTypeError = diagnostics.some(d => d.severity === 'error' && d.message.includes('not assignable'));
 
         // Check for ESLint no-var violation
         const hasLintError = diagnostics.some(
-          (d: any) => d.message.toLowerCase().includes('var') || d.message.includes('no-var'),
+          d => d.message.toLowerCase().includes('var') || d.message.includes('no-var'),
         );
 
         // At minimum the TS type error should be present
-        // ESLint may or may not be available — just verify deduplication doesn't break
-        if (hasTypeError) {
-          expect(hasTypeError).toBe(true);
-        }
+        expect(hasTypeError).toBe(true);
 
         // If both servers reported, verify we get diagnostics from both sources
         if (hasTypeError && hasLintError) {

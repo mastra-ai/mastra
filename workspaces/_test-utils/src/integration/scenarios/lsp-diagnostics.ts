@@ -98,10 +98,11 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         expect(diagnostics.length).toBeGreaterThan(0);
-        const error = diagnostics.find(d => d.severity === 'error')!;
+        const error = diagnostics.find(d => d.severity === 'error');
+        expect(error).toBeDefined();
         // Positions are 1-indexed
-        expect(error.line).toBeGreaterThanOrEqual(1);
-        expect(error.character).toBeGreaterThanOrEqual(1);
+        expect(error!.line).toBeGreaterThanOrEqual(1);
+        expect(error!.character).toBeGreaterThanOrEqual(1);
       },
       getContext().testTimeout,
     );
