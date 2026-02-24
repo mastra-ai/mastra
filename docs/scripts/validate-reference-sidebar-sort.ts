@@ -14,7 +14,7 @@ import path from 'path'
  *   7. Dot-prefixed items are sorted alphabetically (case-insensitive).
  *
  * Usage:
- *   pnpm validate:reference-sidebar         # validate only
+ *   pnpm validate:reference-sidebar        # validate only
  *   pnpm validate:reference-sidebar:fix     # fix in place
  */
 
