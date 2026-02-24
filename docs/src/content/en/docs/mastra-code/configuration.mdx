@@ -105,11 +105,13 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | - | - | - |
 | `PreToolUse` | Before a tool call executes | Yes |
 | `PostToolUse` | After a tool call completes | No |
-| `Stop` | When the agent finishes a response | Yes |
+| `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
 | `UserPromptSubmit` | When the user sends a message | Yes |
 | `SessionStart` | When a session begins | No |
 | `SessionEnd` | When a session ends | No |
 | `Notification` | When the TUI fires a notification | No |
+
+`UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
 ### Hook I/O protocol
 
