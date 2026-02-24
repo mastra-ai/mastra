@@ -108,8 +108,7 @@ export function updateStatusLine(state: TUIState): void {
   const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
   const dirBranchOnly = branch || null;
   // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
-  const dirBranchShort =
-    branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
+  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const isYolo = (state.harness.getState() as any).yolo === true;
