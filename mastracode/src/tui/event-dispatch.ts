@@ -3,6 +3,7 @@
  */
 import type { HarnessEvent, TaskItem } from '@mastra/core/harness';
 
+import { getCurrentGitBranch } from '../utils/project.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -122,6 +123,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
+      // Refresh git branch so TUI status line reflects the current branch
+      const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
+      if (freshBranch) {
+        state.projectInfo.gitBranch = freshBranch;
+      }
       // Restore tasks from thread state
       const threadState = state.harness.getState() as {
         tasks?: TaskItem[];

@@ -33,7 +33,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
+import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 
@@ -208,13 +208,10 @@ export class LocalFilesystem extends MastraFilesystem {
       if (this._isWithinAnyRoot(normalized)) {
         absolutePath = normalized;
       } else {
-        const cleanedPath = inputPath.replace(/^\/+/, '');
-        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+        absolutePath = resolveWorkspacePath(this._basePath, inputPath);
       }
     } else {
-      // Relative path — resolve against basePath
-      const cleanedPath = inputPath.replace(/^\/+/, '');
-      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      absolutePath = resolveWorkspacePath(this._basePath, inputPath);
     }
 
     if (this._contained) {
@@ -224,6 +221,20 @@ export class LocalFilesystem extends MastraFilesystem {
     }
 
     return absolutePath;
+  }
+
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   * Uses the same resolution logic as internal file operations.
+   * Returns `undefined` if the path violates containment.
+   */
+  resolveAbsolutePath(inputPath: string): string | undefined {
+    try {
+      return this.resolvePath(inputPath);
+    } catch {
+      // PermissionError from containment check — path is not resolvable
+      return undefined;
+    }
   }
 
   private toRelativePath(absolutePath: string): string {

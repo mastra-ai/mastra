@@ -10,6 +10,7 @@ import {
 } from '@docusaurus/plugin-content-docs/client'
 import Link from '@docusaurus/Link'
 import { translate } from '@docusaurus/Translate'
+import useIsBrowser from '@docusaurus/useIsBrowser'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import DocSidebarItemLink from '@theme/DocSidebarItem/Link'
 import type { Props } from '@theme/DocSidebarItem/Category'
@@ -45,21 +46,25 @@ function useAutoExpandActiveCategory({
 
 /**
  * When a collapsible category has no link, we still link it to its first child
- * as a fallback. This ensures consistent rendering between SSR and client,
- * and allows navigation inside the category even when JS fails to load.
+ * during SSR as a temporary fallback. This allows to be able to navigate inside
+ * the category even when JS fails to load, is delayed or simply disabled
+ * React hydration becomes an optional progressive enhancement
  * see https://github.com/facebookincubator/infima/issues/36#issuecomment-772543188
  * see https://github.com/facebook/docusaurus/issues/3030
  */
 function useCategoryHrefWithSSRFallback(item: Props['item']): string | undefined {
+  const isBrowser = useIsBrowser()
   return useMemo(() => {
     if (item.href && !item.linkUnlisted) {
       return item.href
     }
-    if (!item.collapsible) {
+    // In these cases, it's not necessary to render a fallback
+    // We skip the "findFirstCategoryLink" computation
+    if (isBrowser || !item.collapsible) {
       return undefined
     }
     return findFirstSidebarItemLink(item)
-  }, [item])
+  }, [item, isBrowser])
 }
 
 function CollapseButton({
