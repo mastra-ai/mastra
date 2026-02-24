@@ -28,6 +28,20 @@ import type { BlaxelMountConfig, BlaxelS3MountConfig, BlaxelGCSMountConfig, Moun
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
 
+/** Convert an unknown error to a readable string. */
+function errorToString(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string') {
+    return (error as any).message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function validateMountPath(mountPath: string): void {
   if (!SAFE_MOUNT_PATH.test(mountPath)) {
     throw new Error(
@@ -316,7 +330,7 @@ export class BlaxelSandbox extends MastraSandbox {
         `${LOG_PREFIX} Error mounting "${filesystem.provider}" (${filesystem.id}) at "${mountPath}":`,
         error,
       );
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
 
       // Clean up the directory we created since mount failed
       try {
@@ -326,7 +340,7 @@ export class BlaxelSandbox extends MastraSandbox {
         // Ignore cleanup errors
       }
 
-      return { success: false, mountPath, error: String(error) };
+      return { success: false, mountPath, error: errorToString(error) };
     }
 
     // Mark as mounted
@@ -603,22 +617,31 @@ export class BlaxelSandbox extends MastraSandbox {
     // Create a new sandbox
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox: ${sandboxName}`);
 
-    this._sandbox = await SandboxInstance.create({
-      name: sandboxName,
-      image: this.image,
-      memory: this.memory,
-      ...(this.timeout && { ttl: this.timeout }),
-      envs: Object.entries(this.env).map(([name, value]) => ({ name, value })),
-      labels: {
-        ...this.labels,
-        'mastra-sandbox-id': this.id,
-      },
-      ports: this.ports.map(p => ({
-        name: p.name,
-        target: p.target,
-        protocol: p.protocol ?? 'HTTP',
-      })),
-    });
+    try {
+      this._sandbox = await SandboxInstance.create({
+        name: sandboxName,
+        image: this.image,
+        memory: this.memory,
+        ...(this.timeout && { ttl: this.timeout }),
+        envs: Object.entries(this.env).map(([name, value]) => ({ name, value })),
+        labels: {
+          ...this.labels,
+          'mastra-sandbox-id': this.id,
+        },
+        ports: this.ports.map(p => ({
+          name: p.name,
+          target: p.target,
+          protocol: p.protocol ?? 'HTTP',
+        })),
+      });
+    } catch (createError) {
+      // Blaxel API may throw plain objects instead of Error instances.
+      // Wrap them so downstream code (instanceof Error checks) works correctly.
+      if (createError instanceof Error) {
+        throw createError;
+      }
+      throw new Error(errorToString(createError));
+    }
 
     this._createdAt = new Date();
     this.logger.debug(`${LOG_PREFIX} Sandbox ready: ${sandboxName} (status: ${this._sandbox.status})`);
@@ -775,7 +798,7 @@ export class BlaxelSandbox extends MastraSandbox {
    */
   private isSandboxDeadError(error: unknown): boolean {
     if (!error) return false;
-    const errorStr = String(error);
+    const errorStr = errorToString(error);
     return (
       errorStr.includes('TERMINATED') ||
       errorStr.includes('sandbox was not found') ||
@@ -879,7 +902,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      const stderr = error instanceof Error ? error.message : String(error);
+      const stderr = errorToString(error);
 
       this.logger.debug(`${LOG_PREFIX} Execution error (${executionTimeMs}ms): ${stderr}`);
 
