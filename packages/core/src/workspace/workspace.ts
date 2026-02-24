@@ -508,6 +508,26 @@ export class Workspace<
   }
 
   /**
+   * Update the per-tool configuration for this workspace.
+   * Takes effect on the next `createWorkspaceTools()` call.
+   *
+   * @example
+   * ```typescript
+   * // Disable write tools for read-only mode
+   * workspace.setToolsConfig({
+   *   mastra_workspace_write_file: { enabled: false },
+   *   mastra_workspace_edit_file: { enabled: false },
+   * });
+   *
+   * // Re-enable all tools
+   * workspace.setToolsConfig(undefined);
+   * ```
+   */
+  setToolsConfig(config: WorkspaceToolsConfig | undefined): void {
+    (this._config as { tools?: WorkspaceToolsConfig }).tools = config;
+  }
+
+  /**
    * Access skills stored in this workspace.
    * Skills are SKILL.md files discovered from the configured skillPaths.
    *
