@@ -597,11 +597,29 @@ describe('DaytonaSandbox', () => {
       expect(instructions).toContain('Cloud sandbox');
     });
 
+    it('includes default working directory', () => {
+      const sandbox = new DaytonaSandbox();
+      expect(sandbox.getInstructions()).toContain('/home/daytona');
+    });
+
+    it('includes command timeout in seconds', () => {
+      const sandbox = new DaytonaSandbox({ timeout: 60_000 });
+      expect(sandbox.getInstructions()).toContain('60s');
+    });
+
     it('includes language info for non-typescript', () => {
       const sandbox = new DaytonaSandbox({ language: 'python' });
-      const instructions = sandbox.getInstructions();
+      expect(sandbox.getInstructions()).toContain('python');
+    });
 
-      expect(instructions).toContain('python');
+    it('includes user when set', () => {
+      const sandbox = new DaytonaSandbox({ user: 'ubuntu' });
+      expect(sandbox.getInstructions()).toContain('ubuntu');
+    });
+
+    it('does not include user when not set', () => {
+      const sandbox = new DaytonaSandbox();
+      expect(sandbox.getInstructions()).not.toContain('Running as user');
     });
 
     it('includes volume count when volumes attached', () => {
@@ -611,9 +629,17 @@ describe('DaytonaSandbox', () => {
           { volumeId: 'v2', mountPath: '/b' },
         ],
       });
-      const instructions = sandbox.getInstructions();
+      expect(sandbox.getInstructions()).toContain('2 volume(s)');
+    });
 
-      expect(instructions).toContain('2 volume(s)');
+    it('includes network blocked notice when networkBlockAll is set', () => {
+      const sandbox = new DaytonaSandbox({ networkBlockAll: true });
+      expect(sandbox.getInstructions()).toContain('Network access is blocked');
+    });
+
+    it('does not include network notice when networkBlockAll is not set', () => {
+      const sandbox = new DaytonaSandbox();
+      expect(sandbox.getInstructions()).not.toContain('Network access is blocked');
     });
   });
 

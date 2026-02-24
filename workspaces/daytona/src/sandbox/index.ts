@@ -372,10 +372,27 @@ export class DaytonaSandbox extends MastraSandbox {
    * Used by agents to understand the execution environment.
    */
   getInstructions(): string {
+    const parts: string[] = [];
+
     const langInfo = this.language !== 'typescript' ? ` (${this.language} runtime)` : '';
-    const volumeCount = this.volumeConfigs.length;
-    const volumeInfo = volumeCount > 0 ? ` ${volumeCount} volume(s) attached.` : '';
-    return `Cloud sandbox with isolated execution environment${langInfo}.${volumeInfo}`;
+    parts.push(`Cloud sandbox with isolated execution environment${langInfo}.`);
+
+    parts.push(`Default working directory: /home/daytona.`);
+    parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
+
+    if (this.sandboxUser) {
+      parts.push(`Running as user: ${this.sandboxUser}.`);
+    }
+
+    if (this.volumeConfigs.length > 0) {
+      parts.push(`${this.volumeConfigs.length} volume(s) attached.`);
+    }
+
+    if (this.networkBlockAll) {
+      parts.push(`Network access is blocked.`);
+    }
+
+    return parts.join(' ');
   }
 
   // ---------------------------------------------------------------------------
