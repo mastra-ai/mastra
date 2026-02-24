@@ -280,6 +280,19 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
   // ---------------------------------------------------------------------------
 
   /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   *
+   * Used by LSP and other features that need the real filesystem location
+   * of a file. The resolution depends on the filesystem's containment mode:
+   * - `contained: true` — `/file.ts` resolves to `basePath/file.ts`
+   * - `contained: false` — `/file.ts` stays as `/file.ts` (real host path)
+   *
+   * Returns `undefined` if the filesystem doesn't support disk-path resolution
+   * (e.g., remote/in-memory filesystems).
+   */
+  resolveAbsolutePath?(path: string): string | undefined;
+
+  /**
    * Check if a path exists.
    */
   exists(path: string): Promise<boolean>;

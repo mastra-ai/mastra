@@ -1526,7 +1526,9 @@ export class Agent<
     this.model = this.model.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
-      return aIndex - bIndex;
+      const aPos = aIndex === -1 ? Infinity : aIndex;
+      const bPos = bIndex === -1 ? Infinity : bIndex;
+      return aPos - bPos;
     });
     this.logger.debug(`[Agents:${this.name}] Models reordered`);
   }

@@ -1,6 +1,6 @@
 {
   "name": "mastra-docs",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "repository": "https://github.com/mastra-ai/mastra",
   "homepage": "https://mastra.ai",
@@ -15,6 +15,9 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "validate:frontmatter": "tsx scripts/validate-frontmatter.ts",
+    "validate:reference-sidebar": "tsx scripts/validate-reference-sidebar-sort.ts",
+    "validate:reference-sidebar:fix": "tsx scripts/validate-reference-sidebar-sort.ts --fix",
+    "validate:sidebar-docs": "tsx scripts/validate-sidebar-docs.ts",
     "format": "prettier --write .",
     "vale": "./node_modules/@vvago/vale/bin/vale",
     "vale:sync": "./node_modules/@vvago/vale/bin/vale sync",

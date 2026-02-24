@@ -15,6 +15,38 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** Storage backend type. */
+export type StorageBackend = 'libsql' | 'pg';
+
+/** LibSQL-specific storage settings. */
+export interface LibSQLStorageSettings {
+  url?: string;
+  authToken?: string;
+}
+
+/** PostgreSQL-specific storage settings. */
+export interface PgStorageSettings {
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  schemaName?: string;
+  disableInit?: boolean;
+  skipDefaultIndexes?: boolean;
+}
+
+/** Storage configuration persisted in global settings. */
+export interface StorageSettings {
+  /** Which backend to use. Default: 'libsql'. */
+  backend: StorageBackend;
+  /** LibSQL-specific config (used when backend is 'libsql'). */
+  libsql: LibSQLStorageSettings;
+  /** PostgreSQL-specific config (used when backend is 'pg'). */
+  pg: PgStorageSettings;
+}
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -52,11 +84,19 @@ export interface GlobalSettings {
   preferences: {
     yolo: boolean | null;
   };
+  // Storage backend configuration
+  storage: StorageSettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
 }
+
+export const STORAGE_DEFAULTS: StorageSettings = {
+  backend: 'libsql',
+  libsql: {},
+  pg: {},
+};
 
 const DEFAULTS: GlobalSettings = {
   onboarding: {
@@ -76,6 +116,7 @@ const DEFAULTS: GlobalSettings = {
   preferences: {
     yolo: null,
   },
+  storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   modelUseCounts: {},
 };
@@ -113,6 +154,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: { ...DEFAULTS.models, ...raw.models },
         preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+        storage: {
+          ...STORAGE_DEFAULTS,
+          ...raw.storage,
+          libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
+          pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
+        },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       };
@@ -174,6 +221,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
       preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+      storage: {
+        ...STORAGE_DEFAULTS,
+        ...raw.storage,
+        libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
+        pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
+      },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
     };
