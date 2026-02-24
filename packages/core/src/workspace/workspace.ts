@@ -524,7 +524,7 @@ export class Workspace<
    * ```
    */
   setToolsConfig(config: WorkspaceToolsConfig | undefined): void {
-    (this._config as { tools?: WorkspaceToolsConfig }).tools = config;
+    this._config.tools = config;
   }
 
   /**
