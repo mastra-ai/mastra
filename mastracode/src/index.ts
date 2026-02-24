@@ -35,7 +35,7 @@ import {
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
+import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
@@ -80,15 +80,6 @@ export function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
-
-  console.info(`Project: ${project.name}`);
-  console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
-  if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
-  if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
-
-  const userId = getUserId(project.rootPath);
-  console.info(`User: ${userId}`);
-  console.info('--------------------------------');
 
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath);

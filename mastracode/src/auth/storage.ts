@@ -22,7 +22,7 @@ import type {
  */
 export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   anthropic: 'anthropic/claude-opus-4-6',
-  'openai-codex': 'openai/gpt-5.3-codex',
+  'openai-codex': 'openai/gpt-5.2-codex',
 };
 
 // Provider registry
