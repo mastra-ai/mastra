@@ -168,6 +168,16 @@ export class CompositeFilesystem<
     return resolved?.mountPath;
   }
 
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   * Strips the mount prefix and delegates to the underlying filesystem.
+   */
+  resolveAbsolutePath(path: string): string | undefined {
+    const r = this.resolveMount(path);
+    if (!r) return undefined;
+    return r.fs.resolveAbsolutePath?.(r.fsPath);
+  }
+
   private normalizePath(path: string): string {
     if (!path || path === '/') return '/';
     // posix.normalize resolves dot segments (./foo → foo, a/../b → b)
