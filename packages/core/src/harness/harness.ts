@@ -560,6 +560,43 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
+  async cloneThread(args?: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  }): Promise<HarnessThread> {
+    const sourceId = args?.sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const result = await this.config.memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: args?.resourceId ?? this.resourceId,
+      title: args?.title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Switch to the cloned thread
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
+  }
+
   async switchThread(threadId: string): Promise<void> {
     this.abort();
 

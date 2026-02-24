@@ -20,6 +20,8 @@ export interface ThreadSelectorOptions {
   currentResourceId?: string;
   onSelect: (thread: HarnessThread) => void;
   onCancel: () => void;
+  /** Called when user presses 'c' to clone the selected thread */
+  onClone?: (thread: HarnessThread) => void;
   /** Function to fetch message preview for a thread */
   getMessagePreview?: (threadId: string) => Promise<string | null>;
 }
@@ -38,6 +40,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private currentResourceId: string | undefined;
   private onSelectCallback: (thread: HarnessThread) => void;
   private onCancelCallback: () => void;
+  private onCloneCallback: ((thread: HarnessThread) => void) | undefined;
   private tui: TUI;
   private getMessagePreview: ((threadId: string) => Promise<string | null>) | undefined;
   private messagePreviews: Map<string, string> = new Map();
@@ -61,6 +64,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.currentThreadId = options.currentThreadId;
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
+    this.onCloneCallback = options.onClone;
     this.getMessagePreview = options.getMessagePreview;
     this.filteredThreads = this.allThreads;
 
@@ -89,7 +93,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private buildUI(): void {
     this.addChild(new Text(bold(fg('accent', 'Select Thread')), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
+    const cloneHint = this.onCloneCallback ? ' • c clone' : '';
+    this.addChild(new Text(fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0));
     this.addChild(new Spacer(1));
 
     this.searchInput = new Input();
@@ -226,6 +231,11 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       }
     } else if (kb.matches(keyData, 'selectCancel')) {
       this.onCancelCallback();
+    } else if (keyData === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
+      const selected = this.filteredThreads[this.selectedIndex];
+      if (selected) {
+        this.onCloneCallback(selected);
+      }
     } else {
       this.searchInput.handleInput(keyData);
       this.filterThreads(this.searchInput.getValue());

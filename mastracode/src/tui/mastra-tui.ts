@@ -154,6 +154,7 @@ export class MastraTUI {
   private pendingLockConflict: {
     threadTitle: string;
     ownerPid: number;
+    threadId?: string;
   } | null = null;
   private lastAskUserComponent?: IToolExecutionComponent; // Track the most recent ask_user tool for inline question placement
   private lastClearedText = ''; // Saved editor text for Ctrl+Z undo
@@ -565,7 +566,7 @@ export class MastraTUI {
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.pendingLockConflict) {
-      this.showThreadLockPrompt(this.pendingLockConflict.threadTitle, this.pendingLockConflict.ownerPid);
+      this.showThreadLockPrompt(this.pendingLockConflict.threadTitle, this.pendingLockConflict.ownerPid, this.pendingLockConflict.threadId);
       this.pendingLockConflict = null;
     }
   }
@@ -615,6 +616,7 @@ export class MastraTUI {
         this.pendingLockConflict = {
           threadTitle: mostRecent.title || mostRecent.id,
           ownerPid: error.ownerPid,
+          threadId: mostRecent.id,
         };
         return;
       }
@@ -1016,6 +1018,7 @@ ${instructions}`,
   private setupAutocomplete(): void {
     const slashCommands: SlashCommand[] = [
       { name: 'new', description: 'Start a new thread' },
+      { name: 'clone', description: 'Clone current thread (keeps context + memory)' },
       { name: 'threads', description: 'Switch between threads' },
       { name: 'models', description: 'Configure model (global/thread/mode)' },
       { name: 'subagents', description: 'Configure subagent model defaults' },
@@ -2656,6 +2659,49 @@ ${instructions}`,
   // Thread Selector
   // ===========================================================================
 
+  private async cloneCurrentThread(): Promise<void> {
+    const currentThreadId = this.harness.getCurrentThreadId();
+    if (!currentThreadId && !this.pendingNewThread) {
+      this.showInfo('No active thread to clone. Send a message first.');
+      return;
+    }
+
+    if (this.pendingNewThread) {
+      this.showInfo('No active thread to clone. Send a message first.');
+      return;
+    }
+
+    try {
+      const clonedThread = await this.harness.cloneThread({
+        sourceThreadId: currentThreadId!,
+      });
+
+      // Reset UI state for the new thread
+      this.pendingNewThread = false;
+      this.chatContainer.clear();
+      this.pendingTools.clear();
+      this.toolInputBuffers.clear();
+      this.allToolComponents = [];
+      this.modifiedFiles.clear();
+      this.pendingFileTools.clear();
+      if (this.todoProgress) {
+        this.todoProgress.updateTodos([]);
+      }
+      this.previousTodos = [];
+      this.todoWriteInsertIndex = -1;
+      this.resetStatusLineState();
+
+      // Render the existing messages from the cloned thread
+      await this.renderExistingMessages();
+      this.updateStatusLine();
+
+      this.showInfo(`Cloned thread → ${clonedThread.title || clonedThread.id}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.showError(`Failed to clone thread: ${msg}`);
+    }
+  }
+
   private async showThreadSelector(): Promise<void> {
     const threads = await this.harness.listThreads({ allResources: true });
     const currentId = this.pendingNewThread ? null : this.harness.getCurrentThreadId();
@@ -2696,7 +2742,7 @@ ${instructions}`,
             await this.harness.switchThread(thread.id);
           } catch (error) {
             if (error instanceof ThreadLockError) {
-              this.showThreadLockPrompt(thread.title || thread.id, error.ownerPid);
+              this.showThreadLockPrompt(thread.title || thread.id, error.ownerPid, thread.id);
               resolve();
               return;
             }
@@ -2713,6 +2759,36 @@ ${instructions}`,
           this.updateStatusLine();
 
           this.showInfo(`Switched to: ${thread.title || thread.id}`);
+          resolve();
+        },
+        onClone: async thread => {
+          this.ui.hideOverlay();
+          try {
+            const clonedThread = await this.harness.cloneThread({
+              sourceThreadId: thread.id,
+            });
+            this.pendingNewThread = false;
+
+            this.chatContainer.clear();
+            this.allToolComponents = [];
+            this.pendingTools.clear();
+            this.toolInputBuffers.clear();
+            this.modifiedFiles.clear();
+            this.pendingFileTools.clear();
+            if (this.todoProgress) {
+              this.todoProgress.updateTodos([]);
+            }
+            this.previousTodos = [];
+            this.todoWriteInsertIndex = -1;
+            this.resetStatusLineState();
+            await this.renderExistingMessages();
+            this.updateStatusLine();
+
+            this.showInfo(`Cloned thread "${thread.title || thread.id}" → ${clonedThread.title || clonedThread.id}`);
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            this.showError(`Failed to clone: ${msg}`);
+          }
           resolve();
         },
         onCancel: () => {
@@ -2786,18 +2862,52 @@ ${instructions}`,
    * Show an inline prompt when a thread is locked by another process.
    * User can create a new thread (y) or exit (n).
    */
-  private showThreadLockPrompt(threadTitle: string, ownerPid: number): void {
+  private showThreadLockPrompt(threadTitle: string, ownerPid: number, lockedThreadId?: string): void {
+    const options: Array<{ label: string; description?: string }> = [
+      { label: 'New thread', description: 'Start a new empty thread' },
+    ];
+    if (lockedThreadId) {
+      options.push({ label: 'Clone thread', description: 'Clone with full context + memory' });
+    }
+    options.push({ label: 'Exit', description: 'Quit' });
+
     const questionComponent = new AskQuestionInlineComponent(
       {
-        question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. Create a new thread?`,
-        options: [
-          { label: 'Yes', description: 'Start a new thread' },
-          { label: 'No', description: 'Exit' },
-        ],
-        formatResult: answer => (answer === 'Yes' ? 'Thread created' : 'Exiting.'),
+        question: `Thread "${threadTitle}" is locked by pid ${ownerPid}.`,
+        options,
+        formatResult: answer => {
+          if (answer === 'Clone thread') return 'Cloning thread…';
+          if (answer === 'New thread') return 'New thread';
+          return 'Exiting.';
+        },
         onSubmit: async answer => {
           this.activeInlineQuestion = undefined;
-          if (answer.toLowerCase().startsWith('y')) {
+          if (answer === 'Clone thread' && lockedThreadId) {
+            try {
+              const clonedThread = await this.harness.cloneThread({
+                sourceThreadId: lockedThreadId,
+              });
+              this.pendingNewThread = false;
+              this.chatContainer.clear();
+              this.pendingTools.clear();
+              this.toolInputBuffers.clear();
+              this.allToolComponents = [];
+              this.modifiedFiles.clear();
+              this.pendingFileTools.clear();
+              if (this.todoProgress) {
+                this.todoProgress.updateTodos([]);
+              }
+              this.previousTodos = [];
+              this.todoWriteInsertIndex = -1;
+              this.resetStatusLineState();
+              await this.renderExistingMessages();
+              this.updateStatusLine();
+              this.showInfo(`Cloned thread → ${clonedThread.title || clonedThread.id}`);
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              this.showError(`Failed to clone thread: ${msg}`);
+            }
+          } else if (answer === 'New thread') {
             // pendingNewThread is already true — thread will be
             // created lazily on first message
           } else {
@@ -3697,6 +3807,11 @@ ${instructions}`,
         this.resetStatusLineState();
         this.ui.requestRender();
         this.showInfo('Ready for new conversation');
+        return true;
+      }
+
+      case 'clone': {
+        await this.cloneCurrentThread();
         return true;
       }
 

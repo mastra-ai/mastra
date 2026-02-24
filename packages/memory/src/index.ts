@@ -44,6 +44,9 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  BufferedObservationChunk,
+  CreateObservationalMemoryInput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -1354,13 +1357,15 @@ Notes:
       await this.embedClonedMessages(result.clonedMessages, config);
     }
 
+    // Fetch source thread once for working memory and OM cloning
+    const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
+    const sourceResourceId = sourceThread?.resourceId;
+
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
     // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'resource';
-      const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
-      const sourceResourceId = sourceThread?.resourceId;
       const shouldCopy =
         scope === 'thread' || (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId);
 
@@ -1381,7 +1386,144 @@ Notes:
       }
     }
 
+    // Clone observational memory if supported.
+    // Thread-scoped: always clone since each thread has its own OM.
+    // Resource-scoped: only clone when the resourceId changes (same resourceId shares OM naturally).
+    if (memoryStore.supportsObservationalMemory && sourceResourceId) {
+      await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
+    }
+
     return result;
+  }
+
+  /**
+   * Clone observational memory records when cloning a thread.
+   * Thread-scoped: always cloned to the new thread.
+   * Resource-scoped: cloned only when the resourceId changes (same resourceId shares OM naturally).
+   * All stored message/thread IDs are remapped to the cloned IDs.
+   */
+  private async cloneObservationalMemory(
+    memoryStore: MemoryStorage,
+    sourceThreadId: string,
+    sourceResourceId: string,
+    result: StorageCloneThreadOutput,
+  ): Promise<void> {
+    // Look up OM for thread-scoped first (threadId + resourceId), then resource-scoped (null + resourceId)
+    let sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);
+    if (!sourceOM) {
+      sourceOM = await memoryStore.getObservationalMemory(null, sourceResourceId);
+    }
+    if (!sourceOM) return;
+
+    const clonedThreadId = result.thread.id;
+    const clonedResourceId = result.thread.resourceId;
+    const resourceChanged = clonedResourceId !== sourceResourceId;
+
+    // Resource-scoped OM with same resourceId: shared naturally, no clone needed
+    if (sourceOM.scope === 'resource' && !resourceChanged) return;
+
+    // Build source → clone message ID map
+    const messageIdMap = result.messageIdMap ?? {};
+
+    // Also fetch source OM history to clone all generations
+    const history = await memoryStore.getObservationalMemoryHistory(
+      sourceOM.scope === 'thread' ? sourceThreadId : null,
+      sourceResourceId,
+    );
+    // history is newest-first; include the current record if not in history
+    const allRecords = history.length > 0 ? history : [sourceOM];
+
+    const now = new Date();
+    const hasher = await this.hasher;
+
+    for (const record of allRecords) {
+      const cloned = this.remapObservationalMemoryRecord(record, {
+        newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
+        newResourceId: clonedResourceId,
+        messageIdMap,
+        sourceThreadId: resourceChanged ? sourceThreadId : undefined,
+        clonedThreadId: resourceChanged ? clonedThreadId : undefined,
+        hasher: resourceChanged ? hasher : undefined,
+      });
+      cloned.id = crypto.randomUUID();
+      cloned.createdAt = now;
+      cloned.updatedAt = now;
+      await memoryStore.insertObservationalMemoryRecord(cloned);
+    }
+  }
+
+  /**
+   * Create a remapped copy of an OM record with new thread/message IDs.
+   */
+  private remapObservationalMemoryRecord(
+    record: ObservationalMemoryRecord,
+    opts: {
+      newThreadId: string | null;
+      newResourceId: string;
+      messageIdMap: Record<string, string>;
+      sourceThreadId?: string;
+      clonedThreadId?: string;
+      hasher?: Awaited<ReturnType<typeof xxhash>>;
+    },
+  ): ObservationalMemoryRecord {
+    const { newThreadId, newResourceId, messageIdMap, sourceThreadId, clonedThreadId, hasher } = opts;
+    const cloned: ObservationalMemoryRecord = { ...record };
+
+    cloned.threadId = newThreadId;
+    cloned.resourceId = newResourceId;
+
+    // Remap observedMessageIds
+    if (cloned.observedMessageIds) {
+      cloned.observedMessageIds = cloned.observedMessageIds.map(id => messageIdMap[id] ?? id);
+    }
+
+    // Remap deprecated bufferedMessageIds
+    if (cloned.bufferedMessageIds) {
+      cloned.bufferedMessageIds = cloned.bufferedMessageIds.map(id => messageIdMap[id] ?? id);
+    }
+
+    // Remap bufferedObservationChunks
+    if (cloned.bufferedObservationChunks) {
+      cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
+        (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
+          ...chunk,
+          messageIds: chunk.messageIds?.map((id: string) => messageIdMap[id] ?? id),
+        }),
+      );
+    }
+
+    // For resource-scoped OM cloned to a new resource, remap thread tags in text fields
+    if (sourceThreadId && clonedThreadId && hasher) {
+      const sourceObscured = hasher.h32ToString(sourceThreadId);
+      const clonedObscured = hasher.h32ToString(clonedThreadId);
+
+      if (sourceObscured !== clonedObscured) {
+        const replaceThreadTags = (text: string | undefined): string | undefined => {
+          if (!text) return text;
+          return text.replaceAll(`<thread id="${sourceObscured}">`, `<thread id="${clonedObscured}">`);
+        };
+
+        cloned.activeObservations = replaceThreadTags(cloned.activeObservations) ?? '';
+        cloned.bufferedReflection = replaceThreadTags(cloned.bufferedReflection);
+
+        if (cloned.bufferedObservationChunks) {
+          cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
+            (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
+              ...chunk,
+              observations: replaceThreadTags(chunk.observations) ?? chunk.observations,
+            }),
+          );
+        }
+      }
+    }
+
+    // Reset transient state flags
+    cloned.isObserving = false;
+    cloned.isReflecting = false;
+    cloned.isBufferingObservation = false;
+    cloned.isBufferingReflection = false;
+
+    return cloned;
   }
 
   /**
