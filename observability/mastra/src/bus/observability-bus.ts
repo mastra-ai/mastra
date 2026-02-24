@@ -112,17 +112,22 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
         // TracingEvent uses TracingEventType enum (snake_case values)
         case TracingEventType.SPAN_STARTED:
         case TracingEventType.SPAN_UPDATED:
-        case TracingEventType.SPAN_ENDED:
-          if (exporter.onTracingEvent) {
-            const result = exporter.onTracingEvent(event as TracingEvent);
-            // Handle async handlers - catch errors without blocking
-            if (result && typeof (result as Promise<void>).catch === 'function') {
-              (result as Promise<void>).catch(err => {
-                console.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
-              });
-            }
+        case TracingEventType.SPAN_ENDED: {
+          // Prefer onTracingEvent if available, fall back to exportTracingEvent.
+          // This ensures exporters that only implement the required exportTracingEvent
+          // (without the optional onTracingEvent handler) still receive tracing events.
+          const handler = exporter.onTracingEvent
+            ? exporter.onTracingEvent.bind(exporter)
+            : exporter.exportTracingEvent.bind(exporter);
+          const result = handler(event as TracingEvent);
+          // Handle async handlers - catch errors without blocking
+          if (result && typeof (result as Promise<void>).catch === 'function') {
+            (result as Promise<void>).catch(err => {
+              console.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
+            });
           }
           break;
+        }
 
         case 'log':
           if (exporter.onLogEvent) {

@@ -427,11 +427,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Emit any observability event through the bus.
-   * The bus routes the event to the appropriate handler on each registered exporter.
-   *
-   * Use this for non-tracing events (logs, metrics, scores, feedback).
-   * Tracing events continue to flow through emitSpanStarted/emitSpanEnded/emitSpanUpdated
-   * which call exportTracingEvent for backward compat with bridges.
+   * The bus routes the event to the appropriate handler on each registered exporter,
+   * and for tracing events triggers auto-extracted metrics.
    */
   protected emitObservabilityEvent(event: ObservabilityEvent): void {
     this.observabilityBus.emit(event);
@@ -621,43 +618,69 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Emit a span started event
+   * Emit a span started event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
    */
   protected emitSpanStarted(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_started event', error);
-      });
+      const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
+      this.emitTracingEvent(event);
     }
   }
 
   /**
-   * Emit a span ended event (called automatically when spans end)
+   * Emit a span ended event (called automatically when spans end).
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
    */
   protected emitSpanEnded(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_ended event', error);
-      });
+      const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
+      this.emitTracingEvent(event);
     }
   }
 
   /**
-   * Emit a span updated event
+   * Emit a span updated event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
    */
   protected emitSpanUpdated(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_UPDATED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_updated event', error);
+      const event: TracingEvent = { type: TracingEventType.SPAN_UPDATED, exportedSpan };
+      this.emitTracingEvent(event);
+    }
+  }
+
+  /**
+   * Emit a tracing event through the bus and bridge.
+   *
+   * The bus routes the event to each registered exporter's onTracingEvent handler
+   * and triggers auto-extracted metrics (e.g., mastra_agent_runs_started,
+   * mastra_model_duration_ms). The bridge receives the event directly via
+   * exportTracingEvent since it is not registered on the bus.
+   */
+  private emitTracingEvent(event: TracingEvent): void {
+    // Route through the bus for exporter delivery + auto-extracted metrics
+    this.observabilityBus.emit(event);
+
+    // Export to bridge directly (bridge is not registered on the bus)
+    if (this.config.bridge) {
+      this.config.bridge.exportTracingEvent(event).catch(error => {
+        this.logger.error(`[Observability] Bridge export error [bridge=${this.config.bridge!.name}]`, error);
       });
     }
   }
 
   /**
-   * Export tracing event through all exporters and bridge (realtime mode)
+   * Export tracing event through all exporters and bridge.
+   *
+   * @deprecated Prefer emitTracingEvent() which routes through the bus.
+   * Kept for backward compatibility with subclasses that may override it.
    */
   protected async exportTracingEvent(event: TracingEvent): Promise<void> {
     // Collect all export targets

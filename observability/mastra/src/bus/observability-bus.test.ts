@@ -427,12 +427,14 @@ describe('ObservabilityBus', () => {
 
       bus.registerExporter(exporter);
 
-      // Should not throw
-      bus.emit(createTracingEvent());
+      const event = createTracingEvent();
 
-      // exportTracingEvent should NOT be called by the bus directly
-      // (the bus routes through onTracingEvent, which is undefined here)
-      expect(exporter.exportTracingEvent).not.toHaveBeenCalled();
+      // Should not throw
+      bus.emit(event);
+
+      // exportTracingEvent should be called as a fallback when onTracingEvent is absent,
+      // ensuring tracing events still reach exporters that don't implement onTracingEvent
+      expect(exporter.exportTracingEvent).toHaveBeenCalledWith(event);
     });
   });
 });
