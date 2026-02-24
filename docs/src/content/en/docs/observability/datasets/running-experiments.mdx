@@ -16,10 +16,6 @@ An experiment runs every item in a dataset through a target (an agent, a workflo
 
 ## Basic experiment
 
-In the Studio, open a dataset and click **Run Experiment** to configure the target, scorers, and options.
-
-![Run experiment dialog](/img/datasets/datasets-run-experiments-dialog.png)
-
 Call [`startExperiment()`](/reference/datasets/startExperiment) with a target and scorers:
 
 ```typescript title="src/mastra/experiments/basic.ts"
@@ -230,10 +226,6 @@ const summary = await dataset.startExperiment({
 
 ## Viewing results
 
-The Experiments tab shows all runs for a dataset, with status and timestamps.
-
-![Experiments tab](/img/datasets/datasets-experiments-tab.png)
-
 ### Listing experiments
 
 ```typescript
@@ -248,10 +240,6 @@ for (const exp of experiments) {
 ```
 
 ### Experiment details
-
-Click an experiment to see per-item results, scores, and execution traces.
-
-![Experiment detail page](/img/datasets/datasets-experiment-details.png)
 
 ```typescript
 const experiment = await dataset.getExperiment({
@@ -279,10 +267,6 @@ for (const result of results) {
 
 ### Comparing experiments
 
-Select two or more experiments to compare their scores and results side by side.
-
-![Compare experiments page](/img/datasets/datasets-compare-experiments.png)
-
 ## Understanding the summary
 
 `startExperiment()` returns an `ExperimentSummary` with counts and per-item results:
@@ -295,6 +279,14 @@ Select two or more experiments to compare their scores and results side by side.
 Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for the full parameter and return type documentation.
 
 :::
+
+## Studio
+
+You can also run experiments in [Mastra Studio](/docs/getting-started/studio). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
+
+After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
+
+In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
 
 ## Related
 
