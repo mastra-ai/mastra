@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed writer being undefined in processOutputResult. The writer was not being passed to runOutputProcessors in the outer MastraModelOutput finish handler, so custom output processors could not emit stream events when processing the final result.
+Fixed a bug where custom output processors could not emit stream events during final output processing. The `writer` object was always `undefined` when passed to output processors in the finish phase, preventing use cases like streaming moderation updates or custom UI events back to the client.
