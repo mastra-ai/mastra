@@ -179,5 +179,3 @@ describe('createStorage', () => {
     expect(result.storage).toBeDefined();
   }, 15000);
 });
-
-

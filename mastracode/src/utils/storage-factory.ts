@@ -66,7 +66,14 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
 
   const store = config.connectionString
     ? new PostgresStore({ ...base, connectionString: config.connectionString })
-    : new PostgresStore({ ...base, host: config.host!, port: config.port, database: config.database, user: config.user, password: config.password });
+    : new PostgresStore({
+        ...base,
+        host: config.host!,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        password: config.password,
+      });
 
   // Test the connection before committing — if it fails, fall back to LibSQL
   // so the user can fix the config via /settings.
