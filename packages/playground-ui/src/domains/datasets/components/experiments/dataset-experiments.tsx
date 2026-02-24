@@ -40,9 +40,9 @@ export function DatasetExperiments({
       if (prev.includes(experimentId)) {
         return prev.filter(id => id !== experimentId);
       }
-      // Only allow selecting 2 experiments max - replace oldest if selecting 3rd
+      // Only allow selecting 2 experiments max - keep oldest, replace most recent
       if (prev.length >= 2) {
-        return [prev[1], experimentId];
+        return [prev[0], experimentId];
       }
       return [...prev, experimentId];
     });
