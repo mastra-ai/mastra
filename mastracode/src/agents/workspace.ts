@@ -123,7 +123,15 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     }),
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
-      env: process.env,
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1',
+        CLICOLOR_FORCE: '1',
+        TERM: process.env.TERM || 'xterm-256color',
+        CI: 'true',
+        NONINTERACTIVE: '1',
+        DEBIAN_FRONTEND: 'noninteractive',
+      },
     }),
     ...(isPlanMode ? { tools: planModeTools } : {}),
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
