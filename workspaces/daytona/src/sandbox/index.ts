@@ -146,7 +146,7 @@ export interface DaytonaSandboxOptions extends MastraSandboxOptions {
  * @example With resources and volumes
  * ```typescript
  * const sandbox = new DaytonaSandbox({
- *   resources: { cpu: 2, memory: 4, disk: 20 },
+ *   resources: { cpu: 2, memory: 4, disk: 6 },
  *   volumes: [{ volumeId: 'vol-123', mountPath: '/data' }],
  *   env: { NODE_ENV: 'production' },
  * });
@@ -199,7 +199,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.autoArchiveInterval = options.autoArchiveInterval;
     this.autoDeleteInterval = options.autoDeleteInterval;
     this.volumeConfigs = options.volumes ?? [];
-    this.sandboxName = options.name;
+    this.sandboxName = options.name ?? this.id;
     this.sandboxUser = options.user;
     this.sandboxPublic = options.public;
     this.networkBlockAll = options.networkBlockAll;
@@ -374,15 +374,12 @@ export class DaytonaSandbox extends MastraSandbox {
   getInstructions(): string {
     const parts: string[] = [];
 
-    const langInfo = this.language !== 'typescript' ? ` (${this.language} runtime)` : '';
-    parts.push(`Cloud sandbox with isolated execution environment${langInfo}.`);
+    parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).`);
 
     parts.push(`Default working directory: /home/daytona.`);
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
 
-    if (this.sandboxUser) {
-      parts.push(`Running as user: ${this.sandboxUser}.`);
-    }
+    parts.push(`Running as user: ${this.sandboxUser ?? 'daytona'}.`);
 
     if (this.volumeConfigs.length > 0) {
       parts.push(`${this.volumeConfigs.length} volume(s) attached.`);

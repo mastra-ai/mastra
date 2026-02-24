@@ -129,8 +129,8 @@ console.log(response.text);
 | `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk }`. Only used with `image`. |
 | `env`                 | `object`  | `{}`                  | Environment variables          |
 | `labels`              | `object`  | `{}`                  | Custom metadata labels         |
-| `name`                | `string`  | —                     | Sandbox display name           |
-| `user`                | `string`  | —                     | OS user to run commands as     |
+| `name`                | `string`  | sandbox `id`          | Sandbox display name           |
+| `user`                | `string`  | `daytona`             | OS user to run commands as     |
 | `public`              | `boolean` | `false`               | Make port previews public      |
 | `ephemeral`           | `boolean` | `false`               | Delete sandbox immediately on stop |
 | `autoStopInterval`    | `number`  | `15`                  | Auto-stop interval in minutes (0 = disabled) |
@@ -142,11 +142,14 @@ console.log(response.text);
 
 ## Direct SDK Access
 
-Access the underlying Daytona `Sandbox` instance for filesystem, git, and LSP operations not exposed through WorkspaceSandbox:
+Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through WorkspaceSandbox:
 
 ```typescript
 const daytonaSandbox = sandbox.instance;
+
 await daytonaSandbox.fs.uploadFile(Buffer.from('data'), '/tmp/file.txt');
+
+await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo');
 ```
 
 ## License

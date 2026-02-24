@@ -128,10 +128,10 @@ describe('DaytonaSandbox', () => {
 
     it('stores resources config', () => {
       const sandbox = new DaytonaSandbox({
-        resources: { cpu: 2, memory: 4, disk: 20 },
+        resources: { cpu: 2, memory: 4, disk: 6 },
       });
 
-      expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 20 });
+      expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 6 });
     });
 
     it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, image', () => {
@@ -302,7 +302,7 @@ describe('DaytonaSandbox', () => {
       await sandbox._start();
 
       const createCall = mockDaytona.create.mock.calls[0]![0];
-      expect(createCall).not.toHaveProperty('name');
+      expect(createCall).toHaveProperty('name', sandbox.id);
       expect(createCall).not.toHaveProperty('user');
       expect(createCall).not.toHaveProperty('public');
       expect(createCall).not.toHaveProperty('autoDeleteInterval');
@@ -607,19 +607,20 @@ describe('DaytonaSandbox', () => {
       expect(sandbox.getInstructions()).toContain('60s');
     });
 
-    it('includes language info for non-typescript', () => {
-      const sandbox = new DaytonaSandbox({ language: 'python' });
-      expect(sandbox.getInstructions()).toContain('python');
+    it('always includes language runtime', () => {
+      expect(new DaytonaSandbox({ language: 'typescript' }).getInstructions()).toContain('typescript');
+      expect(new DaytonaSandbox({ language: 'python' }).getInstructions()).toContain('python');
+      expect(new DaytonaSandbox({ language: 'javascript' }).getInstructions()).toContain('javascript');
     });
 
-    it('includes user when set', () => {
+    it('includes custom user when set', () => {
       const sandbox = new DaytonaSandbox({ user: 'ubuntu' });
       expect(sandbox.getInstructions()).toContain('ubuntu');
     });
 
-    it('does not include user when not set', () => {
+    it('defaults to daytona user when not set', () => {
       const sandbox = new DaytonaSandbox();
-      expect(sandbox.getInstructions()).not.toContain('Running as user');
+      expect(sandbox.getInstructions()).toContain('Running as user: daytona');
     });
 
     it('includes volume count when volumes attached', () => {
