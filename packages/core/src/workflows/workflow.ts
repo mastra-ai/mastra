@@ -72,6 +72,7 @@ import type {
   StepParams,
   OutputWriter,
   StepMetadata,
+  WorkflowRunStartOptions,
 } from './types';
 import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
 
@@ -2936,15 +2937,7 @@ export class Run<
             initialState: TState;
           }) & {
         requestContext?: RequestContext<TRequestContext>;
-        outputWriter?: OutputWriter;
-        tracingContext?: TracingContext;
-        tracingOptions?: TracingOptions;
-        outputOptions?: {
-          includeState?: boolean;
-          includeResumeLabels?: boolean;
-        };
-        perStep?: boolean;
-      },
+      } & WorkflowRunStartOptions,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start(args);
   }
@@ -2972,13 +2965,7 @@ export class Run<
             initialState: TState;
           }) & {
         requestContext?: RequestContext<TRequestContext>;
-        tracingOptions?: TracingOptions;
-        outputOptions?: {
-          includeState?: boolean;
-          includeResumeLabels?: boolean;
-        };
-        perStep?: boolean;
-      },
+      } & WorkflowRunStartOptions,
   ): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {

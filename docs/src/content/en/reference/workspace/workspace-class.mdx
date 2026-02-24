@@ -296,16 +296,36 @@ const info = await workspace.getInfo()
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
-#### `getPathContext()`
+#### `getInstructions(opts?)`
 
-Get information about filesystem and sandbox paths, including instructions for agents.
+Returns combined instructions from the filesystem and sandbox providers. Injected into the agent's system message to help it understand the execution context.
 
 ```typescript
-const context = workspace.getPathContext()
-// { filesystem?, sandbox?, instructions }
+const instructions = workspace.getInstructions()
 ```
 
-The `instructions` field contains provider-generated descriptions combined from the filesystem and sandbox. These instructions are included in tool descriptions to help agents understand the execution context.
+Pass `requestContext` to enable per-request customization when a provider's `instructions` option is a function:
+
+```typescript
+const instructions = workspace.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function on the filesystem or sandbox provider, if one is configured.",
+isOptional: true,
+},
+]}
+/>
+
+**Returns:** `string`
+
+To override the default output, pass an `instructions` option to [LocalFilesystem](/reference/workspace/local-filesystem#constructor-parameters) or [LocalSandbox](/reference/workspace/local-sandbox#constructor-parameters).
 
 #### `getToolsConfig()`
 
