@@ -186,3 +186,7 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
         run: pnpm dlx tsx scripts/validate-frontmatter.ts
+
+      - name: Validate reference sidebar sort order
+        working-directory: ./docs
+        run: pnpm validate:reference-sidebar

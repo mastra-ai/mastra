@@ -15,6 +15,8 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "validate:frontmatter": "tsx scripts/validate-frontmatter.ts",
+    "validate:reference-sidebar": "tsx scripts/validate-reference-sidebar-sort.ts",
+    "validate:reference-sidebar:fix": "tsx scripts/validate-reference-sidebar-sort.ts --fix",
     "format": "prettier --write .",
     "vale": "./node_modules/@vvago/vale/bin/vale",
     "vale:sync": "./node_modules/@vvago/vale/bin/vale sync",
