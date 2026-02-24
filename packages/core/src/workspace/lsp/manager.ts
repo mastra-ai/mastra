@@ -10,9 +10,6 @@
  * walkup finds nothing.
  */
 
-import { existsSync } from 'node:fs';
-import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type { SandboxProcessManager } from '../sandbox/process-manager';
@@ -46,9 +43,7 @@ export class LSPManager {
   private config: LSPConfig;
   private filesystem?: {
     exists(path: string): Promise<boolean>;
-    readFile?(path: string, options?: any): Promise<string | Buffer>;
   };
-  private tempDirs: Set<string> = new Set();
 
   constructor(
     processManager: SandboxProcessManager,
@@ -56,7 +51,6 @@ export class LSPManager {
     config: LSPConfig = {},
     filesystem?: {
       exists(path: string): Promise<boolean>;
-      readFile?(path: string, options?: any): Promise<string | Buffer>;
     },
   ) {
     this.processManager = processManager;
@@ -117,19 +111,11 @@ export class LSPManager {
       return this.clients.get(key) || null;
     }
 
-    // Determine the workspace root for the LSP server.
-    // For remote filesystems, materialize config files to a local temp dir
-    // so the TS server can read tsconfig.json.
-    let workspaceRoot = projectRoot;
-    if (this.filesystem?.readFile && !existsSync(projectRoot)) {
-      workspaceRoot = await this.materializeConfig(projectRoot, serverDef.markers);
-    }
-
     // Create and initialize
     const initTimeout = this.config.initTimeout ?? 15000;
     let timedOut = false;
     const initPromise = (async () => {
-      const client = new LSPClient(serverDef, workspaceRoot, this.processManager);
+      const client = new LSPClient(serverDef, projectRoot, this.processManager);
       await client.initialize(initTimeout);
       if (timedOut) {
         await client.shutdown().catch(() => {});
@@ -328,97 +314,12 @@ export class LSPManager {
   }
 
   /**
-   * Materialize remote config files to a local temp directory.
-   * Reads marker files (e.g. tsconfig.json) from the remote filesystem
-   * and writes them to a temp dir so the locally-spawned TS server can read them.
-   * Handles `extends` in tsconfig.json by recursively materializing referenced files.
-   */
-  async materializeConfig(remotePath: string, markers: string[]): Promise<string> {
-    const tempDir = await mkdtemp(path.join(tmpdir(), 'lsp-config-'));
-    this.tempDirs.add(tempDir);
-
-    if (!this.filesystem?.readFile) return tempDir;
-
-    for (const marker of markers) {
-      const remoteFile = path.join(remotePath, marker);
-      try {
-        const raw = await this.filesystem.readFile(remoteFile);
-        const content = typeof raw === 'string' ? raw : raw.toString('utf-8');
-        await writeFile(path.join(tempDir, marker), content, 'utf-8');
-
-        // Handle tsconfig extends
-        if (marker === 'tsconfig.json') {
-          await this.materializeExtends(remotePath, tempDir, content, 0);
-        }
-      } catch {
-        // File doesn't exist on remote — skip
-      }
-    }
-
-    return tempDir;
-  }
-
-  /**
-   * Recursively materialize files referenced by tsconfig's `extends` field.
-   * Only handles relative paths (not npm package references).
-   * Depth-limited to prevent infinite loops.
-   */
-  private async materializeExtends(
-    remotePath: string,
-    tempDir: string,
-    tsconfigContent: string,
-    depth: number,
-  ): Promise<void> {
-    if (depth >= 5) return;
-
-    try {
-      const parsed = JSON.parse(tsconfigContent);
-      if (!parsed.extends || typeof parsed.extends !== 'string') return;
-
-      const extendsPath = parsed.extends;
-      // Only handle relative paths
-      if (!extendsPath.startsWith('.')) return;
-
-      const remoteExtendsFile = path.join(remotePath, extendsPath);
-      const localExtendsFile = path.join(tempDir, extendsPath);
-
-      // Ensure parent directory exists
-      await mkdir(path.dirname(localExtendsFile), { recursive: true });
-
-      const raw = await this.filesystem!.readFile!(remoteExtendsFile);
-      const content = typeof raw === 'string' ? raw : raw.toString('utf-8');
-      await writeFile(localExtendsFile, content, 'utf-8');
-
-      // Recurse for nested extends
-      await this.materializeExtends(
-        path.dirname(remoteExtendsFile),
-        path.dirname(localExtendsFile),
-        content,
-        depth + 1,
-      );
-    } catch {
-      // Parse error or file not found — skip
-    }
-  }
-
-  /**
-   * Shutdown all managed LSP clients and clean up temp directories.
+   * Shutdown all managed LSP clients.
    */
   async shutdownAll(): Promise<void> {
     await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
     this.clients.clear();
     this.initPromises.clear();
     this.fileLocks.clear();
-
-    // Clean up temp directories used for materialized configs
-    for (const dir of this.tempDirs) {
-      try {
-        const { rm } = await import('node:fs/promises');
-        await rm(dir, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    this.tempDirs.clear();
   }
 }

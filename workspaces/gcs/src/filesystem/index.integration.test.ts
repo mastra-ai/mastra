@@ -254,9 +254,6 @@ if (canRunGCSTests) {
       crossMountApi: true,
       virtualDirectory: true,
       mountIsolation: true,
-      // LSP uses walkUpAsync with CompositeFilesystem.exists() for root resolution
-      lspDiagnostics: true,
-      lspPerFileRoot: true,
     },
     createWorkspace: () => {
       const testBucket = process.env.TEST_GCS_BUCKET!;
@@ -295,15 +292,13 @@ if (canRunGCSTests) {
  */
 if (canRunGCSTests) {
   createWorkspaceIntegrationTests({
-    suiteName: 'GCS Direct Filesystem LSP Integration',
+    suiteName: 'GCS Direct Filesystem Integration',
     testTimeout: 30000,
     sandboxPathsAligned: false,
     testScenarios: {
       fileSync: false,
       writeReadConsistency: true,
       concurrentOperations: true,
-      lspDiagnostics: true,
-      lspPerFileRoot: true,
     },
     createWorkspace: () => {
       const testBucket = process.env.TEST_GCS_BUCKET!;

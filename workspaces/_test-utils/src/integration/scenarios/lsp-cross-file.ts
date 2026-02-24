@@ -6,7 +6,7 @@
  * resolves the import by reading math.ts from disk, enabling cross-file
  * type checking.
  *
- * Graceful skip: on remote FS where source files aren't materialized for the
+ * Graceful skip: on remote FS where source files aren't visible on disk for the
  * TS server, getDiagnostics may return [] — the test passes silently.
  */
 
