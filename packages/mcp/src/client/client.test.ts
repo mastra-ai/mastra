@@ -913,7 +913,7 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 
-  it('should not create duplicate connections when connect is called concurrently (Issue #13411)', async () => {
+  it('should not create duplicate connections when connect is called concurrently', async () => {
     const client = new InternalMastraMCPClient({
       name: 'concurrent-connect-test-client',
       server: {
