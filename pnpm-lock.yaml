@@ -1287,6 +1287,10 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.3.6
+    optionalDependencies:
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../stores/pg
 
   observability/_test-utils:
     devDependencies:

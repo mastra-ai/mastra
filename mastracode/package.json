@@ -79,6 +79,9 @@
     "vscode-jsonrpc": "latest",
     "vscode-languageserver-protocol": "latest"
   },
+  "optionalDependencies": {
+    "@mastra/pg": "workspace:*"
+  },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
