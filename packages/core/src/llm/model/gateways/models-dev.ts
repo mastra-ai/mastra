@@ -8,13 +8,13 @@ import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { createPerplexity } from '@ai-sdk/perplexity-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { createTogetherAI } from '@ai-sdk/togetherai-v5';
 import { createXai } from '@ai-sdk/xai-v5';
+import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { ProviderConfig } from './base.js';
+import type { GatewayLanguageModel, ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
@@ -42,10 +42,6 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
   groq: {
     url: 'https://api.groq.com/openai/v1',
-  },
-  vercel: {
-    url: 'https://ai-gateway.vercel.sh/v1',
-    apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
   },
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
@@ -199,7 +195,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
     switch (providerId) {
@@ -234,6 +230,8 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createTogetherAI({ apiKey })(modelId);
       case 'deepinfra':
         return createDeepInfra({ apiKey })(modelId);
+      case 'vercel':
+        return createGateway({ apiKey, headers })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint

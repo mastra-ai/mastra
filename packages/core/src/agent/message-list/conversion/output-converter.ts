@@ -79,7 +79,17 @@ export function sanitizeV5UIMessages(
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
         // This filters out input-available (incomplete client-side tool calls) and input-streaming
         if (filterIncompleteToolCalls) {
-          return p.state === 'output-available' || p.state === 'output-error';
+          if (p.state === 'output-available' || p.state === 'output-error') {
+            // Strip completed provider-executed tools (e.g. Anthropic web_search). The provider
+            // already handled these internally — sending tool_result for server_tool_use is invalid.
+            if (p.providerExecuted) return false;
+            return true;
+          }
+          // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
+          // because no client-side result is added. Keep them so the provider API sees the
+          // server_tool_use block and can execute the deferred tool on the next request.
+          if (p.state === 'input-available' && p.providerExecuted) return true;
+          return false;
         }
 
         // When processing response messages FROM the LLM: keep input-available states
@@ -155,6 +165,46 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
   const result = AIV5.convertToModelMessages(preprocessed);
+
+  // Build a lookup of toolCallId → stored modelOutput from providerMetadata.mastra.modelOutput.
+  // This allows toModelOutput results computed at tool execution time to be preserved
+  // in the model prompt without re-running the transformation.
+  const storedModelOutputs = new Map<string, unknown>();
+  for (const dbMsg of dbMessages) {
+    if (dbMsg.content?.format === 2 && dbMsg.content.parts) {
+      for (const part of dbMsg.content.parts) {
+        if (
+          part.type === 'tool-invocation' &&
+          part.toolInvocation?.state === 'result' &&
+          part.providerMetadata?.mastra &&
+          typeof part.providerMetadata.mastra === 'object' &&
+          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+        ) {
+          storedModelOutputs.set(
+            part.toolInvocation.toolCallId,
+            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+          );
+        }
+      }
+    }
+  }
+
+  // Apply stored modelOutput to tool-result parts in model messages
+  if (storedModelOutputs.size > 0) {
+    for (const modelMsg of result) {
+      if (modelMsg.role === 'tool' && Array.isArray(modelMsg.content)) {
+        for (let i = 0; i < modelMsg.content.length; i++) {
+          const part = modelMsg.content[i]!;
+          if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+            modelMsg.content[i] = {
+              ...part,
+              output: storedModelOutputs.get(part.toolCallId) as any,
+            };
+          }
+        }
+      }
+    }
+  }
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion

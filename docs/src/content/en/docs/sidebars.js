@@ -220,6 +220,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -227,14 +235,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/semantic-recall',
           label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -595,6 +595,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -646,6 +662,40 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Code',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-code/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/configuration',
+          label: 'Configuration',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/customization',
+          label: 'Customization',
         },
       ],
     },

@@ -1,4 +1,5 @@
 import { Combobox } from '@/ds/components/Combobox';
+import { Badge } from '@/ds/components/Badge';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
 function formatTimestamp(isoString: string): string {
@@ -19,6 +20,7 @@ export interface AgentVersionComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
+  activeVersionId?: string;
 }
 
 export function AgentVersionCombobox({
@@ -28,6 +30,7 @@ export function AgentVersionCombobox({
   className,
   disabled = false,
   variant = 'default',
+  activeVersionId,
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({
     agentId,
@@ -36,13 +39,26 @@ export function AgentVersionCombobox({
 
   const versions = data?.versions ?? [];
 
+  const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
+  const activeVersionNumber = activeVersion?.versionNumber;
+
   const options = [
     { label: 'Latest', value: '' },
-    ...versions.map(version => ({
-      label: `v${version.versionNumber}`,
-      value: version.id,
-      description: formatTimestamp(version.createdAt),
-    })),
+    ...versions.map(version => {
+      const isPublished = version.id === activeVersionId;
+      const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
+
+      return {
+        label: `v${version.versionNumber}`,
+        value: version.id,
+        description: formatTimestamp(version.createdAt),
+        end: isPublished ? (
+          <Badge variant="success">Published</Badge>
+        ) : isDraft ? (
+          <Badge variant="info">Draft</Badge>
+        ) : undefined,
+      };
+    }),
   ];
 
   return (

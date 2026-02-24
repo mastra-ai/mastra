@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
-import { Spinner } from '@/ds/components/Spinner';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMModelsProps {
   value: string;
@@ -43,11 +43,7 @@ export const LLMModels = ({
   }, [filteredModels]);
 
   if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner className="w-4 h-4" />
-      </div>
-    );
+    return <Skeleton className="w-full h-8" />;
   }
 
   return (

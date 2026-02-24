@@ -211,7 +211,8 @@ describe('Workspace Safety Features', () => {
       // Read first, then edit should succeed
       await readTool.execute({ path: '/test.txt' });
       const result = await editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' });
-      expect(result.success).toBe(true);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Replaced 1 occurrence');
 
       const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('goodbye world');

@@ -4942,6 +4942,67 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             },
             "warnings": [],
           },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-1",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "test error",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "I see the tool failed, let me help.",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
         ],
         "text": "",
         "toolCalls": [
@@ -4959,6 +5020,289 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "inputTokens": 3,
           "outputTokens": 10,
           "totalTokens": 13,
+        },
+      },
+      "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
+      "stepResult": {
+        "isContinued": true,
+        "reason": "tool-calls",
+        "warnings": [],
+      },
+    },
+    "runId": "test-run-id",
+    "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "msg-0",
+      "request": {},
+      "warnings": [],
+    },
+    "runId": "test-run-id",
+    "type": "step-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+    },
+    "runId": "test-run-id",
+    "type": "text-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+      "text": "I see the tool failed, let me help.",
+    },
+    "runId": "test-run-id",
+    "type": "text-delta",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "type": "text-end",
+    },
+    "runId": "test-run-id",
+    "type": "text-end",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "msg-0",
+      "messages": {
+        "all": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "test error",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "nonUser": [
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "test error",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "user": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+      },
+      "metadata": {
+        "headers": undefined,
+        "id": "id-1",
+        "modelId": "mock-model-id",
+        "modelMetadata": {
+          "modelId": "mock-model-id",
+          "modelProvider": "mock-provider",
+          "modelVersion": "v2",
+        },
+        "providerMetadata": undefined,
+        "request": {},
+        "timestamp": 1970-01-01T00:00:00.000Z,
+      },
+      "output": {
+        "steps": [
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [],
+                  "role": "tool",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-1",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "test error",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "I see the tool failed, let me help.",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ],
+        "text": "I see the tool failed, let me help.",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
@@ -5018,6 +5362,15 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "nonUser": [
           {
@@ -5051,6 +5404,15 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "I see the tool failed, let me help.",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "user": [
           {
@@ -5066,7 +5428,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
@@ -5118,23 +5480,74 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             },
             "warnings": [],
           },
-        ],
-        "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
             "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-1",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "test error",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "I see the tool failed, let me help.",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
           },
         ],
+        "text": "I see the tool failed, let me help.",
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,

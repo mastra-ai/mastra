@@ -3,7 +3,8 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Play } from 'lucide-react';
-import { cn } from '@/index';
+import { Chip, cn } from '@/index';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '6rem' },
@@ -62,8 +63,6 @@ export function DatasetExperimentsList({
     return <EmptyDatasetExperimentsList />;
   }
 
-  console.log({ experiments });
-
   return (
     <ItemList>
       <ItemList.Header columns={columns}>
@@ -82,8 +81,8 @@ export function DatasetExperimentsList({
             return (
               <ItemList.Row key={experiment.id} isSelected={isSelected}>
                 <ItemList.RowButton
-                  entry={entry}
-                  isSelected={isSelected}
+                  item={entry}
+                  isFeatured={isSelected}
                   columns={columns}
                   onClick={() => onRowClick(experiment.id)}
                 >
@@ -100,18 +99,26 @@ export function DatasetExperimentsList({
                       />
                     </div>
                   )}
-                  <ItemList.TextCell>{truncateExperimentId(experiment.id)}</ItemList.TextCell>
+                  <ItemList.IdCell id={experiment.id} />
                   <ItemList.StatusCell status={status} />
                   <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>
                   <ItemList.TextCell>{experiment.targetId}</ItemList.TextCell>
-                  <ItemList.FlexCell className={cn('[&>small]:text-neutral3')}>
-                    <b>{experiment.totalItems}</b>
-                    <small>|</small>
-                    <b>{experiment.succeededCount}</b>
-                    <small>|</small>
-                    <b>{experiment.failedCount}</b>
-                  </ItemList.FlexCell>
-                  <ItemList.TextCell>{formatDate(experiment.createdAt)}</ItemList.TextCell>
+                  <ItemList.Cell className={cn('flex')}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-1">
+                          {experiment.succeededCount > 0 && <Chip color="green">{experiment.succeededCount}</Chip>}
+                          {experiment.failedCount > 0 && <Chip color="red">{experiment.failedCount}</Chip>}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {experiment.succeededCount} Succeeded
+                        <br />
+                        {experiment.failedCount} Failed
+                      </TooltipContent>
+                    </Tooltip>
+                  </ItemList.Cell>
+                  <ItemList.DateCell date={experiment.createdAt} withTime={true} />
                 </ItemList.RowButton>
               </ItemList.Row>
             );

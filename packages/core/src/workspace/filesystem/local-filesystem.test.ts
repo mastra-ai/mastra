@@ -1,8 +1,9 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -740,6 +741,69 @@ describe('LocalFilesystem', () => {
         expect(instructions).toContain('Additionally');
         expect(instructions).toContain(outsideDir);
       });
+    });
+  });
+
+  // ===========================================================================
+  // getInstructions with custom override
+  // ===========================================================================
+  describe('getInstructions with custom override', () => {
+    it('should return custom instructions when provided', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: 'Custom filesystem instructions here.',
+      });
+      expect(testFs.getInstructions()).toBe('Custom filesystem instructions here.');
+    });
+
+    it('should return empty string when override is empty string', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: '',
+      });
+      expect(testFs.getInstructions()).toBe('');
+    });
+
+    it('should return auto-generated instructions when no override', () => {
+      const testFs = new LocalFilesystem({ basePath: tempDir });
+      expect(testFs.getInstructions()).toContain('Local filesystem');
+    });
+
+    it('should support function form that extends auto instructions', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra info.`,
+      });
+      const result = testFs.getInstructions();
+      expect(result).toContain('Local filesystem');
+      expect(result).toContain('Extra info.');
+    });
+
+    it('should pass requestContext to function form', () => {
+      const ctx = new RequestContext([['locale', 'fr']]);
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} locale=${requestContext?.get('locale')}`;
+      });
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: fn,
+      });
+      const result = testFs.getInstructions({ requestContext: ctx });
+      expect(fn).toHaveBeenCalledOnce();
+      expect(result).toContain('locale=fr');
+      expect(result).toContain('Local filesystem');
+    });
+
+    it('should pass undefined requestContext when not provided to function form', () => {
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} ctx=${String(requestContext)}`;
+      });
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: fn,
+      });
+      const result = testFs.getInstructions();
+      expect(result).toContain('ctx=undefined');
     });
   });
 

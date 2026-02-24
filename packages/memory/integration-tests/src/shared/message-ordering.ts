@@ -11,10 +11,11 @@
  * 2. RAW STORAGE - Direct query to the database (listMessages)
  * 3. RECALL - The processed recall output from Memory
  *
- * Tests run with both OpenAI and Anthropic models to ensure provider-agnostic behavior.
+ * Tests run with OpenAI models.
  */
 
-import { randomUUID } from 'node:crypto';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -23,6 +24,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
@@ -227,7 +230,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '28f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'ordering-test-user';
 
         console.info('\n========================================');
@@ -375,7 +378,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '48f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'multi-tool-test';
 
         console.info('\n========================================');
@@ -474,7 +477,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '38f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'exact-match-test';
 
         console.info('\n========================================');

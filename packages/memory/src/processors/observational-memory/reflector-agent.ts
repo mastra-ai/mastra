@@ -1,4 +1,10 @@
-import { OBSERVER_EXTRACTION_INSTRUCTIONS, OBSERVER_OUTPUT_FORMAT_BASE, OBSERVER_GUIDELINES } from './observer-agent';
+import {
+  OBSERVER_EXTRACTION_INSTRUCTIONS,
+  OBSERVER_OUTPUT_FORMAT_BASE,
+  OBSERVER_GUIDELINES,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
+} from './observer-agent';
 import type { ReflectorResult as BaseReflectorResult } from './types';
 
 /**
@@ -19,8 +25,10 @@ export interface ReflectorResult extends BaseReflectorResult {
  * - Drawing connections and conclusions between observations
  * - Identifying if the agent got off track and how to get back on track
  * - Preserving ALL important information (reflections become the ENTIRE memory)
+ *
+ * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildReflectorSystemPrompt(): string {
+export function buildReflectorSystemPrompt(instruction?: string): string {
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -113,7 +121,7 @@ Hint for the agent's immediate next message. Examples:
 - Call the view tool on src/example.ts to continue debugging.
 </suggested-response>
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
 
 /**
@@ -127,7 +135,7 @@ export const REFLECTOR_SYSTEM_PROMPT = buildReflectorSystemPrompt();
  * - Level 1: Gentle compression guidance (original wording — "slightly more" goes a long way for LLMs)
  * - Level 2: Aggressive compression guidance (stronger push when level 1 didn't work)
  */
-export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2, string> = {
+export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2 | 3, string> = {
   0: '',
   1: `
 ## COMPRESSION REQUIRED
@@ -158,6 +166,21 @@ Please re-process with much more aggressive compression:
 
 Your current detail level was a 10/10, lets aim for a 6/10 detail level.
 `,
+  3: `
+## CRITICAL COMPRESSION REQUIRED
+
+Your previous reflections have failed to compress sufficiently after multiple attempts.
+
+Please re-process with maximum compression:
+- Summarize the oldest observations (first 50-70%) into brief high-level paragraphs — only key facts, decisions, and outcomes
+- For the most recent observations (last 30-50%), retain important details but still use a condensed style
+- Ruthlessly merge related observations — if 10 observations are about the same topic, combine into 1-2 lines
+- Drop procedural details (tool calls, retries, intermediate steps) — keep only final outcomes
+- Drop observations that are no longer relevant or have been superseded by newer information
+- Preserve: names, dates, decisions, errors, user preferences, and architectural choices
+
+Your current detail level was a 10/10, lets aim for a 4/10 detail level.
+`,
 };
 
 /**
@@ -171,11 +194,11 @@ export const COMPRESSION_RETRY_PROMPT = COMPRESSION_GUIDANCE[1];
 export function buildReflectorPrompt(
   observations: string,
   manualPrompt?: string,
-  compressionLevel?: boolean | 0 | 1 | 2,
+  compressionLevel?: boolean | 0 | 1 | 2 | 3,
   skipContinuationHints?: boolean,
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
-  const level: 0 | 1 | 2 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const level: 0 | 1 | 2 | 3 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
@@ -212,11 +235,19 @@ ${guidance}`;
  * Uses XML tag parsing for structured extraction.
  */
 export function parseReflectorOutput(output: string): ReflectorResult {
+  // Check for degenerate repetition before parsing
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      degenerate: true,
+    };
+  }
+
   const parsed = parseReflectorSectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,

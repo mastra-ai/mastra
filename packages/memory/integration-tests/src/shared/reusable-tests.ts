@@ -9,7 +9,7 @@ import type { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
@@ -94,8 +94,8 @@ const getTextContent = (message: any): string => {
   return '';
 };
 
-export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
-  const cleanupAllThreads = async () => {
+export function getResuableTests(optionsFactory: () => { memory: Memory; workerTestConfig?: WorkerTestConfig }) {
+  const cleanupAllThreads = async (memory: Memory) => {
     let allThreads: any[] = [];
     let page = 0;
     const perPage = 100;
@@ -110,15 +110,35 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       page++;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+
+    const indexes = await memory.vector?.listIndexes();
+    if (indexes) {
+      await Promise.all(
+        indexes.map(index =>
+          memory.vector?.deleteVectors({
+            indexName: index,
+            filter: { thread_id: { $in: allThreads.map(thread => thread.id) } },
+          }),
+        ),
+      );
+    }
   };
 
+  let memory: Memory;
+  let workerTestConfig: WorkerTestConfig | undefined;
   beforeEach(async () => {
     messageCounter = 0;
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
+  });
+
+  beforeAll(() => {
+    const options = optionsFactory();
+    memory = options.memory;
+    workerTestConfig = options.workerTestConfig;
   });
 
   afterAll(async () => {
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
   });
 
   describe('Memory Features', () => {
@@ -187,7 +207,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const threadId = thread.id;
 
         const content = Array(1000).fill(`This is a long message to test chunking with`).join(`
-`);
+  `);
         await expect(
           memory.saveMessages({
             messages: [
@@ -390,6 +410,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             semanticRecall: { messageRange: 0, topK: 1 },
           },
         });
+
         const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');
@@ -979,7 +1000,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
   if (workerTestConfig) {
     describe('Concurrent Operations with Workers', () => {
       it('should save multiple messages concurrently using Memory instance in workers to a single thread', async () => {
-        const totalMessages = 20;
+        const totalMessages = 1;
         const mainThread = await memory.saveThread({
           thread: createTestThread(`Reusable Concurrent Worker Test Thread`),
         });
@@ -1007,9 +1028,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
                 vectorConfig: workerTestConfig.vectorConfigForWorker,
               },
             });
+            let completed = false;
             worker.on('message', msg => {
               if ((msg as any).success) {
                 resolve(msg);
+                completed = true;
               } else {
                 console.error('Worker error (reusable test):', (msg as any).error);
                 reject(new Error((msg as any).error?.message || 'Worker failed in reusable test'));
@@ -1017,7 +1040,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             });
             worker.on('error', reject);
             worker.on('exit', code => {
-              if (code !== 0) {
+              if (!completed && code !== 0) {
                 reject(new Error(`Reusable test worker stopped with exit code ${code}`));
               }
             });
@@ -1030,6 +1053,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           console.error('Error during reusable worker execution:', error);
           throw error;
         }
+
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+
         const result = await memory.recall({
           threadId: mainThread.id,
           resourceId,

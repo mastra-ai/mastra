@@ -3,10 +3,13 @@ import type { StorageThreadType } from '../../memory/types';
 import type {
   StorageAgentType,
   StorageMCPClientType,
+  StorageMCPServerType,
   StorageMessageType,
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageWorkspaceType,
+  StorageSkillType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
   DatasetRecord,
@@ -17,9 +20,12 @@ import type {
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
+import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
 import type { PromptBlockVersion } from './prompt-blocks';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
+import type { SkillVersion } from './skills';
+import type { WorkspaceVersion } from './workspaces';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -43,6 +49,12 @@ export class InMemoryDB {
   readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
   readonly mcpClients = new Map<string, StorageMCPClientType>();
   readonly mcpClientVersions = new Map<string, MCPClientVersion>();
+  readonly mcpServers = new Map<string, StorageMCPServerType>();
+  readonly mcpServerVersions = new Map<string, MCPServerVersion>();
+  readonly workspaces = new Map<string, StorageWorkspaceType>();
+  readonly workspaceVersions = new Map<string, WorkspaceVersion>();
+  readonly skills = new Map<string, StorageSkillType>();
+  readonly skillVersions = new Map<string, SkillVersion>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -74,6 +86,12 @@ export class InMemoryDB {
     this.scorerDefinitionVersions.clear();
     this.mcpClients.clear();
     this.mcpClientVersions.clear();
+    this.mcpServers.clear();
+    this.mcpServerVersions.clear();
+    this.workspaces.clear();
+    this.workspaceVersions.clear();
+    this.skills.clear();
+    this.skillVersions.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();

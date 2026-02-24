@@ -9,6 +9,7 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';
+import { cn } from '@/lib/utils';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -18,8 +19,7 @@ export interface DatasetVersionsPanelProps {
   activeVersion?: number | null;
 }
 
-const versionsListColumns = [{ name: 'version', label: 'Dataset Versions', size: '1fr' }];
-const versionsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '.5rem' }, ...versionsListColumns];
+const versionsListColumns = [{ name: 'version', label: 'Dataset Version History', size: '1fr' }];
 
 /**
  * Panel showing dataset version history with optional compare selection.
@@ -50,7 +50,11 @@ export function DatasetVersionsPanel({
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
-      } else if (next.size < 2) {
+      } else if (next.size >= 2) {
+        // Drop most recent selection, keep oldest + add new one
+        const [first] = Array.from(next);
+        return new Set([first, key]);
+      } else {
         next.add(key);
       }
       return next;
@@ -72,55 +76,50 @@ export function DatasetVersionsPanel({
     }
   };
 
-  const columnsToRender = isSelectionActive ? versionsListColumnsWithCheckbox : versionsListColumns;
-
   return (
-    <Column withLeftSeparator={true} className="w-[20rem]">
+    <Column withLeftSeparator={true} className="w-[14rem]">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
+            <Button variant="standard" size="default" onClick={handleCancelSelection}>
+              Cancel
+            </Button>
             <ButtonWithTooltip
               variant="cta"
               size="default"
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
+              className="w-full"
             >
-              <ArrowRightIcon /> Compare Versions
+              <ArrowRightIcon /> Compare
             </ButtonWithTooltip>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (
         <Column.Toolbar>
           <Button variant="standard" size="default" onClick={handleCompareClick}>
-            <GitCompareIcon /> Compare
+            <GitCompareIcon /> Compare Ver.
           </Button>
-          <Button variant="standard" size="default" onClick={onClose}>
-            <XIcon /> Hide
-          </Button>
+          <ButtonWithTooltip variant="standard" size="default" onClick={onClose} tooltipContent="Hide Versions Panel">
+            <XIcon />
+          </ButtonWithTooltip>
         </Column.Toolbar>
       )}
       <Column.Content>
         {isLoading ? (
           <DatasetVersionsListSkeleton />
         ) : (
-          <ItemList className="mr-2">
-            <ItemList.Header columns={columnsToRender}>
-              {columnsToRender.map(col =>
-                col.name === 'checkbox' ? (
-                  <ItemList.FlexCell key={col.name}>&nbsp;</ItemList.FlexCell>
-                ) : (
-                  <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-                ),
-              )}
+          <ItemList>
+            <ItemList.Header columns={versionsListColumns}>
+              {versionsListColumns.map(col => (
+                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+              ))}
             </ItemList.Header>
 
             <ItemList.Scroller>
               <ItemList.Items>
-                {versions?.map((item, index) => {
+                {versions?.map(item => {
                   const key = String(item.version);
                   const createdAtDate = item.createdAt
                     ? typeof item.createdAt === 'string'
@@ -129,12 +128,9 @@ export function DatasetVersionsPanel({
                     : null;
 
                   return (
-                    <ItemList.Row
-                      key={String(item.version)}
-                      isSelected={isSelectionActive ? selectedKeys.has(key) : isVersionSelected(item)}
-                    >
+                    <ItemList.Row key={String(item.version)} isSelected={isSelectionActive && selectedKeys.has(key)}>
                       {isSelectionActive && (
-                        <ItemList.FlexCell className="w-9 pl-4">
+                        <ItemList.Cell className={cn('w-12 pl-2 ')}>
                           <Checkbox
                             checked={selectedKeys.has(key)}
                             onCheckedChange={() => {}}
@@ -148,23 +144,16 @@ export function DatasetVersionsPanel({
                                 : `v${item.version}`
                             }`}
                           />
-                        </ItemList.FlexCell>
+                        </ItemList.Cell>
                       )}
                       <ItemList.RowButton
-                        entry={item}
+                        item={item}
+                        isFeatured={isVersionSelected(item)}
                         columns={versionsListColumns}
-                        isSelected={isSelectionActive ? selectedKeys.has(key) : isVersionSelected(item)}
                         onClick={() => handleVersionClick(item)}
+                        className="py-2"
                       >
-                        <ItemList.FlexCell className="w-full text-neutral flex gap-4 items-baseline text-neutral3">
-                          <strong className="min-w-8">v{item.version}</strong>
-                          <em>{createdAtDate ? format(createdAtDate, 'MMM d, yyyy HH:mm') : null}</em>
-                          {item.isCurrent && (
-                            <span className="ml-auto inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-800">
-                              Latest
-                            </span>
-                          )}
-                        </ItemList.FlexCell>
+                        <ItemList.VersionCell version={item.version} date={createdAtDate} isLatest={item.isCurrent} />
                       </ItemList.RowButton>
                     </ItemList.Row>
                   );

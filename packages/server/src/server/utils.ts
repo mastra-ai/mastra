@@ -40,7 +40,9 @@ export function normalizeRoutePath(path: string): string {
  * Check if a schema looks like a processor step schema.
  * Processor step schemas are discriminated unions on 'phase' with specific values.
  */
-function looksLikeProcessorStepSchema(schema: ZodType | zv4.ZodType<any, any> | undefined): boolean {
+function looksLikeProcessorStepSchema(
+  schema: ZodType | zv4.ZodType<any, any> | { parse(data: unknown): unknown } | undefined,
+): boolean {
   if (!schema) return false;
 
   try {

@@ -1,122 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 /**
- * Legacy extraction instructions from Jan 7, 2026.
- * Used for A/B testing prompt size impact on accuracy.
- * Enable with OM_USE_LEGACY_PROMPT=1
- */
-const LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
-
-When the user TELLS you something about themselves, mark it as an assertion:
-- "I have two kids" → 🔴 (14:30) User stated has two kids
-- "I work at Acme Corp" → 🔴 (14:31) User stated works at Acme Corp
-- "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
-
-When the user ASKS about something, mark it as a question/request:
-- "Can you help me with X?" → 🟡 (15:00) User asked help with X
-- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
-
-USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
-If a user previously stated something and later asks a question about the same topic,
-the assertion is the answer - the question doesn't invalidate what they already told you.
-
-TEMPORAL ANCHORING:
-Convert relative times to estimated dates based on the message timestamp.
-Include the user's original phrasing in quotes, then add an estimated date or range.
-Ranges may span multiple months - e.g., "within the last month" on July 15th could mean anytime in June to early July.
-
-BAD: User was given X by their friend last month.
-GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
-
-PRESERVE UNUSUAL PHRASING:
-When the user uses unexpected or non-standard terminology, quote their exact words.
-
-BAD: User exercised.
-GOOD: User stated they did a "movement session" (their term for exercise).
-
-CONVERSATION CONTEXT:
-- What the user is working on or asking about
-- Previous topics and their outcomes
-- What user understands or needs clarification on
-- Specific requirements or constraints mentioned
-- Contents of assistant learnings and summaries
-- Answers to users questions including full context to remember detailed summaries and explanations
-- Assistant explanations, especially complex ones. observe the fine details so that the assistant does not forget what they explained
-- Relevant code snippets
-- User preferences (like favourites, dislikes, preferences, etc)
-- Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
-- Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
-- When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
-
-ACTIONABLE INSIGHTS:
-- What worked well in explanations
-- What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
-
-/**
- * Check which prompt variant to use (for A/B testing)
- */
-const USE_LEGACY_PROMPT = process.env.OM_USE_LEGACY_PROMPT === '1' || process.env.OM_USE_LEGACY_PROMPT === 'true';
-const USE_CONDENSED_PROMPT =
-  process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
-
-/**
- * Condensed V3 extraction instructions - principle-based, relies on model's common sense.
- * ~45 lines vs ~200 lines in current prompt.
- * Enable with OM_USE_CONDENSED_PROMPT=1
- */
-const CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS = `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
-
-CORE PRINCIPLES:
-
-1. BE SPECIFIC - Vague observations are useless. Capture details that distinguish and identify.
-2. ANCHOR IN TIME - Note when things happened and when they were said.
-3. TRACK STATE CHANGES - When information updates or supersedes previous info, make it explicit.
-4. USE COMMON SENSE - If it would help the assistant remember later, observe it.
-
-ASSERTIONS VS QUESTIONS:
-- User TELLS you something → 🔴 "User stated [fact]"
-- User ASKS something → 🟡 "User asked [question]"
-- User assertions are authoritative. They are the source of truth about their own life.
-
-TEMPORAL ANCHORING:
-- Always include message time at the start: (14:30) User stated...
-- Add estimated date at the END only for relative time references:
-  "User will visit parents this weekend. (meaning Jan 18-19)"
-- Don't add end dates for present-moment statements or vague terms like "recently"
-- Split multi-event statements into separate observations, each with its own date
-
-DETAILS TO ALWAYS PRESERVE:
-- Names, handles, usernames, titles (@username, "Dr. Smith")
-- Numbers, counts, quantities (4 items, 3 sessions, 27th in list)
-- Measurements, percentages, statistics (5kg, 20% improvement, 85% accuracy)
-- Sequences and orderings (steps 1-5, chord progression, lucky numbers)
-- Prices, dates, times, durations ($50, March 15, 2 hours)
-- Locations and distinguishing attributes (near X, based in Y, specializes in Z)
-- User's specific role (presenter, volunteer, organizer - not just "attended")
-- Exact phrasing when unusual ("movement session" for exercise)
-- Verbatim text being collaborated on (code, formatted text, ASCII art)
-
-WHEN ASSISTANT PROVIDES LISTS/RECOMMENDATIONS:
-Don't just say "Assistant recommended 5 hotels." Capture what distinguishes each:
-"Assistant recommended: Hotel A (near station), Hotel B (pet-friendly), Hotel C (has pool)..."
-
-STATE CHANGES:
-When user updates information, note what changed:
-"User will use the new method (replacing the old approach)"
-
-WHO/WHAT/WHERE/WHEN:
-Capture all dimensions. Not just "User went on a trip" but who with, where, when, and what happened.
-
-Don't repeat observations that have already been captured in previous sessions.
-
-REMEMBER: These observations are your ENTIRE memory. Any detail you fail to observe is permanently forgotten. Use common sense - if something seems like it might be important to remember, it probably is. When in doubt, observe it.`;
-
-/**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
  */
-const CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
+export const OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
 
 When the user TELLS you something about themselves, mark it as an assertion:
 - "I have two kids" → 🔴 (14:30) User stated has two kids
@@ -124,8 +12,8 @@ When the user TELLS you something about themselves, mark it as an assertion:
 - "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
 
 When the user ASKS about something, mark it as a question/request:
-- "Can you help me with X?" → 🟡 (15:00) User asked help with X
-- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
+- "Can you help me with X?" → 🔴 (15:00) User asked help with X
+- "What's the best way to do Y?" → 🔴 (15:01) User asked best way to do Y
 
 Distinguish between QUESTIONS and STATEMENTS OF INTENT:
 - "Can you recommend..." → Question (extract as "User asked...")
@@ -307,72 +195,37 @@ CONVERSATION CONTEXT:
 - When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
 - For any described entity (like a person, place, thing, etc), preserve the attributes that would help identify or describe the specific entity later: location ("near X"), specialty ("focuses on Y"), unique feature ("has Z"), relationship ("owned by W"), or other details. The entity's name is important, but so are any additional details that distinguish it. If there are a list of entities, preserve these details for each of them.
 
+USER MESSAGE CAPTURE:
+- Short and medium-length user messages should be captured nearly verbatim in your own words.
+- For very long user messages, summarize but quote key phrases that carry specific intent or meaning.
+- This is critical for continuity: when the conversation window shrinks, the observations are the only record of what the user said.
+
+AVOIDING REPETITIVE OBSERVATIONS:
+- Do NOT repeat the same observation across multiple turns if there is no new information.
+- When the agent performs repeated similar actions (e.g., browsing files, running the same tool type multiple times), group them into a single parent observation with sub-bullets for each new result.
+
+Example — BAD (repetitive):
+* 🟡 (14:30) Agent used view tool on src/auth.ts
+* 🟡 (14:31) Agent used view tool on src/users.ts
+* 🟡 (14:32) Agent used view tool on src/routes.ts
+
+Example — GOOD (grouped):
+* 🟡 (14:30) Agent browsed source files for auth flow
+  * -> viewed src/auth.ts — found token validation logic
+  * -> viewed src/users.ts — found user lookup by email
+  * -> viewed src/routes.ts — found middleware chain
+
+Only add a new observation for a repeated action if the NEW result changes the picture.
+
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
 - User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
 
 /**
- * Select which extraction instructions to use based on environment variable.
- * Set OM_USE_LEGACY_PROMPT=1 to use the smaller Jan 7 prompt for A/B testing.
- * Set OM_USE_CONDENSED_PROMPT=1 to use the new condensed V3 prompt.
- */
-export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
-  ? CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS
-  : USE_LEGACY_PROMPT
-    ? LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS
-    : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
-
-/**
  * The output format instructions for the Observer.
  * This is exported so the Reflector can use the same format.
  */
-
-/**
- * Condensed output format with realistic examples that model desired patterns.
- */
-const CONDENSED_OBSERVER_OUTPUT_FORMAT = `Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
-- 🟡 Medium: project details, learned information, tool results
-- 🟢 Low: minor details, uncertain observations
-
-Group observations by date, then list each with 24-hour time.
-Group related observations (like tool sequences) by indenting.
-
-<observations>
-Date: Dec 4, 2025
-* 🔴 (09:15) User stated they have 3 kids: Emma (12), Jake (9), and Lily (5)
-* 🔴 (09:16) User's anniversary is March 15
-* 🟡 (09:20) User asked how to optimize database queries
-* 🟡 (10:30) User working on auth refactor - targeting 50% latency reduction
-* 🟡 (10:45) Assistant recommended hotels: Grand Plaza (downtown, $180/night), Seaside Inn (near beach, pet-friendly), Mountain Lodge (has pool, free breakfast)
-* 🔴 (11:00) User's friend @maria_dev recommended using Redis for caching
-* 🟡 (11:15) User attended the tech conference as a speaker (presented on microservices)
-* 🔴 (11:30) User will visit parents this weekend (meaning Dec 7-8, 2025)
-* 🟡 (14:00) Agent debugging auth issue
-  * -> ran git status, found 3 modified files
-  * -> viewed auth.ts:45-60, found missing null check
-  * -> applied fix, tests now pass
-* 🟡 (14:30) Assistant provided dataset stats: 7,342 samples, 89.6% accuracy, 23ms inference time
-* 🔴 (15:00) User's lucky numbers from fortune cookie: 7, 14, 23, 38, 42, 49
-
-Date: Dec 5, 2025
-* 🔴 (09:00) User switched from Python to TypeScript for the project (no longer using Python)
-* 🟡 (09:30) User bought running shoes for $120 at SportMart (downtown location)
-* 🔴 (10:00) User prefers morning meetings, not afternoon (updating previous preference)
-* 🟡 (10:30) User went to Italy with their sister last summer (meaning July 2025), visited Rome and Florence for 2 weeks
-* 🔴 (10:45) User's dentist appointment is next Tuesday (meaning Dec 10, 2025)
-* 🟢 (11:00) User mentioned they might try the new coffee shop
-</observations>
-
-<current-task>
-Primary: Implementing OAuth2 flow for the auth refactor
-Secondary: Waiting for user to confirm database schema changes
-</current-task>
-
-<suggested-response>
-The OAuth2 implementation is ready for testing. Would you like me to walk through the flow?
-</suggested-response>`;
 
 /**
  * Base output format for Observer (without patterns section)
@@ -383,7 +236,7 @@ export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
 - 🟢 Low: minor details, uncertain observations
 
 Group related observations (like tool sequences) by indenting:
-* 🟡 (14:33) Agent debugging auth issue
+* 🔴 (14:33) Agent debugging auth issue
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
@@ -393,11 +246,11 @@ Group observations by date, then list each with 24-hour time.
 <observations>
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🟡 (14:31) Working on feature X
-* 🟢 (14:32) User might prefer dark mode
+* 🔴 (14:31) Working on feature X
+* 🟡 (14:32) User might prefer dark mode
 
 Date: Dec 5, 2025
-* 🟡 (09:15) Continued work on feature X
+* 🔴 (09:15) Continued work on feature X
 </observations>
 
 <current-task>
@@ -416,45 +269,32 @@ Hint for the agent's immediate next message. Examples:
 </suggested-response>`;
 
 /**
- * Condensed guidelines - no GOOD/BAD examples, no arbitrary limits
- */
-const CONDENSED_OBSERVER_GUIDELINES = `- Be specific: "User prefers short answers without lengthy explanations" not "User stated a preference"
-- Use terse language - dense sentences without unnecessary words
-- Don't repeat observations that have already been captured
-- When the agent calls tools, observe what was called, why, and what was learned
-- Include line numbers when observing code files
-- If the agent provides a detailed response, observe the key points so it could be repeated
-- Start each observation with a priority emoji (🔴, 🟡, 🟢)
-- Observe WHAT happened and WHAT it means, not HOW well it was done
-- If the user provides detailed messages or code snippets, observe all important details`;
-
-/**
  * The guidelines for the Observer.
  * This is exported so the Reflector can reference them.
  */
-export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
-  ? CONDENSED_OBSERVER_GUIDELINES
-  : `- Be specific enough for the assistant to act on
+export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
-- Use terse language to save tokens. Sentences should be dense without unnecessary words.
-- Do not add repetitive observations that have already been observed.
-- If the agent calls tools, observe what was called, why, and what was learned.
-- When observing files with line numbers, include the line number if useful.
-- If the agent provides a detailed response, observe the contents so it could be repeated.
+- Use terse language to save tokens. Sentences should be dense without unnecessary words
+- Do not add repetitive observations that have already been observed. Group repeated similar actions (tool calls, file browsing) under a single parent with sub-bullets for new results
+- If the agent calls tools, observe what was called, why, and what was learned
+- When observing files with line numbers, include the line number if useful
+- If the agent provides a detailed response, observe the contents so it could be repeated
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- Observe WHAT the agent did and WHAT it means, not HOW well it did it.
-- If the user provides detailed messages or code snippets, observe all important details.`;
+- User messages are always 🔴 priority, so are the completions of tasks. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
+- Observe WHAT the agent did and WHAT it means
+- If the user provides detailed messages or code snippets, observe all important details`;
 
 /**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
+ * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildObserverSystemPrompt(multiThread: boolean = false): string {
+export function buildObserverSystemPrompt(multiThread: boolean = false, instruction?: string): string {
   // Use condensed output format when condensed prompt is enabled
   // Otherwise, use the base output format
-  const outputFormat = USE_CONDENSED_PROMPT ? CONDENSED_OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
+  const outputFormat = OBSERVER_OUTPUT_FORMAT_BASE;
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -476,7 +316,7 @@ Your output MUST use XML tags to structure the response. Each thread's observati
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🟡 (14:31) Working on feature X
+* 🔴 (14:31) Working on feature X
 
 <current-task>
 What the agent is currently working on in this thread
@@ -489,7 +329,7 @@ Hint for the agent's next message in this thread
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🟡 (09:15) User asked about deployment
+* 🔴 (09:15) User asked about deployment
 
 <current-task>
 Current task for this thread
@@ -502,7 +342,7 @@ Suggested response for this thread
 </observations>
 
 Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🔴 High: explicit user facts, preferences, goals achieved, critical context, user messages
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
 
@@ -512,7 +352,7 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -539,7 +379,7 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
 
 /**
@@ -566,6 +406,9 @@ export interface ObserverResult {
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -611,8 +454,8 @@ export function formatMessagesForObserver(messages: MastraDBMessage[], options?:
               const argsStr = JSON.stringify(inv.args, null, 2);
               return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
             }
-            // Skip observation marker parts
-            if (part.type?.startsWith('data-om-observation-')) return '';
+            // Skip all data-* parts (observation markers, activation markers, buffering markers, etc.)
+            if (part.type?.startsWith('data-')) return '';
             return '';
           })
           .filter(Boolean)
@@ -688,7 +531,7 @@ export function buildMultiThreadObserverPrompt(
   prompt += `</thread>\n`;
   prompt += `<thread id="thread2">\n`;
   prompt += `Date: Dec 5, 2025\n`;
-  prompt += `* 🟡 (09:15) User asked about deployment\n`;
+  prompt += `* 🔴 (09:15) User asked about deployment\n`;
   prompt += `<current-task>Discussing deployment options</current-task>\n`;
   prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
   prompt += `</thread>\n`;
@@ -705,6 +548,8 @@ export interface MultiThreadObserverResult {
   threads: Map<string, ObserverResult>;
   /** Raw output from the model (for debugging) */
   rawOutput: string;
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -712,6 +557,11 @@ export interface MultiThreadObserverResult {
  */
 export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
+
+  // Check for degenerate repetition on the whole output
+  if (detectDegenerateRepetition(output)) {
+    return { threads, rawOutput: output, degenerate: true };
+  }
 
   // Extract the <observations> block first
   const observationsMatch = output.match(/^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/im);
@@ -746,8 +596,8 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
-    // Clean up observations
-    observations = observations.trim();
+    // Clean up observations and apply line truncation
+    observations = sanitizeObservationLines(observations.trim());
 
     threads.set(threadId, {
       observations,
@@ -802,11 +652,20 @@ export function buildObserverPrompt(
  * Uses XML tag parsing for structured extraction.
  */
 export function parseObserverOutput(output: string): ObserverResult {
+  // Check for degenerate repetition before parsing (operates on raw output)
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      rawOutput: output,
+      degenerate: true,
+    };
+  }
+
   const parsed = parseMemorySectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,
@@ -886,6 +745,71 @@ function extractListItemsOnly(content: string): string {
   }
 
   return listLines.join('\n').trim();
+}
+
+/**
+ * Maximum length (in characters) for a single observation line.
+ * Lines exceeding this are truncated with an ellipsis marker.
+ * This guards against LLM degeneration that produces enormous single-line outputs.
+ */
+const MAX_OBSERVATION_LINE_CHARS = 10_000;
+
+/**
+ * Truncate individual observation lines that exceed the maximum length.
+ */
+export function sanitizeObservationLines(observations: string): string {
+  if (!observations) return observations;
+  const lines = observations.split('\n');
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
+      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      changed = true;
+    }
+  }
+  return changed ? lines.join('\n') : observations;
+}
+
+/**
+ * Detect degenerate repetition in observer/reflector output.
+ * Returns true if the text contains suspicious levels of repeated content,
+ * which indicates an LLM repeat-penalty bug (e.g., Gemini Flash looping).
+ *
+ * Strategy: sample sequential chunks of the text and check if a high
+ * proportion are near-identical to previous chunks.
+ */
+export function detectDegenerateRepetition(text: string): boolean {
+  if (!text || text.length < 2000) return false;
+
+  // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
+  // If the same ~200-char window appears many times, it's degenerate.
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50)); // sample ~50 windows
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  // If more than 40% of sampled windows are duplicates, it's degenerate
+  if (totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
+    return true;
+  }
+
+  // Strategy 2: Check for extremely long lines (a single line with 50k+ chars
+  // is almost certainly degenerate enumeration)
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.length > 50_000) return true;
+  }
+
+  return false;
 }
 
 /**
