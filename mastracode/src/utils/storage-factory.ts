@@ -1,15 +1,13 @@
 /**
  * Storage factory — creates the appropriate storage backend based on resolved config.
  *
- * LibSQL is always available (direct dependency).
- * PostgreSQL is loaded dynamically via optional `@mastra/pg` dependency.
- *
  * If PG is selected but fails to connect, falls back to LibSQL so the TUI
  * can start and the user can fix the connection via /settings.
  */
 
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
+import { PostgresStore } from '@mastra/pg';
 
 import type { StorageConfig, PgStorageConfig } from './project.js';
 import { getDatabasePath } from './project.js';
@@ -31,7 +29,7 @@ function createFallbackLibSQL(): MastraCompositeStore {
  * Create a storage instance from the resolved config.
  *
  * - `libsql` backend → LibSQLStore (always available)
- * - `pg` backend → PostgresStore (requires @mastra/pg), falls back to LibSQL on failure
+ * - `pg` backend → PostgresStore, falls back to LibSQL on connection failure
  */
 export async function createStorage(config: StorageConfig): Promise<StorageResult> {
   if (config.backend === 'pg') {
@@ -59,38 +57,16 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
     };
   }
 
-  let PostgresStore: any;
-  try {
-    const pg = await import('@mastra/pg');
-    PostgresStore = pg.PostgresStore;
-  } catch {
-    return {
-      storage: createFallbackLibSQL(),
-      warning:
-        'PostgreSQL backend selected but @mastra/pg is not installed. ' +
-        'Using LibSQL fallback. Install it with: pnpm add @mastra/pg',
-    };
-  }
-
-  const storeConfig: Record<string, unknown> = {
-    id: 'mastra-code-storage',
+  const base = {
+    id: 'mastra-code-storage' as const,
+    ...(config.schemaName ? { schemaName: config.schemaName } : {}),
+    ...(config.disableInit ? { disableInit: config.disableInit } : {}),
+    ...(config.skipDefaultIndexes ? { skipDefaultIndexes: config.skipDefaultIndexes } : {}),
   };
 
-  if (config.connectionString) {
-    storeConfig.connectionString = config.connectionString;
-  } else {
-    storeConfig.host = config.host;
-    storeConfig.port = config.port;
-    storeConfig.database = config.database;
-    storeConfig.user = config.user;
-    storeConfig.password = config.password;
-  }
-
-  if (config.schemaName) storeConfig.schemaName = config.schemaName;
-  if (config.disableInit) storeConfig.disableInit = config.disableInit;
-  if (config.skipDefaultIndexes) storeConfig.skipDefaultIndexes = config.skipDefaultIndexes;
-
-  const store = new PostgresStore(storeConfig);
+  const store = config.connectionString
+    ? new PostgresStore({ ...base, connectionString: config.connectionString })
+    : new PostgresStore({ ...base, host: config.host!, port: config.port, database: config.database, user: config.user, password: config.password });
 
   // Test the connection before committing — if it fails, fall back to LibSQL
   // so the user can fix the config via /settings.
