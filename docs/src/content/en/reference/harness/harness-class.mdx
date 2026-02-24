@@ -647,12 +647,12 @@ await harness.loadOMProgress()
 Return the full `ObservationalMemoryRecord` for the current thread and resource, or `null` if no thread is selected or no record exists.
 
 ```typescript
-const record = await harness.getObservationalMemoryRecord();
+const record = await harness.getObservationalMemoryRecord()
 
 if (record) {
-  console.log(record.activeObservations);
-  console.log(record.generationCount);
-  console.log(record.observationTokenCount);
+  console.log(record.activeObservations)
+  console.log(record.generationCount)
+  console.log(record.observationTokenCount)
 }
 ```
 
