@@ -5,14 +5,17 @@ import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
   HarnessConfig,
+  HarnessDisplayState,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -88,6 +91,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   };
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
+  private displayState: HarnessDisplayState = defaultDisplayState();
 
   constructor(config: HarnessConfig<TState>) {
     this.id = config.id;
@@ -516,7 +520,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const thread: HarnessThread = {
       id: this.generateId(),
       resourceId: this.resourceId,
-      title: title || 'New Thread',
+      title: title || '',
       createdAt: now,
       updatedAt: now,
     };
@@ -859,6 +863,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     } catch {
       // OM not available or not initialized — that's fine
+    }
+  }
+
+  async getObservationalMemoryRecord(): Promise<ObservationalMemoryRecord | null> {
+    if (!this.currentThreadId) return null;
+
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      return await memoryStorage.getObservationalMemory(this.currentThreadId, this.resourceId);
+    } catch {
+      return null;
     }
   }
 
@@ -1684,6 +1699,38 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.currentRunId;
   }
 
+  // ===========================================================================
+  // Display State
+  // ===========================================================================
+
+  /**
+   * Returns a read-only snapshot of the canonical display state.
+   * UIs should use this to render instead of building up state from raw events.
+   */
+  getDisplayState(): Readonly<HarnessDisplayState> {
+    return this.displayState;
+  }
+
+  /**
+   * Reset display state fields that are scoped to a thread.
+   * Called on thread switch/creation.
+   */
+  private resetThreadDisplayState(): void {
+    this.displayState.activeTools = new Map();
+    this.displayState.toolInputBuffers = new Map();
+    this.displayState.pendingApproval = null;
+    this.displayState.pendingQuestion = null;
+    this.displayState.pendingPlanApproval = null;
+    this.displayState.activeSubagents = new Map();
+    this.displayState.currentMessage = null;
+    this.displayState.modifiedFiles = new Map();
+    this.displayState.tasks = [];
+    this.displayState.previousTasks = [];
+    this.displayState.omProgress = defaultOMProgressState();
+    this.displayState.bufferingMessages = false;
+    this.displayState.bufferingObservations = false;
+  }
+
   /**
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
@@ -1836,6 +1883,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   private emit(event: HarnessEvent): void {
+    // Update display state based on the event (before dispatching to listeners)
+    this.applyDisplayStateUpdate(event);
+
+    this.dispatchToListeners(event);
+
+    // After every event, emit display_state_changed so UIs that prefer a single
+    // subscribe-and-render pattern can do so. We dispatch directly to listeners
+    // (not through emit()) to avoid infinite recursion.
+    if (event.type !== 'display_state_changed') {
+      this.dispatchToListeners({
+        type: 'display_state_changed',
+        displayState: this.displayState,
+      });
+    }
+  }
+
+  private dispatchToListeners(event: HarnessEvent): void {
     for (const listener of this.listeners) {
       try {
         const result = listener(event);
@@ -1845,6 +1909,377 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       } catch (err) {
         console.error('Error in harness event listener:', err);
       }
+    }
+  }
+
+  /**
+   * Apply a display state update based on an incoming event.
+   * This is the centralized state machine that keeps HarnessDisplayState in sync
+   * with every event the Harness emits.
+   */
+  private applyDisplayStateUpdate(event: HarnessEvent): void {
+    const ds = this.displayState;
+
+    switch (event.type) {
+      // ── Agent lifecycle ────────────────────────────────────────────────
+      case 'agent_start':
+        ds.isRunning = true;
+        ds.activeTools = new Map();
+        ds.toolInputBuffers = new Map();
+        ds.currentMessage = null;
+        ds.pendingApproval = null;
+        break;
+
+      case 'agent_end':
+        ds.isRunning = false;
+        ds.pendingApproval = null;
+        ds.pendingQuestion = null;
+        ds.pendingPlanApproval = null;
+        // Mark any still-running tools as errored (handles abort mid-run)
+        for (const [, tool] of ds.activeTools) {
+          if (tool.status === 'running' || tool.status === 'streaming_input') {
+            tool.status = 'error';
+          }
+        }
+        ds.activeSubagents = new Map();
+        break;
+
+      // ── Message streaming ──────────────────────────────────────────────
+      case 'message_start':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_update':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_end':
+        ds.currentMessage = event.message;
+        break;
+
+      // ── Tool lifecycle ─────────────────────────────────────────────────
+      case 'tool_input_start': {
+        ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
+        const existing = ds.activeTools.get(event.toolCallId);
+        if (existing) {
+          existing.status = 'streaming_input';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: {},
+            status: 'streaming_input',
+          });
+        }
+        break;
+      }
+
+      case 'tool_input_delta': {
+        const buf = ds.toolInputBuffers.get(event.toolCallId);
+        if (buf) {
+          buf.text += event.argsTextDelta;
+        }
+        break;
+      }
+
+      case 'tool_input_end':
+        ds.toolInputBuffers.delete(event.toolCallId);
+        break;
+
+      case 'tool_start': {
+        const existingTool = ds.activeTools.get(event.toolCallId);
+        if (existingTool) {
+          existingTool.name = event.toolName;
+          existingTool.args = event.args;
+          existingTool.status = 'running';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: event.args,
+            status: 'running',
+          });
+        }
+        break;
+      }
+
+      case 'tool_update': {
+        const tool = ds.activeTools.get(event.toolCallId);
+        if (tool) {
+          tool.partialResult =
+            typeof event.partialResult === 'string' ? event.partialResult : JSON.stringify(event.partialResult);
+        }
+        break;
+      }
+
+      case 'tool_end': {
+        const endedTool = ds.activeTools.get(event.toolCallId);
+        if (endedTool) {
+          endedTool.status = event.isError ? 'error' : 'completed';
+          endedTool.result = event.result;
+          endedTool.isError = event.isError;
+        }
+        // Track file modifications
+        if (!event.isError) {
+          const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+          const toolState = ds.activeTools.get(event.toolCallId);
+          if (toolState && FILE_TOOLS.includes(toolState.name)) {
+            const toolArgs = toolState.args as Record<string, unknown>;
+            const filePath = toolArgs?.path as string;
+            if (filePath) {
+              const existing = ds.modifiedFiles.get(filePath);
+              if (existing) {
+                existing.operations.push(toolState.name);
+              } else {
+                ds.modifiedFiles.set(filePath, {
+                  operations: [toolState.name],
+                  firstModified: new Date(),
+                });
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'shell_output': {
+        const shellTool = ds.activeTools.get(event.toolCallId);
+        if (shellTool) {
+          shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
+        }
+        break;
+      }
+
+      case 'tool_approval_required':
+        ds.pendingApproval = {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        };
+        break;
+
+      // ── Interactive prompts ────────────────────────────────────────────
+      case 'ask_question':
+        ds.pendingQuestion = {
+          questionId: event.questionId,
+          question: event.question,
+          options: event.options,
+        };
+        break;
+
+      case 'plan_approval_required':
+        ds.pendingPlanApproval = {
+          planId: event.planId,
+          title: event.title,
+          plan: event.plan,
+        };
+        break;
+
+      case 'plan_approved':
+        ds.pendingPlanApproval = null;
+        break;
+
+      // ── Subagent tracking ──────────────────────────────────────────────
+      case 'subagent_start':
+        ds.activeSubagents.set(event.toolCallId, {
+          agentType: event.agentType,
+          task: event.task,
+          modelId: event.modelId,
+          toolCalls: [],
+          textDelta: '',
+          status: 'running',
+        });
+        break;
+
+      case 'subagent_text_delta': {
+        const sub = ds.activeSubagents.get(event.toolCallId);
+        if (sub) {
+          sub.textDelta += event.textDelta;
+        }
+        break;
+      }
+
+      case 'subagent_tool_start': {
+        const subAgent = ds.activeSubagents.get(event.toolCallId);
+        if (subAgent) {
+          subAgent.toolCalls.push({ name: event.subToolName, isError: false });
+        }
+        break;
+      }
+
+      case 'subagent_tool_end': {
+        const subTool = ds.activeSubagents.get(event.toolCallId);
+        if (subTool) {
+          const tc = subTool.toolCalls.find(t => t.name === event.subToolName && !t.isError);
+          if (tc) {
+            tc.isError = event.isError;
+          }
+        }
+        break;
+      }
+
+      case 'subagent_end': {
+        const endedSub = ds.activeSubagents.get(event.toolCallId);
+        if (endedSub) {
+          endedSub.status = event.isError ? 'error' : 'completed';
+          endedSub.durationMs = event.durationMs;
+          endedSub.result = event.result;
+        }
+        break;
+      }
+
+      // ── Observational Memory ───────────────────────────────────────────
+      case 'om_status': {
+        const w = event.windows;
+        ds.omProgress.pendingTokens = w.active.messages.tokens;
+        ds.omProgress.threshold = w.active.messages.threshold;
+        ds.omProgress.thresholdPercent =
+          w.active.messages.threshold > 0 ? (w.active.messages.tokens / w.active.messages.threshold) * 100 : 0;
+        ds.omProgress.observationTokens = w.active.observations.tokens;
+        ds.omProgress.reflectionThreshold = w.active.observations.threshold;
+        ds.omProgress.reflectionThresholdPercent =
+          w.active.observations.threshold > 0
+            ? (w.active.observations.tokens / w.active.observations.threshold) * 100
+            : 0;
+        ds.omProgress.buffered = {
+          observations: { ...w.buffered.observations },
+          reflection: { ...w.buffered.reflection },
+        };
+        ds.omProgress.generationCount = event.generationCount;
+        ds.omProgress.stepNumber = event.stepNumber;
+        // Drive buffering animation flags from status fields
+        ds.bufferingMessages = w.buffered.observations.status === 'running';
+        ds.bufferingObservations = w.buffered.reflection.status === 'running';
+        break;
+      }
+
+      case 'om_observation_start':
+        ds.omProgress.status = 'observing';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        break;
+
+      case 'om_observation_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.observationTokens;
+        // Messages have been observed — reset pending tokens
+        ds.omProgress.pendingTokens = 0;
+        ds.omProgress.thresholdPercent = 0;
+        break;
+
+      case 'om_observation_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_reflection_start':
+        ds.omProgress.status = 'reflecting';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        ds.omProgress.preReflectionTokens = ds.omProgress.observationTokens;
+        ds.omProgress.observationTokens = event.tokensToReflect;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0 ? (event.tokensToReflect / ds.omProgress.reflectionThreshold) * 100 : 0;
+        break;
+
+      case 'om_reflection_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.compressedTokens;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0
+            ? (event.compressedTokens / ds.omProgress.reflectionThreshold) * 100
+            : 0;
+        break;
+
+      case 'om_reflection_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_buffering_start':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = true;
+        } else {
+          ds.bufferingObservations = true;
+        }
+        break;
+
+      case 'om_buffering_end':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_buffering_failed':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_activation':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      // ── Token usage ────────────────────────────────────────────────────
+      case 'usage_update':
+        ds.tokenUsage = {
+          promptTokens: this.tokenUsage.promptTokens,
+          completionTokens: this.tokenUsage.completionTokens,
+          totalTokens: this.tokenUsage.totalTokens,
+        };
+        break;
+
+      // ── Tasks ──────────────────────────────────────────────────────────
+      case 'task_updated':
+        ds.previousTasks = [...ds.tasks];
+        ds.tasks = event.tasks;
+        break;
+
+      // ── Thread lifecycle ───────────────────────────────────────────────
+      case 'thread_changed':
+        this.resetThreadDisplayState();
+        ds.tokenUsage = { ...this.tokenUsage };
+        break;
+
+      case 'thread_created':
+        this.resetThreadDisplayState();
+        ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        break;
+
+      // ── State changes (for OM threshold overrides) ──────────────────────
+      case 'state_changed': {
+        const keys = event.changedKeys;
+        if (keys.includes('observationThreshold')) {
+          const value = (event.state as Record<string, unknown>).observationThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.threshold = value;
+            ds.omProgress.thresholdPercent = value > 0 ? (ds.omProgress.pendingTokens / value) * 100 : 0;
+          }
+        }
+        if (keys.includes('reflectionThreshold')) {
+          const value = (event.state as Record<string, unknown>).reflectionThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.reflectionThreshold = value;
+            ds.omProgress.reflectionThresholdPercent = value > 0 ? (ds.omProgress.observationTokens / value) * 100 : 0;
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
     }
   }
 
@@ -1916,7 +2351,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
 
     if (this.workspaceFn) {
-      harnessContext.workspace = await Promise.resolve(this.workspaceFn({ requestContext }));
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
+      harnessContext.workspace = resolved;
+      // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
+      this.workspace = resolved;
     }
 
     return requestContext;
@@ -1956,6 +2394,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   getWorkspace(): Workspace | undefined {
     return this.workspace;
+  }
+
+  /**
+   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
+   * this triggers resolution and caches the result so getWorkspace() returns it.
+   * Useful for code paths outside the request flow (e.g. slash commands).
+   */
+  async resolveWorkspace(): Promise<Workspace | undefined> {
+    if (this.workspace) return this.workspace;
+    if (this.workspaceFn) {
+      // buildRequestContext resolves the workspace and caches it on this.workspace
+      await this.buildRequestContext();
+      return this.workspace;
+    }
+    return undefined;
   }
 
   hasWorkspace(): boolean {

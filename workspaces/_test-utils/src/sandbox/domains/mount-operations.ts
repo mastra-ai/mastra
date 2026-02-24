@@ -3,13 +3,13 @@
  * Tests: mount(), unmount(), mount state management
  */
 
-import type { WorkspaceSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
+import type { MastraSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
 import type { SandboxCapabilities } from '../types';
 
 interface TestContext {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   capabilities: Required<SandboxCapabilities>;
   testTimeout: number;
   fastOnly: boolean;

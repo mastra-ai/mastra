@@ -15,8 +15,8 @@ Retrieve system logs with optional filtering:
 
 ```typescript
 const logs = await mastraClient.listLogs({
-  transportId: "transport-1",
-});
+  transportId: 'transport-1',
+})
 ```
 
 ## Getting Logs for a Specific Run
@@ -25,7 +25,7 @@ Retrieve logs for a specific execution run:
 
 ```typescript
 const runLogs = await mastraClient.getLogForRun({
-  runId: "run-1",
-  transportId: "transport-1",
-});
+  runId: 'run-1',
+  transportId: 'transport-1',
+})
 ```

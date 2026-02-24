@@ -26,9 +26,9 @@ npm install @mastra/s3
 Add an `S3Filesystem` to a workspace and assign it to an agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
 
 const workspace = new Workspace({
   filesystem: new S3Filesystem({
@@ -37,19 +37,19 @@ const workspace = new Workspace({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   }),
-});
+})
 
 const agent = new Agent({
   name: 'file-agent',
   model: 'anthropic/claude-opus-4-5',
   workspace,
-});
+})
 ```
 
 ### Cloudflare R2
 
 ```typescript
-import { S3Filesystem } from '@mastra/s3';
+import { S3Filesystem } from '@mastra/s3'
 
 const filesystem = new S3Filesystem({
   bucket: 'my-r2-bucket',
@@ -57,13 +57,13 @@ const filesystem = new S3Filesystem({
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-});
+})
 ```
 
 ### MinIO
 
 ```typescript
-import { S3Filesystem } from '@mastra/s3';
+import { S3Filesystem } from '@mastra/s3'
 
 const filesystem = new S3Filesystem({
   bucket: 'my-bucket',
@@ -71,100 +71,119 @@ const filesystem = new S3Filesystem({
   endpoint: 'http://localhost:9000',
   accessKeyId: 'minioadmin',
   secretAccessKey: 'minioadmin',
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "bucket",
-      type: "string",
-      description: "S3 bucket name",
-    },
-    {
-      name: "region",
-      type: "string",
-      description: "AWS region (use 'auto' for R2)",
-    },
-    {
-      name: "accessKeyId",
-      type: "string",
-      description: "AWS access key ID. Optional for public buckets (read-only access).",
-      isOptional: true,
-    },
-    {
-      name: "secretAccessKey",
-      type: "string",
-      description: "AWS secret access key. Optional for public buckets (read-only access).",
-      isOptional: true,
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "Custom endpoint URL for S3-compatible storage (R2, MinIO, etc.)",
-      isOptional: true,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Optional prefix for all keys (acts like a subdirectory)",
-      isOptional: true,
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this filesystem instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "displayName",
-      type: "string",
-      description: "Human-friendly display name for the UI",
-      isOptional: true,
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, all write operations are blocked",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "bucket",
+type: "string",
+description: "S3 bucket name",
+},
+{
+name: "region",
+type: "string",
+description: "AWS region (use 'auto' for R2)",
+},
+{
+name: "accessKeyId",
+type: "string",
+description: "AWS access key ID. Optional for public buckets (read-only access).",
+isOptional: true,
+},
+{
+name: "secretAccessKey",
+type: "string",
+description: "AWS secret access key. Optional for public buckets (read-only access).",
+isOptional: true,
+},
+{
+name: "endpoint",
+type: "string",
+description: "Custom endpoint URL for S3-compatible storage (R2, MinIO, etc.)",
+isOptional: true,
+},
+{
+name: "forcePathStyle",
+type: "boolean",
+description: "Force path-style URLs instead of virtual-hosted-style. Required for some S3-compatible services like MinIO. Defaults to true when a custom endpoint is provided.",
+isOptional: true,
+defaultValue: "true (when endpoint is set)",
+},
+{
+name: "prefix",
+type: "string",
+description: "Optional prefix for all keys (acts like a subdirectory)",
+isOptional: true,
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this filesystem instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "displayName",
+type: "string",
+description: "Human-friendly display name for the UI",
+isOptional: true,
+},
+{
+name: "icon",
+type: "FilesystemIcon",
+description: "Icon identifier for the UI",
+isOptional: true,
+},
+{
+name: "description",
+type: "string",
+description: "Short description of this filesystem for the UI",
+isOptional: true,
+},
+{
+name: "readOnly",
+type: "boolean",
+description: "When true, all write operations are blocked",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Filesystem instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('S3Filesystem')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('s3')",
-    },
-    {
-      name: "bucket",
-      type: "string",
-      description: "The S3 bucket name",
-    },
-    {
-      name: "readOnly",
-      type: "boolean | undefined",
-      description: "Whether the filesystem is in read-only mode",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Filesystem instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('S3Filesystem')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('s3')",
+},
+{
+name: "bucket",
+type: "string",
+description: "The S3 bucket name",
+},
+{
+name: "readOnly",
+type: "boolean | undefined",
+description: "Whether the filesystem is in read-only mode",
+},
+]}
 />
 
 ## Methods
@@ -188,7 +207,7 @@ S3Filesystem implements the [WorkspaceFilesystem interface](/reference/workspace
 Initialize the filesystem. Verifies bucket access and credentials.
 
 ```typescript
-await filesystem.init();
+await filesystem.init()
 ```
 
 ### `getInfo()`
@@ -196,7 +215,7 @@ await filesystem.init();
 Returns metadata about this filesystem instance.
 
 ```typescript
-const info = filesystem.getInfo();
+const info = filesystem.getInfo()
 // { id: '...', name: 'S3Filesystem', provider: 's3', status: 'ready' }
 ```
 
@@ -205,7 +224,7 @@ const info = filesystem.getInfo();
 Returns the mount configuration for sandboxes that support mounting this filesystem type.
 
 ```typescript
-const config = filesystem.getMountConfig();
+const config = filesystem.getMountConfig()
 // { type: 's3', bucket: 'my-bucket', region: 'us-east-1', ... }
 ```
 
@@ -214,9 +233,9 @@ const config = filesystem.getMountConfig();
 S3Filesystem can be mounted into E2B sandboxes, making the bucket accessible as a local directory:
 
 ```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { E2BSandbox } from '@mastra/e2b';
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
   mounts: {
@@ -228,7 +247,7 @@ const workspace = new Workspace({
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 See [E2BSandbox reference](/reference/workspace/e2b-sandbox) for more details on mounting.

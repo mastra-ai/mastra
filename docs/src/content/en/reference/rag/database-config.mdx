@@ -17,11 +17,11 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
 
 ```typescript
 export type DatabaseConfig = {
-  pinecone?: PineconeConfig;
-  pgvector?: PgVectorConfig;
-  chroma?: ChromaConfig;
-  [key: string]: any; // Extensible for future databases
-};
+  pinecone?: PineconeConfig
+  pgvector?: PgVectorConfig
+  chroma?: ChromaConfig
+  [key: string]: any // Extensible for future databases
+}
 ```
 
 ## Database-Specific Types
@@ -32,40 +32,40 @@ Configuration options specific to Pinecone vector store.
 
 <PropertiesTable
   content={[
-    {
-      name: "namespace",
-      type: "string",
-      description:
-        "Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
-      isOptional: true,
-    },
-    {
-      name: "sparseVector",
-      type: "{ indices: number[]; values: number[]; }",
-      description:
-        "Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "indices",
-              description: "Array of indices for sparse vector components",
-              isOptional: false,
-              type: "number[]",
-            },
-            {
-              name: "values",
-              description: "Array of values corresponding to the indices",
-              isOptional: false,
-              type: "number[]",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "namespace",
+type: "string",
+description:
+"Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
+isOptional: true,
+},
+{
+name: "sparseVector",
+type: "{ indices: number[]; values: number[]; }",
+description:
+"Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "indices",
+description: "Array of indices for sparse vector components",
+isOptional: false,
+type: "number[]",
+},
+{
+name: "values",
+description: "Array of values corresponding to the indices",
+isOptional: false,
+type: "number[]",
+},
+],
+},
+],
+},
+]}
 />
 
 **Use Cases:**
@@ -80,28 +80,28 @@ Configuration options specific to PostgreSQL with pgvector extension.
 
 <PropertiesTable
   content={[
-    {
-      name: "minScore",
-      type: "number",
-      description:
-        "Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
-      isOptional: true,
-    },
-    {
-      name: "ef",
-      type: "number",
-      description:
-        "HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
-      isOptional: true,
-    },
-    {
-      name: "probes",
-      type: "number",
-      description:
-        "IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "minScore",
+type: "number",
+description:
+"Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
+isOptional: true,
+},
+{
+name: "ef",
+type: "number",
+description:
+"HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
+isOptional: true,
+},
+{
+name: "probes",
+type: "number",
+description:
+"IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
+isOptional: true,
+},
+]}
 />
 
 **Performance Guidelines:**
@@ -122,26 +122,26 @@ Configuration options specific to Chroma vector store.
 
 <PropertiesTable
   content={[
-    {
-      name: "where",
-      type: "Record<string, any>",
-      description:
-        "Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
-      isOptional: true,
-    },
-    {
-      name: "whereDocument",
-      type: "Record<string, any>",
-      description:
-        "Document content filtering conditions. Allows filtering based on the actual document text content.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "where",
+type: "Record<string, any>",
+description:
+"Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
+isOptional: true,
+},
+{
+name: "whereDocument",
+type: "Record<string, any>",
+description:
+"Document content filtering conditions. Allows filtering based on the actual document text content.",
+isOptional: true,
+},
+]}
 />
 
 **Filter Syntax Examples:**
 
-```typescript
+```typescript prettier:false
 // Simple equality
 where: { "category": "technical" }
 
@@ -171,7 +171,7 @@ whereDocument: { "$contains": "API documentation" }
     ### Basic Database Configuration
 
     ```typescript
-    import { createVectorQueryTool } from '@mastra/rag';
+    import { createVectorQueryTool } from '@mastra/rag'
 
     const vectorTool = createVectorQueryTool({
       vectorStoreName: 'pinecone',
@@ -179,19 +179,18 @@ whereDocument: { "$contains": "API documentation" }
       model: embedModel,
       databaseConfig: {
         pinecone: {
-          namespace: 'production'
-        }
-      }
-    });
+          namespace: 'production',
+        },
+      },
+    })
     ```
-
   </TabItem>
 
   <TabItem value="runtime-override" label="Runtime Override">
     ### Runtime Configuration Override
 
     ```typescript
-    import { RequestContext } from '@mastra/core/request-context';
+    import { RequestContext } from '@mastra/core/request-context'
 
     // Initial configuration
     const vectorTool = createVectorQueryTool({
@@ -200,25 +199,21 @@ whereDocument: { "$contains": "API documentation" }
       model: embedModel,
       databaseConfig: {
         pinecone: {
-          namespace: 'development'
-        }
-      }
-    });
+          namespace: 'development',
+        },
+      },
+    })
 
     // Override at runtime
-    const requestContext = new RequestContext();
+    const requestContext = new RequestContext()
     requestContext.set('databaseConfig', {
       pinecone: {
-        namespace: 'production'
-      }
-    });
+        namespace: 'production',
+      },
+    })
 
-    await vectorTool.execute(
-      { queryText: 'search query' },
-      { mastra, requestContext }
-    );
+    await vectorTool.execute({ queryText: 'search query' }, { mastra, requestContext })
     ```
-
   </TabItem>
 
   <TabItem value="multi-database" label="Multi-Database">
@@ -231,25 +226,24 @@ whereDocument: { "$contains": "API documentation" }
       model: embedModel,
       databaseConfig: {
         pinecone: {
-          namespace: 'default'
+          namespace: 'default',
         },
         pgvector: {
           minScore: 0.8,
-          ef: 150
+          ef: 150,
         },
         chroma: {
-          where: { 'type': 'documentation' }
-        }
-      }
-    });
+          where: { type: 'documentation' },
+        },
+      },
+    })
     ```
 
     :::note
 
-**Multi-Database Support**: When you configure multiple databases, only the configuration matching the actual vector store being used will be applied.
+    **Multi-Database Support**: When you configure multiple databases, only the configuration matching the actual vector store being used will be applied.
 
-:::
-
+    :::
   </TabItem>
 
   <TabItem value="performance-tuning" label="Performance Tuning">
@@ -263,12 +257,12 @@ whereDocument: { "$contains": "API documentation" }
       model: embedModel,
       databaseConfig: {
         pgvector: {
-          ef: 400,        // High accuracy
-          probes: 20,     // High recall
-          minScore: 0.85  // High quality threshold
-        }
-      }
-    });
+          ef: 400, // High accuracy
+          probes: 20, // High recall
+          minScore: 0.85, // High quality threshold
+        },
+      },
+    })
 
     // High speed configuration
     const highSpeedTool = createVectorQueryTool({
@@ -277,14 +271,13 @@ whereDocument: { "$contains": "API documentation" }
       model: embedModel,
       databaseConfig: {
         pgvector: {
-          ef: 50,         // Lower accuracy, faster
-          probes: 3,      // Lower recall, faster
-          minScore: 0.6   // Lower quality threshold
-        }
-      }
-    });
+          ef: 50, // Lower accuracy, faster
+          probes: 3, // Lower recall, faster
+          minScore: 0.6, // Lower quality threshold
+        },
+      },
+    })
     ```
-
   </TabItem>
 </Tabs>
 
@@ -295,40 +288,40 @@ The `DatabaseConfig` type is designed to be extensible. To add support for a new
 ```typescript
 // 1. Define the configuration interface
 export interface NewDatabaseConfig {
-  customParam1?: string;
-  customParam2?: number;
+  customParam1?: string
+  customParam2?: number
 }
 
 // 2. Extend DatabaseConfig type
 export type DatabaseConfig = {
-  pinecone?: PineconeConfig;
-  pgvector?: PgVectorConfig;
-  chroma?: ChromaConfig;
-  newdatabase?: NewDatabaseConfig;
-  [key: string]: any;
-};
+  pinecone?: PineconeConfig
+  pgvector?: PgVectorConfig
+  chroma?: ChromaConfig
+  newdatabase?: NewDatabaseConfig
+  [key: string]: any
+}
 
 // 3. Use in vector query tool
 const vectorTool = createVectorQueryTool({
-  vectorStoreName: "newdatabase",
-  indexName: "documents",
+  vectorStoreName: 'newdatabase',
+  indexName: 'documents',
   model: embedModel,
   databaseConfig: {
     newdatabase: {
-      customParam1: "value",
+      customParam1: 'value',
       customParam2: 42,
     },
   },
-});
+})
 ```
 
 ## Best Practices
 
 1. **Environment Configuration**: Use different namespaces or configurations for different environments
-2. **Performance Tuning**: Start with default values and adjust based on your specific needs
-3. **Quality Filtering**: Use minScore to filter out low-quality results
-4. **Runtime Flexibility**: Override configurations at runtime for dynamic scenarios
-5. **Documentation**: Document your specific configuration choices for team members
+1. **Performance Tuning**: Start with default values and adjust based on your specific needs
+1. **Quality Filtering**: Use minScore to filter out low-quality results
+1. **Runtime Flexibility**: Override configurations at runtime for dynamic scenarios
+1. **Documentation**: Document your specific configuration choices for team members
 
 ## Migration Guide
 

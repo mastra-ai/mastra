@@ -24,11 +24,11 @@ Snapshots are automatically created and managed by Mastra whenever a workflow is
 Snapshots are the key mechanism enabling Mastra's suspend and resume capabilities. When a workflow step calls `await suspend()`:
 
 1. The workflow execution is paused at that exact point
-2. The current state of the workflow is captured as a snapshot
-3. The snapshot is persisted to storage
-4. The workflow step is marked as "suspended" with a status of `'suspended'`
-5. Later, when `resume()` is called on the suspended step, the snapshot is retrieved
-6. The workflow execution resumes from exactly where it left off
+1. The current state of the workflow is captured as a snapshot
+1. The snapshot is persisted to storage
+1. The workflow step is marked as "suspended" with a status of `'suspended'`
+1. Later, when `resume()` is called on the suspended step, the snapshot is retrieved
+1. The workflow execution resumes from exactly where it left off
 
 This mechanism provides a powerful way to implement human-in-the-loop workflows, handle rate limiting, wait for external resources, and implement complex branching workflows that may need to pause for extended periods.
 
@@ -100,31 +100,31 @@ Read more about:
 When a workflow is suspended, Mastra automatically persists the workflow snapshot with these steps:
 
 1. The `suspend()` function in a step execution triggers the snapshot process
-2. The `WorkflowInstance.suspend()` method records the suspended machine
-3. `persistWorkflowSnapshot()` is called to save the current state
-4. The snapshot is serialized and stored in the configured database in the `workflow_snapshots` table
-5. The storage record includes the workflow name, run ID, and the serialized snapshot
+1. The `WorkflowInstance.suspend()` method records the suspended machine
+1. `persistWorkflowSnapshot()` is called to save the current state
+1. The snapshot is serialized and stored in the configured database in the `workflow_snapshots` table
+1. The storage record includes the workflow name, run ID, and the serialized snapshot
 
 ### Retrieving snapshots
 
 When a workflow is resumed, Mastra retrieves the persisted snapshot with these steps:
 
 1. The `resume()` method is called with a specific step ID
-2. The snapshot is loaded from storage using `loadWorkflowSnapshot()`
-3. The snapshot is parsed and prepared for resumption
-4. The workflow execution is recreated with the snapshot state
-5. The suspended step is resumed, and execution continues
+1. The snapshot is loaded from storage using `loadWorkflowSnapshot()`
+1. The snapshot is parsed and prepared for resumption
+1. The workflow execution is recreated with the snapshot state
+1. The suspended step is resumed, and execution continues
 
 ```typescript
-const storage = mastra.getStorage();
-const workflowStore = await storage?.getStore('workflows');
+const storage = mastra.getStorage()
+const workflowStore = await storage?.getStore('workflows')
 
 const snapshot = await workflowStore?.loadWorkflowSnapshot({
-  runId: "<run-id>",
-  workflowName: "<workflow-id>",
-});
+  runId: '<run-id>',
+  workflowName: '<workflow-id>',
+})
 
-console.log(snapshot);
+console.log(snapshot)
 ```
 
 ## Storage options for snapshots
@@ -132,17 +132,17 @@ console.log(snapshot);
 Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
 
 ```typescript title="src/mastra/index.ts" 
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-import { approvalWorkflow } from "./workflows";
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { approvalWorkflow } from './workflows'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: ":memory:",
+    url: ':memory:',
   }),
   workflows: { approvalWorkflow },
-});
+})
 ```
 
 - [libSQL Storage](/reference/storage/libsql)
@@ -156,22 +156,22 @@ export const mastra = new Mastra({
 ## Best practices
 
 1. **Ensure Serializability**: Any data that needs to be included in the snapshot must be serializable (convertible to JSON).
-2. **Minimize Snapshot Size**: Avoid storing large data objects directly in the workflow context. Instead, store references to them (like IDs) and retrieve the data when needed.
-3. **Handle Resume Context Carefully**: When resuming a workflow, carefully consider what context to provide. This will be merged with the existing snapshot data.
-4. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they are properly resumed.
-5. **Consider Storage Scaling**: For applications with many suspended workflows, ensure your storage solution is appropriately scaled.
+1. **Minimize Snapshot Size**: Avoid storing large data objects directly in the workflow context. Instead, store references to them (like IDs) and retrieve the data when needed.
+1. **Handle Resume Context Carefully**: When resuming a workflow, carefully consider what context to provide. This will be merged with the existing snapshot data.
+1. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they are properly resumed.
+1. **Consider Storage Scaling**: For applications with many suspended workflows, ensure your storage solution is appropriately scaled.
 
 ## Custom snapshot metadata
 
 You can attach custom metadata when suspending a workflow by defining a `suspendSchema`. This metadata is stored in the snapshot and made available when the workflow is resumed.
 
 ```typescript {30-34} title="src/mastra/workflows/test-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const approvalStep = createStep({
-  id: "approval-step",
-  description: "Accepts a value, waits for confirmation",
+  id: 'approval-step',
+  description: 'Accepts a value, waits for confirmation',
   inputSchema: z.object({
     value: z.number(),
     user: z.string(),
@@ -191,23 +191,23 @@ const approvalStep = createStep({
     approved: z.boolean(),
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
-    const { value, user, requiredApprovers } = inputData;
-    const { confirm } = resumeData ?? {};
+    const { value, user, requiredApprovers } = inputData
+    const { confirm } = resumeData ?? {}
 
     if (!confirm) {
       return await suspend({
-        message: "Workflow suspended",
+        message: 'Workflow suspended',
         requestedBy: user,
         approvers: [...requiredApprovers],
-      });
+      })
     }
 
     return {
       value,
       approved: confirm,
-    };
+    }
   },
-});
+})
 ```
 
 ### Providing resume data
@@ -215,26 +215,26 @@ const approvalStep = createStep({
 Use `resumeData` to pass structured input when resuming a suspended step. It must match the step’s `resumeSchema`.
 
 ```typescript {14-20}
-const workflow = mastra.getWorkflow("approvalWorkflow");
+const workflow = mastra.getWorkflow('approvalWorkflow')
 
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const result = await run.start({
   inputData: {
     value: 100,
-    user: "Michael",
-    requiredApprovers: ["manager", "finance"],
+    user: 'Michael',
+    requiredApprovers: ['manager', 'finance'],
   },
-});
+})
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
-    step: "approval-step",
+    step: 'approval-step',
     resumeData: {
       confirm: true,
-      approver: "manager",
+      approver: 'manager',
     },
-  });
+  })
 }
 ```
 

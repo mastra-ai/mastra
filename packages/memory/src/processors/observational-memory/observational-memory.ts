@@ -748,7 +748,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       ObservationalMemory.lastBufferedBoundary.delete(reflBufKey);
       ObservationalMemory.asyncBufferingOps.delete(obsBufKey);
       ObservationalMemory.asyncBufferingOps.delete(reflBufKey);
-      ObservationalMemory.reflectionBufferCycleIds.delete(obsBufKey);
+      ObservationalMemory.reflectionBufferCycleIds.delete(reflBufKey);
     }
   }
 
@@ -1535,6 +1535,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         threadId: null,
         resourceId: resourceId ?? threadId,
       };
+    }
+    if (!threadId) {
+      throw new Error(
+        `ObservationalMemory (scope: 'thread') requires a threadId, but received an empty value. ` +
+          `This is a bug — getThreadContext should have caught this earlier.`,
+      );
     }
     return {
       threadId,
@@ -2605,6 +2611,16 @@ ${suggestedResponse}
       };
     }
 
+    // In thread scope, threadId is required — without it OM would silently
+    // fall back to a resource-keyed record which causes deadlocks when
+    // multiple threads share the same resourceId.
+    if (this.scope === 'thread') {
+      throw new Error(
+        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+          `Ensure the agent is configured with Memory and a valid threadId is provided.`,
+      );
+    }
+
     return null;
   }
 
@@ -3309,8 +3325,13 @@ ${suggestedResponse}
     const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
+    omDebug(
+      `[OM:processInputStep:ENTER] step=${stepNumber}, hasMastraMemory=${!!requestContext?.get('MastraMemory')}, hasMemoryInfo=${!!messageList?.serialize()?.memoryInfo?.threadId}`,
+    );
+
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
+      omDebug(`[OM:processInputStep:NO-CONTEXT] getThreadContext returned null — returning early`);
       return messageList;
     }
 
@@ -4198,15 +4219,10 @@ ${formattedMessages}
       const existingIds = freshRecord?.observedMessageIds ?? record.observedMessageIds ?? [];
       const allObservedIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 
-      await this.storage.updateActiveObservations({
-        id: record.id,
-        observations: newObservations,
-        tokenCount: totalTokenCount,
-        lastObservedAt,
-        observedMessageIds: allObservedIds,
-      });
-
-      // Save thread-specific metadata (currentTask, suggestedResponse only)
+      // Save thread-specific metadata BEFORE updating the OM record.
+      // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
+      // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
+      // when concurrent agents share a resourceId.
       if (result.suggestedContinuation || result.currentTask) {
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
@@ -4221,6 +4237,14 @@ ${formattedMessages}
           });
         }
       }
+
+      await this.storage.updateActiveObservations({
+        id: record.id,
+        observations: newObservations,
+        tokenCount: totalTokenCount,
+        lastObservedAt,
+        observedMessageIds: allObservedIds,
+      });
 
       // ════════════════════════════════════════════════════════════════════════
       // INSERT END MARKER after successful observation

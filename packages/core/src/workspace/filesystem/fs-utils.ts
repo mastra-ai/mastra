@@ -169,6 +169,33 @@ export function isTextFile(filename: string): boolean {
 }
 
 // =============================================================================
+// Path Resolution
+// =============================================================================
+
+/**
+ * Resolve a workspace path to an absolute OS filesystem path.
+ *
+ * Workspace paths typically start with '/' but are relative to `basePath`
+ * (e.g. "/app.ts" → "basePath/app.ts"). However, with `contained: false` or
+ * when the path is already a real path within `basePath`, it should be used as-is.
+ *
+ * @param basePath - The workspace filesystem base path
+ * @param filePath - The workspace path to resolve
+ * @returns The absolute OS filesystem path
+ */
+export function resolveWorkspacePath(basePath: string, filePath: string): string {
+  if (path.isAbsolute(filePath)) {
+    const normalizedBase = path.normalize(basePath);
+    const normalizedFile = path.normalize(filePath);
+    const rel = path.relative(normalizedBase, normalizedFile);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return normalizedFile;
+    }
+  }
+  return path.join(basePath, filePath.replace(/^\/+/, ''));
+}
+
+// =============================================================================
 // Filesystem Operations
 // =============================================================================
 
