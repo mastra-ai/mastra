@@ -33,6 +33,12 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
+  // Refresh git branch — tool calls during this turn may have switched branches
+  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
+  if (freshBranch) {
+    state.projectInfo.gitBranch = freshBranch;
+  }
+
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
