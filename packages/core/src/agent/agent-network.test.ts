@@ -5087,6 +5087,150 @@ describe('Agent - network - requestContext propagation (issue #12330)', () => {
   });
 });
 
+describe('Agent - network - tracingContext propagation', () => {
+  const createMockSpan = () => {
+    let span: any;
+    const tracker = {
+      getTracingContext: () => ({ currentSpan: span }),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      wrapStream: <T>(stream: T) => stream,
+      startStep: vi.fn(),
+    };
+
+    span = {
+      id: 'test-span-id',
+      traceId: 'test-trace-id',
+      isValid: true,
+      externalTraceId: 'test-trace-id',
+      parent: undefined,
+      createChildSpan: vi.fn(),
+      createChildEvent: vi.fn(),
+      createEventSpan: vi.fn(),
+      createTracker: vi.fn(() => tracker),
+      findParent: vi.fn(),
+      end: vi.fn(),
+      update: vi.fn(),
+      error: vi.fn(),
+      executeInContext: async (fn: () => Promise<any>) => await fn(),
+      executeInContextSync: (fn: () => any) => fn(),
+    };
+
+    span.createChildSpan.mockImplementation(() => createMockSpan());
+    span.createChildEvent.mockImplementation(() => createMockSpan());
+    span.createEventSpan.mockImplementation(() => createMockSpan());
+    span.findParent.mockImplementation(() => undefined);
+
+    return span;
+  };
+
+  it('should propagate tracingContext to sub-agents executed within the network', async () => {
+    const memory = new MockMemory();
+
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text', text: 'Sub-agent handled task' }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Sub-agent handled task' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'tracing-sub-agent',
+      name: 'Tracing Sub-Agent',
+      instructions: 'Handle delegated tasks.',
+      model: subAgentModel,
+    });
+
+    const subAgentStreamSpy = vi.spyOn(subAgent, 'stream');
+
+    const routingSelectSubAgent = JSON.stringify({
+      primitiveId: 'tracing-sub-agent',
+      primitiveType: 'agent',
+      prompt: 'Handle this delegated task',
+      selectionReason: 'Delegating to tracing sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Sub-agent completed the task',
+    });
+
+    let callCount = 0;
+    const routingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectSubAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectSubAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-agent-tracing',
+      name: 'Network Tracing Agent',
+      instructions: 'Delegate tasks to tracing-sub-agent.',
+      model: routingModel,
+      agents: { 'tracing-sub-agent': subAgent },
+      memory,
+    });
+
+    const rootSpan = createMockSpan();
+    const tracingContext = { currentSpan: rootSpan };
+
+    const anStream = await networkAgent.network('Run delegated task', {
+      tracingContext: tracingContext as any,
+      memory: {
+        thread: 'test-thread-network-tracing-propagation',
+        resource: 'test-resource-network-tracing-propagation',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // consume
+    }
+
+    expect(subAgentStreamSpy).toHaveBeenCalled();
+    const subAgentStreamOptions = subAgentStreamSpy.mock.calls[0]?.[1] as any;
+    const propagatedSpan = subAgentStreamOptions?.tracingContext?.currentSpan;
+    expect(propagatedSpan).toBeDefined();
+    expect(propagatedSpan).not.toBe(rootSpan);
+    expect(propagatedSpan?.traceId).toBe(rootSpan.traceId);
+  });
+});
+
 describe('Agent - network - abort functionality', () => {
   afterEach(() => {
     vi.restoreAllMocks();
