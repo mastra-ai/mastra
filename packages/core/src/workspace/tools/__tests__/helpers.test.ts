@@ -288,7 +288,7 @@ describe('getEditDiagnosticsText', () => {
 
     const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
 
-    expect(result.length).toBeLessThanOrEqual(2100); // 2000 + truncation message
+    expect(result.length).toBeLessThanOrEqual(2050); // 2000 + '\n  ... (truncated)' (18 chars)
     expect(result).toContain('... (truncated)');
   });
 
@@ -305,17 +305,30 @@ describe('getEditDiagnosticsText', () => {
   });
 
   it('returns empty string on timeout', async () => {
-    const mockLsp = {
-      root: '/project',
-      getDiagnostics: vi
-        .fn()
-        .mockImplementation(() => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 50))),
-    };
-    const workspace = createMockWorkspace({ sandbox: true });
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    vi.useFakeTimers();
+    try {
+      const mockLsp = {
+        root: '/project',
+        getDiagnostics: vi.fn().mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              // This will be triggered when fake timers advance past 10s (DIAG_TIMEOUT_MS)
+              setTimeout(() => reject(new Error('LSP diagnostics timeout')), 15_000);
+            }),
+        ),
+      };
+      const workspace = createMockWorkspace({ sandbox: true });
+      Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
 
-    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+      const resultPromise = getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
 
-    expect(result).toBe('');
+      // Advance past the internal DIAG_TIMEOUT_MS (10_000ms) to trigger the Promise.race timeout
+      await vi.advanceTimersByTimeAsync(11_000);
+
+      const result = await resultPromise;
+      expect(result).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

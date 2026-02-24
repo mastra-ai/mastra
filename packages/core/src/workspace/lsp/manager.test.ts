@@ -82,14 +82,74 @@ const mockProcessManager = {
 describe('LSPManager', () => {
   let manager: LSPManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetAllMocks();
+
+    // Re-establish baseline mock implementations after reset
+    mockWaitForDiagnostics.mockResolvedValue([
+      {
+        severity: 1,
+        message: "Type 'string' is not assignable to type 'number'.",
+        range: { start: { line: 11, character: 4 } },
+        source: 'ts',
+      },
+      {
+        severity: 2,
+        message: "'unused' is declared but its value is never read.",
+        range: { start: { line: 2, character: 0 } },
+        source: 'ts',
+      },
+    ]);
+    mockShutdown.mockResolvedValue(undefined);
+    mockInitialize.mockResolvedValue(undefined);
+    (mockProcessManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pid: 1,
+      kill: vi.fn(),
+      reader: {},
+      writer: {},
+    });
+
+    // Re-establish server mocks (resetAllMocks clears vi.mock factory implementations)
+    const servers = await import('./servers');
+    (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
+      if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+      if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+      return null;
+    });
+    (servers.walkUpAsync as ReturnType<typeof vi.fn>).mockImplementation(
+      async (startDir: string, _markers: string[]) => {
+        if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+        if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+        if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
+        return null;
+      },
+    );
+    (servers.getServersForFile as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+      if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+        return [
+          {
+            id: 'typescript',
+            name: 'TypeScript Language Server',
+            languageIds: ['typescript', 'typescriptreact'],
+            markers: ['tsconfig.json', 'package.json'],
+            command: () => 'typescript-language-server --stdio',
+          },
+        ];
+      }
+      return [];
+    });
+
+    // Re-establish client mocks
+    const client = await import('./client');
+    (client.loadLSPDeps as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (client.isLSPAvailable as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
     manager = new LSPManager(mockProcessManager, '/project');
     mockIsAlive = true;
   });
 
   afterEach(async () => {
     await manager.shutdownAll();
-    vi.clearAllMocks();
   });
 
   describe('root', () => {

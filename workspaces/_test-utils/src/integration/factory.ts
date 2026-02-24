@@ -107,7 +107,8 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
         // /int-test-xxx) would be treated as a host-root path by the sandbox
         // while the filesystem resolves it relative to basePath.
         const fsBasePath = (workspace.filesystem as { basePath: string }).basePath;
-        currentTestPath = join(fsBasePath, basePath.slice(1));
+        const relativeBasePath = basePath.replace(/^[/\\]+/, '');
+        currentTestPath = join(fsBasePath, relativeBasePath);
       } else {
         currentTestPath = basePath;
       }

@@ -55,12 +55,13 @@ export function walkUp(startDir: string, markers: string[]): string | null {
   let current = startDir;
   const fsRoot = parse(current).root;
 
-  while (current !== fsRoot) {
+  while (true) {
     for (const marker of markers) {
       if (existsSync(join(current, marker))) {
         return current;
       }
     }
+    if (current === fsRoot) break;
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
@@ -81,12 +82,13 @@ export async function walkUpAsync(
   let current = startDir;
   const fsRoot = parse(current).root;
 
-  while (current !== fsRoot) {
+  while (true) {
     for (const marker of markers) {
       if (await fs.exists(join(current, marker))) {
         return current;
       }
     }
+    if (current === fsRoot) break;
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;

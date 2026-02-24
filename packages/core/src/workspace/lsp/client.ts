@@ -48,6 +48,7 @@ export function isLSPAvailable(): boolean {
   try {
     const req = createRequire(import.meta.url);
     req.resolve('vscode-jsonrpc/node');
+    req.resolve('vscode-languageserver-protocol');
     return true;
   } catch {
     return false;
@@ -115,7 +116,7 @@ export class LSPClient {
   private workspaceRoot: string;
   private processManager: SandboxProcessManager;
   private diagnostics: Map<string, any[]> = new Map();
-  private initializationOptions: any = null;
+  private initializationOptions: Record<string, unknown> | null = null;
 
   constructor(serverDef: LSPServerDef, workspaceRoot: string, processManager: SandboxProcessManager) {
     this.serverDef = serverDef;

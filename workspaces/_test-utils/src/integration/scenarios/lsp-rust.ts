@@ -23,6 +23,8 @@ export function createLspRustTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
 
+        const content = 'fn main() {\n    let x: i32 = "hello";\n}\n';
+
         const fs = workspace.filesystem;
         if (fs) {
           // Write Cargo.toml so walkUpAsync finds a project root
@@ -30,9 +32,9 @@ export function createLspRustTests(getContext: () => TestContext): void {
             join(testDir, 'Cargo.toml'),
             '[package]\nname = "test"\nversion = "0.1.0"\nedition = "2021"\n',
           );
+          // Persist src/main.rs to disk so rust-analyzer can see it as part of a Cargo target
+          await fs.writeFile(filePath, content);
         }
-
-        const content = 'fn main() {\n    let x: i32 = "hello";\n}\n';
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
@@ -54,15 +56,17 @@ export function createLspRustTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
 
+        const content = 'fn main() {\n    let x: i32 = 42;\n    println!("{}", x);\n}\n';
+
         const fs = workspace.filesystem;
         if (fs) {
           await fs.writeFile(
             join(testDir, 'Cargo.toml'),
             '[package]\nname = "test"\nversion = "0.1.0"\nedition = "2021"\n',
           );
+          // Persist src/main.rs to disk so rust-analyzer can see it as part of a Cargo target
+          await fs.writeFile(filePath, content);
         }
-
-        const content = 'fn main() {\n    let x: i32 = 42;\n    println!("{}", x);\n}\n';
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 

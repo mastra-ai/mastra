@@ -31,7 +31,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         // Write project markers for ESLint
         await fs.writeFile(
           join(testDir, 'package.json'),
-          JSON.stringify({ name: 'test', version: '1.0.0', devDependencies: { eslint: '*' } }),
+          JSON.stringify({ name: 'test', version: '1.0.0', type: 'module', devDependencies: { eslint: '*' } }),
         );
 
         // ESLint flat config with no-var rule
@@ -78,7 +78,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
 
         await fs.writeFile(
           join(testDir, 'package.json'),
-          JSON.stringify({ name: 'test', version: '1.0.0', devDependencies: { eslint: '*' } }),
+          JSON.stringify({ name: 'test', version: '1.0.0', type: 'module', devDependencies: { eslint: '*' } }),
         );
 
         await fs.writeFile(

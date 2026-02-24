@@ -484,12 +484,11 @@ export class Workspace<
 
     // Initialize LSP if configured and a process manager is available
     if (config.lsp) {
-      const hasProcesses = !!this._sandbox?.processes;
-      const depsAvailable = isLSPAvailable();
-      if (hasProcesses && depsAvailable) {
+      const processes = this._sandbox?.processes;
+      if (processes && isLSPAvailable()) {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
-        this._lsp = new LSPManager(this._sandbox!.processes!, defaultRoot, lspConfig, this._fs);
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
       }
     }
 

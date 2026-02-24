@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -1670,12 +1671,19 @@ Line 3 conclusion`;
       const workspace = new Workspace({ sandbox, lsp: true });
 
       // findProjectRoot(process.cwd()) finds the repo root (has package.json, tsconfig.json)
-      // The resolved root should be an absolute path, not process.cwd() fallback
+      // The resolved root should be an absolute path that contains a project marker
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
-      expect(path.isAbsolute(workspace.lsp!.root)).toBe(true);
+      const root = workspace.lsp!.root;
+      expect(path.isAbsolute(root)).toBe(true);
+      // Verify it found a real project root (not just cwd fallback) by checking for markers
+      const hasMarker =
+        existsSync(path.join(root, 'package.json')) ||
+        existsSync(path.join(root, 'tsconfig.json')) ||
+        existsSync(path.join(root, 'go.mod'));
+      expect(hasMarker).toBe(true);
     });
 
-    it('passes LSPConfig options through to LSPManager', () => {
+    it('passes LSPConfig root through to LSPManager', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
@@ -1683,6 +1691,8 @@ Line 3 conclusion`;
       });
 
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      // root is the only publicly exposed LSPConfig property on LSPManager;
+      // disableServers, diagnosticTimeout, and initTimeout are verified in manager.test.ts
       expect(workspace.lsp!.root).toBe(tempDir);
     });
 
@@ -1715,7 +1725,7 @@ Line 3 conclusion`;
       vi.spyOn(workspace.lsp!, 'shutdownAll').mockRejectedValue(new Error('LSP shutdown failed'));
 
       await workspace.init();
-      await expect(workspace.destroy()).resolves.not.toThrow();
+      await workspace.destroy();
       expect(workspace.lsp).toBeUndefined();
     });
   });

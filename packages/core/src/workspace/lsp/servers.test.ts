@@ -12,6 +12,13 @@ import {
   walkUpAsync,
 } from './servers';
 
+/** Helper to create a mock filesystem from a set of existing paths */
+function mockFs(existingPaths: Set<string>): { exists(path: string): Promise<boolean> } {
+  return {
+    exists: async (p: string) => existingPaths.has(p),
+  };
+}
+
 describe('walkUp', () => {
   let tempDir: string;
 
@@ -71,6 +78,17 @@ describe('walkUp', () => {
     // walkUp from a shallow path should not hang
     const result = walkUp('/tmp', ['definitely-not-a-real-marker-file-xyz']);
     expect(result).toBeNull();
+  });
+
+  it('checks the filesystem root itself for markers', () => {
+    // If a marker exists at the fs root, walkUp should find it
+    // We use tempDir as a stand-in since we can't write to /
+    const child = join(tempDir, 'child');
+    mkdirSync(child, { recursive: true });
+    writeFileSync(join(tempDir, 'package.json'), '{}');
+
+    // Walking up from child should find tempDir (closest marker)
+    expect(walkUp(child, ['package.json'])).toBe(tempDir);
   });
 });
 
@@ -171,10 +189,17 @@ describe('getServersForFile', () => {
     expect(servers.some(s => s.id === 'rust')).toBe(true);
   });
 
-  it('returns empty array for unsupported files', () => {
+  it('returns empty array for files with no matching server', () => {
+    // .png has no language mapping at all
+    expect(getServersForFile('/project/image.png')).toEqual([]);
+    // .txt has no language mapping
+    expect(getServersForFile('/project/notes.txt')).toEqual([]);
+  });
+
+  it('returns empty array for mapped languages without a builtin server', () => {
+    // .md and .json have language IDs but no BUILTIN_SERVERS entry (yet)
     expect(getServersForFile('/project/README.md')).toEqual([]);
     expect(getServersForFile('/project/data.json')).toEqual([]);
-    expect(getServersForFile('/project/image.png')).toEqual([]);
   });
 
   it('filters disabled servers', () => {
@@ -208,13 +233,6 @@ describe('getServersForFile', () => {
 });
 
 describe('walkUpAsync', () => {
-  /** Helper to create a mock filesystem from a set of existing paths */
-  function mockFs(existingPaths: Set<string>): { exists(path: string): Promise<boolean> } {
-    return {
-      exists: async (p: string) => existingPaths.has(p),
-    };
-  }
-
   it('finds closest marker', async () => {
     const fs = mockFs(new Set(['/workspace/a/package.json']));
     expect(await walkUpAsync('/workspace/a/b/c', ['package.json'], fs)).toBe('/workspace/a');
@@ -246,6 +264,11 @@ describe('walkUpAsync', () => {
     expect(result).toBeNull();
   });
 
+  it('finds marker at filesystem root', async () => {
+    const fs = mockFs(new Set(['/package.json']));
+    expect(await walkUpAsync('/src/lib', ['package.json'], fs)).toBe('/');
+  });
+
   it('works with composite filesystem mount paths', async () => {
     // Simulates CompositeFilesystem where /s3/src/tsconfig.json exists in S3 mount
     const fs = mockFs(new Set(['/s3/src/tsconfig.json']));
@@ -260,12 +283,6 @@ describe('walkUpAsync', () => {
 });
 
 describe('findProjectRootAsync', () => {
-  function mockFs(existingPaths: Set<string>): { exists(path: string): Promise<boolean> } {
-    return {
-      exists: async (p: string) => existingPaths.has(p),
-    };
-  }
-
   it('finds tsconfig.json', async () => {
     const fs = mockFs(new Set(['/project/tsconfig.json']));
     expect(await findProjectRootAsync('/project/src', fs)).toBe('/project');

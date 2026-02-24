@@ -28,14 +28,30 @@ describe('LANGUAGE_EXTENSIONS', () => {
     expect(LANGUAGE_EXTENSIONS['.rs']).toBe('rust');
   });
 
+  it('maps C/C++ extensions', () => {
+    expect(LANGUAGE_EXTENSIONS['.c']).toBe('c');
+    expect(LANGUAGE_EXTENSIONS['.cpp']).toBe('cpp');
+    expect(LANGUAGE_EXTENSIONS['.cc']).toBe('cpp');
+    expect(LANGUAGE_EXTENSIONS['.cxx']).toBe('cpp');
+    expect(LANGUAGE_EXTENSIONS['.h']).toBe('c');
+    expect(LANGUAGE_EXTENSIONS['.hpp']).toBe('cpp');
+  });
+
+  it('maps Java extension', () => {
+    expect(LANGUAGE_EXTENSIONS['.java']).toBe('java');
+  });
+
   it('maps web extensions', () => {
     expect(LANGUAGE_EXTENSIONS['.html']).toBe('html');
     expect(LANGUAGE_EXTENSIONS['.css']).toBe('css');
     expect(LANGUAGE_EXTENSIONS['.scss']).toBe('scss');
+    expect(LANGUAGE_EXTENSIONS['.sass']).toBe('sass');
+    expect(LANGUAGE_EXTENSIONS['.less']).toBe('less');
   });
 
   it('maps data format extensions', () => {
     expect(LANGUAGE_EXTENSIONS['.json']).toBe('json');
+    expect(LANGUAGE_EXTENSIONS['.jsonc']).toBe('jsonc');
     expect(LANGUAGE_EXTENSIONS['.yaml']).toBe('yaml');
     expect(LANGUAGE_EXTENSIONS['.yml']).toBe('yaml');
     expect(LANGUAGE_EXTENSIONS['.md']).toBe('markdown');

@@ -4,7 +4,22 @@
 
 Add LSP diagnostics to workspace edit tools
 
-Edit tools (write_file, edit_file, ast_edit) now append diagnostics from language
-servers after edits. Supports TypeScript, Python (pyright), Go (gopls), Rust
-(rust-analyzer), and ESLint. Requires sandbox with process manager; gracefully
-degrades when deps unavailable.
+Language Server Protocol (LSP) diagnostics now appear after edits made with write_file, edit_file, and ast_edit.
+Seeing type and lint errors immediately helps catch issues before the next tool call.
+Edits still work without diagnostics when language servers are not installed.
+
+Supports TypeScript, Python (Pyright), Go (gopls), Rust (rust-analyzer), and ESLint.
+
+**Example**
+
+Before:
+
+```ts
+const workspace = new Workspace({ sandbox, filesystem });
+```
+
+After:
+
+```ts
+const workspace = new Workspace({ sandbox, filesystem, lsp: true });
+```
