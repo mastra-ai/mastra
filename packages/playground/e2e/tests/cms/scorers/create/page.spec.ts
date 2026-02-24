@@ -212,8 +212,8 @@ test.describe('Scorer Creation Persistence', () => {
     // Verify h1 contains the scorer name
     await expect(page.locator('h1')).toContainText(`Edit scorer: ${scorerName}`);
 
-    // Verify Update button is visible
-    await expect(page.getByRole('button', { name: 'Update scorer' })).toBeVisible();
+    // Verify Publish button is visible
+    await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 
     // Verify name
     await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
@@ -221,11 +221,11 @@ test.describe('Scorer Creation Persistence', () => {
     // Verify description
     await expect(page.locator('#scorer-description')).toHaveValue(description);
 
-    // Verify provider combobox contains OpenAI
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    // Verify provider combobox contains OpenAI (nth(1) because version combobox is nth(0) on edit page)
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
 
     // Verify model combobox contains gpt-4o-mini
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
 
     // Verify score range
     await expect(page.getByPlaceholder('Min')).toHaveValue('0');

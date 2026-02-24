@@ -5,6 +5,7 @@ import type {
   PromptBlocksStorage,
   ScorerDefinitionsStorage,
   MCPClientsStorage,
+  MCPServersStorage,
   WorkspacesStorage,
   SkillsStorage,
   ScoresStorage,
@@ -27,6 +28,7 @@ export type StorageDomains = {
   promptBlocks?: PromptBlocksStorage;
   scorerDefinitions?: ScorerDefinitionsStorage;
   mcpClients?: MCPClientsStorage;
+  mcpServers?: MCPServersStorage;
   workspaces?: WorkspacesStorage;
   skills?: SkillsStorage;
   blobs?: BlobStore;
@@ -225,6 +227,7 @@ export class MastraCompositeStore extends MastraBase {
         promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
         scorerDefinitions: domainOverrides.scorerDefinitions ?? defaultStores?.scorerDefinitions,
         mcpClients: domainOverrides.mcpClients ?? defaultStores?.mcpClients,
+        mcpServers: domainOverrides.mcpServers ?? defaultStores?.mcpServers,
         workspaces: domainOverrides.workspaces ?? defaultStores?.workspaces,
         skills: domainOverrides.skills ?? defaultStores?.skills,
       } as StorageDomains;
@@ -301,6 +304,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.mcpClients) {
       initTasks.push(this.stores.mcpClients.init());
+    }
+
+    if (this.stores?.mcpServers) {
+      initTasks.push(this.stores.mcpServers.init());
     }
 
     if (this.stores?.workspaces) {

@@ -93,8 +93,10 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'API write then sandbox read is consistent',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const ctx = getContext();
+        const { workspace, getTestPath } = ctx;
 
+        if (!ctx.sandboxPathsAligned) return;
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const filePath = `${getTestPath()}/api-to-sandbox-consistency.txt`;
@@ -113,8 +115,10 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'sandbox write then API read is consistent',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const ctx = getContext();
+        const { workspace, getTestPath } = ctx;
 
+        if (!ctx.sandboxPathsAligned) return;
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const filePath = `${getTestPath()}/sandbox-to-api-consistency.txt`;
@@ -124,7 +128,11 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
         await workspace.sandbox.executeCommand('mkdir', ['-p', getTestPath()]);
 
         // Write via sandbox (same path — mountPath baked into getTestPath)
-        const writeResult = await workspace.sandbox.executeCommand('sh', ['-c', `echo -n "${content}" > ${filePath}`]);
+        // Use printf instead of echo -n for POSIX portability (macOS sh prints -n literally)
+        const writeResult = await workspace.sandbox.executeCommand('sh', [
+          '-c',
+          `printf '%s' '${content}' > "${filePath}"`,
+        ]);
         expect(writeResult.exitCode).toBe(0);
 
         // Poll via API until consistent (FUSE caching may cause delay)

@@ -1,5 +1,6 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
+import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
@@ -8,7 +9,6 @@ import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
-import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
@@ -77,6 +77,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const currentContent = allContent.slice(previousContentLength);
       previousContentLength = allContent.length;
 
+      const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
+
       const currentStep: StepResult<Tools> = {
         content: currentContent,
         usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -94,12 +96,16 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         reasoningText: typedInputData.output.reasoningText || '',
         files: typedInputData.output.files || [],
         toolCalls: typedInputData.output.toolCalls || [],
-        toolResults: typedInputData.output.toolResults || [],
+        toolResults: toolResultParts as StepResult<Tools>['toolResults'],
         sources: typedInputData.output.sources || [],
         staticToolCalls: typedInputData.output.staticToolCalls || [],
         dynamicToolCalls: typedInputData.output.dynamicToolCalls || [],
-        staticToolResults: typedInputData.output.staticToolResults || [],
-        dynamicToolResults: typedInputData.output.dynamicToolResults || [],
+        staticToolResults: toolResultParts.filter(
+          (part: any) => part.dynamic === false,
+        ) as StepResult<Tools>['staticToolResults'],
+        dynamicToolResults: toolResultParts.filter(
+          (part: any) => part.dynamic === true,
+        ) as StepResult<Tools>['dynamicToolResults'],
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
@@ -133,15 +139,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       if (shouldEmitStepFinish) {
         // Only enqueue if controller is still open
-        if (isControllerOpen(controller)) {
-          controller.enqueue({
-            type: 'step-finish',
-            runId,
-            from: ChunkFrom.AGENT,
-            // @ts-expect-error TODO: Look into the proper types for this
-            payload: typedInputData,
-          });
-        }
+        safeEnqueue(controller, {
+          type: 'step-finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          // @ts-expect-error TODO: Look into the proper types for this
+          payload: typedInputData,
+        });
       }
 
       const reason = typedInputData.stepResult?.reason;

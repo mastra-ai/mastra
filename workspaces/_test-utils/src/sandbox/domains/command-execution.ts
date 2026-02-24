@@ -3,13 +3,13 @@
  * Tests: executeCommand with various options
  */
 
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { describe, it, expect } from 'vitest';
+import type { MastraSandbox } from '@mastra/core/workspace';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 import type { SandboxCapabilities } from '../types';
 
 interface TestContext {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   capabilities: Required<SandboxCapabilities>;
   testTimeout: number;
   fastOnly: boolean;
@@ -17,14 +17,21 @@ interface TestContext {
 
 export function createCommandExecutionTests(getContext: () => TestContext): void {
   describe('Command Execution', () => {
+    let executeCommand: NonNullable<MastraSandbox['executeCommand']>;
+
+    beforeAll(() => {
+      const { sandbox } = getContext();
+      expect(
+        sandbox.executeCommand,
+        'sandbox.executeCommand must be defined when commandExecution tests are enabled',
+      ).toBeDefined();
+      executeCommand = sandbox.executeCommand!.bind(sandbox);
+    });
+
     it(
       'executes a simple command',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
-        const result = await sandbox.executeCommand('echo', ['hello']);
+        const result = await executeCommand('echo', ['hello']);
 
         expect(result.exitCode).toBe(0);
         expect(result.success).toBe(true);
@@ -36,11 +43,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     it(
       'captures stdout',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
-        const result = await sandbox.executeCommand('echo', ['stdout test']);
+        const result = await executeCommand('echo', ['stdout test']);
 
         expect(result.stdout).toContain('stdout test');
       },
@@ -50,12 +53,8 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     it(
       'captures stderr',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
         // Use a command that writes to stderr
-        const result = await sandbox.executeCommand('sh', ['-c', 'echo "error message" >&2']);
+        const result = await executeCommand('sh', ['-c', 'echo "error message" >&2']);
 
         expect(result.stderr).toContain('error message');
       },
@@ -65,11 +64,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     it(
       'returns non-zero exit code for failing command',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
-        const result = await sandbox.executeCommand('sh', ['-c', 'exit 1']);
+        const result = await executeCommand('sh', ['-c', 'exit 1']);
 
         expect(result.exitCode).toBe(1);
         expect(result.success).toBe(false);
@@ -80,11 +75,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     it(
       'handles commands with arguments',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
-        const result = await sandbox.executeCommand('echo', ['arg1', 'arg2', 'arg3']);
+        const result = await executeCommand('echo', ['arg1', 'arg2', 'arg3']);
 
         expect(result.stdout.trim()).toBe('arg1 arg2 arg3');
       },
@@ -94,11 +85,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     it(
       'handles commands with special characters in arguments',
       async () => {
-        const { sandbox } = getContext();
-
-        if (!sandbox.executeCommand) return;
-
-        const result = await sandbox.executeCommand('echo', ['hello world', 'test']);
+        const result = await executeCommand('echo', ['hello world', 'test']);
 
         expect(result.stdout.trim()).toBe('hello world test');
       },
@@ -109,11 +96,10 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'passes environment variables to command',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsEnvVars) return;
-          if (!sandbox.executeCommand) return;
 
-          const result = await sandbox.executeCommand('sh', ['-c', 'echo $TEST_VAR'], {
+          const result = await executeCommand('sh', ['-c', 'echo $TEST_VAR'], {
             env: { TEST_VAR: 'test_value' },
           });
 
@@ -125,11 +111,10 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'handles multiple environment variables',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsEnvVars) return;
-          if (!sandbox.executeCommand) return;
 
-          const result = await sandbox.executeCommand('sh', ['-c', 'echo "$VAR1 $VAR2"'], {
+          const result = await executeCommand('sh', ['-c', 'echo "$VAR1 $VAR2"'], {
             env: { VAR1: 'first', VAR2: 'second' },
           });
 
@@ -143,15 +128,15 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'executes command in specified working directory',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsWorkingDirectory) return;
-          if (!sandbox.executeCommand) return;
 
-          const result = await sandbox.executeCommand('pwd', [], {
+          const result = await executeCommand('pwd', [], {
             cwd: '/tmp',
           });
 
-          expect(result.stdout.trim()).toBe('/tmp');
+          // macOS: /tmp symlinks to /private/tmp
+          expect(['/tmp', '/private/tmp']).toContain(result.stdout.trim());
         },
         getContext().testTimeout,
       );
@@ -161,12 +146,11 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'times out long-running commands',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsTimeout) return;
-          if (!sandbox.executeCommand) return;
 
-          const result = await sandbox.executeCommand('sleep', ['10'], {
-            timeout: 1000, // 1 second timeout
+          const result = await executeCommand('sleep', ['10'], {
+            timeout: 100,
           });
 
           // Should either timeout (exit non-zero) or be killed
@@ -180,15 +164,14 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'executes multiple commands concurrently',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsConcurrency) return;
-          if (!sandbox.executeCommand) return;
 
           // Run multiple commands in parallel
           const results = await Promise.all([
-            sandbox.executeCommand('echo', ['first']),
-            sandbox.executeCommand('echo', ['second']),
-            sandbox.executeCommand('echo', ['third']),
+            executeCommand('echo', ['first']),
+            executeCommand('echo', ['second']),
+            executeCommand('echo', ['third']),
           ]);
 
           // All commands should succeed
@@ -205,15 +188,14 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'concurrent commands do not interfere with each other',
         async () => {
-          const { sandbox, capabilities } = getContext();
+          const { capabilities } = getContext();
           if (!capabilities.supportsConcurrency) return;
           if (!capabilities.supportsEnvVars) return;
-          if (!sandbox.executeCommand) return;
 
           // Run commands that set different env vars
           const results = await Promise.all([
-            sandbox.executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value1' } }),
-            sandbox.executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value2' } }),
+            executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value1' } }),
+            executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value2' } }),
           ]);
 
           // Each command should see its own env vars

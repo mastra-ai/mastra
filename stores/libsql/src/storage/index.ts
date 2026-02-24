@@ -8,6 +8,7 @@ import { BlobsLibSQL } from './domains/blobs';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
+import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
@@ -24,6 +25,7 @@ export {
   DatasetsLibSQL,
   ExperimentsLibSQL,
   MCPClientsLibSQL,
+  MCPServersLibSQL,
   MemoryLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
@@ -158,6 +160,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
     const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
     const mcpClients = new MCPClientsLibSQL(domainConfig);
+    const mcpServers = new MCPServersLibSQL(domainConfig);
     const workspaces = new WorkspacesLibSQL(domainConfig);
     const skills = new SkillsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
@@ -173,6 +176,7 @@ export class LibSQLStore extends MastraCompositeStore {
       promptBlocks,
       scorerDefinitions,
       mcpClients,
+      mcpServers,
       workspaces,
       skills,
       blobs,

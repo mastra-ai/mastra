@@ -42,6 +42,7 @@ import type {
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
@@ -335,6 +336,30 @@ export class Agent<
   }
 
   /**
+   * Gets the workspace-instructions processors to add when the workspace has a
+   * filesystem or sandbox (i.e. something to describe).
+   * @internal
+   */
+  private async getWorkspaceInstructionsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    requestContext?: RequestContext,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (!workspace) return [];
+
+    // Skip if workspace has no filesystem or sandbox (nothing to describe)
+    if (!workspace.filesystem && !workspace.sandbox) return [];
+
+    // Check for existing processor to avoid duplicates
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-instructions-processor',
+    );
+    if (hasProcessor) return [];
+
+    return [new WorkspaceInstructionsProcessor({ workspace })];
+  }
+
+  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -505,7 +530,7 @@ export class Agent<
         // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as Parameters<typeof createStep>[0]);
+        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
       }
       workflow = workflow.then(step);
     }
@@ -570,13 +595,17 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get workspace instructions processors (with deduplication)
+    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
+
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    // Skills processors run after memory but before user-configured processors
-    const allProcessors = [...memoryProcessors, ...skillsProcessors, ...configuredProcessors];
+    // Workspace instructions run after memory
+    // Skills processors run after workspace but before user-configured processors
+    const allProcessors = [...memoryProcessors, ...workspaceProcessors, ...skillsProcessors, ...configuredProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
@@ -1099,6 +1128,7 @@ export class Agent<
         convertTools: this.convertTools.bind(this),
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
         __runInputProcessors: this.__runInputProcessors.bind(this),
+        __runProcessInputStep: this.__runProcessInputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
@@ -1497,7 +1527,9 @@ export class Agent<
     this.model = this.model.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
-      return aIndex - bIndex;
+      const aPos = aIndex === -1 ? Infinity : aIndex;
+      const bPos = bIndex === -1 ? Infinity : bIndex;
+      return aPos - bPos;
     });
     this.logger.debug(`[Agents:${this.name}] Models reordered`);
   }
@@ -1752,8 +1784,8 @@ export class Agent<
           });
         }
       }
-      // If no user message, return a default title for new threads
-      return `New Thread ${new Date().toISOString()}`;
+      // If no user message, return undefined so existing title is preserved
+      return undefined;
     } catch (e) {
       this.logger.error('Error generating title:', e);
       // Return undefined on error so existing title is preserved
@@ -1763,6 +1795,14 @@ export class Agent<
 
   public __setMemory(memory: DynamicArgument<MastraMemory>) {
     this.#memory = memory;
+  }
+
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+    this.#workspace = workspace;
+    if (this.#mastra && workspace && typeof workspace !== 'function') {
+      workspace.__setLogger(this.logger);
+      this.#mastra.addWorkspace(workspace);
+    }
   }
 
   /**
@@ -1931,7 +1971,13 @@ export class Agent<
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (
+      inputProcessorOverrides?.length ||
+      this.#inputProcessors ||
+      this.#memory ||
+      this.#workspace ||
+      this.#mastra?.getWorkspace()
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -1954,6 +2000,82 @@ export class Agent<
               domain: ErrorDomain.AGENT,
               category: ErrorCategory.USER,
               text: `[Agent:${this.name}] - Input processor error`,
+            },
+            error,
+          );
+        }
+      }
+    }
+
+    return {
+      messageList,
+      tripwire,
+    };
+  }
+
+  /**
+   * Runs processInputStep phase on input processors.
+   * Used by legacy path to execute per-step input processing (e.g., Observational Memory)
+   * that would otherwise only run in the v5 agentic loop.
+   * @internal
+   */
+  private async __runProcessInputStep({
+    requestContext,
+    tracingContext,
+    messageList,
+    stepNumber = 0,
+    processorStates,
+  }: {
+    requestContext: RequestContext;
+    tracingContext: TracingContext;
+    messageList: MessageList;
+    stepNumber?: number;
+    processorStates?: Map<string, ProcessorState>;
+  }): Promise<{
+    messageList: MessageList;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
+  }> {
+    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+
+    if (this.#inputProcessors || this.#memory) {
+      const runner = await this.getProcessorRunner({
+        requestContext,
+        processorStates,
+      });
+      try {
+        const llm = await this.getLLM({ requestContext });
+        const model = llm.getModel();
+        await runner.runProcessInputStep({
+          messageList,
+          stepNumber,
+          steps: [],
+          tracingContext,
+          requestContext,
+          // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
+          // OM's processInputStep doesn't use the model parameter, so this is safe.
+          model: model as MastraLanguageModel,
+          retryCount: 0,
+        });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          tripwire = {
+            reason: error.message,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+            processorId: error.processorId,
+          };
+        } else {
+          throw new MastraError(
+            {
+              id: 'AGENT_INPUT_STEP_PROCESSOR_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Input step processor error`,
             },
             error,
           );
@@ -2881,7 +3003,7 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
-    return this.formatTools({
+    const allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
@@ -2889,7 +3011,8 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
-    });
+    };
+    return this.formatTools(allTools);
   }
 
   /**
@@ -3462,7 +3585,7 @@ export class Agent<
           instructions: titleInstructions,
         } = this.resolveTitleGenerationConfig(config.generateTitle);
 
-        if (shouldGenerate && !threadExists) {
+        if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
             const title = await this.genTitle(

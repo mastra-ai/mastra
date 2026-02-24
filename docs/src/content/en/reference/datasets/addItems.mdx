@@ -14,65 +14,67 @@ Adds multiple items to the dataset in a single bulk operation.
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const items = await dataset.addItems({
   items: [
-    { input: { question: "What is AI?" }, groundTruth: { answer: "Artificial Intelligence" } },
-    { input: { question: "What is ML?" }, groundTruth: { answer: "Machine Learning" } },
-    { input: { question: "What is DL?" }, metadata: { category: "deep-learning" } },
+    { input: { question: 'What is AI?' }, groundTruth: { answer: 'Artificial Intelligence' } },
+    { input: { question: 'What is ML?' }, groundTruth: { answer: 'Machine Learning' } },
+    { input: { question: 'What is DL?' }, metadata: { category: 'deep-learning' } },
   ],
-});
+})
 
-console.log(`Added ${items.length} items`);
+console.log(`Added ${items.length} items`)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "items",
-      type: "Array<object>",
-      description: "Array of items to add. Each item has the same shape as the dataset.addItem() input.",
-      properties: [{
-        type: "DatasetItem",
-        parameters: [
-          {
-            name: "input",
-            type: "unknown",
-            description: "Input data for the item.",
-          },
-          {
-            name: "groundTruth",
-            type: "unknown",
-            isOptional: true,
-            description: "Expected output or ground truth.",
-          },
-          {
-            name: "metadata",
-            type: "Record<string, unknown>",
-            isOptional: true,
-            description: "Arbitrary metadata.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "items",
+type: "Array<object>",
+description: "Array of items to add. Each item has the same shape as the dataset.addItem() input.",
+properties: [{
+type: "DatasetItem",
+parameters: [
+{
+name: "input",
+type: "unknown",
+description: "Input data for the item.",
+},
+{
+name: "groundTruth",
+type: "unknown",
+isOptional: true,
+description: "Expected output or ground truth.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata.",
+},
+],
+}],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<DatasetItem[]>",
-      description: "Array of created dataset items. See dataset.addItem() for the item shape.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<DatasetItem[]>",
+description: "Array of created dataset items. See dataset.addItem() for the item shape.",
+},
+]}
 />

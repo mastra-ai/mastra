@@ -43,10 +43,6 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   groq: {
     url: 'https://api.groq.com/openai/v1',
   },
-  vercel: {
-    url: 'https://ai-gateway.vercel.sh/v1',
-    apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
-  },
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
     url: 'https://api.moonshot.ai/anthropic/v1',
@@ -235,7 +231,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'deepinfra':
         return createDeepInfra({ apiKey })(modelId);
       case 'vercel':
-        return createGateway({ apiKey, baseURL, headers })(modelId);
+        return createGateway({ apiKey, headers })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint

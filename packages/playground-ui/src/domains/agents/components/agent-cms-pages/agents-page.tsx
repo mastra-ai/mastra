@@ -55,27 +55,39 @@ export function AgentsPage() {
     if (isSet) {
       const next = { ...selectedAgents };
       delete next[agentId];
-      form.setValue('agents', next);
+      form.setValue('agents', next, { shouldDirty: true });
     } else {
-      form.setValue('agents', {
-        ...selectedAgents,
-        [agentId]: { ...selectedAgents?.[agentId], description: getOriginalDescription(agentId) },
-      });
+      form.setValue(
+        'agents',
+        {
+          ...selectedAgents,
+          [agentId]: { ...selectedAgents?.[agentId], description: getOriginalDescription(agentId) },
+        },
+        { shouldDirty: true },
+      );
     }
   };
 
   const handleDescriptionChange = (agentId: string, description: string) => {
-    form.setValue('agents', {
-      ...selectedAgents,
-      [agentId]: { ...selectedAgents?.[agentId], description },
-    });
+    form.setValue(
+      'agents',
+      {
+        ...selectedAgents,
+        [agentId]: { ...selectedAgents?.[agentId], description },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleRulesChange = (agentId: string, rules: RuleGroup | undefined) => {
-    form.setValue('agents', {
-      ...selectedAgents,
-      [agentId]: { ...selectedAgents?.[agentId], rules },
-    });
+    form.setValue(
+      'agents',
+      {
+        ...selectedAgents,
+        [agentId]: { ...selectedAgents?.[agentId], rules },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const filteredOptions = useMemo(() => {

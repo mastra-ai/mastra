@@ -422,7 +422,7 @@ export class Memory extends MastraMemory {
 
       await memoryStore.updateThread({
         id: threadId,
-        title: thread.title || 'Untitled Thread',
+        title: thread.title || '',
         metadata: {
           ...thread.metadata,
           workingMemory,
@@ -536,7 +536,7 @@ ${workingMemory}`;
 
         await memoryStore.updateThread({
           id: threadId,
-          title: thread.title || 'Untitled Thread',
+          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,
@@ -1715,6 +1715,7 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
+            instruction: omConfig.observation.instruction,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1725,6 +1726,7 @@ Notes:
             providerOptions: omConfig.reflection.providerOptions,
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
+            instruction: omConfig.reflection.instruction,
           }
         : undefined,
     });

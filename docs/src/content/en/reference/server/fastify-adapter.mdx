@@ -30,96 +30,96 @@ npm install @mastra/fastify@latest fastify
 ## Usage example
 
 ```typescript title="server.ts"
-import Fastify from 'fastify';
-import { MastraServer } from '@mastra/fastify';
-import { mastra } from './mastra';
+import Fastify from 'fastify'
+import { MastraServer } from '@mastra/fastify'
+import { mastra } from './mastra'
 
-const app = Fastify({ logger: true });
-const server = new MastraServer({ app, mastra });
+const app = Fastify({ logger: true })
+const server = new MastraServer({ app, mastra })
 
-await server.init();
+await server.init()
 
 app.listen({ port: 3000 }, (err, address) => {
   if (err) {
-    console.error(err);
-    process.exit(1);
+    console.error(err)
+    process.exit(1)
   }
-  console.log(`Server running on ${address}`);
-});
+  console.log(`Server running on ${address}`)
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "app",
-      type: "FastifyInstance",
-      description: "Fastify app instance",
-      isOptional: false,
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Mastra instance",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Route path prefix (e.g., `/api/v2`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "openapiPath",
-      type: "string",
-      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "bodyLimitOptions",
-      type: "BodyLimitOptions",
-      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
-      description: "Request body size limits",
-      isOptional: true,
-    },
-    {
-      name: "streamOptions",
-      type: "StreamOptions",
-      typeDescription: "{ redact?: boolean }",
-      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
-      isOptional: true,
-      defaultValue: "{ redact: true }",
-    },
-    {
-      name: "customRouteAuthConfig",
-      type: "Map<string, boolean>",
-      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
-      isOptional: true,
-    },
-    {
-      name: "tools",
-      type: "ToolsInput",
-      typeDescription: "Record<string, ToolAction | VercelTool>",
-      description: "Available tools for the server",
-      isOptional: true,
-    },
-    {
-      name: "taskStore",
-      type: "InMemoryTaskStore",
-      description: "Task store for A2A (Agent-to-Agent) operations",
-      isOptional: true,
-    },
-    {
-      name: "mcpOptions",
-      type: "MCPOptions",
-      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "app",
+type: "FastifyInstance",
+description: "Fastify app instance",
+isOptional: false,
+},
+{
+name: "mastra",
+type: "Mastra",
+description: "Mastra instance",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Route path prefix (e.g., `/api/v2`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "openapiPath",
+type: "string",
+description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "bodyLimitOptions",
+type: "BodyLimitOptions",
+typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+description: "Request body size limits",
+isOptional: true,
+},
+{
+name: "streamOptions",
+type: "StreamOptions",
+typeDescription: "{ redact?: boolean }",
+description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+isOptional: true,
+defaultValue: "{ redact: true }",
+},
+{
+name: "customRouteAuthConfig",
+type: "Map<string, boolean>",
+description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+isOptional: true,
+},
+{
+name: "tools",
+type: "ToolsInput",
+typeDescription: "Record<string, ToolAction | VercelTool>",
+description: "Available tools for the server",
+isOptional: true,
+},
+{
+name: "taskStore",
+type: "InMemoryTaskStore",
+description: "Task store for A2A (Agent-to-Agent) operations",
+isOptional: true,
+},
+{
+name: "mcpOptions",
+type: "MCPOptions",
+typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
+isOptional: true,
+},
+]}
 />
 
 ## Manual initialization

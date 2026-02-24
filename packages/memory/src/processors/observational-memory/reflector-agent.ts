@@ -1,4 +1,10 @@
-import { OBSERVER_EXTRACTION_INSTRUCTIONS, OBSERVER_OUTPUT_FORMAT_BASE, OBSERVER_GUIDELINES } from './observer-agent';
+import {
+  OBSERVER_EXTRACTION_INSTRUCTIONS,
+  OBSERVER_OUTPUT_FORMAT_BASE,
+  OBSERVER_GUIDELINES,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
+} from './observer-agent';
 import type { ReflectorResult as BaseReflectorResult } from './types';
 
 /**
@@ -19,8 +25,10 @@ export interface ReflectorResult extends BaseReflectorResult {
  * - Drawing connections and conclusions between observations
  * - Identifying if the agent got off track and how to get back on track
  * - Preserving ALL important information (reflections become the ENTIRE memory)
+ *
+ * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildReflectorSystemPrompt(): string {
+export function buildReflectorSystemPrompt(instruction?: string): string {
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -113,7 +121,7 @@ Hint for the agent's immediate next message. Examples:
 - Call the view tool on src/example.ts to continue debugging.
 </suggested-response>
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
 
 /**
@@ -227,11 +235,19 @@ ${guidance}`;
  * Uses XML tag parsing for structured extraction.
  */
 export function parseReflectorOutput(output: string): ReflectorResult {
+  // Check for degenerate repetition before parsing
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      degenerate: true,
+    };
+  }
+
   const parsed = parseReflectorSectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,

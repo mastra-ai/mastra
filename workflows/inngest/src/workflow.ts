@@ -362,6 +362,65 @@ export class InngestWorkflow<
             }
           }
 
+          // Ensure final snapshot is persisted BEFORE publishing workflow-finish
+          // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
+          const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
+            workflowStatus: result.status as any,
+            stepResults: result.steps,
+          });
+          if (shouldPersistFinalSnapshot) {
+            const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+            if (workflowsStore) {
+              // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
+              // which were set correctly by the handlers during execution
+              let existingSnapshot:
+                | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
+                | undefined;
+              if (result.status === 'suspended') {
+                existingSnapshot =
+                  (await workflowsStore.loadWorkflowSnapshot({
+                    workflowName: this.id,
+                    runId,
+                  })) ?? undefined;
+              }
+
+              await workflowsStore.persistWorkflowSnapshot({
+                workflowName: this.id,
+                runId,
+                resourceId,
+                snapshot: {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: result.steps as any,
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? (result.result as any) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  timestamp: Date.now(),
+                },
+              });
+            }
+          }
+
+          // Publish workflow-finish event for realtime subscribers
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-finish',
+              payload: {
+                status: result.status,
+                result: result.status === 'success' ? result.result : undefined,
+                error: result.status === 'failed' ? result.error : undefined,
+              },
+            },
+          });
+
           // Throw after span ended for failed workflows
           if (result.status === 'failed') {
             throw new NonRetriableError(`Workflow failed`, {

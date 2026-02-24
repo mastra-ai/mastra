@@ -17,20 +17,20 @@ Observational Memory (OM) is Mastra's memory system for long-context agentic mem
 Enable `observationalMemory` in the memory options when creating your agent:
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5-mini",
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     options: {
       // highlight-next-line
       observationalMemory: true,
     },
   }),
-});
+})
 ```
 
 That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. To use a different model or customize thresholds, pass a config object instead:
@@ -39,10 +39,10 @@ That's it. The agent now has humanlike long-term memory that persists across con
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "deepseek/deepseek-reasoner",
+      model: 'deepseek/deepseek-reasoner',
     },
   },
-});
+})
 ```
 
 See [configuration options](/reference/memory/observational-memory) for full API details.
@@ -94,8 +94,8 @@ When observations exceed their threshold (default: 40,000 tokens), the Reflector
 The result is a three-tier system:
 
 1. **Recent messages**: Exact conversation history for the current task
-2. **Observations**: A log of what the Observer has seen
-3. **Reflections**: Condensed observations when memory becomes too long
+1. **Observations**: A log of what the Observer has seen
+1. **Reflections**: Condensed observations when memory becomes too long
 
 ## Models
 
@@ -111,10 +111,10 @@ We've also tested `deepseek`, `qwen3`, and `glm-4.7` for the Observer. For the R
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "deepseek/deepseek-reasoner",
+      model: 'deepseek/deepseek-reasoner',
     },
   },
-});
+})
 ```
 
 See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
@@ -129,12 +129,14 @@ Each thread has its own observations. This scope is well tested and works well a
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "google/gemini-2.5-flash",
-      scope: "thread",
+      model: 'google/gemini-2.5-flash',
+      scope: 'thread',
     },
   },
-});
+})
 ```
+
+Thread scope requires a valid `threadId` to be provided when calling the agent. If `threadId` is missing, Observational Memory throws an error. This prevents multiple threads from silently sharing a single observation record, which can cause database deadlocks.
 
 ### Resource scope (experimental)
 
@@ -144,11 +146,11 @@ Observations are shared across all threads for a resource (typically a user). En
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "google/gemini-2.5-flash",
-      scope: "resource",
+      model: 'google/gemini-2.5-flash',
+      scope: 'resource',
     },
   },
-});
+})
 ```
 
 Resource scope works, however it's marked as experimental for now until we prove task adherence/continuity across multiple ongoing simultaneous threads.
@@ -160,8 +162,7 @@ For your use-case this may not be a problem, so your mileage may vary.
 
 :::warning
 
-In resource scope, unobserved messages across *all* threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
-
+In resource scope, unobserved messages across _all_ threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
 
 :::
 
@@ -173,7 +174,7 @@ OM uses token thresholds to decide when to observe and reflect. See [token budge
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "google/gemini-2.5-flash",
+      model: 'google/gemini-2.5-flash',
       observation: {
         // when to run the Observer (default: 30,000)
         messageTokens: 30_000,
@@ -187,7 +188,7 @@ const memory = new Memory({
       shareTokenBudget: false,
     },
   },
-});
+})
 ```
 
 ## Async Buffering
@@ -200,6 +201,8 @@ As the agent converses, message tokens accumulate. At regular intervals (`buffer
 
 When message tokens reach the `messageTokens` threshold, buffered chunks activate: their observations move into the active observation log, and the corresponding raw messages are removed from the context window. The agent never pauses.
 
+Buffered observations also include continuation hints — a suggested next response and the current task — so the main agent maintains conversational continuity after activation shrinks the context window.
+
 If the agent produces messages faster than the Observer can process them, a `blockAfter` safety threshold forces a synchronous observation as a last resort.
 
 Reflection works similarly — the Reflector runs in the background when observations reach a fraction of the reflection threshold.
@@ -207,7 +210,7 @@ Reflection works similarly — the Reflector runs in the background when observa
 ### Settings
 
 | Setting | Default | What it controls |
-|---------|---------|-----------------|
+| - | - | - |
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
@@ -222,13 +225,13 @@ To disable async buffering and use synchronous observation/reflection instead:
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: "google/gemini-2.5-flash",
+      model: 'google/gemini-2.5-flash',
       observation: {
         bufferTokens: false,
       },
     },
   },
-});
+})
 ```
 
 Setting `bufferTokens: false` disables both observation and reflection async buffering. See [async buffering configuration](/reference/memory/observational-memory#async-buffering) for the full API.

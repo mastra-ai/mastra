@@ -20,8 +20,6 @@ import {
   DatasetItemContent,
   DatasetItemVersionsPanel,
   EditModeContent,
-  Alert,
-  AlertTitle,
   AlertDialog,
   Button,
   Icon,
@@ -233,12 +231,9 @@ function DatasetItemPage() {
               Datasets
             </Crumb>
             <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name || datasetId}
+              {dataset?.name}
             </Crumb>
-            <Crumb isCurrent>
-              <Icon>
-                <FileCodeIcon />
-              </Icon>
+            <Crumb isCurrent as="span">
               Item
             </Crumb>
           </Breadcrumb>
@@ -295,9 +290,10 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Alert variant="destructive">
-                    <AlertTitle>This item was deleted at version v{latestVersion.datasetVersion}</AlertTitle>
-                  </Alert>
+                  <Notice variant="destructive">
+                    <AlertTriangleIcon />
+                    <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
@@ -325,12 +321,10 @@ function DatasetItemPage() {
                     onCancel={handleCancel}
                     isSaving={updateItem.isPending}
                   />
+                ) : displayItem ? (
+                  <DatasetItemContent item={displayItem} Link={FrameworkLink} />
                 ) : (
-                  displayItem && (
-                    <div className="grid content-start">
-                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
-                    </div>
-                  )
+                  <div className="text-neutral4 text-sm">Item data not available</div>
                 )}
               </Column>
               {!isEditing && (
@@ -375,60 +369,3 @@ function DatasetItemPage() {
 
 export { DatasetItemPage };
 export default DatasetItemPage;
-
-/*
-
-
-            <ListAndDetails isDetailsActive={true}>
-              <ListAndDetails.Column isTopFixed={isViewingOldVersion || isDeleted}>
-                {isDeleted && latestVersion && (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      This item was deleted at version v{latestVersion.datasetVersion}
-                    </AlertTitle>
-                  </Alert>
-                )}
-                {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <Alert variant="warning">
-                    <AlertTitle>Viewing version v{selectedVersion.datasetVersion}</AlertTitle>
-                    <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
-                      <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
-                    </Button>
-                  </Alert>
-                )}
-
-                {isEditing ? (
-                  <EditModeContent
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    groundTruthValue={groundTruthValue}
-                    setGroundTruthValue={setGroundTruthValue}
-                    metadataValue={metadataValue}
-                    setMetadataValue={setMetadataValue}
-                    validationErrors={null}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                    isSaving={updateItem.isPending}
-                  />
-                ) : (
-                  displayItem && (
-                    <div className="grid content-start">
-                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
-                    </div>
-                  )
-                )}
-              </ListAndDetails.Column>
-
-              <ListAndDetails.Separator />
-
-              <ListAndDetails.Column>
-                <DatasetItemVersionsPanel
-                  datasetId={datasetId}
-                  itemId={itemId}
-                  onClose={() => {}}
-                  onVersionSelect={handleVersionSelect}
-                  activeVersion={selectedVersion?.datasetVersion ?? null}
-                />
-              </ListAndDetails.Column>
-            </ListAndDetails>
-            */

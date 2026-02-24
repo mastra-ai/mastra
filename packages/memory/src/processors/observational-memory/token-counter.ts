@@ -4,6 +4,22 @@ import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 
 /**
+ * Shared default encoder singleton.
+ * Tiktoken(o200k_base) builds two internal Maps with ~200k entries each,
+ * costing ~80-120 MB of heap per instance. Since ObservationalMemory creates
+ * a TokenCounter for both input and output processors per request, sharing
+ * the default encoder avoids duplicating this cost.
+ */
+let sharedDefaultEncoder: Tiktoken | undefined;
+
+function getDefaultEncoder(): Tiktoken {
+  if (!sharedDefaultEncoder) {
+    sharedDefaultEncoder = new Tiktoken(o200k_base);
+  }
+  return sharedDefaultEncoder;
+}
+
+/**
  * Token counting utility using tiktoken.
  * For POC we use o200k_base (GPT-4o encoding) as a reasonable default.
  * Production will add provider-aware counting.
@@ -19,7 +35,7 @@ export class TokenCounter {
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(encoding?: TiktokenBPE) {
-    this.encoder = new Tiktoken(encoding || o200k_base);
+    this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
   }
 
   /**

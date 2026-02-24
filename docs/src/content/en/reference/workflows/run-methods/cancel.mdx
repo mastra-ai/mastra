@@ -14,9 +14,9 @@ This method aborts any running steps and updates the workflow status to 'cancele
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
-await run.cancel();
+await run.cancel()
 // Returns: { message: 'Workflow run canceled' }
 ```
 
@@ -24,37 +24,39 @@ await run.cancel();
 
 <PropertiesTable
   content={[
-    {
-      name: "No parameters",
-      type: "void",
-      description: "This method takes no parameters",
-      isOptional: false,
-    },
-  ]}
+{
+name: "No parameters",
+type: "void",
+description: "This method takes no parameters",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<{ message: string }>",
-      description:
-        "A promise that resolves with { message: 'Workflow run canceled' } when cancellation succeeds",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<{ message: string }>",
+description:
+"A promise that resolves with { message: 'Workflow run canceled' } when cancellation succeeds",
+},
+]}
 />
 
 ## How cancellation works
 
 When called, the workflow will:
+
 1. **Trigger the abort signal** - Uses the standard Web API AbortSignal to notify running steps
-2. **Prevent subsequent steps** - No further steps will be executed
+1. **Prevent subsequent steps** - No further steps will be executed
 
 ## Abort signal behavior
 
 Steps that check the `abortSignal` parameter can respond to cancellation:
+
 - Steps can listen to the 'abort' event: `abortSignal.addEventListener('abort', callback)`
 - Steps can check if already aborted: `if (abortSignal.aborted) { ... }`
 - Useful for cancelling timeouts, network requests, or long-running operations
@@ -66,12 +68,12 @@ Steps that check the `abortSignal` parameter can respond to cancellation:
 ### Cancelling a workflow on error
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 try {
-  const result = await run.start({ inputData: { value: "initial data" } });
+  const result = await run.start({ inputData: { value: 'initial data' } })
 } catch (error) {
-  await run.cancel();
+  await run.cancel()
 }
 ```
 
@@ -81,26 +83,26 @@ try {
 const step = createStep({
   id: 'long-running-step',
   execute: async ({ inputData, abortSignal, abort }) => {
-    const timeout = new Promise((resolve) => {
-      const timer = setTimeout(() => resolve('done'), 10000);
-      
+    const timeout = new Promise(resolve => {
+      const timer = setTimeout(() => resolve('done'), 10000)
+
       // Clean up if canceled
       abortSignal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        resolve('canceled');
-      });
-    });
-    
-    const result = await timeout;
-    
+        clearTimeout(timer)
+        resolve('canceled')
+      })
+    })
+
+    const result = await timeout
+
     // Check if aborted after async operation
     if (abortSignal.aborted) {
-      return abort(); // Stop execution
+      return abort() // Stop execution
     }
-    
-    return { result };
-  }
-});
+
+    return { result }
+  },
+})
 ```
 
 ## Related

@@ -7,10 +7,9 @@
  * @see https://e2b.dev/docs
  */
 
+import type { RequestContext } from '@mastra/core/di';
 import type {
   SandboxInfo,
-  ExecuteCommandOptions,
-  CommandResult,
   WorkspaceFilesystem,
   MountResult,
   FilesystemMountConfig,
@@ -18,15 +17,19 @@ import type {
   MountManager,
   MastraSandboxOptions,
 } from '@mastra/core/workspace';
+
+/**
+ * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
+ */
+type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
-
-import { shellQuote } from '../utils/shell-quote';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { E2BProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
@@ -83,6 +86,16 @@ export interface E2BSandboxOptions extends MastraSandboxOptions {
   apiKey?: string;
   /** Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var. */
   accessToken?: string;
+  /**
+   * Custom instructions that override the default instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the default instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the default instructions and
+   *   optional request context so you can extend or customise per-request.
+   */
+  instructions?: InstructionsOption;
 }
 
 // =============================================================================
@@ -132,20 +145,20 @@ export class E2BSandbox extends MastraSandbox {
   readonly id: string;
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
-
-  // Status is managed by base class lifecycle methods
   status: ProviderStatus = 'pending';
+
+  declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
+  declare readonly processes: E2BProcessManager;
 
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
-
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly connectionOpts: Record<string, string>;
-  declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
+  private readonly _instructionsOverride?: InstructionsOption;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -154,7 +167,11 @@ export class E2BSandbox extends MastraSandbox {
   private _templatePreparePromise?: Promise<string>;
 
   constructor(options: E2BSandboxOptions = {}) {
-    super({ ...options, name: 'E2BSandbox' });
+    super({
+      ...options,
+      name: 'E2BSandbox',
+      processes: new E2BProcessManager({ env: options.env ?? {} }),
+    });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
@@ -168,16 +185,14 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
+    this._instructionsOverride = options.instructions;
+
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
     this._templatePreparePromise = this.resolveTemplate().catch(err => {
       this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on start):`, err);
       return ''; // Return empty string, will be retried in start()
     });
-  }
-
-  private generateId(): string {
-    return `e2b-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   /**
@@ -190,19 +205,19 @@ export class E2BSandbox extends MastraSandbox {
    *
    * @example Direct file operations
    * ```typescript
-   * const e2bSandbox = sandbox.instance;
-   * await e2bSandbox.files.write('/tmp/test.txt', 'Hello');
-   * const content = await e2bSandbox.files.read('/tmp/test.txt');
-   * const files = await e2bSandbox.files.list('/tmp');
+   * const e2b = sandbox.e2b;
+   * await e2b.files.write('/tmp/test.txt', 'Hello');
+   * const content = await e2b.files.read('/tmp/test.txt');
+   * const files = await e2b.files.list('/tmp');
    * ```
    *
    * @example Access ports
    * ```typescript
-   * const e2bSandbox = sandbox.instance;
-   * const url = e2bSandbox.getHost(3000);
+   * const e2b = sandbox.e2b;
+   * const url = e2b.getHost(3000);
    * ```
    */
-  get instance(): Sandbox {
+  get e2b(): Sandbox {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
@@ -210,7 +225,190 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
-  // Mount Support
+  // Lifecycle
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Start the E2B sandbox.
+   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
+   *
+   * Status management and mount processing are handled by the base class.
+   */
+  async start(): Promise<void> {
+    // Already have a sandbox instance
+    if (this._sandbox) {
+      return;
+    }
+
+    // Await template preparation (started in constructor) and existing sandbox search in parallel
+    const [existingSandbox, templateId] = await Promise.all([
+      this.findExistingSandbox(),
+      this._templatePreparePromise || this.resolveTemplate(),
+    ]);
+
+    if (existingSandbox) {
+      this._sandbox = existingSandbox;
+      this._createdAt = new Date();
+      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
+
+      // Clean up stale mounts from previous config
+      // (processPending is called by base class after start completes)
+      const expectedPaths = Array.from(this.mounts.entries.keys());
+      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+      await this.reconcileMounts(expectedPaths);
+      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+      return;
+    }
+
+    // If template preparation failed earlier, retry now
+    let resolvedTemplateId = templateId;
+    if (!resolvedTemplateId) {
+      this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
+      resolvedTemplateId = await this.resolveTemplate();
+    }
+
+    // Create a new sandbox with our logical ID in metadata
+    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+    this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
+
+    try {
+      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+        ...this.connectionOpts,
+        autoPause: true,
+        metadata: {
+          ...this.metadata,
+          'mastra-sandbox-id': this.id,
+        },
+        timeoutMs: this.timeout,
+      });
+    } catch (createError) {
+      // If template not found (404), rebuild it and retry
+      const errorStr = String(createError);
+      if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
+        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
+        this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
+        const rebuiltTemplateId = await this.buildDefaultTemplate();
+
+        this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
+        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
+          ...this.connectionOpts,
+          autoPause: true,
+          metadata: {
+            ...this.metadata,
+            'mastra-sandbox-id': this.id,
+          },
+          timeoutMs: this.timeout,
+        });
+      } else {
+        throw createError;
+      }
+    }
+
+    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
+    this._createdAt = new Date();
+    // Note: processPending is called by base class after start completes
+  }
+
+  /**
+   * Stop the E2B sandbox.
+   * Unmounts all filesystems and releases the sandbox reference.
+   * Status management is handled by the base class.
+   */
+  async stop(): Promise<void> {
+    // Kill all background processes before stopping
+    try {
+      const procs = await this.processes.list();
+      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+    } catch {
+      // Best-effort: sandbox may already be dead
+    }
+
+    // Unmount all filesystems before stopping
+    // Collect keys first since unmount() mutates the map
+    for (const mountPath of [...this.mounts.entries.keys()]) {
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Best-effort unmount; sandbox may already be dead
+      }
+    }
+
+    this._sandbox = null;
+  }
+
+  /**
+   * Destroy the E2B sandbox and clean up all resources.
+   * Unmounts filesystems, kills the sandbox, and clears mount state.
+   * Status management is handled by the base class.
+   */
+  async destroy(): Promise<void> {
+    if (this._sandbox) {
+      // Kill all background processes
+      try {
+        const procs = await this.processes.list();
+        await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+      } catch {
+        // Best-effort: sandbox may already be dead
+      }
+
+      // Unmount all filesystems
+      // Collect keys first since unmount() mutates the map
+      for (const mountPath of [...this.mounts.entries.keys()]) {
+        try {
+          await this.unmount(mountPath);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+
+      try {
+        await this._sandbox.kill();
+      } catch {
+        // Ignore errors during destroy
+      }
+
+      this._sandbox = null;
+    }
+
+    this.mounts.clear();
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      createdAt: this._createdAt ?? new Date(),
+      mounts: Array.from(this.mounts.entries).map(([path, entry]) => ({
+        path,
+        filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
+      })),
+      metadata: {
+        ...this.metadata,
+      },
+    };
+  }
+
+  /**
+   * Get instructions describing this E2B sandbox.
+   * Used by agents to understand the execution environment.
+   */
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    if (this._instructionsOverride === undefined) return this._getDefaultInstructions();
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
+    const defaultInstructions = this._getDefaultInstructions();
+    return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
+  }
+
+  private _getDefaultInstructions(): string {
+    const mountCount = this.mounts.entries.size;
+    const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
+    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mounting
   // ---------------------------------------------------------------------------
 
   /**
@@ -341,27 +539,6 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Mounted ${mountPath}`);
     return { success: true, mountPath };
-  }
-
-  /**
-   * Write marker file for detecting config changes on reconnect.
-   * Stores both the mount path and config hash in the file.
-   */
-  private async writeMarkerFile(mountPath: string): Promise<void> {
-    if (!this._sandbox) return;
-
-    const markerContent = this.mounts.getMarkerContent(mountPath);
-    if (!markerContent) return;
-
-    const filename = this.mounts.markerFilename(mountPath);
-    const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    try {
-      await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
-      await this._sandbox.files.write(markerPath, markerContent);
-    } catch {
-      // Non-fatal - marker is just for optimization
-      this.logger.debug(`${LOG_PREFIX} Warning: Could not write marker file at ${markerPath}`);
-    }
   }
 
   /**
@@ -502,151 +679,61 @@ export class E2BSandbox extends MastraSandbox {
     }
   }
 
-  /**
-   * Check if a path is already mounted and if the config matches.
-   *
-   * @param mountPath - The mount path to check
-   * @param newConfig - The new config to compare against the stored config
-   * @returns 'not_mounted' | 'matching' | 'mismatched'
-   */
-  private async checkExistingMount(
-    mountPath: string,
-    newConfig: E2BMountConfig,
-  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
-    if (!this._sandbox) throw new SandboxNotReadyError(this.id);
+  // ---------------------------------------------------------------------------
+  // Deprecated
+  // ---------------------------------------------------------------------------
 
-    // Check if path is a mount point
-    const mountCheck = await this._sandbox.commands.run(
-      `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
-    );
+  /** @deprecated Use `e2b` instead. */
+  get instance(): Sandbox {
+    return this.e2b;
+  }
 
-    if (mountCheck.stdout.trim() !== 'mounted') {
-      return 'not_mounted';
-    }
-
-    // Path is mounted - check if config matches via marker file
-    const filename = this.mounts.markerFilename(mountPath);
-    const markerPath = `/tmp/.mastra-mounts/${filename}`;
-
-    try {
-      const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
-      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
-
-      if (!parsed) {
-        return 'mismatched';
-      }
-
-      // Compute hash of the NEW config and compare with stored hash
-      const newConfigHash = this.mounts.computeConfigHash(newConfig);
-      this.logger.debug(
-        `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
-      );
-
-      if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
-        return 'matching';
-      }
-    } catch {
-      // Marker doesn't exist or can't be read - treat as mismatched
-    }
-
-    return 'mismatched';
+  /** @deprecated Use `status === 'running'` instead. */
+  async isReady(): Promise<boolean> {
+    return this.status === 'running' && this._sandbox !== null;
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle (overrides base class protected methods)
+  // Internal Helpers
   // ---------------------------------------------------------------------------
 
+  private generateId(): string {
+    return `e2b-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   /**
-   * Start the E2B sandbox.
-   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
-   *
-   * Status management and mount processing are handled by the base class.
+   * Find an existing sandbox with matching mastra-sandbox-id metadata.
+   * Returns the connected sandbox if found, null otherwise.
    */
-  async start(): Promise<void> {
-    // Already have a sandbox instance
-    if (this._sandbox) {
-      return;
-    }
-
-    // Await template preparation (started in constructor) and existing sandbox search in parallel
-    const [existingSandbox, templateId] = await Promise.all([
-      this.findExistingSandbox(),
-      this._templatePreparePromise || this.resolveTemplate(),
-    ]);
-
-    if (existingSandbox) {
-      this._sandbox = existingSandbox;
-      this._createdAt = new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
-
-      // Clean up stale mounts from previous config
-      // (processPending is called by base class after start completes)
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      return;
-    }
-
-    // If template preparation failed earlier, retry now
-    let resolvedTemplateId = templateId;
-    if (!resolvedTemplateId) {
-      this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
-      resolvedTemplateId = await this.resolveTemplate();
-    }
-
-    // Create a new sandbox with our logical ID in metadata
-    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
-    this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
-
+  private async findExistingSandbox(): Promise<Sandbox | null> {
     try {
-      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+      // Query E2B for existing sandbox with our logical ID in metadata
+      const paginator = Sandbox.list({
         ...this.connectionOpts,
-        autoPause: true,
-        metadata: {
-          ...this.metadata,
-          'mastra-sandbox-id': this.id,
+        query: {
+          metadata: { 'mastra-sandbox-id': this.id },
+          state: ['running', 'paused'],
         },
-        timeoutMs: this.timeout,
       });
-    } catch (createError) {
-      // If template not found (404), rebuild it and retry
-      const errorStr = String(createError);
-      if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
-        this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
-        const rebuiltTemplateId = await this.buildDefaultTemplate();
 
-        this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
-          ...this.connectionOpts,
-          autoPause: true,
-          metadata: {
-            ...this.metadata,
-            'mastra-sandbox-id': this.id,
-          },
-          timeoutMs: this.timeout,
-        });
-      } else {
-        throw createError;
+      const sandboxes = await paginator.nextItems();
+
+      this.logger.debug(`${LOG_PREFIX} sandboxes:`, sandboxes);
+
+      // Sandbox.list only returns running/paused sandboxes, so no need to filter
+      if (sandboxes.length > 0) {
+        const existingSandbox = sandboxes[0]!;
+        this.logger.debug(
+          `${LOG_PREFIX} Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
+        );
+        return await Sandbox.connect(existingSandbox.sandboxId, this.connectionOpts);
       }
+    } catch (e) {
+      this.logger.debug(`${LOG_PREFIX} Error querying for existing sandbox:`, e);
+      // Continue to create new sandbox
     }
 
-    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
-    this._createdAt = new Date();
-    // Note: processPending is called by base class after start completes
-  }
-
-  /**
-   * Build the default mountable template (bypasses exists check).
-   */
-  private async buildDefaultTemplate(): Promise<string> {
-    const { template, id } = createDefaultMountableTemplate();
-    this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
-    const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
-    this._resolvedTemplateId = buildResult.templateId;
-    this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
-    return buildResult.templateId;
+    return null;
   }
 
   /**
@@ -715,136 +802,82 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
-   * Find an existing sandbox with matching mastra-sandbox-id metadata.
-   * Returns the connected sandbox if found, null otherwise.
+   * Build the default mountable template (bypasses exists check).
    */
-  private async findExistingSandbox(): Promise<Sandbox | null> {
+  private async buildDefaultTemplate(): Promise<string> {
+    const { template, id } = createDefaultMountableTemplate();
+    this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
+    const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
+    this._resolvedTemplateId = buildResult.templateId;
+    this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
+    return buildResult.templateId;
+  }
+
+  /**
+   * Write marker file for detecting config changes on reconnect.
+   * Stores both the mount path and config hash in the file.
+   */
+  private async writeMarkerFile(mountPath: string): Promise<void> {
+    if (!this._sandbox) return;
+
+    const markerContent = this.mounts.getMarkerContent(mountPath);
+    if (!markerContent) return;
+
+    const filename = this.mounts.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
     try {
-      // Query E2B for existing sandbox with our logical ID in metadata
-      const paginator = Sandbox.list({
-        ...this.connectionOpts,
-        query: {
-          metadata: { 'mastra-sandbox-id': this.id },
-          state: ['running', 'paused'],
-        },
-      });
+      await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
+      await this._sandbox.files.write(markerPath, markerContent);
+    } catch {
+      // Non-fatal - marker is just for optimization
+      this.logger.debug(`${LOG_PREFIX} Warning: Could not write marker file at ${markerPath}`);
+    }
+  }
 
-      const sandboxes = await paginator.nextItems();
+  /**
+   * Check if a path is already mounted and if the config matches.
+   */
+  private async checkExistingMount(
+    mountPath: string,
+    newConfig: E2BMountConfig,
+  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+    if (!this._sandbox) throw new SandboxNotReadyError(this.id);
 
-      this.logger.debug(`${LOG_PREFIX} sandboxes:`, sandboxes);
+    // Check if path is a mount point
+    const mountCheck = await this._sandbox.commands.run(
+      `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
+    );
 
-      // Sandbox.list only returns running/paused sandboxes, so no need to filter
-      if (sandboxes.length > 0) {
-        const existingSandbox = sandboxes[0]!;
-        this.logger.debug(
-          `${LOG_PREFIX} Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
-        );
-        return await Sandbox.connect(existingSandbox.sandboxId, this.connectionOpts);
-      }
-    } catch (e) {
-      this.logger.debug(`${LOG_PREFIX} Error querying for existing sandbox:`, e);
-      // Continue to create new sandbox
+    if (mountCheck.stdout.trim() !== 'mounted') {
+      return 'not_mounted';
     }
 
-    return null;
-  }
+    // Path is mounted - check if config matches via marker file
+    const filename = this.mounts.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
 
-  /**
-   * Stop the E2B sandbox.
-   * Unmounts all filesystems and releases the sandbox reference.
-   * Status management is handled by the base class.
-   */
-  async stop(): Promise<void> {
-    // Unmount all filesystems before stopping
-    // Collect keys first since unmount() mutates the map
-    for (const mountPath of [...this.mounts.entries.keys()]) {
-      try {
-        await this.unmount(mountPath);
-      } catch {
-        // Best-effort unmount; sandbox may already be dead
+    try {
+      const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
+      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
+
+      if (!parsed) {
+        return 'mismatched';
       }
+
+      // Compute hash of the NEW config and compare with stored hash
+      const newConfigHash = this.mounts.computeConfigHash(newConfig);
+      this.logger.debug(
+        `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
+      );
+
+      if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
+        return 'matching';
+      }
+    } catch {
+      // Marker doesn't exist or can't be read - treat as mismatched
     }
 
-    this._sandbox = null;
-  }
-
-  /**
-   * Destroy the E2B sandbox and clean up all resources.
-   * Unmounts filesystems, kills the sandbox, and clears mount state.
-   * Status management is handled by the base class.
-   */
-  async destroy(): Promise<void> {
-    // Unmount all filesystems
-    // Collect keys first since unmount() mutates the map
-    for (const mountPath of [...this.mounts.entries.keys()]) {
-      try {
-        await this.unmount(mountPath);
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
-
-    if (this._sandbox) {
-      try {
-        await this._sandbox.kill();
-      } catch {
-        // Ignore errors during destroy
-      }
-    }
-
-    this._sandbox = null;
-    this.mounts.clear();
-  }
-
-  /**
-   * Check if the sandbox is ready for operations.
-   */
-  async isReady(): Promise<boolean> {
-    return this.status === 'running' && this._sandbox !== null;
-  }
-
-  /**
-   * Get information about the current state of the sandbox.
-   */
-  async getInfo(): Promise<SandboxInfo> {
-    return {
-      id: this.id,
-      name: this.name,
-      provider: this.provider,
-      status: this.status,
-      createdAt: this._createdAt ?? new Date(),
-      mounts: Array.from(this.mounts.entries).map(([path, entry]) => ({
-        path,
-        filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
-      })),
-      metadata: {
-        ...this.metadata,
-      },
-    };
-  }
-
-  /**
-   * Get instructions describing this E2B sandbox.
-   * Used by agents to understand the execution environment.
-   */
-  getInstructions(): string {
-    const mountCount = this.mounts.entries.size;
-    const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
-    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Internal Helpers
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Ensure the sandbox is started and return the E2B Sandbox instance.
-   * Uses base class ensureRunning() for status management and error handling.
-   * @throws {SandboxNotReadyError} if sandbox fails to start
-   */
-  private async ensureSandbox(): Promise<Sandbox> {
-    await this.ensureRunning();
-    return this._sandbox!;
+    return 'mismatched';
   }
 
   /**
@@ -883,92 +916,29 @@ export class E2BSandbox extends MastraSandbox {
     this.status = 'stopped';
   }
 
-  // ---------------------------------------------------------------------------
-  // Command Execution
-  // ---------------------------------------------------------------------------
-
   /**
-   * Execute a shell command in the sandbox.
-   * Automatically starts the sandbox if not already running.
-   * Retries once if the sandbox is found to be dead.
+   * Execute an operation with automatic retry if the sandbox is found to be dead.
+   *
+   * When the E2B sandbox times out or crashes mid-operation, this method
+   * resets sandbox state, restarts it, and retries the operation once.
+   *
+   * @internal Used by E2BProcessManager to handle dead sandboxes during spawn.
    */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
-    const sandbox = await this.ensureSandbox();
-
-    const startTime = Date.now();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-
-    this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
-
+  async retryOnDead<T>(fn: () => Promise<T>): Promise<T> {
     try {
-      // Merge sandbox default env with per-command env (per-command overrides)
-      // Filter out undefined values to get Record<string, string>
-      const mergedEnv = { ...this.env, ...options.env };
-      const envs = Object.fromEntries(
-        Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
-      );
-
-      const result = await sandbox.commands.run(fullCommand, {
-        cwd: options.cwd,
-        envs,
-        timeoutMs: options.timeout,
-        onStdout: options.onStdout,
-        onStderr: options.onStderr,
-      });
-
-      const executionTimeMs = Date.now() - startTime;
-
-      this.logger.debug(`${LOG_PREFIX} Exit code: ${result.exitCode} (${executionTimeMs}ms)`);
-      if (result.stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${result.stdout}`);
-      if (result.stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${result.stderr}`);
-
-      return {
-        success: result.exitCode === 0,
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        executionTimeMs,
-        command,
-        args,
-      };
+      return await fn();
     } catch (error) {
-      // Handle sandbox-is-dead errors - retry once (not infinitely)
       if (this.isSandboxDeadError(error) && !this._isRetrying) {
         this.handleSandboxTimeout();
         this._isRetrying = true;
         try {
-          return await this.executeCommand(command, args, options);
+          await this.ensureRunning();
+          return await fn();
         } finally {
           this._isRetrying = false;
         }
       }
-
-      const executionTimeMs = Date.now() - startTime;
-
-      // E2B errors often contain the actual command result in error.result
-      const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
-      const stdout = errorObj.result?.stdout || '';
-      const stderr = errorObj.result?.stderr || (error instanceof Error ? error.message : String(error));
-      const exitCode = errorObj.result?.exitCode ?? 1;
-
-      this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms) [error]`);
-      if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
-      if (stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${stderr}`);
-
-      return {
-        success: false,
-        exitCode,
-        stdout,
-        stderr,
-        executionTimeMs,
-        command,
-        args,
-      };
+      throw error;
     }
   }
 }
