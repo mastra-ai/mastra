@@ -1,7 +1,7 @@
 /**
  * TUI setup: keyboard shortcuts, layout building, autocomplete, key handlers.
  */
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
@@ -216,9 +216,12 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 
 /** Detect the fd binary (fast file finder) for @ fuzzy file autocomplete */
 function detectFdPath(): string | null {
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
   for (const bin of ['fd', 'fdfind']) {
     try {
-      const resolved = execSync(`which ${bin}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      const resolved = execFileSync(whichCmd, [bin], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] })
+        .trim()
+        .split(/\r?\n/)[0];
       if (resolved) return resolved;
     } catch {
       // not found, try next
