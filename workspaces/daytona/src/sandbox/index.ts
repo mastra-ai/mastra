@@ -9,7 +9,12 @@
  */
 
 import { Daytona, DaytonaNotFoundError } from '@daytonaio/sdk';
-import type { CreateSandboxFromImageParams, CreateSandboxFromSnapshotParams, Sandbox, VolumeMount } from '@daytonaio/sdk';
+import type {
+  CreateSandboxFromImageParams,
+  CreateSandboxFromSnapshotParams,
+  Sandbox,
+  VolumeMount,
+} from '@daytonaio/sdk';
 import type {
   SandboxInfo,
   ExecuteCommandOptions,
@@ -26,12 +31,10 @@ import type { DaytonaResources } from './types';
 const LOG_PREFIX = '[@mastra/daytona]';
 
 /** String patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
-const SANDBOX_DEAD_PATTERNS = [
-  'sandbox was not found',
-  'Sandbox not found',
-  'sandbox is not running',
-  'Sandbox not running',
-  'sandbox has been deleted',
+const SANDBOX_DEAD_PATTERNS: (string | RegExp)[] = [
+  'Sandbox is not running',
+  'Sandbox already destroyed',
+  /sandbox.*not found/i,
 ];
 
 // =============================================================================
@@ -275,7 +278,11 @@ export class DaytonaSandbox extends MastraSandbox {
     // Resources without image fall back to snapshot-based creation (resources are ignored).
     const createParams: CreateSandboxFromSnapshotParams | CreateSandboxFromImageParams =
       this.image && !this.snapshotId
-        ? (compact({ ...baseParams, image: this.image, resources: this.resources }) satisfies CreateSandboxFromImageParams)
+        ? (compact({
+            ...baseParams,
+            image: this.image,
+            resources: this.resources,
+          }) satisfies CreateSandboxFromImageParams)
         : (compact({ ...baseParams, snapshot: this.snapshotId }) satisfies CreateSandboxFromSnapshotParams);
 
     // Create sandbox
@@ -389,7 +396,9 @@ export class DaytonaSandbox extends MastraSandbox {
     if (!error) return false;
     if (error instanceof DaytonaNotFoundError) return true;
     const errorStr = String(error);
-    return SANDBOX_DEAD_PATTERNS.some(pattern => errorStr.includes(pattern));
+    return SANDBOX_DEAD_PATTERNS.some(pattern =>
+      pattern instanceof RegExp ? pattern.test(errorStr) : errorStr.includes(pattern),
+    );
   }
 
   /**
