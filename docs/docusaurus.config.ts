@@ -12,6 +12,7 @@ const config: Config = {
   favicon: '/img/favicon.ico',
   url: 'https://mastra.ai',
   baseUrl: '/',
+  trailingSlash: false,
   onBrokenLinks: 'throw',
   markdown: {
     hooks: {
