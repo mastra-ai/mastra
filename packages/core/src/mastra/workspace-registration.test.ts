@@ -146,6 +146,23 @@ describe('Workspace Registration', () => {
 
       expect(() => mastra.addWorkspace(null as any)).toThrow();
     });
+
+    it('should throw when agent source is missing agentId', () => {
+      const mastra = new Mastra({ logger: false });
+      const workspace = createWorkspace('ws');
+
+      expect(() => mastra.addWorkspace(workspace, undefined, { source: 'agent', agentName: 'A' })).toThrow(
+        'agentId and agentName',
+      );
+    });
+
+    it('should throw when agentId is supplied without source and agentName is missing', () => {
+      const mastra = new Mastra({ logger: false });
+      const workspace = createWorkspace('ws2');
+
+      // source is inferred as 'agent' because agentId is present, but agentName is absent
+      expect(() => mastra.addWorkspace(workspace, undefined, { agentId: 'some-id' })).toThrow('agentId and agentName');
+    });
   });
 
   describe('getWorkspaceById', () => {
@@ -240,8 +257,7 @@ describe('Workspace Registration', () => {
         agents: { testAgent: agent },
       });
 
-      // Wait for async registration
-      await waitForWorkspaceRegistration();
+      await waitForWorkspaceRegistration(mastra, 'agent-workspace');
 
       // Workspace should be in the registry
       const registered = mastra.getWorkspaceById('agent-workspace');
@@ -263,8 +279,7 @@ describe('Workspace Registration', () => {
 
       mastra.addAgent(agent);
 
-      // Wait for async registration
-      await waitForWorkspaceRegistration();
+      await waitForWorkspaceRegistration(mastra, 'late-agent-workspace');
 
       // Workspace should be in the registry
       const registered = mastra.getWorkspaceById('late-agent-workspace');
@@ -295,8 +310,7 @@ describe('Workspace Registration', () => {
         agents: { agent1, agent2 },
       });
 
-      // Wait for async registration
-      await waitForWorkspaceRegistration();
+      await waitForWorkspaceRegistration(mastra, 'shared-workspace');
 
       // Workspace should only be registered once
       const workspaces = mastra.listWorkspaces();
@@ -317,8 +331,8 @@ describe('Workspace Registration', () => {
         agents: { testAgent: agent },
       });
 
-      // Wait for async registration
-      await waitForWorkspaceRegistration();
+      // No workspace to poll for — just allow the async registration path to settle
+      await new Promise(r => setTimeout(r, 50));
 
       // Should have no workspaces
       const workspaces = mastra.listWorkspaces();
@@ -345,8 +359,7 @@ describe('Workspace Registration', () => {
         agents: { testAgent: agent },
       });
 
-      // Wait for async registration
-      await waitForWorkspaceRegistration();
+      await waitForWorkspaceRegistration(mastra, 'agent');
 
       // Both should be registered
       const workspaces = mastra.listWorkspaces();
@@ -355,7 +368,7 @@ describe('Workspace Registration', () => {
       expect(workspaces['global']!.source).toBe('mastra');
       expect(workspaces['agent']!.workspace).toBe(agentWorkspace);
       expect(workspaces['agent']!.source).toBe('agent');
-      expect(workspaces['agent']!.agentId).toBe('testAgent');
+      expect(workspaces['agent']!.agentId).toBe('test-agent');
       expect(workspaces['agent']!.agentName).toBe('Test Agent');
 
       // getWorkspace() should still return global

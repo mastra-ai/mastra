@@ -376,7 +376,7 @@ describe('Workspace Handlers', () => {
         id: 'agent-ws',
         name: 'Agent Workspace',
         source: 'agent',
-        agentId: 'testAgent',
+        agentId: 'test-agent',
         agentName: 'test-agent',
       });
     });
@@ -407,7 +407,7 @@ describe('Workspace Handlers', () => {
         id: 'only-agent-ws',
         name: 'Only Agent Workspace',
         source: 'agent',
-        agentId: 'soloAgent',
+        agentId: 'solo-agent',
         agentName: 'solo-agent',
       });
     });

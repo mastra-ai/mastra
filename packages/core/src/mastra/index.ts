@@ -904,7 +904,7 @@ export class Mastra<
           if (workspace) {
             this.addWorkspace(workspace, undefined, {
               source: 'agent',
-              agentId: agentKey,
+              agentId: mastraAgent.id ?? agentKey,
               agentName: mastraAgent.name,
             });
           }
@@ -1261,7 +1261,8 @@ export class Mastra<
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }
-    if (metadata?.source === 'agent' && (!metadata.agentId || !metadata.agentName)) {
+    const source = metadata?.source ?? (metadata?.agentId || metadata?.agentName ? 'agent' : 'mastra');
+    if (source === 'agent' && (!metadata?.agentId || !metadata?.agentName)) {
       throw new MastraError({
         id: 'MASTRA_ADD_WORKSPACE_MISSING_AGENT_METADATA',
         domain: ErrorDomain.MASTRA,
@@ -1277,7 +1278,6 @@ export class Mastra<
       return;
     }
 
-    const source = metadata?.source ?? (metadata?.agentId || metadata?.agentName ? 'agent' : 'mastra');
     this.#workspaces[workspaceKey] = {
       workspace,
       source,
