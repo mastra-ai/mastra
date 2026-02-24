@@ -10,7 +10,12 @@ export interface ScorerSelectorProps {
   container?: React.RefObject<HTMLElement | null>;
 }
 
-export function ScorerSelector({ selectedScorers, setSelectedScorers, disabled = false, container }: ScorerSelectorProps) {
+export function ScorerSelector({
+  selectedScorers,
+  setSelectedScorers,
+  disabled = false,
+  container,
+}: ScorerSelectorProps) {
   const { data: scorers, isLoading } = useScorers();
 
   const options = useMemo(() => {
