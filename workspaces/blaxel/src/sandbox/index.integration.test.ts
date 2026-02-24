@@ -12,6 +12,14 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
+import {
+  createSandboxTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
+import { Workspace } from '@mastra/core/workspace';
+import { GCSFilesystem } from '@mastra/gcs';
+import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { BlaxelSandbox } from './index';
@@ -449,3 +457,247 @@ describe.skipIf(!hasBlaxelCredentials || !hasS3Credentials)('BlaxelSandbox Mount
     expect(checkResult.exitCode).not.toBe(0);
   }, 180000);
 });
+
+/**
+ * Shared Sandbox Conformance Tests
+ *
+ * These tests verify BlaxelSandbox conforms to the WorkspaceSandbox interface.
+ * They use the shared test suite from @internal/workspace-test-utils.
+ */
+if (hasBlaxelCredentials) {
+  createSandboxTestSuite({
+    suiteName: 'BlaxelSandbox Conformance',
+    createSandbox: options => {
+      return new BlaxelSandbox({
+        id: `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timeout: '2m',
+        ...(options?.env && { env: options.env }),
+      });
+    },
+    cleanupSandbox: async sandbox => {
+      try {
+        await sandbox._destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+    capabilities: {
+      supportsMounting: true,
+      supportsReconnection: true,
+      supportsConcurrency: true,
+      supportsEnvVars: true,
+      supportsWorkingDirectory: true,
+      supportsTimeout: true,
+      defaultCommandTimeout: 30000,
+    },
+    testTimeout: 60000,
+  });
+}
+
+/**
+ * Shared Workspace Integration Tests (Blaxel + S3)
+ *
+ * These tests verify end-to-end filesystem<->sandbox sync using a real S3Filesystem
+ * mounted via s3fs FUSE inside a Blaxel sandbox.
+ */
+const canRunSharedIntegration = !!(hasBlaxelCredentials && hasS3Credentials);
+
+if (canRunSharedIntegration) {
+  const mountPoint = '/data/s3-shared';
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'Blaxel + S3 Shared Integration',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: true,
+      concurrentOperations: true,
+      largeFileHandling: true,
+      writeReadConsistency: true,
+    },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+
+      return new Workspace({
+        mounts: {
+          [mountPoint]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+          }),
+        },
+        sandbox: new BlaxelSandbox({
+          id: `shared-int-${Date.now()}`,
+          timeout: '3m',
+        }),
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
+
+/**
+ * S3+GCS Multi-Mount Integration Tests
+ *
+ * Two different buckets (S3 + GCS), each FUSE-mounted at a separate path.
+ * Sandbox paths align with API paths, so all multi-mount and cross-mount tests run.
+ */
+if (canRunSharedIntegration && hasGCSCredentials) {
+  const s3Mount = '/data/multi-s3';
+  const gcsMount = '/data/multi-gcs';
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'Blaxel + S3/GCS Multi-Mount Integration',
+    testTimeout: 120000,
+    sandboxPathsAligned: true,
+    testScenarios: {
+      fileSync: false,
+      multiMount: true,
+      crossMountCopy: true,
+    },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+
+      return new Workspace({
+        mounts: {
+          [s3Mount]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+          }),
+          [gcsMount]: new GCSFilesystem({
+            bucket: process.env.TEST_GCS_BUCKET!,
+            credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+          }),
+        },
+        sandbox: new BlaxelSandbox({
+          id: `multi-s3gcs-${Date.now()}`,
+          timeout: '4m',
+        }),
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
+
+/**
+ * S3+S3 Multi-Mount Integration Tests
+ *
+ * Same bucket with different prefixes. s3fs FUSE mounts the full bucket,
+ * so sandbox paths don't align with prefix-scoped API paths.
+ * Only the API-level isolation test runs; sandbox-dependent tests are skipped.
+ */
+if (canRunSharedIntegration) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'Blaxel + S3+S3 Multi-Mount Integration',
+    testTimeout: 120000,
+    sandboxPathsAligned: false,
+    testScenarios: {
+      fileSync: false,
+      multiMount: true,
+      crossMountCopy: false,
+    },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+      const prefix1 = `multi-s3a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const prefix2 = `multi-s3b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      return new Workspace({
+        mounts: {
+          '/data/multi-s3a': new S3Filesystem({ ...s3Config, prefix: prefix1 }),
+          '/data/multi-s3b': new S3Filesystem({ ...s3Config, prefix: prefix2 }),
+        },
+        sandbox: new BlaxelSandbox({
+          id: `multi-s3s3-${Date.now()}`,
+          timeout: '4m',
+        }),
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
+
+/**
+ * Read-Only Mount Shared Integration Tests (Blaxel + S3 readOnly)
+ *
+ * Tests read-only mount enforcement end-to-end using an S3 filesystem
+ * mounted with readOnly: true inside a Blaxel sandbox.
+ */
+if (canRunSharedIntegration) {
+  const roMountPath = '/data/s3-readonly-shared';
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'Blaxel + S3 Read-Only Mount Integration',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: false,
+      readOnlyMount: true,
+    },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+
+      return new Workspace({
+        mounts: {
+          [roMountPath]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+            readOnly: true,
+          }),
+        },
+        sandbox: new BlaxelSandbox({
+          id: `ro-int-${Date.now()}`,
+          timeout: '3m',
+        }),
+      });
+    },
+  });
+}
+
+/**
+ * Blaxel + CompositeFilesystem(S3+GCS) Integration Tests
+ *
+ * Tests composite-specific scenarios (mount routing, cross-mount API, virtual
+ * directories, mount isolation) with a Blaxel sandbox containing S3 + GCS mounts.
+ */
+if (canRunSharedIntegration && hasGCSCredentials) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'Blaxel + CompositeFilesystem(S3+GCS)',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: false,
+      mountRouting: true,
+      crossMountApi: true,
+      virtualDirectory: true,
+      mountIsolation: true,
+    },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+      const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      return new Workspace({
+        mounts: {
+          '/s3': new S3Filesystem({
+            ...s3Config,
+            prefix: `${prefix}-s3`,
+          }),
+          '/gcs': new GCSFilesystem({
+            bucket: process.env.TEST_GCS_BUCKET!,
+            credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+            prefix: `${prefix}-gcs`,
+          }),
+        },
+        sandbox: new BlaxelSandbox({
+          id: `cfs-${Date.now()}`,
+          timeout: '4m',
+        }),
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
+  });
+}
