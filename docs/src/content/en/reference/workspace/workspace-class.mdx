@@ -296,14 +296,32 @@ const info = await workspace.getInfo()
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
-#### `getInstructions()`
+#### `getInstructions(opts?)`
 
 Returns combined instructions from the filesystem and sandbox providers. Injected into the agent's system message to help it understand the execution context.
 
 ```typescript
 const instructions = workspace.getInstructions()
-// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.\nLocal command execution. Working directory: "/workspace".'
 ```
+
+Pass `requestContext` to enable per-request customization when a provider's `instructions` option is a function:
+
+```typescript
+const instructions = workspace.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function on the filesystem or sandbox provider, if one is configured.",
+isOptional: true,
+},
+]}
+/>
 
 **Returns:** `string`
 

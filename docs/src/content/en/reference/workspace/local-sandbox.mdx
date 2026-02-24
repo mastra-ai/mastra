@@ -289,7 +289,7 @@ const info = await sandbox.getInfo()
 // { status: 'running', resources: { ... } }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
 Returns a description of how this sandbox works. When assigned to an agent, this is injected into the agent's system message.
 
@@ -297,6 +297,25 @@ Returns a description of how this sandbox works. When assigned to an agent, this
 const instructions = sandbox.getInstructions()
 // 'Local command execution. Working directory: "/workspace".'
 ```
+
+Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
+
+```typescript
+const instructions = sandbox.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function if one was provided in the constructor.",
+isOptional: true,
+},
+]}
+/>
 
 **Returns:** `string`
 

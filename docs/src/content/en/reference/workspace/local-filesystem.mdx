@@ -462,7 +462,7 @@ const info = filesystem.getInfo()
 // { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
 Returns a description of how paths work in this filesystem. When assigned to an agent, this is injected into the agent's system message.
 
@@ -470,6 +470,25 @@ Returns a description of how paths work in this filesystem. When assigned to an 
 const instructions = filesystem.getInstructions()
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
+
+Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
+
+```typescript
+const instructions = filesystem.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function if one was provided in the constructor.",
+isOptional: true,
+},
+]}
+/>
 
 **Returns:** `string`
 
