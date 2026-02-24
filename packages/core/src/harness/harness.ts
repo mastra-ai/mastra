@@ -1735,6 +1735,22 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
 
+        // Sandbox streaming data chunks (from workspace execute_command tool)
+        case 'data-sandbox-stdout': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+          }
+          break;
+        }
+        case 'data-sandbox-stderr': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
+          }
+          break;
+        }
+
         default:
           break;
       }
