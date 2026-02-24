@@ -239,6 +239,8 @@
   },
   "devDependencies": {
     "@ast-grep/napi": "^0.40.0",
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageserver-protocol": "^3.17.0",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
     "@ai-sdk/azure": "^2.0.0",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.36",
