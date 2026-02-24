@@ -55,7 +55,15 @@ Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) fo
 
 :::
 
+The Datasets page lists all your datasets with their current version and creation date.
+
+![Datasets list page in Mastra Studio](/img/datasets/datasets-list.png)
+
 ## Creating a dataset
+
+In the Studio, click **Create Dataset** to set a name, description, and optional schemas.
+
+![Create dataset dialog](/img/datasets/datasets-create-dialog.png)
 
 Call [`create()`](/reference/datasets/create) with a name and optional description:
 
@@ -95,6 +103,14 @@ Items that don't match the schema are rejected at insert time.
 
 ## Adding items
 
+The Items tab shows all items in the dataset with search and version filtering.
+
+![Dataset items tab](/img/datasets/datasets-item-tab.png)
+
+Click **Add Item** to insert a new item with JSON editors for input and ground truth.
+
+![Add item dialog](/img/datasets/datasets-add-item-dialog.png)
+
 Use [`addItem()`](/reference/datasets/addItem) for a single item or [`addItems()`](/reference/datasets/addItems) to insert in bulk:
 
 ```typescript title="src/mastra/datasets/add-items.ts"
@@ -118,6 +134,10 @@ await dataset.addItems({
   ],
 })
 ```
+
+In the Studio, you can also import items in bulk from a CSV file. When importing, map each column to the corresponding dataset field.
+
+![CSV column mapping dialog](/img/datasets/datasets-csv-column-mapping.png)
 
 ## Updating and deleting items
 
@@ -158,6 +178,10 @@ const v2Items = await dataset.listItems({ version: 2 })
 
 Every mutation to a dataset's items (add, update, or delete) bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
 
+Open the versions panel to see the full history of changes to the dataset.
+
+![Dataset versions panel](/img/datasets/datasets-versions-panel.png)
+
 ### Listing versions
 
 Use [`listVersions()`](/reference/datasets/listVersions) to see the paginated history of versions:
@@ -169,6 +193,10 @@ for (const v of versions) {
   console.log(`Version ${v.version} — created ${v.createdAt}`)
 }
 ```
+
+Select two versions to compare changes side by side, with status indicators for added, changed, and removed items.
+
+![Compare dataset versions](/img/datasets/datasets-compare-versions.png)
 
 ### Viewing item history
 

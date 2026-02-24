@@ -16,6 +16,10 @@ An experiment runs every item in a dataset through a target (an agent, a workflo
 
 ## Basic experiment
 
+In the Studio, open a dataset and click **Run Experiment** to configure the target, scorers, and options.
+
+![Run experiment dialog](/img/datasets/datasets-run-experiments-dialog.png)
+
 Call [`startExperiment()`](/reference/datasets/startExperiment) with a target and scorers:
 
 ```typescript title="src/mastra/experiments/basic.ts"
@@ -226,6 +230,10 @@ const summary = await dataset.startExperiment({
 
 ## Viewing results
 
+The Experiments tab shows all runs for a dataset, with status and timestamps.
+
+![Experiments tab](/img/datasets/datasets-experiments-tab.png)
+
 ### Listing experiments
 
 ```typescript
@@ -240,6 +248,10 @@ for (const exp of experiments) {
 ```
 
 ### Experiment details
+
+Click an experiment to see per-item results, scores, and execution traces.
+
+![Experiment detail page](/img/datasets/datasets-experiment-details.png)
 
 ```typescript
 const experiment = await dataset.getExperiment({
@@ -264,6 +276,12 @@ for (const result of results) {
   console.log(result.itemId, result.output, result.error)
 }
 ```
+
+### Comparing experiments
+
+Select two or more experiments to compare their scores and results side by side.
+
+![Compare experiments page](/img/datasets/datasets-compare-experiments.png)
 
 ## Understanding the summary
 
