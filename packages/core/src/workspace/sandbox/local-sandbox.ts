@@ -9,11 +9,15 @@
  * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
+import * as childProcess from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { RequestContext } from '../../request-context';
+
+import type { WorkspaceFilesystem } from '../filesystem/filesystem';
+import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
 import type { InstructionsOption } from '../types';
 import { resolveInstructions } from '../utils';
@@ -21,9 +25,32 @@ import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
+import type { MountManager } from './mount-manager';
+import { mountGCS } from './mounts/gcs';
+import type { LocalGCSMountConfig } from './mounts/gcs';
+import { isMountPoint, unmountFuse } from './mounts/platform';
+import { mountS3 } from './mounts/s3';
+import type { LocalS3MountConfig } from './mounts/s3';
+import { MountToolNotFoundError } from './mounts/types';
+import type { LocalMountContext } from './mounts/types';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo } from './types';
+
+// =============================================================================
+// Mount Path Validation
+// =============================================================================
+
+/** Allowlist pattern for mount paths — absolute path with safe characters only. */
+const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
+
+function validateMountPath(mountPath: string): void {
+  if (!SAFE_MOUNT_PATH.test(mountPath)) {
+    throw new Error(
+      `Invalid mount path: ${mountPath}. Must be an absolute path with alphanumeric, dash, dot, underscore, or slash characters only.`,
+    );
+  }
+}
 
 // =============================================================================
 // Local Sandbox
@@ -113,14 +140,16 @@ export class LocalSandbox extends MastraSandbox {
   readonly workingDirectory: string;
   readonly isolation: IsolationBackend;
   declare readonly processes: LocalProcessManager;
+  declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
-  private readonly _nativeSandboxConfig: NativeSandboxConfig;
+  private _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
   private _sandboxFolderPath?: string;
   private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
   private readonly _instructionsOverride?: InstructionsOption;
+  private _activeMountPaths: Set<string> = new Set();
 
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
@@ -211,15 +240,25 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Stop the local sandbox.
+   * Unmounts all active FUSE mounts before stopping.
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
     this.logger.debug('[LocalSandbox] Stopping sandbox', { workingDirectory: this.workingDirectory });
+
+    // Unmount all active mounts (best-effort)
+    for (const mountPath of [...this._activeMountPaths]) {
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Best-effort unmount
+      }
+    }
   }
 
   /**
    * Destroy the local sandbox and clean up resources.
-   * Cleans up seatbelt profile if auto-generated.
+   * Unmounts all filesystems, clears mount state, and cleans up seatbelt profile.
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
@@ -228,6 +267,17 @@ export class LocalSandbox extends MastraSandbox {
     // Kill all background processes
     const procs = await this.processes.list();
     await Promise.all(procs.map(p => this.processes.kill(p.pid)));
+
+    // Unmount all active mounts
+    for (const mountPath of [...this._activeMountPaths]) {
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    this._activeMountPaths.clear();
+    this.mounts.clear();
 
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
@@ -313,6 +363,388 @@ export class LocalSandbox extends MastraSandbox {
       ...this.env,
       ...additionalEnv,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mount Support
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Mount a filesystem at a path on the local host.
+   *
+   * - **local** — Creates a symlink from `<workingDir>/<mount>` to the basePath.
+   * - **s3** — FUSE mount via s3fs. Linux: `apt install s3fs`. macOS: `brew install gromgit/fuse/s3fs-mac` + macFUSE.
+   * - **gcs** — FUSE mount via gcsfuse. Linux: `apt install gcsfuse`. macOS: not officially supported.
+   *
+   * Virtual mount paths (e.g. `/s3`) are resolved under the sandbox's workingDirectory.
+   * When the required FUSE tool is missing, the mount is marked `unavailable` (warning, not error)
+   * — the workspace still works via SDK filesystem methods, only sandbox process access is affected.
+   * Other mount types can be handled via the `onMount` hook.
+   */
+  async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
+    validateMountPath(mountPath);
+
+    // Resolve virtual mount path to host filesystem path
+    const hostPath = this.resolveHostPath(mountPath);
+
+    this.logger.debug(`[LocalSandbox] Mounting "${mountPath}" → "${hostPath}"...`);
+
+    // Get mount config
+    const config = filesystem.getMountConfig?.() as FilesystemMountConfig | undefined;
+    if (!config) {
+      const error = `Filesystem "${filesystem.id}" does not provide a mount config`;
+      this.logger.error(`[LocalSandbox] ${error}`);
+      this.mounts.set(mountPath, { filesystem, state: 'error', error });
+      return { success: false, mountPath, error };
+    }
+
+    // Check if already mounted with matching config
+    const existingMount = await this.checkExistingMount(mountPath, hostPath, config);
+    if (existingMount === 'matching') {
+      this.logger.debug(
+        `[LocalSandbox] Detected existing mount for ${filesystem.provider} ("${filesystem.id}") at "${hostPath}" with correct config, skipping`,
+      );
+      this.mounts.set(mountPath, { state: 'mounted', config });
+      this._activeMountPaths.add(mountPath);
+      return { success: true, mountPath };
+    } else if (existingMount === 'mismatched') {
+      this.logger.debug(`[LocalSandbox] Config mismatch, unmounting to re-mount with new config...`);
+      await this.unmount(mountPath);
+    }
+
+    this.logger.debug(`[LocalSandbox] Config type: ${config.type}`);
+    this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+
+    // Check if host directory exists and is non-empty
+    try {
+      const entries = await fs.readdir(hostPath);
+      if (entries.length > 0) {
+        const error = `Cannot mount at ${hostPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
+        this.logger.error(`[LocalSandbox] ${error}`);
+        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+        return { success: false, mountPath, error };
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        // Directory doesn't exist yet — will create it below
+      } else if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOTDIR') {
+        // Some other error (not ENOENT, not ENOTDIR) — proceed anyway
+      }
+    }
+
+    // Create mount directory under working directory
+    try {
+      this.logger.debug(`[LocalSandbox] Creating mount directory at ${hostPath}...`);
+      await fs.mkdir(hostPath, { recursive: true });
+    } catch (mkdirError) {
+      this.logger.debug(`[LocalSandbox] mkdir error for "${hostPath}":`, mkdirError);
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(mkdirError) });
+      return { success: false, mountPath, error: String(mkdirError) };
+    }
+
+    // Create mount context
+    const mountCtx = this.createMountContext();
+
+    try {
+      switch (config.type) {
+        case 'local': {
+          // Local filesystem — create a symlink from hostPath to the basePath
+          const localConfig = config as { type: 'local'; basePath: string };
+          // Remove the empty directory created above — symlink replaces it
+          await fs.rmdir(hostPath);
+          await fs.symlink(localConfig.basePath, hostPath);
+          this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
+          break;
+        }
+        case 's3':
+          this.logger.debug(`[LocalSandbox] Mounting S3 bucket at ${hostPath}...`);
+          await mountS3(hostPath, config as LocalS3MountConfig, mountCtx);
+          this.logger.debug(`[LocalSandbox] Mounted S3 bucket at ${hostPath}`);
+          break;
+        case 'gcs':
+          this.logger.debug(`[LocalSandbox] Mounting GCS bucket at ${hostPath}...`);
+          await mountGCS(hostPath, config as LocalGCSMountConfig, mountCtx);
+          this.logger.debug(`[LocalSandbox] Mounted GCS bucket at ${hostPath}`);
+          break;
+        default:
+          this.mounts.set(mountPath, {
+            filesystem,
+            state: 'unsupported',
+            config,
+            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
+          });
+          return {
+            success: false,
+            mountPath,
+            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
+          };
+      }
+    } catch (error) {
+      // Tool not installed — warn and mark as unavailable (workspace still works via SDK)
+      if (error instanceof MountToolNotFoundError) {
+        this.logger.warn(
+          `[LocalSandbox] FUSE mount unavailable at "${mountPath}": ${error.message}. Filesystem tools will still work, but sandbox processes won't have access to this mount path.`,
+        );
+        this.mounts.set(mountPath, { filesystem, state: 'unavailable', config, error: String(error) });
+
+        try {
+          await fs.rmdir(hostPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+
+        return { success: false, mountPath, error: String(error), unavailable: true };
+      }
+
+      // Actual mount failure — error
+      this.logger.error(
+        `[LocalSandbox] Error mounting "${filesystem.provider}" (${filesystem.id}) at "${hostPath}":`,
+        error,
+      );
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
+
+      // Clean up the directory we created since mount failed
+      try {
+        await fs.rmdir(hostPath);
+        this.logger.debug(`[LocalSandbox] Cleaned up directory after failed mount: ${hostPath}`);
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return { success: false, mountPath, error: String(error) };
+    }
+
+    // Mark as mounted
+    this.mounts.set(mountPath, { state: 'mounted', config });
+    this._activeMountPaths.add(mountPath);
+
+    // Write marker file
+    await this.writeMarkerFile(mountPath, hostPath);
+
+    // Dynamically add host path to isolation allowlist
+    this.addMountPathToIsolation(hostPath);
+
+    this.logger.debug(`[LocalSandbox] Mounted ${mountPath} → ${hostPath}`);
+    return { success: true, mountPath };
+  }
+
+  /**
+   * Unmount a filesystem from a path.
+   */
+  async unmount(mountPath: string): Promise<void> {
+    validateMountPath(mountPath);
+
+    const hostPath = this.resolveHostPath(mountPath);
+
+    this.logger.debug(`[LocalSandbox] Unmounting ${mountPath} (${hostPath})...`);
+
+    // Only call FUSE unmount for actual FUSE mounts (not symlinks)
+    try {
+      const stats = await fs.lstat(hostPath);
+      if (!stats.isSymbolicLink()) {
+        const mountCtx = this.createMountContext();
+        await unmountFuse(hostPath, mountCtx);
+      }
+    } catch (error) {
+      this.logger.debug(`[LocalSandbox] Unmount error:`, error);
+    }
+
+    this.mounts.delete(mountPath);
+    this._activeMountPaths.delete(mountPath);
+
+    // Clean up marker file
+    const filename = this.mounts.markerFilename(hostPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+    try {
+      await fs.unlink(markerPath);
+    } catch {
+      // Ignore if doesn't exist
+    }
+
+    // Remove mount point (symlink or empty directory)
+    try {
+      const stats = await fs.lstat(hostPath);
+      if (stats.isSymbolicLink()) {
+        await fs.unlink(hostPath);
+      } else {
+        await fs.rmdir(hostPath);
+      }
+      this.logger.debug(`[LocalSandbox] Unmounted and removed ${hostPath}`);
+    } catch {
+      this.logger.debug(`[LocalSandbox] Unmounted ${hostPath} (not removed: does not exist or not empty)`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mount Helpers (private)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Run a command on the host, outside any isolation.
+   * Used for mount/unmount operations which need host-level access.
+   */
+  private runHostCommand(
+    command: string,
+    args: string[],
+    options?: { timeout?: number },
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const timeout = options?.timeout ?? 30_000;
+    return new Promise((resolve, reject) => {
+      const proc = childProcess.spawn(command, args, {
+        cwd: this.workingDirectory,
+        env: this.buildEnv(),
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let killed = false;
+
+      const timeoutId = timeout
+        ? setTimeout(() => {
+            killed = true;
+            proc.kill('SIGTERM');
+          }, timeout)
+        : undefined;
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on('error', err => {
+        if (timeoutId) clearTimeout(timeoutId);
+        reject(err);
+      });
+
+      proc.on('close', (code, signal) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (killed) {
+          resolve({ stdout, stderr: stderr + `\nProcess timed out after ${timeout}ms`, exitCode: 124 });
+        } else if (signal) {
+          resolve({ stdout, stderr: stderr + `\nProcess terminated by ${signal}`, exitCode: 128 });
+        } else {
+          resolve({ stdout, stderr, exitCode: code ?? 0 });
+        }
+      });
+    });
+  }
+
+  /**
+   * Create a LocalMountContext for mount operations.
+   */
+  private createMountContext(): LocalMountContext {
+    return {
+      run: (command, args, options) => this.runHostCommand(command, args, options),
+      platform: os.platform(),
+      logger: this.logger,
+    };
+  }
+
+  /**
+   * Write a marker file for detecting config changes.
+   * Uses hostPath (resolved OS path) for the marker filename and content,
+   * and mountPath (virtual path) for looking up the entry.
+   */
+  private async writeMarkerFile(mountPath: string, hostPath: string): Promise<void> {
+    const entry = this.mounts.get(mountPath);
+    if (!entry?.configHash) return;
+
+    const filename = this.mounts.markerFilename(hostPath);
+    const markerContent = `${hostPath}|${entry.configHash}`;
+    const markerDir = '/tmp/.mastra-mounts';
+    const markerFilePath = path.join(markerDir, filename);
+
+    try {
+      await fs.mkdir(markerDir, { recursive: true });
+      await fs.writeFile(markerFilePath, markerContent, 'utf-8');
+    } catch {
+      this.logger.debug(`[LocalSandbox] Warning: Could not write marker file at ${markerFilePath}`);
+    }
+  }
+
+  /**
+   * Check if a path is already mounted and if the config matches.
+   * Uses hostPath (resolved OS path) for checking the actual mount point.
+   */
+  private async checkExistingMount(
+    _mountPath: string,
+    hostPath: string,
+    newConfig: FilesystemMountConfig,
+  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+    const mountCtx = this.createMountContext();
+    const mounted = await isMountPoint(hostPath, mountCtx);
+
+    if (!mounted) {
+      return 'not_mounted';
+    }
+
+    // Path is mounted — check if config matches via marker file
+    const filename = this.mounts.markerFilename(hostPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+
+    try {
+      const content = await fs.readFile(markerPath, 'utf-8');
+      const parsed = this.mounts.parseMarkerContent(content.trim());
+
+      if (!parsed) {
+        return 'mismatched';
+      }
+
+      const newConfigHash = this.mounts.computeConfigHash(newConfig);
+      this.logger.debug(
+        `[LocalSandbox] Marker check — stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
+      );
+
+      if (parsed.path === hostPath && parsed.configHash === newConfigHash) {
+        return 'matching';
+      }
+    } catch {
+      // Marker doesn't exist or can't be read
+    }
+
+    return 'mismatched';
+  }
+
+  /**
+   * Dynamically add a mount path to the sandbox isolation allowlist.
+   *
+   * - Seatbelt: pushes to readWritePaths, regenerates inline profile
+   * - Bwrap: pushes to readWritePaths (buildBwrapCommand reads config each call)
+   */
+  private addMountPathToIsolation(mountPath: string): void {
+    if (this.isolation === 'none') return;
+
+    // Add to readWritePaths
+    if (!this._nativeSandboxConfig.readWritePaths) {
+      this._nativeSandboxConfig = { ...this._nativeSandboxConfig, readWritePaths: [] };
+    }
+    if (!this._nativeSandboxConfig.readWritePaths!.includes(mountPath)) {
+      this._nativeSandboxConfig.readWritePaths!.push(mountPath);
+    }
+
+    // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up
+    if (this.isolation === 'seatbelt') {
+      this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+    }
+    // Bwrap: buildBwrapCommand reads config.readWritePaths each call, so no extra work needed
+  }
+
+  // ---------------------------------------------------------------------------
+  // Isolation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve a virtual mount path to a host filesystem path.
+   *
+   * Virtual paths like "/s3" become `<workingDir>/s3`. This differs from E2B
+   * where root-level paths like `/s3` are used directly (E2B runs in a VM with sudo).
+   * LocalSandbox runs on the host, so mounts are scoped under workingDirectory.
+   */
+  private resolveHostPath(mountPath: string): string {
+    return path.join(this.workingDirectory, mountPath.replace(/^\/+/, ''));
   }
 
   /**

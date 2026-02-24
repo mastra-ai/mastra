@@ -15,7 +15,7 @@ import type { ProviderStatus } from '../lifecycle';
 /**
  * State of a mount in the sandbox.
  */
-export type MountState = 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported';
+export type MountState = 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported' | 'unavailable';
 
 /**
  * Entry representing a mount in the sandbox.
