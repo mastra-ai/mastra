@@ -490,6 +490,9 @@ if (hasBlaxelCredentials) {
       supportsTimeout: true,
       defaultCommandTimeout: 30000,
     },
+    testDomains: {
+      processManagement: false, // BlaxelSandbox does not implement processes
+    },
     testTimeout: 60000,
   });
 }
