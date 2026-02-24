@@ -14,50 +14,50 @@ Outputs trace events to the console for debugging and development.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new ConsoleExporter(config?: BaseExporterConfig)
 ```
 
 <PropertiesTable
   props={[
-    {
-      name: "config",
-      type: "BaseExporterConfig",
-      description: "Configuration options",
-      required: false,
-    },
-  ]}
+{
+name: "config",
+type: "BaseExporterConfig",
+description: "Configuration options",
+required: false,
+},
+]}
 />
 
 ## BaseExporterConfig
 
 ```typescript
 interface BaseExporterConfig {
-  logger?: IMastraLogger;
-  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+  logger?: IMastraLogger
+  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'
 }
 ```
 
 <PropertiesTable
   props={[
-    {
-      name: "logger",
-      type: "IMastraLogger",
-      description: "Logger instance (falls back to ConsoleLogger with INFO level)",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
-      description: "Log level for the exporter (default: INFO)",
-      required: false,
-    },
-  ]}
+{
+name: "logger",
+type: "IMastraLogger",
+description: "Logger instance (falls back to ConsoleLogger with INFO level)",
+required: false,
+},
+{
+name: "logLevel",
+type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+description: "Log level for the exporter (default: INFO)",
+required: false,
+},
+]}
 />
 
 ## Properties
 
-```typescript
+```typescript prettier:false
 readonly name = 'tracing-console-exporter';
 ```
 
@@ -65,7 +65,7 @@ readonly name = 'tracing-console-exporter';
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -73,18 +73,18 @@ Exports a tracing event to the console.
 
 <PropertiesTable
   props={[
-    {
-      name: "event",
-      type: "TracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+{
+name: "event",
+type: "TracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -94,7 +94,7 @@ Logs shutdown message.
 
 The exporter outputs different formats based on event type:
 
-### SPAN_STARTED
+### SPAN\_STARTED
 
 ```
 🚀 SPAN_STARTED
@@ -107,7 +107,7 @@ The exporter outputs different formats based on event type:
 ────────────────────────────────────────
 ```
 
-### SPAN_ENDED
+### SPAN\_ENDED
 
 ```
 ✅ SPAN_ENDED
@@ -123,7 +123,7 @@ The exporter outputs different formats based on event type:
 ────────────────────────────────────────
 ```
 
-### SPAN_UPDATED
+### SPAN\_UPDATED
 
 ```
 📝 SPAN_UPDATED
@@ -141,22 +141,22 @@ The exporter outputs different formats based on event type:
 ## Usage
 
 ```typescript
-import { ConsoleExporter } from "@mastra/observability";
-import { ConsoleLogger, LogLevel } from "@mastra/core/logger";
+import { ConsoleExporter } from '@mastra/observability'
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger'
 
 // Use default logger (INFO level)
-const exporter = new ConsoleExporter();
+const exporter = new ConsoleExporter()
 
 // Use custom log level
 const exporter = new ConsoleExporter({
-  logLevel: 'debug'
-});
+  logLevel: 'debug',
+})
 
 // Use custom logger instance
-const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG });
+const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG })
 const exporterWithLogger = new ConsoleExporter({
-  logger: customLogger
-});
+  logger: customLogger,
+})
 ```
 
 ## Implementation Details

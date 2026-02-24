@@ -183,7 +183,7 @@ describe('integration tools round-trip', () => {
 // mapInstructionBlocksToApi / mapInstructionBlocksFromApi
 // ---------------------------------------------------------------------------
 describe('mapInstructionBlocksToApi', () => {
-  it('maps blocks stripping the id', () => {
+  it('maps inline blocks stripping the id', () => {
     const blocks = [
       { id: '1', type: 'prompt_block' as const, content: 'Hello' },
       { id: '2', type: 'prompt_block' as const, content: 'World', rules: undefined },
@@ -191,6 +191,22 @@ describe('mapInstructionBlocksToApi', () => {
     expect(mapInstructionBlocksToApi(blocks)).toEqual([
       { type: 'prompt_block', content: 'Hello', rules: undefined },
       { type: 'prompt_block', content: 'World', rules: undefined },
+    ]);
+  });
+
+  it('maps ref blocks to prompt_block_ref with id', () => {
+    const blocks = [{ id: 'ui-1', type: 'prompt_block_ref' as const, promptBlockId: 'saved-block-123' }];
+    expect(mapInstructionBlocksToApi(blocks)).toEqual([{ type: 'prompt_block_ref', id: 'saved-block-123' }]);
+  });
+
+  it('maps mixed inline and ref blocks', () => {
+    const blocks = [
+      { id: '1', type: 'prompt_block' as const, content: 'Inline' },
+      { id: '2', type: 'prompt_block_ref' as const, promptBlockId: 'ref-456' },
+    ];
+    expect(mapInstructionBlocksToApi(blocks)).toEqual([
+      { type: 'prompt_block', content: 'Inline', rules: undefined },
+      { type: 'prompt_block_ref', id: 'ref-456' },
     ]);
   });
 
@@ -208,33 +224,58 @@ describe('mapInstructionBlocksFromApi', () => {
     const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(raw);
     expect(instructionsString).toBe('A\n\nB');
     expect(instructionBlocks).toHaveLength(2);
-    expect(instructionBlocks[0].content).toBe('A');
-    expect(instructionBlocks[1].content).toBe('B');
     expect(instructionBlocks[0].type).toBe('prompt_block');
+    expect(instructionBlocks[1].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('A');
+    }
+    if (instructionBlocks[1].type === 'prompt_block') {
+      expect(instructionBlocks[1].content).toBe('B');
+    }
   });
 
-  it('filters out non-prompt_block types', () => {
+  it('parses prompt_block_ref instructions', () => {
+    const raw = [
+      { type: 'prompt_block' as const, content: 'Inline' },
+      { type: 'prompt_block_ref' as const, id: 'ref-123' },
+    ];
+    const { instructionBlocks } = mapInstructionBlocksFromApi(raw);
+    expect(instructionBlocks).toHaveLength(2);
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    expect(instructionBlocks[1].type).toBe('prompt_block_ref');
+    if (instructionBlocks[1].type === 'prompt_block_ref') {
+      expect(instructionBlocks[1].promptBlockId).toBe('ref-123');
+    }
+  });
+
+  it('filters out text type blocks', () => {
     const raw = [
       { type: 'prompt_block' as const, content: 'Keep' },
       { type: 'text' as const, content: 'Skip' },
     ];
     const { instructionBlocks } = mapInstructionBlocksFromApi(raw);
     expect(instructionBlocks).toHaveLength(1);
-    expect(instructionBlocks[0].content).toBe('Keep');
+    expect(instructionBlocks[0].type).toBe('prompt_block');
   });
 
   it('handles plain string input', () => {
     const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi('Hello');
     expect(instructionsString).toBe('Hello');
     expect(instructionBlocks).toHaveLength(1);
-    expect(instructionBlocks[0].content).toBe('Hello');
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('Hello');
+    }
   });
 
   it('handles undefined input', () => {
     const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(undefined);
     expect(instructionsString).toBe('');
     expect(instructionBlocks).toHaveLength(1);
-    expect(instructionBlocks[0].content).toBe('');
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('');
+    }
   });
 });
 

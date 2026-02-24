@@ -341,7 +341,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
         args: [limitValue, start],
       });
 
@@ -609,7 +609,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     try {
       // T3.14, T3.22 — SCD-2 range query, NO window functions
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND datasetVersion <= ? AND (validTo IS NULL OR validTo > ?) AND isDeleted = 0 ORDER BY createdAt DESC`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND datasetVersion <= ? AND (validTo IS NULL OR validTo > ?) AND isDeleted = 0 ORDER BY createdAt DESC, id ASC`,
         args: [datasetId, version, version],
       });
 
@@ -688,7 +688,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const end = perPageInput === false ? total : start + perPage;
 
         const result = await this.#client.execute({
-          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
           args: [...queryParams, limitValue, start],
         });
 
@@ -734,7 +734,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 

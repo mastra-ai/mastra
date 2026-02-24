@@ -1,0 +1,114 @@
+---
+title: "Mastra Code overview | Mastra Code"
+description: "Mastra Code is a terminal-based AI coding agent built with Mastra. It provides multi-model support, persistent conversations, coding tools, and a polished TUI."
+packages:
+  - "mastracode"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Mastra Code overview
+
+Mastra Code is a terminal-based AI coding agent built on Mastra's [Harness](/reference/harness/harness-class), [Agent](/docs/agents/overview), and [Memory](/docs/memory/overview) primitives. It runs in your terminal, connects to 70+ AI models, and provides tools for reading, searching, editing, and executing code.
+
+Mastra Code organizes its capabilities around these areas:
+
+- [**Modes**](/docs/mastra-code/modes): Switch between Build, Plan, and Fast modes to match your workflow.
+- [**Tools**](/docs/mastra-code/tools): Built-in tools for file viewing, editing, searching, shell commands, and web search.
+- [**Configuration**](/docs/mastra-code/configuration): Project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
+- [**Customization**](/docs/mastra-code/customization): Extend Mastra Code programmatically with custom modes, tools, subagents, and storage.
+
+## When to use Mastra Code
+
+- **Day-to-day coding**: Ask questions about your codebase, make edits, run tests, and manage Git.
+- **Code exploration**: Use Plan mode to analyze architecture and create implementation plans before writing code.
+- **Quick lookups**: Switch to Fast mode for brief answers and small edits with minimal latency.
+- **Multi-model workflows**: Compare responses across different AI providers by switching models mid-conversation.
+
+## Prerequisites
+
+Mastra Code requires Node.js 22.13.0 or later.
+
+## Get started
+
+<Steps>
+  <StepItem>
+    Install Mastra Code globally:
+
+    ```sh npm2yarn
+    npm install -g mastracode
+    ```
+
+    Or run it with `npx`:
+
+    ```sh npm2yarn
+    npx mastracode
+    ```
+  </StepItem>
+
+  <StepItem>
+    Navigate to your project directory and start Mastra Code:
+
+    ```sh
+    cd your-project
+    mastracode
+    ```
+  </StepItem>
+
+  <StepItem>
+    Run the `/login` command to authenticate with your AI providers (Anthropic, OpenAI).
+  </StepItem>
+
+  <StepItem>
+    Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
+  </StepItem>
+</Steps>
+
+## Slash commands
+
+Mastra Code provides built-in slash commands for managing sessions and settings:
+
+| Command | Description |
+| - | - |
+| `/new` | Start a new conversation thread |
+| `/threads` | List all threads for this project |
+| `/models` | Select a different AI model |
+| `/mode` | Switch between Build, Plan, and Fast modes |
+| `/cost` | Show token usage for the current conversation |
+| `/login` | Authenticate with OAuth providers |
+| `/logout` | Log out from a provider |
+| `/settings` | Open the settings panel |
+| `/sandbox` | Add external directories to the allowed path list |
+| `/diff` | Show files modified in the current session |
+| `/help` | Show available commands |
+| `/exit` | Exit the TUI |
+
+You can also define custom slash commands as markdown files. See [Configuration](/docs/mastra-code/configuration) for details.
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| - | - |
+| `Ctrl+C` | Interrupt current operation |
+| `Ctrl+D` | Exit (when editor is empty) |
+| `Ctrl+T` | Toggle thinking blocks visibility |
+| `Ctrl+E` | Expand/collapse all tool outputs |
+| `Ctrl+F` | Send a follow-up message while the agent is running |
+
+## Architecture
+
+Mastra Code is built on four layers:
+
+1. **TUI**: Terminal interface (`pi-tui` components)
+1. **Harness**: Mode management, thread persistence, event system, state management
+1. **Mastra Agent**: Dynamic model selection, tool execution, memory integration, subagents
+1. **LibSQL Storage**: Thread persistence, message history, token usage tracking, observational memory
+
+## Next steps
+
+- [Modes](/docs/mastra-code/modes)
+- [Tools](/docs/mastra-code/tools)
+- [Configuration](/docs/mastra-code/configuration)
+- [Customization](/docs/mastra-code/customization)
+- [API reference](/reference/mastra-code/createMastraCode)

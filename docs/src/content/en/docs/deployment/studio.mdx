@@ -74,125 +74,112 @@ Currently, you can't directly deploy the built Studio assets to a CDN, as the UI
 Follow the example below to create a SPA using Vite.
 
 <Steps>
+  <StepItem>
+    Create a new folder and initialize a new Node.js project:
 
-<StepItem>
+    ```bash npm2yarn
+    mkdir studio-spa
+    cd studio-spa
+    npm init
+    ```
+  </StepItem>
 
-Create a new folder and initialize a new Node.js project:
+  <StepItem>
+    Install `vite` and `mastra` as dependencies:
 
-```bash npm2yarn
-mkdir studio-spa
-cd studio-spa
-npm init
-```
+    ```bash npm2yarn
+    npm install vite mastra
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Add a build script to your `package.json`:
 
-<StepItem>
+    ```json title="package.json"
+    {
+      "scripts": {
+        "build": "vite build"
+      }
+    }
+    ```
+  </StepItem>
 
-Install `vite` and `mastra` as dependencies:
+  <StepItem>
+    Create a placeholder `index.html` file:
 
-```bash npm2yarn
-npm install vite mastra
-```
+    ```html title="index.html"
+    <!doctype html>
+    <html>
+      <head></head>
+      <body></body>
+    </html>
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Create a `vite.config.js` file. It copies the built Studio assets to the `dist` folder and replaces any `%%PLACEHOLDER%%` values in the HTML with environment variable values.
 
-<StepItem>
+    ```js title="vite.config.js"
+    import { defineConfig, loadEnv } from 'vite'
+    import { readFileSync, cpSync, writeFileSync } from 'node:fs'
+    import { resolve, join } from 'node:path'
 
-Add a build script to your `package.json`:
+    const studioDir = resolve(import.meta.dirname, 'node_modules/mastra/dist/studio')
 
-```json title="package.json"
-{
-  "scripts": {
-    "build": "vite build"
-  }
-}
-```
+    export default defineConfig(({ mode }) => {
+      const env = loadEnv(mode, process.cwd(), 'MASTRA_')
 
-</StepItem>
+      return {
+        plugins: [
+          {
+            name: 'mastra-studio',
+            closeBundle() {
+              const outDir = resolve(import.meta.dirname, 'dist')
+              cpSync(studioDir, outDir, { recursive: true })
 
-<StepItem>
-
-Create a placeholder `index.html` file:
-
-```html title="index.html"
-<!doctype html>
-<html><head></head>
-<body></body></html>
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a `vite.config.js` file. It copies the built Studio assets to the `dist` folder and replaces any `%%PLACEHOLDER%%` values in the HTML with environment variable values.
-
-```js title="vite.config.js"
-import { defineConfig, loadEnv } from 'vite'
-import { readFileSync, cpSync, writeFileSync } from 'node:fs'
-import { resolve, join } from 'node:path'
-
-const studioDir = resolve(import.meta.dirname, 'node_modules/mastra/dist/studio')
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'MASTRA_')
-
-  return {
-    plugins: [
-      {
-        name: 'mastra-studio',
-        closeBundle() {
-          const outDir = resolve(import.meta.dirname, 'dist')
-          cpSync(studioDir, outDir, { recursive: true })
-
-          const indexPath = join(outDir, 'index.html')
-          const html = readFileSync(indexPath, 'utf-8')
-          writeFileSync(indexPath, html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''))
+              const indexPath = join(outDir, 'index.html')
+              const html = readFileSync(indexPath, 'utf-8')
+              writeFileSync(
+                indexPath,
+                html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''),
+              )
+            },
+          },
+        ],
+        build: {
+          emptyOutDir: true,
         },
-      },
-    ],
-    build: {
-      emptyOutDir: true,
-    },
-  }
-})
-```
+      }
+    })
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Create a `.env` file with the necessary environment variables.
 
-<StepItem>
+    ```env title=".env"
+    MASTRA_SERVER_HOST=localhost
+    MASTRA_SERVER_PORT=4111
+    MASTRA_SERVER_PROTOCOL=http
+    MASTRA_API_PREFIX=/api
+    MASTRA_STUDIO_BASE_PATH=
+    MASTRA_TELEMETRY_DISABLED=true
+    MASTRA_HIDE_CLOUD_CTA=false
+    MASTRA_CLOUD_API_ENDPOINT=
+    MASTRA_EXPERIMENTAL_FEATURES=false
+    MASTRA_REQUEST_CONTEXT_PRESETS=
+    ```
+  </StepItem>
 
-Create a `.env` file with the necessary environment variables.
+  <StepItem>
+    Run the build script to generate the static files in the `dist` folder:
 
-```env title=".env"
-MASTRA_SERVER_HOST=localhost
-MASTRA_SERVER_PORT=4111
-MASTRA_SERVER_PROTOCOL=http
-MASTRA_API_PREFIX=/api
-MASTRA_STUDIO_BASE_PATH=
-MASTRA_TELEMETRY_DISABLED=true
-MASTRA_HIDE_CLOUD_CTA=false
-MASTRA_CLOUD_API_ENDPOINT=
-MASTRA_EXPERIMENTAL_FEATURES=false
-MASTRA_REQUEST_CONTEXT_PRESETS=
-```
+    ```bash npm2yarn
+    npm run build
+    ```
+  </StepItem>
 
-</StepItem>
-
-<StepItem>
-
-Run the build script to generate the static files in the `dist` folder:
-
-```bash npm2yarn
-npm run build
-```
-
-</StepItem>
-
-<StepItem>
-
-Point your hosting provider to the `dist` folder and deploy!
-
-</StepItem>
-
+  <StepItem>
+    Point your hosting provider to the `dist` folder and deploy!
+  </StepItem>
 </Steps>

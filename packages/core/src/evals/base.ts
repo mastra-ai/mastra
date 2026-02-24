@@ -5,6 +5,7 @@ import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import { InternalSpans } from '../observability';
@@ -537,6 +538,9 @@ class MastraScorer<
         validateInputs: false,
       },
     });
+
+    // update logger
+    workflow.__setLogger(this.#mastra?.getLogger() ?? noopLogger);
 
     let chainedWorkflow = workflow;
     for (const step of workflowSteps) {

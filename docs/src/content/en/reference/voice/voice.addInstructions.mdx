@@ -13,25 +13,24 @@ The `addInstructions()` method equips a voice provider with instructions that gu
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { Agent } from '@mastra/core/agent'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: 'gpt-5.1-realtime',
     apiKey: process.env.OPENAI_API_KEY,
   },
-});
+})
 
 // Create an agent with the voice provider
 const agent = new Agent({
-  name: "Customer Support Agent",
-  instructions:
-    "You are a helpful customer support agent for a software company.",
-  model: "openai/gpt-5.1",
+  name: 'Customer Support Agent',
+  instructions: 'You are a helpful customer support agent for a software company.',
+  model: 'openai/gpt-5.1',
   voice,
-});
+})
 
 // Add additional instructions to the voice provider
 voice.addInstructions(`
@@ -40,24 +39,25 @@ voice.addInstructions(`
   - Speak clearly and concisely
   - Ask clarifying questions when needed
   - Summarize the conversation at the end
-`);
+`)
 
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 ```
 
 ## Parameters
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "instructions",
-      type: "string",
-      description: "Instructions to guide the voice model's behavior",
-      isOptional: false,
-    },
-  ]}
+{
+name: "instructions",
+type: "string",
+description: "Instructions to guide the voice model's behavior",
+isOptional: false,
+},
+]}
 />
 
 ## Return Value
