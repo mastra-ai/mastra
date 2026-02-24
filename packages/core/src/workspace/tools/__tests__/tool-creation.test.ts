@@ -105,6 +105,19 @@ describe('createWorkspaceTools', () => {
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   });
 
+  it('should not inject path context into execute_command tool description', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+    const executeTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+    // The tool description should be the base description, not augmented with path context
+    expect(executeTool.description).not.toContain('Local filesystem');
+    expect(executeTool.description).not.toContain('Local command execution');
+  });
+
   it('should have all expected tool names with proper namespacing', () => {
     expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
     expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');
@@ -117,5 +130,76 @@ describe('createWorkspaceTools', () => {
     expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
     expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
     expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
+    expect(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT).toBe('mastra_workspace_get_process_output');
+    expect(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS).toBe('mastra_workspace_kill_process');
+  });
+
+  describe('background process tools', () => {
+    it('should register process tools when sandbox has processes (LocalSandbox)', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+    });
+
+    it('should not register process tools when sandbox has no processes', () => {
+      // Minimal sandbox without processes
+      const sandbox = {
+        id: 'test',
+        name: 'test',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 0,
+        }),
+      };
+      const workspace = new Workspace({ sandbox });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+    });
+
+    it('should include background param in execute_command schema when processes available', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+      const execTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+      const shape = execTool.inputSchema.shape;
+      expect(shape).toHaveProperty('background');
+    });
+
+    it('should not include background param in execute_command schema when no processes', () => {
+      const sandbox = {
+        id: 'test',
+        name: 'test',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 0,
+        }),
+      };
+      const workspace = new Workspace({ sandbox });
+      const tools = createWorkspaceTools(workspace);
+      const execTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+      const shape = execTool.inputSchema.shape;
+      expect(shape).not.toHaveProperty('background');
+    });
   });
 });

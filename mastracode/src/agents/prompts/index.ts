@@ -7,20 +7,21 @@ export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';
 
+import { hasTavilyKey } from '../../tools/index.js';
 import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions.js';
 import { buildBasePrompt } from './base.js';
 import type { PromptContext as BasePromptContext } from './base.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { planModePrompt } from './plan.js';
+import { buildToolGuidance } from './tool-guidance.js';
 
 // Extended prompt context that includes runtime information
-export interface PromptContext extends BasePromptContext {
+export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
   currentDate: string;
   workingDir: string;
-  availableTools?: string; // Mode-specific available tools
 }
 
 const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
@@ -34,6 +35,13 @@ const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
  * Combines the base prompt with mode-specific instructions.
  */
 export function buildFullPrompt(ctx: PromptContext): string {
+  // Determine whether web search tools are available
+  const modelId = ctx.state?.currentModelId as string | undefined;
+  const hasWebSearch = hasTavilyKey() || (!!modelId && modelId.startsWith('anthropic/'));
+
+  // Build mode-aware tool guidance
+  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch });
+
   // Map new context to base context
   const baseCtx: BasePromptContext = {
     projectPath: ctx.workingDir,
@@ -42,18 +50,14 @@ export function buildFullPrompt(ctx: PromptContext): string {
     platform: process.platform,
     date: ctx.currentDate,
     mode: ctx.modeId,
+    modelId: ctx.modelId,
     activePlan: ctx.state?.activePlan,
+    toolGuidance,
   };
 
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
   const modeSpecific = typeof entry === 'function' ? entry(ctx) : entry;
-
-  // Add available tools section if provided
-  let toolsSection = '';
-  if (ctx.availableTools) {
-    toolsSection = `\n# Available Tools for ${ctx.modeId} mode:\n${ctx.availableTools}\n`;
-  }
 
   // Inject current task state so agent doesn't lose track after OM truncation
   let taskSection = '';
@@ -70,5 +74,5 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const instructionSources = loadAgentInstructions(ctx.workingDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
-  return base + toolsSection + taskSection + instructionsSection + '\n' + modeSpecific;
+  return base + taskSection + instructionsSection + '\n' + modeSpecific;
 }

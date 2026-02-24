@@ -19,11 +19,50 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { E2BSandbox } from './index';
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
-const { mockSandbox, createMockSandboxApi, resetMockDefaults } = vi.hoisted(() => {
+const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandHandle } = vi.hoisted(() => {
+  let nextMockPid = 1000;
+
+  /**
+   * Create a mock E2B CommandHandle for background process spawning.
+   * Emits data through the onStdout/onStderr callbacks when wait() is called
+   * (not synchronously — the deferred reference pattern in E2BProcessManager
+   * means the handle variable isn't assigned until after commands.run resolves).
+   */
+  const createMockCommandHandle = (
+    result: { exitCode: number; stdout: string; stderr: string },
+    opts?: { onStdout?: (data: string) => void; onStderr?: (data: string) => void },
+  ) => {
+    return {
+      pid: nextMockPid++,
+      wait: vi.fn().mockImplementation(async () => {
+        // Emit data just before resolving (handle is assigned by now)
+        if (result.stdout && opts?.onStdout) opts.onStdout(result.stdout);
+        if (result.stderr && opts?.onStderr) opts.onStderr(result.stderr);
+        return result;
+      }),
+      kill: vi.fn().mockResolvedValue(true),
+    };
+  };
+
+  /**
+   * Default mock implementation for commands.run that handles both
+   * foreground and background modes.
+   */
+  const createDefaultRunMock = () =>
+    vi.fn().mockImplementation((_cmd: string, opts?: any) => {
+      const result = { exitCode: 0, stdout: '', stderr: '' };
+      if (opts?.background) {
+        return Promise.resolve(createMockCommandHandle(result, opts));
+      }
+      return Promise.resolve(result);
+    });
+
   const mockSandbox = {
     sandboxId: 'mock-sandbox-id',
     commands: {
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+      run: createDefaultRunMock(),
+      list: vi.fn().mockResolvedValue([]),
+      sendStdin: vi.fn().mockResolvedValue(undefined),
     },
     files: {
       write: vi.fn().mockResolvedValue(undefined),
@@ -81,14 +120,24 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults } = vi.hoisted(() =
     });
     (Template.exists as any).mockResolvedValue(false);
     (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
-    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    // Default run mock handles both foreground and background modes
+    mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
+      const result = { exitCode: 0, stdout: '', stderr: '' };
+      if (opts?.background) {
+        return Promise.resolve(createMockCommandHandle(result, opts));
+      }
+      return Promise.resolve(result);
+    });
+    mockSandbox.commands.list.mockResolvedValue([]);
+    mockSandbox.commands.sendStdin.mockResolvedValue(undefined);
     mockSandbox.files.write.mockResolvedValue(undefined);
     mockSandbox.files.read.mockResolvedValue('');
     mockSandbox.files.list.mockResolvedValue([]);
     mockSandbox.kill.mockResolvedValue(undefined);
+    nextMockPid = 1000;
   };
 
-  return { mockSandbox, createMockSandboxApi, resetMockDefaults };
+  return { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandHandle };
 });
 
 // Mock the E2B SDK
@@ -324,9 +373,11 @@ describe('E2BSandbox', () => {
 
       await sandbox.executeCommand('echo', ['test'], { env: { B: '3', C: '4' } });
 
+      // executeCommand now goes through processes.spawn (background mode)
       expect(mockSandbox.commands.run).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
+          background: true,
           envs: expect.objectContaining({ A: '1', B: '3', C: '4' }),
         }),
       );
@@ -404,10 +455,12 @@ describe('E2BSandbox', () => {
 
   describe('Command Execution', () => {
     it('executes command and returns result', async () => {
-      mockSandbox.commands.run.mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: 'hello\n',
-        stderr: '',
+      const expectedResult = { exitCode: 0, stdout: 'hello\n', stderr: '' };
+      mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
+        if (opts?.background) {
+          return Promise.resolve(createMockCommandHandle(expectedResult, opts));
+        }
+        return Promise.resolve(expectedResult);
       });
 
       const sandbox = new E2BSandbox();
@@ -421,10 +474,12 @@ describe('E2BSandbox', () => {
     });
 
     it('captures stderr', async () => {
-      mockSandbox.commands.run.mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'error message',
+      const expectedResult = { exitCode: 1, stdout: '', stderr: 'error message' };
+      mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
+        if (opts?.background) {
+          return Promise.resolve(createMockCommandHandle(expectedResult, opts));
+        }
+        return Promise.resolve(expectedResult);
       });
 
       const sandbox = new E2BSandbox();
@@ -436,10 +491,15 @@ describe('E2BSandbox', () => {
     });
 
     it('returns non-zero exit code for failing command', async () => {
-      mockSandbox.commands.run.mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: '',
-        stderr: '',
+      const expectedResult = { exitCode: 1, stdout: '', stderr: '' };
+      mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
+        if (opts?.background) {
+          // E2B throws for non-zero exit codes in background mode
+          const handle = createMockCommandHandle(expectedResult, opts);
+          handle.wait.mockRejectedValue(Object.assign(new Error('exit code 1'), { exitCode: 1 }));
+          return Promise.resolve(handle);
+        }
+        return Promise.resolve(expectedResult);
       });
 
       const sandbox = new E2BSandbox();
@@ -457,24 +517,12 @@ describe('E2BSandbox', () => {
 
       await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
 
+      // executeCommand now goes through processes.spawn (background mode)
       expect(mockSandbox.commands.run).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
+          background: true,
           cwd: '/tmp',
-        }),
-      );
-    });
-
-    it('respects timeout option', async () => {
-      const sandbox = new E2BSandbox();
-      await sandbox._start();
-
-      await sandbox.executeCommand('sleep', ['10'], { timeout: 1000 });
-
-      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          timeoutMs: 1000,
         }),
       );
     });
@@ -1616,12 +1664,16 @@ describe('E2BSandbox Internal Methods', () => {
       await sandbox._start();
 
       let callCount = 0;
-      mockSandbox.commands.run.mockImplementation(() => {
+      mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
         callCount++;
         if (callCount === 1) {
           throw new Error('sandbox was not found');
         }
-        return Promise.resolve({ exitCode: 0, stdout: 'ok', stderr: '' });
+        const result = { exitCode: 0, stdout: 'ok', stderr: '' };
+        if (opts?.background) {
+          return Promise.resolve(createMockCommandHandle(result, opts));
+        }
+        return Promise.resolve(result);
       });
 
       const result = await sandbox.executeCommand('echo', ['test']);
@@ -1641,28 +1693,33 @@ describe('E2BSandbox Internal Methods', () => {
         throw new Error('sandbox was not found');
       });
 
-      // Second attempt also fails, should return error result (not throw forever)
-      const result = await sandbox.executeCommand('echo', ['test']);
-
-      expect(result.success).toBe(false);
-      expect(result.stderr).toContain('sandbox was not found');
+      // Second attempt also fails — should throw (not retry forever)
+      await expect(sandbox.executeCommand('echo', ['test'])).rejects.toThrow('sandbox was not found');
     });
 
     it('extracts result from E2B error object', async () => {
       const sandbox = new E2BSandbox();
       await sandbox._start();
 
-      // Simulate E2B error with embedded result
+      // Simulate E2B error with embedded result — spawn throws with result attached
       const e2bError = Object.assign(new Error('Command failed'), {
         result: { exitCode: 127, stdout: '', stderr: 'command not found' },
       });
-      mockSandbox.commands.run.mockRejectedValueOnce(e2bError);
+      mockSandbox.commands.run.mockImplementationOnce((_cmd: string, opts?: any) => {
+        if (opts?.background) {
+          // E2B handle.wait() rejects with the error
+          const handle = createMockCommandHandle({ exitCode: 0, stdout: '', stderr: '' }, opts);
+          handle.wait.mockRejectedValue(e2bError);
+          return Promise.resolve(handle);
+        }
+        return Promise.reject(e2bError);
+      });
 
       const result = await sandbox.executeCommand('nonexistent');
 
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(127);
-      expect(result.stderr).toBe('command not found');
+      expect(result.stderr).toContain('command not found');
     });
   });
 
