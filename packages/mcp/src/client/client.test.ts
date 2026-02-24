@@ -207,6 +207,83 @@ describe('MastraMCPClient with Streamable HTTP', () => {
   });
 });
 
+describe('MastraMCPClient - outputSchema without structuredContent', () => {
+  // Reproduces the bug where MCP servers (e.g. FastMCP) define outputSchema on
+  // a tool but don't return structuredContent in the response. The raw
+  // CallToolResult envelope gets validated against the outputSchema and Zod
+  // strips all unrecognised keys, producing {}.
+  //
+  // We use a real server connection but spy on the SDK Client's methods to
+  // simulate a non-SDK MCP server (like FastMCP) that advertises outputSchema
+  // on tool listings but only populates the content array in tool call responses.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'output-schema-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return the parsed result, not {} when structuredContent is absent', async () => {
+    // Spy on the SDK Client to simulate a FastMCP-style server:
+    // - listTools returns a tool with outputSchema
+    // - callTool returns content[] without structuredContent
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { expression: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              result: { type: 'number' },
+              expression: { type: 'string' },
+            },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+    expect(calculateTool).toBeDefined();
+
+    const result = await calculateTool.execute?.({ expression: '1 + 1' });
+
+    // Before the fix this would be {} because the raw CallToolResult envelope
+    // ({ content: [...], isError: false }) was validated against the outputSchema
+    // and Zod stripped all unrecognised keys.
+    expect(result).toEqual({ result: 2, expression: '1 + 1' });
+  });
+});
+
 describe('MastraMCPClient - Elicitation Tests', () => {
   let testServer: {
     httpServer: HttpServer;
