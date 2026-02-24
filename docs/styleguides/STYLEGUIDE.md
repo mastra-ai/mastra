@@ -216,6 +216,28 @@ Use lists for a group of related items, such as a complete set of configuration 
 - Use unordered (bulleted) lists when the order of the items is not important.
 - Use ordered (numbered) lists when giving steps or instructions to be followed in sequence.
 
+### Do not use emdashes in lists
+
+To not use emdashes in lists, if you want to separate the concise summary from the description of a list item, use bold text and colons instead.
+
+> ❌
+>
+> - **Memory** — Memory allows your agent to do stuff.
+
+> ✅
+>
+> - **Memory**: Memory allows your agent to do stuff.
+
+### Capitalize the first letter after colons in lists
+
+> ❌
+>
+> - **Memory**: memory allows your agent to do stuff.
+
+> ✅
+>
+> - **Memory**: Memory allows your agent to do stuff.
+
 ### List item punctuation
 
 When list items are full sentences, end with a period.
@@ -314,22 +336,42 @@ Use as little jargon as necessary. Describe jargon in parentheses on first refer
 
 > ✅ In your browser, open [`http://localhost:3000/`](http://localhost:3000/).
 
-### Specify syntax and filename for terminal commands
+### Specify syntax for terminal commands
 
-If the code should run in a terminal, set the code block's syntax highlighting and filename appropriately.
+If the code should run in a terminal, set the code block's syntax highlighting appropriately.
 
 > ❌
 
 ````
 ```
-npm i @mastra/core
+mastra dev
 ```
 ````
 
 > ✅
 
 ````
-```sh filename="terminal"
-npm i @mastra/core
+```sh
+mastra dev
+```
+````
+
+### Specify `npm2yarn` syntax for npm commands
+
+When adding instructions like `npm install`, `npx some-name` or `npm run some-script`, specify `npm2yarn` as code metadata. This allows the documentation site to automatically convert the command to the user's preferred package manager (npm, yarn, bun, or pnpm).
+
+> ❌
+
+````
+```sh
+npm install @mastra/core
+```
+````
+
+> ✅
+
+````
+```sh npm2yarn
+npm install @mastra/core
 ```
 ````
