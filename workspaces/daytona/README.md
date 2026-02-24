@@ -2,7 +2,7 @@
 
 Daytona cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
 
-Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, and snapshots.
+Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, and sandbox reconnection.
 
 ## Install
 
@@ -63,6 +63,17 @@ For one-shot tasks — sandbox is deleted immediately on stop:
 const sandbox = new DaytonaSandbox({
   ephemeral: true,
   language: 'python',
+});
+```
+
+### Streaming output
+
+Stream command output in real time via callbacks:
+
+```typescript
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
 });
 ```
 

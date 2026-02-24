@@ -115,6 +115,19 @@ const workspace = new Workspace({
 });
 ```
 
+### Streaming output
+
+Stream command output in real time via `onStdout` and `onStderr` callbacks:
+
+```typescript
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+});
+```
+
+Both callbacks are optional and can be used independently.
+
 ### Network isolation
 
 Restrict outbound network access:
@@ -320,7 +333,7 @@ Called automatically on first command execution or by `workspace.init()`.
 
 ### `stop()`
 
-Stop the sandbox. The sandbox can be restarted later.
+Stop the sandbox. The sandbox can be restarted later — files and state persist.
 
 ```typescript
 await sandbox.stop();
@@ -343,6 +356,12 @@ const result = await sandbox.executeCommand('node', ['-e', 'console.log("Hello!"
 const output = await sandbox.executeCommand('pip', ['install', 'requests'], {
   timeout: 60_000,
   cwd: '/workspace',
+});
+
+// Stream output in real time
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
 });
 ```
 
