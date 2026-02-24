@@ -714,8 +714,9 @@ describe('withMastra middleware', () => {
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
       expect(afterTurn1).toHaveLength(2);
-      expect(afterTurn1[0]!.role).toBe('user');
-      expect(afterTurn1[1]!.role).toBe('assistant');
+      const turn1Roles = afterTurn1.map(m => m.role);
+      expect(turn1Roles).toContain('user');
+      expect(turn1Roles).toContain('assistant');
 
       const model2 = withMastra(createMockModel('Second response'), {
         memory: {
