@@ -3,13 +3,14 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput } from './output-helpers';
+import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 export const getProcessOutputTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
   description: `Get the current output (stdout, stderr) and status of a background process by its PID.
 
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
+  toModelOutput: sandboxToModelOutput,
   inputSchema: z.object({
     pid: z.number().describe('The process ID returned when the background command was started'),
     tail: z

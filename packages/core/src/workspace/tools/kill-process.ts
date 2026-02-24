@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { truncateOutput } from './output-helpers';
+import { truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 const KILL_TAIL_LINES = 50;
 
@@ -12,6 +12,7 @@ export const killProcessTool = createTool({
   description: `Kill a background process by its PID.
 
 Use this to stop a long-running background process that was started with execute_command (background: true). Returns the last ${KILL_TAIL_LINES} lines of output.`,
+  toModelOutput: sandboxToModelOutput,
   inputSchema: z.object({
     pid: z.number().describe('The process ID of the background process to kill'),
   }),

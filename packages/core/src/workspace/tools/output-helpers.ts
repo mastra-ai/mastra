@@ -5,6 +5,34 @@ export const DEFAULT_TAIL_LINES = 200;
 export const MAX_OUTPUT_CHARS = 30_000;
 
 /**
+ * Strip ANSI escape codes from text.
+ * Covers CSI sequences (colors, cursor), OSC sequences (hyperlinks), and C1 controls.
+ * Based on the pattern from chalk/ansi-regex.
+ */
+
+const ANSI_RE =
+  /(?:\u001B\][\s\S]*?(?:\u0007|\u001B\u005C|\u009C))|(?:[\u001B\u009B][\[\]()#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])/g;
+
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, '');
+}
+
+/**
+ * `toModelOutput` handler for sandbox tools.
+ * Strips ANSI escape codes so the model sees clean text, while the raw
+ * output (with colors) is preserved in the stream/TUI.
+ *
+ * Returns `{ type: 'text', value: '...' }` to match the AI SDK's
+ * expected tool-result output format.
+ */
+export function sandboxToModelOutput(output: unknown): unknown {
+  if (typeof output === 'string') {
+    return { type: 'text', value: stripAnsi(output) };
+  }
+  return output;
+}
+
+/**
  * Return the last N lines of output, similar to `tail -n`.
  * - `n > 0`: last N lines
  * - `n === 0`: no limit (return all)

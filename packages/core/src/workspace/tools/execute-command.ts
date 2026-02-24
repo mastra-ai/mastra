@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput } from './output-helpers';
+import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 /**
  * Base input schema for execute_command (no background param).
@@ -138,6 +138,7 @@ export const executeCommandTool = createTool({
   description: baseDescription,
   inputSchema: executeCommandInputSchema,
   execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
 });
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
@@ -148,4 +149,5 @@ export const executeCommandWithBackgroundTool = createTool({
 Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
   inputSchema: executeCommandWithBackgroundSchema,
   execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
 });

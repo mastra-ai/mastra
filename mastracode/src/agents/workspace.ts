@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { stateSchema } from '../schema';
@@ -76,40 +77,57 @@ const skillPaths = collectSkillPaths([
   claudeGlobalSkillsPath,
 ]);
 
-export function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
+const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
+
+export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
   const state = ctx?.getState?.();
+  const modeId = ctx?.modeId ?? 'build';
   const projectPath = state?.projectPath;
 
   if (!projectPath) {
     throw new Error('Project path is required');
   }
 
-  // Sync filesystem's allowedPaths with sandbox-granted paths from harness state
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+  const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const isPlanMode = modeId === 'plan';
+  const planModeTools = {
+    mastra_workspace_write_file: { enabled: false },
+    mastra_workspace_edit_file: { enabled: false },
+    mastra_workspace_ast_edit: { enabled: false },
+  };
 
-  const workspace = new Workspace({
-    id: 'mastra-code-workspace',
+  // Reuse existing workspace if already registered (preserves ProcessManager state)
+  let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
+  try {
+    existing = mastra?.getWorkspaceById(workspaceId) as Workspace<LocalFilesystem, LocalSandbox>;
+  } catch {
+    // Not registered yet
+  }
+
+  if (existing) {
+    existing.filesystem.setAllowedPaths(allowedPaths);
+    existing.setToolsConfig(isPlanMode ? planModeTools : undefined);
+    return existing;
+  }
+
+  // First call for this project — create the workspace
+  return new Workspace({
+    id: workspaceId,
     name: 'Mastra Code Workspace',
     filesystem: new LocalFilesystem({
       basePath: projectPath,
-      allowedPaths: skillPaths,
+      allowedPaths,
     }),
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
       env: process.env,
     }),
-    // Disable workspace tools — built-in tools are used instead.
-    // Workspace tools use different output formats (e.g. → separator, offset/limit params)
-    // that the TUI renderers don't fully support yet.
-    // We will update to use workspace tools very soon - just disabling until then
-    tools: { enabled: false },
+    ...(isPlanMode ? { tools: planModeTools } : {}),
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
   });
-
-  workspace.filesystem.setAllowedPaths([...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))]);
-
-  return workspace;
 }
 
 if (skillPaths.length > 0) {
