@@ -480,7 +480,7 @@ describe('WorkspaceSkillsImpl', () => {
   });
 
   describe('getReference()', () => {
-    it('should return reference content', async () => {
+    it('should return reference content using full skill-root-relative path', async () => {
       const filesystem = createMockFilesystem({
         '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
         '/skills/test-skill/references/doc.md': REFERENCE_CONTENT,
@@ -491,8 +491,51 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['/skills'],
       });
 
-      const content = await skills.getReference('test-skill', 'doc.md');
+      const content = await skills.getReference('test-skill', 'references/doc.md');
       expect(content).toBe(REFERENCE_CONTENT);
+    });
+
+    it('should resolve paths in non-references subdirectories', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/test-skill/docs/schema.md': 'schema content',
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills'],
+      });
+
+      const content = await skills.getReference('test-skill', 'docs/schema.md');
+      expect(content).toBe('schema content');
+    });
+
+    it('should resolve ./prefixed paths relative to skill root', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/test-skill/config.json': '{}',
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills'],
+      });
+
+      const content = await skills.getReference('test-skill', './config.json');
+      expect(content).toBe('{}');
+    });
+
+    it('should block path traversal attacks', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills'],
+      });
+
+      await expect(skills.getReference('test-skill', '../../etc/passwd')).rejects.toThrow('Invalid reference path');
     });
 
     it('should return null for non-existent reference', async () => {
@@ -523,7 +566,7 @@ describe('WorkspaceSkillsImpl', () => {
   });
 
   describe('getScript()', () => {
-    it('should return script content', async () => {
+    it('should return script content using full skill-root-relative path', async () => {
       const filesystem = createMockFilesystem({
         '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
         '/skills/test-skill/scripts/run.sh': SCRIPT_CONTENT,
@@ -534,13 +577,13 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['/skills'],
       });
 
-      const content = await skills.getScript('test-skill', 'run.sh');
+      const content = await skills.getScript('test-skill', 'scripts/run.sh');
       expect(content).toBe(SCRIPT_CONTENT);
     });
   });
 
   describe('getAsset()', () => {
-    it('should return asset as Buffer', async () => {
+    it('should return asset as Buffer using full skill-root-relative path', async () => {
       const assetBuffer = Buffer.from('PNG image data');
       const filesystem = createMockFilesystem({
         '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
@@ -552,7 +595,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['/skills'],
       });
 
-      const content = await skills.getAsset('test-skill', 'logo.png');
+      const content = await skills.getAsset('test-skill', 'assets/logo.png');
       expect(content).toBeInstanceOf(Buffer);
       expect(content?.toString()).toBe('PNG image data');
     });

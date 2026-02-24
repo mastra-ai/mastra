@@ -152,15 +152,26 @@ jobs:
               console.error('Failed to post comment:', error);
             }
 
-  validate-frontmatter:
-    name: Validate MDX frontmatter
-    # Only run on the main repository, not on forks
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+  lint-docs:
+    name: Lint docs
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Check formatting
+        working-directory: ./docs
+        run: pnpm prettier --check .
+
+      - name: Lint with remark
+        working-directory: ./docs
+        run: pnpm lint:remark
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -171,11 +182,15 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: ./.github/actions/setup-pnpm-node
-
       - name: Validate frontmatter
         if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
         run: pnpm dlx tsx scripts/validate-frontmatter.ts
+
+      - name: Validate reference sidebar sort order
+        working-directory: ./docs
+        run: pnpm validate:reference-sidebar
+
+      - name: Check for docs not linked in sidebars
+        working-directory: ./docs
+        run: pnpm validate:sidebar-docs
