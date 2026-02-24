@@ -15,7 +15,7 @@ export function createLspPythonTests(getContext: () => TestContext): void {
   describe('LSP Python Diagnostics (Pyright)', () => {
     it(
       'detects type errors in Python files when pyright is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -44,7 +44,7 @@ export function createLspPythonTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Python when pyright is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

@@ -19,7 +19,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
   describe('LSP ESLint Diagnostics', () => {
     it(
       'detects ESLint rule violations when ESLint language server is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -61,7 +61,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
 
     it(
       'getDiagnosticsMulti returns diagnostics from both TypeScript and ESLint servers',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

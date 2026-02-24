@@ -15,7 +15,7 @@ export function createLspRustTests(getContext: () => TestContext): void {
   describe('LSP Rust Diagnostics (rust-analyzer)', () => {
     it(
       'detects type errors in Rust files when rust-analyzer is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -48,7 +48,7 @@ export function createLspRustTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Rust when rust-analyzer is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

@@ -19,7 +19,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
   describe('LSP Cross-File Import Diagnostics', () => {
     it(
       'detects type errors across file imports',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -55,7 +55,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for correct cross-file import usage',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

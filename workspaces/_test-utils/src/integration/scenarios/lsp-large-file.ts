@@ -28,7 +28,7 @@ export function createLspLargeFileTests(getContext: () => TestContext): void {
   describe('LSP Large File Diagnostics', () => {
     it(
       'detects type error in a ~500-line TypeScript file',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

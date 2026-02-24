@@ -33,7 +33,7 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'detects type errors in files outside workspace basePath',
-      async (ctx) => {
+      async ctx => {
         const { workspace, sandboxPathsAligned } = getContext();
 
         // Only meaningful when the filesystem can see absolute host paths
@@ -64,7 +64,7 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'returns no errors for valid code in external project',
-      async (ctx) => {
+      async ctx => {
         const { workspace, sandboxPathsAligned } = getContext();
 
         if (!sandboxPathsAligned) return ctx.skip();

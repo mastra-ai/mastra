@@ -15,7 +15,7 @@ export function createLspGoTests(getContext: () => TestContext): void {
   describe('LSP Go Diagnostics (gopls)', () => {
     it(
       'detects type errors in Go files when gopls is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -43,7 +43,7 @@ export function createLspGoTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Go when gopls is available',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();

@@ -26,7 +26,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
   describe('LSP Diagnostics', () => {
     it(
       'reports type errors in TypeScript files',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip(); // LSP not configured or deps unavailable
@@ -55,7 +55,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'returns empty diagnostics for valid TypeScript',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -80,7 +80,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'diagnostics include line and character positions',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
@@ -109,7 +109,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'returns empty array for unsupported file types',
-      async (ctx) => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
         if (!lsp) return ctx.skip();
