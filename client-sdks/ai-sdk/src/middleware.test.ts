@@ -694,6 +694,80 @@ describe('withMastra middleware', () => {
       expect(uniqueIds.size).toBe(definedIds.length);
     });
 
+    it('should not re-persist historical messages on subsequent turns', async () => {
+      const model1 = withMastra(createMockModel('First response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model1,
+        prompt: 'First question',
+      });
+
+      const { messages: afterTurn1 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn1).toHaveLength(2);
+      const turn1Roles = afterTurn1.map(m => m.role);
+      expect(turn1Roles).toContain('user');
+      expect(turn1Roles).toContain('assistant');
+
+      const model2 = withMastra(createMockModel('Second response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model2,
+        prompt: 'Second question',
+      });
+
+      const { messages: afterTurn2 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn2).toHaveLength(4);
+
+      const texts = afterTurn2.map(
+        m =>
+          m.content?.parts
+            ?.filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('') || '',
+      );
+      expect(texts.sort()).toEqual(['First question', 'First response', 'Second question', 'Second response'].sort());
+
+      const model3 = withMastra(createMockModel('Third response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model3,
+        prompt: 'Third question',
+      });
+
+      const { messages: afterTurn3 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn3).toHaveLength(6);
+    });
+
     it('should handle multi-turn conversation with persistent storage', async () => {
       // Turn 1
       const model1 = withMastra(createMockModel('My name is Assistant.'), {
