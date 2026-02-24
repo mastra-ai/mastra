@@ -40,6 +40,18 @@ function LandingContent() {
             {para}
           </p>
         ))}
+        <p className="mt-4 text-sm text-(--mastra-text-tertiary)">
+          All course code is available on{' '}
+          <a
+            href="https://github.com/mastra-ai/mastra-agent-course"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-(--ifm-link-hover-color)"
+          >
+            GitHub
+          </a>
+          .
+        </p>
       </div>
 
       {/* Lesson list grouped by module */}
