@@ -19,21 +19,18 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
   describe('LSP Cross-File Import Diagnostics', () => {
     it(
       'detects type errors across file imports',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
         // Write tsconfig.json so the TS server knows this is a project
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         // Write the dependency file to disk — the TS server reads this to resolve imports
         await fs.writeFile(
@@ -42,17 +39,13 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         );
 
         // Import add() and call it with a wrong argument type
-        const content = [
-          'import { add } from "./math";',
-          '',
-          'const result = add(1, "hello");',
-        ].join('\n');
+        const content = ['import { add } from "./math";', '', 'const result = add(1, "hello");'].join('\n');
 
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 
         // Graceful skip: if TS server can't read math.ts from disk (remote FS),
         // diagnostics may be empty — test passes without assertions
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
         expect(diagnostics.some(d => d.message.includes('not assignable'))).toBe(true);
@@ -62,20 +55,17 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for correct cross-file import usage',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         await fs.writeFile(
           join(testDir, 'math.ts'),
@@ -83,16 +73,12 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         );
 
         // Correct usage — both arguments are numbers
-        const content = [
-          'import { add } from "./math";',
-          '',
-          'const result = add(1, 2);',
-        ].join('\n');
+        const content = ['import { add } from "./math";', '', 'const result = add(1, 2);'].join('\n');
 
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 
         // Graceful skip if TS server can't resolve the import
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         const errors = diagnostics.filter(d => d.severity === 'error');
         expect(errors).toHaveLength(0);

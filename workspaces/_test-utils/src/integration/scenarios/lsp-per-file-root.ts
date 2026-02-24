@@ -28,13 +28,13 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
   describe('LSP Per-File Root Resolution', () => {
     it(
       'reports diagnostics for files in separate project directories',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -49,16 +49,10 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
         );
 
         // Get diagnostics for a type error in project-a
-        const diagsA = await lsp.getDiagnostics(
-          join(testDir, 'project-a', 'error.ts'),
-          'const x: number = "hello";',
-        );
+        const diagsA = await lsp.getDiagnostics(join(testDir, 'project-a', 'error.ts'), 'const x: number = "hello";');
 
         // Get diagnostics for a type error in project-b
-        const diagsB = await lsp.getDiagnostics(
-          join(testDir, 'project-b', 'error.ts'),
-          'const y: number = "world";',
-        );
+        const diagsB = await lsp.getDiagnostics(join(testDir, 'project-b', 'error.ts'), 'const y: number = "world";');
 
         // Both should report at least one type error — proves separate LSP roots resolved
         expect(diagsA.length).toBeGreaterThan(0);
@@ -72,13 +66,15 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
 
     it(
       'uses project-specific tsconfig strict settings',
-      async () => {
-        const { workspace, getTestPath } = getContext();
+      async ctx => {
+        const { workspace, getTestPath, sandboxPathsAligned } = getContext();
+        if (!sandboxPathsAligned) return ctx.skip(); // TS server must see tsconfig on disk
+
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -113,13 +109,13 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
 
     it(
       'returns empty diagnostics for valid code in both projects',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 

@@ -15,13 +15,15 @@ export function createLspRustTests(getContext: () => TestContext): void {
   describe('LSP Rust Diagnostics (rust-analyzer)', () => {
     it(
       'detects type errors in Rust files when rust-analyzer is available',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
+
+        const content = 'fn main() {\n    let x: i32 = "hello";\n}\n';
 
         const fs = workspace.filesystem;
         if (fs) {
@@ -30,14 +32,14 @@ export function createLspRustTests(getContext: () => TestContext): void {
             join(testDir, 'Cargo.toml'),
             '[package]\nname = "test"\nversion = "0.1.0"\nedition = "2021"\n',
           );
+          // Persist src/main.rs to disk so rust-analyzer can see it as part of a Cargo target
+          await fs.writeFile(filePath, content);
         }
-
-        const content = 'fn main() {\n    let x: i32 = "hello";\n}\n';
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip: if rust-analyzer is not installed, getDiagnostics returns []
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
       },
@@ -46,13 +48,15 @@ export function createLspRustTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Rust when rust-analyzer is available',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
+
+        const content = 'fn main() {\n    let x: i32 = 42;\n    println!("{}", x);\n}\n';
 
         const fs = workspace.filesystem;
         if (fs) {
@@ -60,14 +64,14 @@ export function createLspRustTests(getContext: () => TestContext): void {
             join(testDir, 'Cargo.toml'),
             '[package]\nname = "test"\nversion = "0.1.0"\nedition = "2021"\n',
           );
+          // Persist src/main.rs to disk so rust-analyzer can see it as part of a Cargo target
+          await fs.writeFile(filePath, content);
         }
-
-        const content = 'fn main() {\n    let x: i32 = 42;\n    println!("{}", x);\n}\n';
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip if rust-analyzer not available
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         const errors = diagnostics.filter(d => d.severity === 'error');
         expect(errors).toHaveLength(0);

@@ -2,7 +2,7 @@
  * Types for integration test configuration.
  */
 
-import type { Workspace } from '@mastra/core/workspace';
+import type { AnyWorkspace } from '@mastra/core/workspace';
 
 /**
  * Configuration for workspace integration tests.
@@ -12,10 +12,10 @@ export interface WorkspaceIntegrationTestConfig {
   suiteName: string;
 
   /** Create a Workspace instance. The factory calls workspace.init() automatically. */
-  createWorkspace: () => Promise<Workspace> | Workspace;
+  createWorkspace: () => Promise<AnyWorkspace> | AnyWorkspace;
 
   /** Cleanup after tests (delete test files, etc.) */
-  cleanupWorkspace?: (workspace: Workspace) => Promise<void>;
+  cleanupWorkspace?: (workspace: AnyWorkspace) => Promise<void>;
 
   /** Test scenarios to run (default: all applicable) */
   testScenarios?: IntegrationTestScenarios;

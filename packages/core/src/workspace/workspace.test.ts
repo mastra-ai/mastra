@@ -1,9 +1,11 @@
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { RequestContext } from '../request-context';
+import { WORKSPACE_TOOLS } from './constants';
 import {
   WorkspaceError,
   FilesystemNotAvailableError,
@@ -13,6 +15,7 @@ import {
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import { LSPManager } from './lsp';
 import { LocalSandbox } from './sandbox';
+import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 // =============================================================================
@@ -807,6 +810,73 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem, tools: toolsConfig });
 
       expect(workspace.getToolsConfig()).toBe(toolsConfig);
+    });
+  });
+
+  // ===========================================================================
+  // setToolsConfig
+  // ===========================================================================
+  describe('setToolsConfig', () => {
+    it('should disable tools excluded by config on next createWorkspaceTools call', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      // All tools available initially
+      const toolsBefore = createWorkspaceTools(workspace);
+      expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
+      expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeDefined();
+
+      // Disable write and edit tools
+      workspace.setToolsConfig({
+        mastra_workspace_write_file: { enabled: false },
+        mastra_workspace_edit_file: { enabled: false },
+      });
+
+      const toolsAfter = createWorkspaceTools(workspace);
+      expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+      expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeUndefined();
+      // Other tools still available
+      expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
+    });
+
+    it('should re-enable all tools when config is cleared', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        tools: { mastra_workspace_write_file: { enabled: false } },
+      });
+
+      // Write tool disabled initially
+      const toolsBefore = createWorkspaceTools(workspace);
+      expect(toolsBefore[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+
+      // Clear config — all tools re-enabled
+      workspace.setToolsConfig(undefined);
+
+      const toolsAfter = createWorkspaceTools(workspace);
+      expect(toolsAfter[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
+    });
+
+    it('should replace existing config entirely', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        tools: { mastra_workspace_write_file: { enabled: false } },
+      });
+
+      // Write disabled, edit enabled
+      const tools1 = createWorkspaceTools(workspace);
+      expect(tools1[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+      expect(tools1[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeDefined();
+
+      // Replace: now edit disabled, write re-enabled
+      workspace.setToolsConfig({
+        mastra_workspace_edit_file: { enabled: false },
+      });
+
+      const tools2 = createWorkspaceTools(workspace);
+      expect(tools2[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
+      expect(tools2[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]).toBeUndefined();
     });
   });
 
@@ -1647,12 +1717,19 @@ Line 3 conclusion`;
       const workspace = new Workspace({ sandbox, lsp: true });
 
       // findProjectRoot(process.cwd()) finds the repo root (has package.json, tsconfig.json)
-      // The resolved root should be an absolute path, not process.cwd() fallback
+      // The resolved root should be an absolute path that contains a project marker
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
-      expect(path.isAbsolute(workspace.lsp!.root)).toBe(true);
+      const root = workspace.lsp!.root;
+      expect(path.isAbsolute(root)).toBe(true);
+      // Verify it found a real project root (not just cwd fallback) by checking for markers
+      const hasMarker =
+        existsSync(path.join(root, 'package.json')) ||
+        existsSync(path.join(root, 'tsconfig.json')) ||
+        existsSync(path.join(root, 'go.mod'));
+      expect(hasMarker).toBe(true);
     });
 
-    it('passes LSPConfig options through to LSPManager', () => {
+    it('passes LSPConfig root through to LSPManager', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
@@ -1660,6 +1737,8 @@ Line 3 conclusion`;
       });
 
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      // root is the only publicly exposed LSPConfig property on LSPManager;
+      // disableServers, diagnosticTimeout, and initTimeout are verified in manager.test.ts
       expect(workspace.lsp!.root).toBe(tempDir);
     });
 
@@ -1692,7 +1771,7 @@ Line 3 conclusion`;
       vi.spyOn(workspace.lsp!, 'shutdownAll').mockRejectedValue(new Error('LSP shutdown failed'));
 
       await workspace.init();
-      await expect(workspace.destroy()).resolves.not.toThrow();
+      await workspace.destroy();
       expect(workspace.lsp).toBeUndefined();
     });
   });

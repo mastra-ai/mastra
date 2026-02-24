@@ -82,14 +82,74 @@ const mockProcessManager = {
 describe('LSPManager', () => {
   let manager: LSPManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetAllMocks();
+
+    // Re-establish baseline mock implementations after reset
+    mockWaitForDiagnostics.mockResolvedValue([
+      {
+        severity: 1,
+        message: "Type 'string' is not assignable to type 'number'.",
+        range: { start: { line: 11, character: 4 } },
+        source: 'ts',
+      },
+      {
+        severity: 2,
+        message: "'unused' is declared but its value is never read.",
+        range: { start: { line: 2, character: 0 } },
+        source: 'ts',
+      },
+    ]);
+    mockShutdown.mockResolvedValue(undefined);
+    mockInitialize.mockResolvedValue(undefined);
+    (mockProcessManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pid: 1,
+      kill: vi.fn(),
+      reader: {},
+      writer: {},
+    });
+
+    // Re-establish server mocks (resetAllMocks clears vi.mock factory implementations)
+    const servers = await import('./servers');
+    (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
+      if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+      if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+      return null;
+    });
+    (servers.walkUpAsync as ReturnType<typeof vi.fn>).mockImplementation(
+      async (startDir: string, _markers: string[]) => {
+        if (startDir.startsWith('/project') || startDir === '/project') return '/project';
+        if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+        if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
+        return null;
+      },
+    );
+    (servers.getServersForFile as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+      if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+        return [
+          {
+            id: 'typescript',
+            name: 'TypeScript Language Server',
+            languageIds: ['typescript', 'typescriptreact'],
+            markers: ['tsconfig.json', 'package.json'],
+            command: () => 'typescript-language-server --stdio',
+          },
+        ];
+      }
+      return [];
+    });
+
+    // Re-establish client mocks
+    const client = await import('./client');
+    (client.loadLSPDeps as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (client.isLSPAvailable as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
     manager = new LSPManager(mockProcessManager, '/project');
     mockIsAlive = true;
   });
 
   afterEach(async () => {
     await manager.shutdownAll();
-    vi.clearAllMocks();
   });
 
   describe('root', () => {
@@ -207,27 +267,41 @@ describe('LSPManager', () => {
 
   describe('initialization timeout', () => {
     it('returns null when initialization times out', async () => {
-      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
-      // Make initialize hang longer than the timeout
-      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+      vi.useFakeTimers();
+      try {
+        const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+        // Make initialize hang — fake timers prevent a real 5s delay
+        mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-      const client = await timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        await vi.advanceTimersByTimeAsync(5000);
+        const client = await clientPromise;
 
-      expect(client).toBeNull();
-      await timeoutManager.shutdownAll();
+        expect(client).toBeNull();
+        await timeoutManager.shutdownAll();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('cleans up client after timeout', async () => {
-      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
-      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+      vi.useFakeTimers();
+      try {
+        const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+        mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-      await timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        await vi.advanceTimersByTimeAsync(5000);
+        await clientPromise;
 
-      // Subsequent call should attempt a fresh initialization
-      mockInitialize.mockResolvedValueOnce(undefined);
-      const client = await timeoutManager.getClient('/project/src/app.ts');
-      expect(client).not.toBeNull();
-      await timeoutManager.shutdownAll();
+        // Subsequent call should attempt a fresh initialization
+        mockInitialize.mockResolvedValueOnce(undefined);
+        const client = await timeoutManager.getClient('/project/src/app.ts');
+        expect(client).not.toBeNull();
+        await timeoutManager.shutdownAll();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('returns null when initialization throws', async () => {
@@ -445,15 +519,18 @@ describe('LSPManager', () => {
       const unhandledHandler = vi.fn();
       process.on('unhandledRejection', unhandledHandler);
 
-      mockWaitForDiagnostics.mockRejectedValueOnce(new Error('Connection lost'));
+      try {
+        mockWaitForDiagnostics.mockRejectedValueOnce(new Error('Connection lost'));
 
-      await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+        await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
 
-      // Give the event loop a tick to surface any unhandled rejections
-      await new Promise(resolve => setTimeout(resolve, 50));
+        // Give the event loop time to surface any unhandled rejections
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(unhandledHandler).not.toHaveBeenCalled();
-      process.removeListener('unhandledRejection', unhandledHandler);
+        expect(unhandledHandler).not.toHaveBeenCalled();
+      } finally {
+        process.removeListener('unhandledRejection', unhandledHandler);
+      }
     });
 
     it('returns empty array when waitForDiagnostics hangs past timeout', async () => {

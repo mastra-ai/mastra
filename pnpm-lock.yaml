@@ -1208,6 +1208,9 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:../packages/memory
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../stores/pg
       '@tavily/core':
         specifier: latest
         version: 0.7.1
@@ -2796,6 +2799,13 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    optionalDependencies:
+      vscode-jsonrpc:
+        specifier: ^8.2.0
+        version: 8.2.1
+      vscode-languageserver-protocol:
+        specifier: ^3.17.0
+        version: 3.17.5
 
   packages/create-mastra:
     dependencies:

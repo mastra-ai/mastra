@@ -266,6 +266,20 @@ export class LocalFilesystem extends MastraFilesystem {
     return absolutePath;
   }
 
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   * Uses the same resolution logic as internal file operations.
+   * Returns `undefined` if the path violates containment.
+   */
+  resolveAbsolutePath(inputPath: string): string | undefined {
+    try {
+      return this.resolvePath(inputPath);
+    } catch {
+      // PermissionError from containment check — path is not resolvable
+      return undefined;
+    }
+  }
+
   private toRelativePath(absolutePath: string): string {
     return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }

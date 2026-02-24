@@ -6,17 +6,15 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
-  state.modifiedFiles.clear();
-  state.pendingFileTools.clear();
+  // Clear file tracking in display state (thread_created will also reset this)
+  state.harness.getDisplayState().modifiedFiles.clear();
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.previousTasks = [];
   state.taskWriteInsertIndex = -1;
 
-  ctx.resetStatusLineState();
+  ctx.updateStatusLine();
   state.ui.requestRender();
   ctx.showInfo('Ready for new conversation');
 }

@@ -19,9 +19,6 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
-/** Tools that modify files, used for /diff tracking */
-const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-
 /**
  * Format a tool result for display.
  * Handles objects, strings, and other types.
@@ -90,7 +87,6 @@ export function handleToolApprovalRequired(
       } else if (action.type === 'yolo') {
         state.harness.setState({ yolo: true } as any);
         state.harness.respondToToolApproval({ decision: 'approve' });
-        ctx.updateStatusLine();
       } else {
         state.harness.respondToToolApproval({ decision: 'decline' });
       }
@@ -161,14 +157,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     }
   }
 
-  // Track file-modifying tools for /diff command
-  if (FILE_TOOLS.includes(toolName)) {
-    const toolArgs = args as Record<string, unknown>;
-    const filePath = toolArgs?.path as string;
-    if (filePath) {
-      state.pendingFileTools.set(toolCallId, { toolName, filePath });
-    }
-  }
+  // File modification tracking is handled by the Harness display state
 }
 
 export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, partialResult: unknown): void {
@@ -207,7 +196,6 @@ export function handleShellOutput(
  */
 export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: string, toolName: string): void {
   const { state } = ctx;
-  state.toolInputBuffers.set(toolCallId, { text: '', toolName });
 
   // Mark as seen so handleMessageUpdate doesn't create a duplicate component
   if (!state.seenToolCallIds.has(toolCallId)) {
@@ -251,12 +239,12 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  * Handle an incremental delta of tool call input arguments.
  * Buffers the partial JSON text and attempts to parse it, updating the component's args.
  */
-export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, argsTextDelta: string): void {
+export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const buffer = state.toolInputBuffers.get(toolCallId);
+  const ds = state.harness.getDisplayState();
+  const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 
-  buffer.text += argsTextDelta;
   const updatedText = buffer.text;
 
   try {
@@ -308,8 +296,8 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 /**
  * Clean up the input buffer when tool input streaming ends.
  */
-export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
-  ctx.state.toolInputBuffers.delete(toolCallId);
+export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
+  // Buffer cleanup handled by Harness display state
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
@@ -324,20 +312,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     (subagentComponent as any)._pendingResult = resultText;
   }
 
-  // Track successful file modifications for /diff command
-  const pendingFile = state.pendingFileTools.get(toolCallId);
-  if (pendingFile && !isError) {
-    const existing = state.modifiedFiles.get(pendingFile.filePath);
-    if (existing) {
-      existing.operations.push(pendingFile.toolName);
-    } else {
-      state.modifiedFiles.set(pendingFile.filePath, {
-        operations: [pendingFile.toolName],
-        firstModified: new Date(),
-      });
-    }
-  }
-  state.pendingFileTools.delete(toolCallId);
+  // File modification tracking is handled by the Harness display state
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {

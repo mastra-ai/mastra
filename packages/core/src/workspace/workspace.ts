@@ -44,6 +44,7 @@ import { callLifecycle } from './lifecycle';
 import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
+import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -497,12 +498,23 @@ export class Workspace<
 
     // Initialize LSP if configured and a process manager is available
     if (config.lsp) {
-      const hasProcesses = !!this._sandbox?.processes;
-      const depsAvailable = isLSPAvailable();
-      if (hasProcesses && depsAvailable) {
+      const processes = this._sandbox?.processes;
+      if (!this._sandbox) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
+        );
+      } else if (!processes) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. Sandbox "${this._sandbox.name ?? 'unknown'}" does not provide one — LSP disabled.`,
+        );
+      } else if (!isLSPAvailable()) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages. Install them to enable LSP diagnostics.`,
+        );
+      } else {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
-        this._lsp = new LSPManager(this._sandbox!.processes!, defaultRoot, lspConfig, this._fs);
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
       }
     }
 
@@ -550,6 +562,14 @@ export class Workspace<
   }
 
   /**
+   * Get the per-tool configuration for this workspace.
+   * Returns undefined if no tools config was provided.
+   */
+  getToolsConfig(): WorkspaceToolsConfig | undefined {
+    return this._config.tools;
+  }
+
+  /**
    * The LSP manager (if configured, initialized, and a process manager is available).
    * Returns undefined if LSP is not configured, deps are missing, or sandbox has no process manager.
    */
@@ -558,11 +578,23 @@ export class Workspace<
   }
 
   /**
-   * Get the per-tool configuration for this workspace.
-   * Returns undefined if no tools config was provided.
+   * Update the per-tool configuration for this workspace.
+   * Takes effect on the next `createWorkspaceTools()` call.
+   *
+   * @example
+   * ```typescript
+   * // Disable write tools for read-only mode
+   * workspace.setToolsConfig({
+   *   mastra_workspace_write_file: { enabled: false },
+   *   mastra_workspace_edit_file: { enabled: false },
+   * });
+   *
+   * // Re-enable all tools
+   * workspace.setToolsConfig(undefined);
+   * ```
    */
-  getToolsConfig(): WorkspaceToolsConfig | undefined {
-    return this._config.tools;
+  setToolsConfig(config: WorkspaceToolsConfig | undefined): void {
+    this._config.tools = config;
   }
 
   /**
@@ -893,7 +925,7 @@ export class Workspace<
     if (mountEntries && mountEntries.size > 0) {
       const sandboxAccessible: string[] = [];
       const workspaceOnly: string[] = [];
-      const workingDir = this._sandbox?.workingDirectory;
+      const workingDir = this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined;
 
       for (const [mountPath, entry] of mountEntries) {
         const fsName = entry.filesystem.displayName || entry.filesystem.provider;
@@ -958,7 +990,7 @@ export class Workspace<
       sandbox: this._sandbox
         ? {
             provider: this._sandbox.provider,
-            workingDirectory: this._sandbox.workingDirectory,
+            workingDirectory: this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined,
           }
         : undefined,
       instructions,

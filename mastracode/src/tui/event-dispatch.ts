@@ -11,8 +11,6 @@ import {
   handleMessageStart,
   handleMessageUpdate,
   handleMessageEnd,
-  handleUsageUpdate,
-  handleOMStatus,
   handleOMObservationStart,
   handleOMObservationEnd,
   handleOMReflectionStart,
@@ -122,12 +120,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
-      ectx.resetStatusLineState();
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
-      ectx.syncOMThresholdsFromHarness();
-      state.tokenUsage = state.harness.getTokenUsage();
-      ectx.updateStatusLine();
       // Restore tasks from thread state
       const threadState = state.harness.getState() as {
         tasks?: TaskItem[];
@@ -150,19 +144,17 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
-      state.previousTasks = [];
       state.taskWriteInsertIndex = -1;
-      ectx.updateStatusLine();
       break;
     }
 
     case 'usage_update':
-      handleUsageUpdate(ectx, event.usage);
+      // Token accumulation handled by Harness display state
       break;
 
     // Observational Memory events
     case 'om_status':
-      handleOMStatus(ectx, event);
+      // All state updates handled by Harness applyDisplayStateUpdate
       break;
 
     case 'om_observation_start':
@@ -283,13 +275,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         if (allCompleted) {
           // Show collapsed completed list (pinned/live)
           ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (state.previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        } else if (state.harness.getDisplayState().previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
-          ectx.renderClearedTasksInline(state.previousTasks, insertIndex);
+          ectx.renderClearedTasksInline(state.harness.getDisplayState().previousTasks, insertIndex);
         }
-
-        // Track for next diff
-        state.previousTasks = tasks ? [...tasks] : [];
 
         state.ui.requestRender();
       }
@@ -310,6 +299,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'plan_approved':
       // Handled directly in onApprove callback to ensure proper sequencing
+      break;
+
+    case 'display_state_changed':
+      // The Harness emits this after every event with the updated display state.
+      // Use it as the single trigger for status-line re-renders since all the
+      // fields it reads (isRunning, omProgress, buffering flags) are now
+      // maintained by the Harness.
+      ectx.updateStatusLine();
       break;
   }
 }

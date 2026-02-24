@@ -26,10 +26,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
   describe('LSP Diagnostics', () => {
     it(
       'reports type errors in TypeScript files',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return; // LSP not configured or deps unavailable
+        if (!lsp) return ctx.skip(); // LSP not configured or deps unavailable
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'error.ts');
@@ -38,10 +38,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         // can find the project root on any provider (local, S3, GCS).
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = "hello";';
@@ -58,20 +55,17 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'returns empty diagnostics for valid TypeScript',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'valid.ts');
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = 42;';
@@ -86,20 +80,17 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'diagnostics include line and character positions',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'positions.ts');
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = "hello";';
@@ -107,20 +98,21 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         expect(diagnostics.length).toBeGreaterThan(0);
-        const error = diagnostics.find(d => d.severity === 'error')!;
+        const error = diagnostics.find(d => d.severity === 'error');
+        expect(error).toBeDefined();
         // Positions are 1-indexed
-        expect(error.line).toBeGreaterThanOrEqual(1);
-        expect(error.character).toBeGreaterThanOrEqual(1);
+        expect(error!.line).toBeGreaterThanOrEqual(1);
+        expect(error!.character).toBeGreaterThanOrEqual(1);
       },
       getContext().testTimeout,
     );
 
     it(
       'returns empty array for unsupported file types',
-      async () => {
+      async ctx => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'readme.md');

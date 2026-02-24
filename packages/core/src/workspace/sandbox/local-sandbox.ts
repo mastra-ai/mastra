@@ -411,8 +411,14 @@ export class LocalSandbox extends MastraSandbox {
       this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
       this._activeMountPaths.add(mountPath);
       return { success: true, mountPath };
+    } else if (existingMount === 'foreign') {
+      // Something is already mounted/symlinked here but we didn't create it — refuse to touch it
+      const error = `Cannot mount at ${hostPath}: path is already occupied by an existing mount or symlink that was not created by Mastra. Unmount it manually or use a different mount path.`;
+      this.logger.error(`[LocalSandbox] ${error}`);
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+      return { success: false, mountPath, error };
     } else if (existingMount === 'mismatched') {
-      this.logger.debug(`[LocalSandbox] Config mismatch, unmounting to re-mount with new config...`);
+      this.logger.debug(`[LocalSandbox] Config mismatch on our mount, unmounting to re-mount with new config...`);
       await this.unmount(mountPath);
     }
 
@@ -627,7 +633,8 @@ export class LocalSandbox extends MastraSandbox {
         if (killed) {
           resolve({ stdout, stderr: stderr + `\nProcess timed out after ${timeout}ms`, exitCode: 124 });
         } else if (signal) {
-          resolve({ stdout, stderr: stderr + `\nProcess terminated by ${signal}`, exitCode: 128 });
+          const signo = signal ? (os.constants.signals[signal as keyof typeof os.constants.signals] ?? 0) : 0;
+          resolve({ stdout, stderr: stderr + `\nProcess terminated by ${signal}`, exitCode: 128 + signo });
         } else {
           resolve({ stdout, stderr, exitCode: code ?? 0 });
         }
@@ -676,7 +683,7 @@ export class LocalSandbox extends MastraSandbox {
     _mountPath: string,
     hostPath: string,
     newConfig: FilesystemMountConfig,
-  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+  ): Promise<'not_mounted' | 'matching' | 'mismatched' | 'foreign'> {
     const mountCtx = this.createMountContext();
     const mounted = await isMountPoint(hostPath, mountCtx);
 
@@ -690,20 +697,11 @@ export class LocalSandbox extends MastraSandbox {
           const resolvedTarget = linkTarget ? path.resolve(path.dirname(hostPath), linkTarget) : null;
           const expectedTarget = path.resolve((newConfig as { type: 'local'; basePath: string }).basePath);
           if (!resolvedTarget || resolvedTarget !== expectedTarget) {
-            return 'mismatched';
+            // Symlink exists but points somewhere else — check if we created it
+            return (await this.hasMarkerFile(hostPath)) ? 'mismatched' : 'foreign';
           }
           // Symlink target matches — validate via marker file
-          const filename = this.mounts.markerFilename(hostPath);
-          const markerPath = `/tmp/.mastra-mounts/${filename}`;
-          const content = await fs.readFile(markerPath, 'utf-8');
-          const parsed = this.mounts.parseMarkerContent(content.trim());
-          if (parsed) {
-            const newConfigHash = this.mounts.computeConfigHash(newConfig);
-            if (parsed.path === hostPath && parsed.configHash === newConfigHash) {
-              return 'matching';
-            }
-          }
-          return 'mismatched';
+          return this.checkMarkerFile(hostPath, newConfig);
         }
       } catch {
         // Not a symlink or no marker — treat as not mounted
@@ -711,7 +709,34 @@ export class LocalSandbox extends MastraSandbox {
       return 'not_mounted';
     }
 
-    // Path is mounted — check if config matches via marker file
+    // Path is a FUSE mount point — check marker to see if we created it
+    return this.checkMarkerFile(hostPath, newConfig);
+  }
+
+  /**
+   * Check if a marker file exists for a given host path (regardless of content).
+   * Returns true if we previously created a mount here.
+   */
+  private async hasMarkerFile(hostPath: string): Promise<boolean> {
+    const filename = this.mounts.markerFilename(hostPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+    try {
+      await fs.access(markerPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if a marker file matches the given config.
+   * Returns 'matching' if hash matches, 'mismatched' if hash differs,
+   * or 'foreign' if no marker exists (we didn't create this mount).
+   */
+  private async checkMarkerFile(
+    hostPath: string,
+    newConfig: FilesystemMountConfig,
+  ): Promise<'matching' | 'mismatched' | 'foreign'> {
     const filename = this.mounts.markerFilename(hostPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
 
@@ -720,6 +745,7 @@ export class LocalSandbox extends MastraSandbox {
       const parsed = this.mounts.parseMarkerContent(content.trim());
 
       if (!parsed) {
+        // Marker exists but is malformed — we created it but can't verify, treat as ours
         return 'mismatched';
       }
 
@@ -731,11 +757,12 @@ export class LocalSandbox extends MastraSandbox {
       if (parsed.path === hostPath && parsed.configHash === newConfigHash) {
         return 'matching';
       }
-    } catch {
-      // Marker doesn't exist or can't be read
-    }
 
-    return 'mismatched';
+      return 'mismatched';
+    } catch {
+      // No marker file — this mount was not created by us
+      return 'foreign';
+    }
   }
 
   /**

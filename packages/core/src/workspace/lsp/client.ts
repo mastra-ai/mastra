@@ -48,6 +48,7 @@ export function isLSPAvailable(): boolean {
   try {
     const req = createRequire(import.meta.url);
     req.resolve('vscode-jsonrpc/node');
+    req.resolve('vscode-languageserver-protocol');
     return true;
   } catch {
     return false;
@@ -115,7 +116,7 @@ export class LSPClient {
   private workspaceRoot: string;
   private processManager: SandboxProcessManager;
   private diagnostics: Map<string, any[]> = new Map();
-  private initializationOptions: any = null;
+  private initializationOptions: Record<string, unknown> | null = null;
 
   constructor(serverDef: LSPServerDef, workspaceRoot: string, processManager: SandboxProcessManager) {
     this.serverDef = serverDef;
@@ -237,10 +238,13 @@ export class LSPClient {
     // Handle window/workDoneProgress/create requests
     this.connection.onRequest('window/workDoneProgress/create', () => null);
 
+    let initTimer: ReturnType<typeof setTimeout>;
     await Promise.race([
       this.connection.sendRequest('initialize', initParams),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('LSP initialize request timed out')), initTimeout)),
-    ]);
+      new Promise((_, reject) => {
+        initTimer = setTimeout(() => reject(new Error('LSP initialize request timed out')), initTimeout);
+      }),
+    ]).finally(() => clearTimeout(initTimer!));
 
     // Send initialized notification
     this.connection.sendNotification('initialized', {});
@@ -340,10 +344,13 @@ export class LSPClient {
     if (this.connection) {
       try {
         if (this.handle && this.handle.exitCode === undefined) {
+          let shutdownTimer: ReturnType<typeof setTimeout>;
           await Promise.race([
             this.connection.sendRequest('shutdown'),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Shutdown request timed out')), 1000)),
-          ]);
+            new Promise((_, reject) => {
+              shutdownTimer = setTimeout(() => reject(new Error('Shutdown request timed out')), 1000);
+            }),
+          ]).finally(() => clearTimeout(shutdownTimer!));
           this.connection.sendNotification('exit');
         }
       } catch {

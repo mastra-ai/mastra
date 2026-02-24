@@ -9,7 +9,7 @@
  * (sandboxPathsAligned === true).
  */
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -20,9 +20,8 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
   describe('LSP External Project Diagnostics', () => {
     let externalDir: string | undefined;
 
-    afterEach(async () => {
+    afterEach(() => {
       if (externalDir) {
-        const { rmSync } = await import('node:fs');
         try {
           rmSync(externalDir, { recursive: true, force: true });
         } catch {
@@ -34,26 +33,23 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'detects type errors in files outside workspace basePath',
-      async () => {
+      async ctx => {
         const { workspace, sandboxPathsAligned } = getContext();
 
         // Only meaningful when the filesystem can see absolute host paths
-        if (!sandboxPathsAligned) return;
+        if (!sandboxPathsAligned) return ctx.skip();
 
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         // Create a completely separate temp dir outside the workspace
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
 
         // Write tsconfig.json in the external dir — walkUpAsync should find it
-        await fs.writeFile(
-          join(externalDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(externalDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         const content = 'const x: number = "hello";';
 
@@ -68,23 +64,20 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'returns no errors for valid code in external project',
-      async () => {
+      async ctx => {
         const { workspace, sandboxPathsAligned } = getContext();
 
-        if (!sandboxPathsAligned) return;
+        if (!sandboxPathsAligned) return ctx.skip();
 
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
 
-        await fs.writeFile(
-          join(externalDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(externalDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         const content = 'const x: number = 42;';
 

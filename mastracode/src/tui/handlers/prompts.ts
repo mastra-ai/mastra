@@ -198,7 +198,6 @@ export async function handlePlanApproval(
             planId,
             response: { action: 'approved' },
           });
-          ctx.updateStatusLine();
 
           // Now that mode switch is complete, add system reminder and trigger build agent
           // Use setTimeout to ensure the plan approval component has fully rendered

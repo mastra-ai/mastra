@@ -6,8 +6,9 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
+import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { fg, bg, bold, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 
@@ -19,6 +20,9 @@ export interface SettingsConfig {
   yolo: boolean;
   thinkingLevel: string;
   escapeAsCancel: boolean;
+  storageBackend: StorageBackend;
+  pgConnectionString: string;
+  libsqlUrl: string;
 }
 
 export interface SettingsCallbacks {
@@ -26,6 +30,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onClose: () => void;
 }
 
@@ -47,6 +52,128 @@ class SelectSubmenu extends SelectList {
     };
     this.onCancel = onBack;
   }
+}
+
+// =============================================================================
+// Storage Backend Submenu (backend selector → optional PG connection input)
+// =============================================================================
+
+class StorageBackendSubmenu extends Container {
+  private phase: 'select' | 'connection' = 'select';
+  private pendingBackend: StorageBackend = 'libsql';
+  private selectList: SelectList;
+  private input!: Input;
+  private onDone: (backend: StorageBackend, connectionUrl?: string) => void;
+  private onBack: () => void;
+  private currentPgConnectionString: string;
+  private currentLibsqlUrl: string;
+
+  constructor(
+    currentBackend: StorageBackend,
+    currentPgConnectionString: string,
+    currentLibsqlUrl: string,
+    onDone: (backend: StorageBackend, connectionUrl?: string) => void,
+    onBack: () => void,
+  ) {
+    super();
+    this.onDone = onDone;
+    this.onBack = onBack;
+    this.currentPgConnectionString = currentPgConnectionString;
+    this.currentLibsqlUrl = currentLibsqlUrl;
+
+    // Phase 1: backend selection
+    const items: SelectItem[] = [
+      {
+        value: 'libsql',
+        label: '  LibSQL',
+        description: 'Local file-based SQLite or remote Turso URL',
+      },
+      {
+        value: 'pg',
+        label: '  PostgreSQL',
+        description: 'Remote PostgreSQL (requires connection string)',
+      },
+    ];
+
+    this.selectList = new SelectList(items, items.length, getSelectListTheme());
+    const currentIndex = items.findIndex(i => i.value === currentBackend);
+    if (currentIndex !== -1) this.selectList.setSelectedIndex(currentIndex);
+
+    this.selectList.onSelect = (item: SelectItem) => {
+      this.pendingBackend = item.value as StorageBackend;
+      this.showConnectionInput();
+    };
+    this.selectList.onCancel = onBack;
+
+    this.addChild(this.selectList);
+  }
+
+  private showConnectionInput(): void {
+    this.phase = 'connection';
+    this.clear();
+
+    if (this.pendingBackend === 'pg') {
+      this.addChild(new Text(bold(fg('accent', 'PostgreSQL Connection')), 0, 0));
+      this.addChild(new Spacer(1));
+      this.addChild(new Text(fg('muted', 'Enter a connection string:'), 0, 0));
+      this.addChild(new Text(fg('dim', 'e.g. postgresql://user:pass@localhost:5432/mydb'), 0, 0));
+    } else {
+      this.addChild(new Text(bold(fg('accent', 'LibSQL Connection')), 0, 0));
+      this.addChild(new Spacer(1));
+      this.addChild(new Text(fg('muted', 'Enter a URL or leave empty for default local file:'), 0, 0));
+      this.addChild(new Text(fg('dim', 'e.g. libsql://your-db.turso.io'), 0, 0));
+    }
+    this.addChild(new Spacer(1));
+
+    this.input = new Input();
+    const currentValue = this.pendingBackend === 'pg' ? this.currentPgConnectionString : this.currentLibsqlUrl;
+    if (currentValue) {
+      this.input.setValue(currentValue);
+    }
+    this.addChild(this.input);
+
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(fg('dim', 'Enter to save · Esc to go back'), 0, 0));
+  }
+
+  handleInput(data: string): void {
+    if (this.phase === 'select') {
+      this.selectList.handleInput(data);
+      return;
+    }
+
+    // Connection string input phase
+    if (data === '\r' || data === '\n') {
+      const value = this.input.getValue().trim();
+      if (this.pendingBackend === 'pg') {
+        // PG requires a connection string
+        if (value) {
+          this.onDone('pg', value);
+        }
+      } else {
+        // LibSQL: empty = default local file, non-empty = custom URL
+        this.onDone('libsql', value || undefined);
+      }
+      return;
+    }
+
+    if (data === '\x1b' || data === '\x1b\x1b') {
+      this.onBack();
+      return;
+    }
+
+    this.input.handleInput(data);
+  }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function storageLabel(config: SettingsConfig): string {
+  if (config.storageBackend === 'pg') return 'PostgreSQL';
+  if (config.libsqlUrl) return `LibSQL (${config.libsqlUrl})`;
+  return 'LibSQL (local file)';
 }
 
 // =============================================================================
@@ -190,6 +317,29 @@ export class SettingsComponent extends Box implements Focusable {
               config.escapeAsCancel = value === 'on';
               callbacks.onEscapeAsCancelChange(config.escapeAsCancel);
               done(config.escapeAsCancel ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'storageBackend',
+        label: 'Storage backend',
+        description: 'Database backend for threads, memory, and agent data (restart required)',
+        currentValue: storageLabel(config),
+        submenu: (_currentValue, done) =>
+          new StorageBackendSubmenu(
+            config.storageBackend,
+            config.pgConnectionString,
+            config.libsqlUrl,
+            (backend: StorageBackend, connectionUrl?: string) => {
+              config.storageBackend = backend;
+              if (backend === 'pg' && connectionUrl !== undefined) {
+                config.pgConnectionString = connectionUrl;
+              } else if (backend === 'libsql') {
+                config.libsqlUrl = connectionUrl ?? '';
+              }
+              callbacks.onStorageBackendChange(backend, connectionUrl);
+              done(storageLabel(config));
             },
             () => done(),
           ),
