@@ -153,6 +153,14 @@ export function detectProject(projectPath: string): ProjectInfo {
 }
 
 /**
+ * Get the current git branch for a given directory.
+ * Lightweight alternative to detectProject() for refreshing just the branch.
+ */
+export function getCurrentGitBranch(cwd: string): string | undefined {
+  return git('rev-parse --abbrev-ref HEAD', cwd);
+}
+
+/**
  * Get the application data directory for mastracode
  * - macOS: ~/Library/Application Support/mastracode
  * - Linux: ~/.local/share/mastracode
