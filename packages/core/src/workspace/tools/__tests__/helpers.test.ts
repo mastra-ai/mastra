@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import type { ToolExecutionContext } from '../../../tools/types';
+import type { LSPDiagnostic } from '../../lsp/types';
 import { Workspace } from '../../workspace';
-import { emitWorkspaceMetadata, requireWorkspace, requireFilesystem, requireSandbox } from '../helpers';
+import {
+  emitWorkspaceMetadata,
+  getEditDiagnosticsText,
+  requireWorkspace,
+  requireFilesystem,
+  requireSandbox,
+} from '../helpers';
 
 const dummySandbox = { id: 'sb-1', name: 'test-sandbox', provider: 'local', status: 'running' as const };
 const dummyFilesystem = {
@@ -131,5 +138,184 @@ describe('requireSandbox', () => {
     const context: ToolExecutionContext = { workspace };
 
     expect(() => requireSandbox(context)).toThrow();
+  });
+});
+
+describe('getEditDiagnosticsText', () => {
+  function createMockLSPWorkspace(diagnostics: LSPDiagnostic[] = []) {
+    const mockLsp = {
+      root: '/project',
+      getDiagnostics: vi.fn().mockResolvedValue(diagnostics),
+    };
+    const workspace = createMockWorkspace({ sandbox: true });
+    // Attach mock LSP manager
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    return { workspace, mockLsp };
+  }
+
+  it('returns empty string when workspace has no LSP manager', async () => {
+    const workspace = createMockWorkspace({ sandbox: true });
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x = 1');
+    expect(result).toBe('');
+  });
+
+  it('returns empty string when diagnostics are empty', async () => {
+    const { workspace } = createMockLSPWorkspace([]);
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x = 1');
+    expect(result).toBe('');
+  });
+
+  it('formats error diagnostics', async () => {
+    const { workspace } = createMockLSPWorkspace([
+      {
+        severity: 'error',
+        message: "Type 'string' is not assignable to type 'number'.",
+        line: 5,
+        character: 3,
+        source: 'ts',
+      },
+    ]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x: number = "hello"');
+
+    expect(result).toContain('LSP Diagnostics:');
+    expect(result).toContain('Errors:');
+    expect(result).toContain("5:3 - Type 'string' is not assignable to type 'number'. [ts]");
+  });
+
+  it('formats warnings separately from errors', async () => {
+    const { workspace } = createMockLSPWorkspace([
+      { severity: 'error', message: 'Type error', line: 1, character: 1, source: 'ts' },
+      { severity: 'warning', message: 'Unused variable', line: 2, character: 1, source: 'ts' },
+    ]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(result).toContain('Errors:');
+    expect(result).toContain('Warnings:');
+    // Errors should appear before warnings
+    const errIdx = result.indexOf('Errors:');
+    const warnIdx = result.indexOf('Warnings:');
+    expect(errIdx).toBeLessThan(warnIdx);
+  });
+
+  it('groups all severity levels', async () => {
+    const { workspace } = createMockLSPWorkspace([
+      { severity: 'error', message: 'Error msg', line: 1, character: 1 },
+      { severity: 'warning', message: 'Warning msg', line: 2, character: 1 },
+      { severity: 'info', message: 'Info msg', line: 3, character: 1 },
+      { severity: 'hint', message: 'Hint msg', line: 4, character: 1 },
+    ]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(result).toContain('Errors:');
+    expect(result).toContain('Warnings:');
+    expect(result).toContain('Info:');
+    expect(result).toContain('Hints:');
+  });
+
+  it('omits source tag when source is undefined', async () => {
+    const { workspace } = createMockLSPWorkspace([{ severity: 'error', message: 'No source', line: 1, character: 1 }]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(result).toContain('1:1 - No source');
+    expect(result).not.toContain('[');
+  });
+
+  it('deduplicates identical diagnostics', async () => {
+    const dup: LSPDiagnostic = { severity: 'error', message: 'Duplicate', line: 1, character: 1, source: 'ts' };
+    const { workspace } = createMockLSPWorkspace([dup, dup, dup]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    // Should only appear once
+    const matches = result.match(/Duplicate/g);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('keeps diagnostics with different locations', async () => {
+    const { workspace } = createMockLSPWorkspace([
+      { severity: 'error', message: 'Same message', line: 1, character: 1, source: 'ts' },
+      { severity: 'error', message: 'Same message', line: 5, character: 1, source: 'ts' },
+    ]);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    const matches = result.match(/Same message/g);
+    expect(matches).toHaveLength(2);
+  });
+
+  it('resolves relative paths using lspManager.root', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+
+    await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 'code');
+  });
+
+  it('treats paths starting with / as absolute on Unix', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+
+    // /src/app.ts is an absolute path — passes through as-is
+    await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/src/app.ts', 'code');
+  });
+
+  it('passes absolute paths through as-is', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+
+    await getEditDiagnosticsText(workspace, '/Users/me/project/src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/Users/me/project/src/app.ts', 'code');
+  });
+
+  it('truncates long output', async () => {
+    // Generate many diagnostics to exceed 2000 chars
+    const diagnostics: LSPDiagnostic[] = [];
+    for (let i = 0; i < 100; i++) {
+      diagnostics.push({
+        severity: 'error',
+        message: `Error on line ${i}: This is a long error message that takes up space in the output buffer to ensure truncation`,
+        line: i,
+        character: 1,
+        source: 'ts',
+      });
+    }
+    const { workspace } = createMockLSPWorkspace(diagnostics);
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(result.length).toBeLessThanOrEqual(2100); // 2000 + truncation message
+    expect(result).toContain('... (truncated)');
+  });
+
+  it('returns empty string when getDiagnostics throws', async () => {
+    const mockLsp = {
+      root: '/project',
+      getDiagnostics: vi.fn().mockRejectedValue(new Error('LSP crashed')),
+    };
+    const workspace = createMockWorkspace({ sandbox: true });
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+    expect(result).toBe('');
+  });
+
+  it('returns empty string on timeout', async () => {
+    const mockLsp = {
+      root: '/project',
+      getDiagnostics: vi
+        .fn()
+        .mockImplementation(() => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 50))),
+    };
+    const workspace = createMockWorkspace({ sandbox: true });
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'code');
+
+    expect(result).toBe('');
   });
 });

@@ -12,6 +12,7 @@ import {
   SearchNotAvailableError,
 } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
+import { LSPManager } from './lsp';
 import { LocalSandbox } from './sandbox';
 import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
@@ -1615,6 +1616,107 @@ Line 3 conclusion`;
       await workspace.init();
       await expect(workspace.destroy()).rejects.toThrow('Sandbox destroy failed');
       expect(workspace.status).toBe('error');
+    });
+  });
+
+  // ===========================================================================
+  // LSP Initialization
+  // ===========================================================================
+  describe('LSP initialization', () => {
+    it('creates LSPManager when lsp:true and sandbox has processes', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+    });
+
+    it('does not create LSPManager when lsp is not configured', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not create LSPManager when sandbox has no process manager', () => {
+      const sandbox = {
+        provider: 'mock',
+        status: 'running' as const,
+        start: vi.fn(),
+        destroy: vi.fn(),
+        getInfo: vi.fn(),
+      } as any;
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not create LSPManager when no sandbox is provided', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem, lsp: true });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('uses explicit root from LSPConfig', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: { root: '/explicit/root' } });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      expect(workspace.lsp!.root).toBe('/explicit/root');
+    });
+
+    it('resolves root via findProjectRoot when no explicit root', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      // findProjectRoot(process.cwd()) finds the repo root (has package.json, tsconfig.json)
+      // The resolved root should be an absolute path, not process.cwd() fallback
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      expect(path.isAbsolute(workspace.lsp!.root)).toBe(true);
+    });
+
+    it('passes LSPConfig options through to LSPManager', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({
+        sandbox,
+        lsp: { root: tempDir, disableServers: ['eslint'], diagnosticTimeout: 5000, initTimeout: 3000 },
+      });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      expect(workspace.lsp!.root).toBe(tempDir);
+    });
+
+    it('treats lsp:true as empty LSPConfig', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const ws1 = new Workspace({ sandbox, lsp: true });
+      const ws2 = new Workspace({ sandbox, lsp: {} });
+
+      expect(ws1.lsp).toBeInstanceOf(LSPManager);
+      expect(ws2.lsp).toBeInstanceOf(LSPManager);
+      expect(ws1.lsp!.root).toBe(ws2.lsp!.root);
+    });
+
+    it('shuts down LSP on destroy', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      const lsp = workspace.lsp!;
+      const shutdownSpy = vi.spyOn(lsp, 'shutdownAll').mockResolvedValue(undefined);
+
+      await workspace.init();
+      await workspace.destroy();
+
+      expect(shutdownSpy).toHaveBeenCalled();
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not fail destroy when LSP shutdown throws', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      vi.spyOn(workspace.lsp!, 'shutdownAll').mockRejectedValue(new Error('LSP shutdown failed'));
+
+      await workspace.init();
+      await expect(workspace.destroy()).resolves.not.toThrow();
+      expect(workspace.lsp).toBeUndefined();
     });
   });
 });
