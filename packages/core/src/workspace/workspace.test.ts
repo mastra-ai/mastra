@@ -810,6 +810,55 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
+  // setToolsConfig
+  // ===========================================================================
+  describe('setToolsConfig', () => {
+    it('should update tools config from undefined', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      expect(workspace.getToolsConfig()).toBeUndefined();
+
+      const newConfig = {
+        mastra_workspace_write_file: { enabled: false },
+      };
+      workspace.setToolsConfig(newConfig);
+
+      expect(workspace.getToolsConfig()).toEqual(newConfig);
+    });
+
+    it('should replace existing tools config', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        tools: { mastra_workspace_read_file: { enabled: true } },
+      });
+
+      const newConfig = {
+        mastra_workspace_write_file: { enabled: false },
+        mastra_workspace_edit_file: { enabled: false },
+      };
+      workspace.setToolsConfig(newConfig);
+
+      expect(workspace.getToolsConfig()).toEqual(newConfig);
+    });
+
+    it('should clear tools config when set to undefined', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        tools: { mastra_workspace_write_file: { enabled: false } },
+      });
+
+      expect(workspace.getToolsConfig()).toBeDefined();
+
+      workspace.setToolsConfig(undefined);
+
+      expect(workspace.getToolsConfig()).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
   // __setLogger
   // ===========================================================================
   describe('__setLogger', () => {
