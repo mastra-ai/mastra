@@ -447,7 +447,8 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Execute a shell command in the sandbox.
+   * Execute a shell command in the sandbox via a Daytona session.
+   * Sessions provide separate stdout/stderr streams and real-time output callbacks.
    * Automatically starts the sandbox if not already running.
    * Retries once if the sandbox is found to be dead.
    */
@@ -462,35 +463,77 @@ export class DaytonaSandbox extends MastraSandbox {
     const startTime = Date.now();
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 
+    // Merge sandbox default env with per-command env (per-command overrides)
+    const mergedEnv = { ...this.env, ...options.env };
+    const envs = Object.fromEntries(
+      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
+
+    // Bake cwd and env into the command — session API has no native cwd/envVars params
+    const sessionCommand = buildSessionCommand(fullCommand, options.cwd, envs);
+
+    // Convert timeout from ms to seconds for Daytona SDK
+    const effectiveTimeout = options.timeout ?? this.timeout;
+    const timeoutSecs = Math.ceil(effectiveTimeout / 1000);
+
+    const sessionId = `mastra-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
     try {
-      // Merge sandbox default env with per-command env (per-command overrides)
-      const mergedEnv = { ...this.env, ...options.env };
-      const envs = Object.fromEntries(
-        Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      await sandbox.process.createSession(sessionId);
+
+      const { cmdId } = await sandbox.process.executeSessionCommand(sessionId, {
+        command: sessionCommand,
+        runAsync: true,
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      // Stream logs until the command finishes, with a client-side timeout.
+      // deleteSession in the finally block kills the process if timeout fires.
+      const logsPromise = sandbox.process.getSessionCommandLogs(
+        sessionId,
+        cmdId,
+        (chunk: string) => {
+          stdout += chunk;
+          options.onStdout?.(chunk);
+        },
+        (chunk: string) => {
+          stderr += chunk;
+          options.onStderr?.(chunk);
+        },
       );
+      // Suppress the rejection that occurs when the session is deleted after timeout
+      logsPromise.catch(() => {});
 
-      // Convert timeout from ms to seconds for Daytona SDK (fall back to instance default)
-      const effectiveTimeout = options.timeout ?? this.timeout;
-      const timeoutSecs = Math.ceil(effectiveTimeout / 1000);
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Command timed out after ${effectiveTimeout}ms`)),
+          effectiveTimeout,
+        );
+      });
 
-      const response = await sandbox.process.executeCommand(fullCommand, options.cwd, envs, timeoutSecs);
+      try {
+        await Promise.race([logsPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      const cmd = await sandbox.process.getSessionCommand(sessionId, cmdId);
+      const exitCode = cmd.exitCode ?? 0;
 
       const executionTimeMs = Date.now() - startTime;
 
-      // Daytona ExecuteResponse has exitCode and result (stdout).
-      // The SDK does not provide a separate stderr stream — stderr is
-      // interleaved into result. We set stderr to '' for interface compliance.
-      const stdout = response.result ?? '';
-      const stderr = '';
-
-      this.logger.debug(`${LOG_PREFIX} Exit code: ${response.exitCode} (${executionTimeMs}ms)`);
+      this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms)`);
       if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
+      if (stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${stderr}`);
 
       return {
-        success: response.exitCode === 0,
-        exitCode: response.exitCode,
+        success: exitCode === 0,
+        exitCode,
         stdout,
         stderr,
         executionTimeMs,
@@ -511,7 +554,6 @@ export class DaytonaSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      // Try to extract result from error
       const errorObj = error as { exitCode?: number; result?: string };
       const stdout = errorObj.result ?? '';
       const stderr = error instanceof Error ? error.message : String(error);
@@ -530,6 +572,37 @@ export class DaytonaSandbox extends MastraSandbox {
         command,
         args,
       };
+    } finally {
+      // Best-effort session cleanup — sandbox may be dead or session already gone
+      try {
+        await sandbox.process.deleteSession(sessionId);
+      } catch {
+        // ignore
+      }
     }
   }
+}
+
+/**
+ * Build a shell command string that bakes in cwd and env vars.
+ * Session commands have no native cwd/envVars params so we prepend them.
+ *
+ * @example
+ * buildSessionCommand('npm test', '/app', { NODE_ENV: 'test' })
+ * // → "export NODE_ENV=test && cd /app && npm test"
+ */
+function buildSessionCommand(command: string, cwd: string | undefined, envs: Record<string, string>): string {
+  const parts: string[] = [];
+
+  for (const [k, v] of Object.entries(envs)) {
+    parts.push(`export ${k}=${shellQuote(v)}`);
+  }
+
+  if (cwd) {
+    parts.push(`cd ${shellQuote(cwd)}`);
+  }
+
+  parts.push(command);
+
+  return parts.join(' && ');
 }
