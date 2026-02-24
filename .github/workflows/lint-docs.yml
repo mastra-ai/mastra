@@ -190,3 +190,7 @@ jobs:
       - name: Validate reference sidebar sort order
         working-directory: ./docs
         run: pnpm validate:reference-sidebar
+
+      - name: Check for docs not linked in sidebars
+        working-directory: ./docs
+        run: pnpm validate:sidebar-docs
