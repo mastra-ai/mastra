@@ -1,5 +1,4 @@
 {
-  "trailingSlash": false,
   "redirects": [
     {
       "source": "/docs/v1/:path*",
