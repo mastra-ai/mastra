@@ -1,6 +1,6 @@
 # Styleguide: Deployment guide
 
-A deployment guide walks the reader through deploying their Mastra application to a specific platform. It covers installation, configuration, the deploy process itself, and platform-specific concerns. The reader already has a working Mastra app — this guide gets it running in production.
+A deployment guide walks the reader through deploying their Mastra application to a specific platform. It covers installation, configuration, the deploy process itself, and platform-specific concerns. The reader already has a working Mastra app — this guide gets it running in production. This styleguide covers the page type found in `docs/src/content/en/guides/deployment/`.
 
 Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
 

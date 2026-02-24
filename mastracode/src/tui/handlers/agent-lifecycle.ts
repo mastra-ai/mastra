@@ -4,6 +4,7 @@
  */
 import { Spacer, Text } from '@mariozechner/pi-tui';
 
+import { getCurrentGitBranch } from '../../utils/project.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { theme } from '../theme.js';
 
@@ -11,23 +12,32 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = true;
+
+  // Refresh git branch so status line reflects the current branch
+  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
+  if (freshBranch) {
+    state.projectInfo.gitBranch = freshBranch;
+  }
+
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
       ctx.updateStatusLine();
     });
   }
   state.gradientAnimator.start();
-  ctx.updateStatusLine();
 }
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
+
+  // Refresh git branch — tool calls during this turn may have switched branches
+  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
+  if (freshBranch) {
+    state.projectInfo.gitBranch = freshBranch;
+  }
 
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
@@ -35,7 +45,6 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
   ctx.notify('agent_done');
@@ -53,11 +62,9 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
 
   // Update streaming message to show it was interrupted
   if (state.streamingComponent && state.streamingMessage) {
@@ -76,18 +83,15 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.followUpComponents = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after interruption
   state.ui.requestRender();
 }
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.isAgentActive = false;
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
 
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
@@ -97,6 +101,5 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.followUpComponents = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   // Keep allToolComponents so Ctrl+E continues to work after errors
 }

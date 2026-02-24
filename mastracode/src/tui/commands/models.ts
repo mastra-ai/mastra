@@ -39,7 +39,6 @@ async function showModelListForScope(
             saveSettings(settings);
           }
           ctx.showInfo(`Model set for ${scopeLabel}: ${model.id}`);
-          ctx.updateStatusLine();
         } catch (err) {
           ctx.showError(`Failed to switch model: ${err instanceof Error ? err.message : String(err)}`);
         }

@@ -142,7 +142,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     // can be inserted before them (keeping them anchored at bottom).
     // Only track if the agent is already streaming a response — otherwise
     // this is the initial message that triggers the response, not a follow-up.
-    if (state.isAgentActive && state.streamingComponent) {
+    if (state.harness.getDisplayState().isRunning && state.streamingComponent) {
       state.followUpComponents.push(userComponent);
     }
   }
@@ -161,9 +161,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
+
+  // Local accumulator for detecting task clears during history reconstruction
+  let previousTasksAcc: TaskItem[] = [];
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -269,14 +271,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               replacedWithInline = true;
             } else if (!tasks || tasks.length === 0) {
               // Tasks were cleared - show with previous tasks if we have them
-              if (state.previousTasks.length > 0) {
-                renderClearedTasksInline(state, state.previousTasks);
-                state.previousTasks = [];
+              if (previousTasksAcc.length > 0) {
+                renderClearedTasksInline(state, previousTasksAcc);
+                previousTasksAcc = [];
                 replacedWithInline = true;
               }
             } else {
               // Track for detecting clears
-              state.previousTasks = [...tasks];
+              previousTasksAcc = [...tasks];
             }
           }
 
@@ -377,8 +379,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   // Restore pinned task list from the last active task_write in history
-  if (state.previousTasks.length > 0 && state.taskProgress) {
-    state.taskProgress.updateTasks(state.previousTasks);
+  if (previousTasksAcc.length > 0 && state.taskProgress) {
+    state.taskProgress.updateTasks(previousTasksAcc);
   }
 
   state.ui.requestRender();

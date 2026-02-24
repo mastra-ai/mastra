@@ -14,5 +14,4 @@ export async function handleThinkCommand(ctx: SlashCommandContext): Promise<void
   const next = levels[nextIdx]!;
   await ctx.harness.setState({ thinkingLevel: next.id } as any);
   ctx.showInfo(`Thinking: ${next.label}`);
-  ctx.updateStatusLine();
 }

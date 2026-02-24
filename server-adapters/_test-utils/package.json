@@ -1,6 +1,6 @@
 {
   "name": "@internal/server-adapter-test-utils",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Test utilities for server adapters",
   "type": "module",
   "main": "src/index.ts",

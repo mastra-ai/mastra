@@ -22,7 +22,6 @@ import { AskQuestionInlineComponent } from './components/ask-question-inline.js'
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
-import { defaultOMProgressState } from './components/om-progress.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -153,7 +152,6 @@ export class MastraTUI {
         if (this.state.pendingNewThread) {
           await this.state.harness.createThread();
           this.state.pendingNewThread = false;
-          updateStatusLine(this.state);
         }
 
         // Check if a model is selected
@@ -239,9 +237,6 @@ export class MastraTUI {
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
 
-    // Load initial token usage from harness (persisted from previous session)
-    this.state.tokenUsage = this.state.harness.getTokenUsage();
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -266,11 +261,9 @@ export class MastraTUI {
     }
 
     // Load OM progress now that we're subscribed (the event during
-    // thread selection fired before we were listening)
+    // thread selection fired before we were listening).
+    // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
-
-    // Sync OM thresholds from thread metadata (may differ from OM defaults)
-    this.syncOMThresholdsFromHarness();
 
     // Start the UI
     this.state.ui.start();
@@ -317,38 +310,6 @@ export class MastraTUI {
   }
 
   // ===========================================================================
-  // Status Line Reset
-  // ===========================================================================
-
-  /**
-   * Sync omProgress thresholds from harness state (thread metadata).
-   * Called after thread load to pick up per-thread threshold overrides.
-   */
-  private syncOMThresholdsFromHarness(): void {
-    const obsThreshold = this.state.harness.getObservationThreshold();
-    const refThreshold = this.state.harness.getReflectionThreshold();
-    this.state.omProgress.threshold = obsThreshold;
-    this.state.omProgress.thresholdPercent =
-      obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
-    this.state.omProgress.reflectionThreshold = refThreshold;
-    this.state.omProgress.reflectionThresholdPercent =
-      refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
-    updateStatusLine(this.state);
-  }
-  private resetStatusLineState(): void {
-    const prev = this.state.omProgress;
-    this.state.omProgress = {
-      ...defaultOMProgressState(),
-      // Preserve thresholds across resets
-      threshold: prev.threshold,
-      reflectionThreshold: prev.reflectionThreshold,
-    };
-    this.state.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-    this.state.bufferingMessages = false;
-    this.state.bufferingObservations = false;
-    updateStatusLine(this.state);
-  }
-
   /**
    * Insert a child into the chat container before any follow-up user messages.
    * If no follow-ups are pending, appends to end.
@@ -453,7 +414,6 @@ export class MastraTUI {
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       stop: () => this.stop(),
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
@@ -469,14 +429,12 @@ export class MastraTUI {
       showError: msg => showError(this.state, msg),
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       notify: (reason, message) => notify(this.state, reason, message),
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
       renderExistingMessages: () => renderExistingMessages(this.state),
-      syncOMThresholdsFromHarness: () => this.syncOMThresholdsFromHarness(),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
         renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
@@ -540,7 +498,6 @@ export class MastraTUI {
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.harness.switchModel({ modelId: defaultModel });
-            updateStatusLine(this.state);
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);

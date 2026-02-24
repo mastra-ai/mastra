@@ -1,5 +1,149 @@
 # mastracode
 
+## 0.3.0
+
+### Minor Changes
+
+- Added interactive onboarding flow for first-time setup ([#13421](https://github.com/mastra-ai/mastra/pull/13421))
+
+  **Setup wizard** — On first launch, an interactive wizard guides you through:
+  - Authenticating with AI providers (Claude Max, OpenAI Codex)
+  - Choosing a model pack (Varied, Anthropic, OpenAI, or Custom)
+  - Selecting an observational memory model
+  - Enabling or disabling YOLO mode (auto-approve tool calls)
+
+  **Global settings** — Your preferences are now saved to `settings.json` in the app data directory and automatically applied to new threads. Model pack selections reference pack IDs so you get new model versions automatically.
+
+  **Custom model packs** — Choose "Custom" to pick a specific model for each mode (plan/build/fast). Saved custom packs appear when re-running `/setup`.
+
+  **`/setup` command** — Re-run the setup wizard anytime. Previously chosen options are highlighted with "(current)" indicators.
+
+  **Settings migration** — Model-related data previously stored in `auth.json` (`_modelRanks`, `_modeModelId_*`, `_subagentModelId*`) is automatically migrated to `settings.json` on first load.
+
+- Added storage backend configuration to `/settings` with PostgreSQL opt-in and remote LibSQL support. ([#13435](https://github.com/mastra-ai/mastra/pull/13435))
+
+  **Selecting a backend**
+
+  Switch storage backends through the `/settings` command (Storage backend option) or by setting the `MASTRA_STORAGE_BACKEND` environment variable. LibSQL remains the default — no changes needed for existing setups. Both backends prompt for a connection URL interactively after selection.
+
+  **Remote LibSQL (Turso)**
+
+  Select LibSQL in `/settings` and enter a remote Turso URL (e.g. `libsql://your-db.turso.io`). Leave empty to keep the default local file database. Can also be set via environment variable:
+
+  ```sh
+  export MASTRA_DB_URL="libsql://your-db.turso.io"
+  export MASTRA_DB_AUTH_TOKEN="your-token"
+  ```
+
+  **PostgreSQL configuration**
+
+  Select PostgreSQL in `/settings` and enter a connection string, or configure via environment variables:
+
+  ```sh
+  export MASTRA_STORAGE_BACKEND=pg
+  export MASTRA_PG_CONNECTION_STRING="postgresql://user:pass@localhost:5432/db"
+  ```
+
+  If the PostgreSQL connection fails on startup, mastracode falls back to the local LibSQL database and shows a warning so you can fix the connection via `/settings`.
+
+  Optional PostgreSQL settings include `schemaName`, `disableInit`, and `skipDefaultIndexes`.
+
+- Added model name to Co-Authored-By in commit messages. Commits now include the active model (e.g. `Co-Authored-By: Mastra Code (anthropic/claude-opus-4-6) <noreply@mastra.ai>`) for traceability when switching between models. Falls back to the original static format when no model is set. ([#13376](https://github.com/mastra-ai/mastra/pull/13376))
+
+### Patch Changes
+
+- Fixed plan mode agent to properly call submit_plan tool. The agent was generating text descriptions instead of calling the tool. Fixed by: creating dynamic mode-specific tool guidance with correct tool names, clarifying tool vs text usage with explicit exceptions for communication tools, and strengthening submit_plan call instructions with urgent language and code examples. ([#13416](https://github.com/mastra-ai/mastra/pull/13416))
+
+- Updated `/cost` and `/diff` commands to read token usage, memory progress, and modified files from the Harness display state instead of maintaining separate local copies. Moved shared type definitions (`OMProgressState`, `OMStatus`, `OMBufferedStatus`) to `@mastra/core/harness` and re-exported them for backward compatibility. ([#13427](https://github.com/mastra-ai/mastra/pull/13427))
+
+- Exclude hidden files from directory listings ([#13384](https://github.com/mastra-ai/mastra/pull/13384))
+
+- Consolidated keyboard shortcuts and commands into a `/help` overlay. The header now shows a compact hint line (`⇧Tab mode · /help info & shortcuts`) instead of 3 lines of keybinding instructions. Running `/help` opens a styled overlay with all commands and shortcuts. ([#13426](https://github.com/mastra-ai/mastra/pull/13426))
+
+- Improved TUI maintainability by modularizing the main TUI class into focused modules: event handlers, command dispatchers, status line rendering, message rendering, error display, shell passthrough, and setup logic. Reduced the main TUI file from ~4,760 lines to 449 lines with no changes to user-facing behavior. ([#13413](https://github.com/mastra-ai/mastra/pull/13413))
+
+- Added styled ASCII art banner header to the TUI with purple gradient and project frontmatter display. The banner shows "MASTRA CODE" in block letters for wide terminals, "MASTRA" for medium terminals, and falls back to a compact single line for narrow terminals. Project info (name, resource ID, branch, user) now renders inside the TUI header instead of via console.info before startup. ([#13422](https://github.com/mastra-ai/mastra/pull/13422))
+
+- LSP now shows correct diagnostics for TypeScript and JavaScript files ([#13385](https://github.com/mastra-ai/mastra/pull/13385))
+
+- Updated dependencies [[`551dc24`](https://github.com/mastra-ai/mastra/commit/551dc2445ffb6efa05eb268e8ab700bcd34ed39c), [`e8afc44`](https://github.com/mastra-ai/mastra/commit/e8afc44a41f24ffe8b8ae4a5ee27cfddbe7934a6), [`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`c2e02f1`](https://github.com/mastra-ai/mastra/commit/c2e02f181843cbda8db6fd893adce85edc0f8742), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`0c338b8`](https://github.com/mastra-ai/mastra/commit/0c338b87362dcd95ff8191ca00df645b6953f534), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/libsql@1.6.1
+  - @mastra/pg@1.6.1
+  - @mastra/memory@1.5.1
+  - @mastra/core@1.7.0
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added interactive onboarding flow for first-time setup ([#13421](https://github.com/mastra-ai/mastra/pull/13421))
+
+  **Setup wizard** — On first launch, an interactive wizard guides you through:
+  - Authenticating with AI providers (Claude Max, OpenAI Codex)
+  - Choosing a model pack (Varied, Anthropic, OpenAI, or Custom)
+  - Selecting an observational memory model
+  - Enabling or disabling YOLO mode (auto-approve tool calls)
+
+  **Global settings** — Your preferences are now saved to `settings.json` in the app data directory and automatically applied to new threads. Model pack selections reference pack IDs so you get new model versions automatically.
+
+  **Custom model packs** — Choose "Custom" to pick a specific model for each mode (plan/build/fast). Saved custom packs appear when re-running `/setup`.
+
+  **`/setup` command** — Re-run the setup wizard anytime. Previously chosen options are highlighted with "(current)" indicators.
+
+  **Settings migration** — Model-related data previously stored in `auth.json` (`_modelRanks`, `_modeModelId_*`, `_subagentModelId*`) is automatically migrated to `settings.json` on first load.
+
+- Added storage backend configuration to `/settings` with PostgreSQL opt-in and remote LibSQL support. ([#13435](https://github.com/mastra-ai/mastra/pull/13435))
+
+  **Selecting a backend**
+
+  Switch storage backends through the `/settings` command (Storage backend option) or by setting the `MASTRA_STORAGE_BACKEND` environment variable. LibSQL remains the default — no changes needed for existing setups. Both backends prompt for a connection URL interactively after selection.
+
+  **Remote LibSQL (Turso)**
+
+  Select LibSQL in `/settings` and enter a remote Turso URL (e.g. `libsql://your-db.turso.io`). Leave empty to keep the default local file database. Can also be set via environment variable:
+
+  ```sh
+  export MASTRA_DB_URL="libsql://your-db.turso.io"
+  export MASTRA_DB_AUTH_TOKEN="your-token"
+  ```
+
+  **PostgreSQL configuration**
+
+  Select PostgreSQL in `/settings` and enter a connection string, or configure via environment variables:
+
+  ```sh
+  export MASTRA_STORAGE_BACKEND=pg
+  export MASTRA_PG_CONNECTION_STRING="postgresql://user:pass@localhost:5432/db"
+  ```
+
+  If the PostgreSQL connection fails on startup, mastracode falls back to the local LibSQL database and shows a warning so you can fix the connection via `/settings`.
+
+  Optional PostgreSQL settings include `schemaName`, `disableInit`, and `skipDefaultIndexes`.
+
+- Added model name to Co-Authored-By in commit messages. Commits now include the active model (e.g. `Co-Authored-By: Mastra Code (anthropic/claude-opus-4-6) <noreply@mastra.ai>`) for traceability when switching between models. Falls back to the original static format when no model is set. ([#13376](https://github.com/mastra-ai/mastra/pull/13376))
+
+### Patch Changes
+
+- Fixed plan mode agent to properly call submit_plan tool. The agent was generating text descriptions instead of calling the tool. Fixed by: creating dynamic mode-specific tool guidance with correct tool names, clarifying tool vs text usage with explicit exceptions for communication tools, and strengthening submit_plan call instructions with urgent language and code examples. ([#13416](https://github.com/mastra-ai/mastra/pull/13416))
+
+- Updated `/cost` and `/diff` commands to read token usage, memory progress, and modified files from the Harness display state instead of maintaining separate local copies. Moved shared type definitions (`OMProgressState`, `OMStatus`, `OMBufferedStatus`) to `@mastra/core/harness` and re-exported them for backward compatibility. ([#13427](https://github.com/mastra-ai/mastra/pull/13427))
+
+- Exclude hidden files from directory listings ([#13384](https://github.com/mastra-ai/mastra/pull/13384))
+
+- Consolidated keyboard shortcuts and commands into a `/help` overlay. The header now shows a compact hint line (`⇧Tab mode · /help info & shortcuts`) instead of 3 lines of keybinding instructions. Running `/help` opens a styled overlay with all commands and shortcuts. ([#13426](https://github.com/mastra-ai/mastra/pull/13426))
+
+- Improved TUI maintainability by modularizing the main TUI class into focused modules: event handlers, command dispatchers, status line rendering, message rendering, error display, shell passthrough, and setup logic. Reduced the main TUI file from ~4,760 lines to 449 lines with no changes to user-facing behavior. ([#13413](https://github.com/mastra-ai/mastra/pull/13413))
+
+- Added styled ASCII art banner header to the TUI with purple gradient and project frontmatter display. The banner shows "MASTRA CODE" in block letters for wide terminals, "MASTRA" for medium terminals, and falls back to a compact single line for narrow terminals. Project info (name, resource ID, branch, user) now renders inside the TUI header instead of via console.info before startup. ([#13422](https://github.com/mastra-ai/mastra/pull/13422))
+
+- LSP now shows correct diagnostics for TypeScript and JavaScript files ([#13385](https://github.com/mastra-ai/mastra/pull/13385))
+
+- Updated dependencies [[`551dc24`](https://github.com/mastra-ai/mastra/commit/551dc2445ffb6efa05eb268e8ab700bcd34ed39c), [`e8afc44`](https://github.com/mastra-ai/mastra/commit/e8afc44a41f24ffe8b8ae4a5ee27cfddbe7934a6), [`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`c2e02f1`](https://github.com/mastra-ai/mastra/commit/c2e02f181843cbda8db6fd893adce85edc0f8742), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/libsql@1.6.1-alpha.0
+  - @mastra/pg@1.6.1-alpha.0
+  - @mastra/memory@1.5.1-alpha.0
+  - @mastra/core@1.7.0-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes

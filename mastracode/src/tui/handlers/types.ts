@@ -16,14 +16,12 @@ export interface EventHandlerContext {
     event: { error: Error; errorType?: string; retryable?: boolean; retryDelay?: number } | Error,
   ) => void;
   updateStatusLine: () => void;
-  resetStatusLineState: () => void;
   notify: (reason: NotificationReason, message?: string) => void;
   handleSlashCommand: (input: string) => Promise<boolean>;
   addUserMessage: (message: HarnessMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
   renderExistingMessages: () => Promise<void>;
-  syncOMThresholdsFromHarness: () => void;
   renderCompletedTasksInline: (tasks: TaskItem[], insertIndex?: number, collapsed?: boolean) => void;
   renderClearedTasksInline: (clearedTasks: TaskItem[], insertIndex?: number) => void;
   refreshModelAuthStatus: () => Promise<void>;

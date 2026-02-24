@@ -334,6 +334,234 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+// =============================================================================
+// Observational Memory Progress
+// =============================================================================
+
+/**
+ * Status of the Observational Memory system.
+ */
+export type OMStatus = 'idle' | 'observing' | 'reflecting';
+
+/**
+ * Status of a buffered OM operation (observation or reflection).
+ */
+export type OMBufferedStatus = 'idle' | 'running' | 'complete';
+
+/**
+ * Full progress state for Observational Memory.
+ * Maintained by the Harness and exposed via `HarnessDisplayState`.
+ */
+export interface OMProgressState {
+  status: OMStatus;
+  // Active window tokens/thresholds (from om_status events)
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  // Buffered state (from om_status events)
+  buffered: {
+    observations: {
+      status: OMBufferedStatus;
+      chunks: number;
+      messageTokens: number;
+      projectedMessageRemoval: number;
+      observationTokens: number;
+    };
+    reflection: {
+      status: OMBufferedStatus;
+      inputObservationTokens: number;
+      observationTokens: number;
+    };
+  };
+  generationCount: number;
+  stepNumber: number;
+  cycleId?: string;
+  startTime?: number;
+  /** Observation tokens before reflection compression (set on om_reflection_start) */
+  preReflectionTokens: number;
+}
+
+// =============================================================================
+// Display State
+// =============================================================================
+
+/**
+ * State of an active tool execution, tracked by the Harness for UI consumption.
+ */
+export interface ActiveToolState {
+  name: string;
+  args: unknown;
+  status: 'streaming_input' | 'running' | 'completed' | 'error';
+  partialResult?: string;
+  result?: unknown;
+  isError?: boolean;
+  shellOutput?: string;
+}
+
+/**
+ * State of an active subagent execution, tracked by the Harness for UI consumption.
+ */
+export interface ActiveSubagentState {
+  agentType: string;
+  task: string;
+  modelId?: string;
+  toolCalls: Array<{ name: string; isError: boolean }>;
+  textDelta: string;
+  status: 'running' | 'completed' | 'error';
+  durationMs?: number;
+  result?: string;
+}
+
+/**
+ * Canonical display state maintained by the Harness.
+ *
+ * This is the single source of truth for *what to display*.
+ * Any UI (TUI, web, desktop) can subscribe to snapshots of this state
+ * instead of interpreting 35+ raw event types.
+ *
+ * The Harness updates this state alongside every event emission,
+ * then emits a `display_state_changed` event so UIs can react.
+ */
+export interface HarnessDisplayState {
+  // ── Agent lifecycle ──────────────────────────────────────────────────
+  /** Whether an agent operation is currently in progress */
+  isRunning: boolean;
+
+  // ── Current streaming message ────────────────────────────────────────
+  /** The message currently being streamed (null when idle) */
+  currentMessage: HarnessMessage | null;
+
+  // ── Token usage ──────────────────────────────────────────────────────
+  /** Cumulative token usage for the current thread */
+  tokenUsage: TokenUsage;
+
+  // ── Tool execution tracking ──────────────────────────────────────────
+  /** Active tool executions keyed by toolCallId */
+  activeTools: Map<string, ActiveToolState>;
+
+  // ── Streaming tool input ─────────────────────────────────────────────
+  /** Partial JSON buffers for tools whose arguments are being streamed */
+  toolInputBuffers: Map<string, { text: string; toolName: string }>;
+
+  // ── Tool approval ────────────────────────────────────────────────────
+  /** A tool awaiting user approval (null when no approval pending) */
+  pendingApproval: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+  } | null;
+
+  // ── Interactive prompts ──────────────────────────────────────────────
+  /** A question from the agent awaiting user answer (null when none) */
+  pendingQuestion: {
+    questionId: string;
+    question: string;
+    options?: Array<{ label: string; description?: string }>;
+  } | null;
+
+  /** A plan awaiting user approval (null when none) */
+  pendingPlanApproval: {
+    planId: string;
+    title?: string;
+    plan: string;
+  } | null;
+
+  // ── Subagent tracking ────────────────────────────────────────────────
+  /** Active subagent executions keyed by parent toolCallId */
+  activeSubagents: Map<string, ActiveSubagentState>;
+
+  // ── Observational Memory ─────────────────────────────────────────────
+  /** Full OM progress state (status, tokens, thresholds, buffered) */
+  omProgress: OMProgressState;
+
+  /** Whether message buffering is currently running */
+  bufferingMessages: boolean;
+
+  /** Whether observation buffering is currently running */
+  bufferingObservations: boolean;
+
+  // ── File modifications ───────────────────────────────────────────────
+  /** Files modified by tool executions (for /diff and similar features) */
+  modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
+
+  // ── Tasks ────────────────────────────────────────────────────────────
+  /** Current task list (from task_write tool) */
+  tasks: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+
+  /** Previous task list snapshot (for diff detection) */
+  previousTasks: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+}
+
+/**
+ * Creates the default/initial `HarnessDisplayState`.
+ */
+export function defaultDisplayState(): HarnessDisplayState {
+  return {
+    isRunning: false,
+    currentMessage: null,
+    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    activeTools: new Map(),
+    toolInputBuffers: new Map(),
+    pendingApproval: null,
+    pendingQuestion: null,
+    pendingPlanApproval: null,
+    activeSubagents: new Map(),
+    omProgress: defaultOMProgressState(),
+    bufferingMessages: false,
+    bufferingObservations: false,
+    modifiedFiles: new Map(),
+    tasks: [],
+    previousTasks: [],
+  };
+}
+
+/**
+ * Creates the default OM progress state.
+ */
+export function defaultOMProgressState(): OMProgressState {
+  return {
+    status: 'idle',
+    pendingTokens: 0,
+    threshold: 30000,
+    thresholdPercent: 0,
+    observationTokens: 0,
+    reflectionThreshold: 40000,
+    reflectionThresholdPercent: 0,
+    buffered: {
+      observations: {
+        status: 'idle',
+        chunks: 0,
+        messageTokens: 0,
+        projectedMessageRemoval: 0,
+        observationTokens: 0,
+      },
+      reflection: {
+        status: 'idle',
+        inputObservationTokens: 0,
+        observationTokens: 0,
+      },
+    },
+    generationCount: 0,
+    stepNumber: 0,
+    preReflectionTokens: 0,
+  };
+}
+
+// =============================================================================
+// Events
+// =============================================================================
+
 /**
  * Events emitted by the harness that UIs can subscribe to.
  */
@@ -493,7 +721,8 @@ export type HarnessEvent =
         status: 'pending' | 'in_progress' | 'completed';
         activeForm: string;
       }>;
-    };
+    }
+  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
 /**
  * Listener function for harness events.
