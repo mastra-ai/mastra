@@ -320,6 +320,14 @@ export type { WorkspaceStatus } from './types';
  */
 export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
 
+/** A workspace entry in the Mastra registry, enriched with source metadata. */
+export interface RegisteredWorkspace {
+  workspace: Workspace;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+}
+
 // =============================================================================
 // Path Context Types
 // =============================================================================

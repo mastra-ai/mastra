@@ -95,7 +95,8 @@ describe('Workspace Registration', () => {
 
       const workspaces = mastra.listWorkspaces();
       expect(Object.keys(workspaces)).toHaveLength(1);
-      expect(workspaces['global-workspace']).toBe(workspace);
+      expect(workspaces['global-workspace']!.workspace).toBe(workspace);
+      expect(workspaces['global-workspace']!.source).toBe('mastra');
     });
   });
 
@@ -203,9 +204,9 @@ describe('Workspace Registration', () => {
 
       const workspaces = mastra.listWorkspaces();
       expect(Object.keys(workspaces)).toHaveLength(3);
-      expect(workspaces['workspace-1']).toBe(workspace1);
-      expect(workspaces['workspace-2']).toBe(workspace2);
-      expect(workspaces['workspace-3']).toBe(workspace3);
+      expect(workspaces['workspace-1']!.workspace).toBe(workspace1);
+      expect(workspaces['workspace-2']!.workspace).toBe(workspace2);
+      expect(workspaces['workspace-3']!.workspace).toBe(workspace3);
     });
 
     it('should return a copy of the registry', () => {
@@ -300,7 +301,7 @@ describe('Workspace Registration', () => {
       // Workspace should only be registered once
       const workspaces = mastra.listWorkspaces();
       expect(Object.keys(workspaces)).toHaveLength(1);
-      expect(workspaces['shared-workspace']).toBe(workspace);
+      expect(workspaces['shared-workspace']!.workspace).toBe(workspace);
     });
 
     it('should not fail when agent has no workspace', async () => {
@@ -350,8 +351,12 @@ describe('Workspace Registration', () => {
       // Both should be registered
       const workspaces = mastra.listWorkspaces();
       expect(Object.keys(workspaces)).toHaveLength(2);
-      expect(workspaces['global']).toBe(globalWorkspace);
-      expect(workspaces['agent']).toBe(agentWorkspace);
+      expect(workspaces['global']!.workspace).toBe(globalWorkspace);
+      expect(workspaces['global']!.source).toBe('mastra');
+      expect(workspaces['agent']!.workspace).toBe(agentWorkspace);
+      expect(workspaces['agent']!.source).toBe('agent');
+      expect(workspaces['agent']!.agentId).toBe('testAgent');
+      expect(workspaces['agent']!.agentName).toBe('Test Agent');
 
       // getWorkspace() should still return global
       expect(mastra.getWorkspace()).toBe(globalWorkspace);
@@ -456,7 +461,7 @@ describe('Workspace Registration', () => {
       // But workspace should only be registered once
       const workspaces = mastra.listWorkspaces();
       expect(Object.keys(workspaces)).toHaveLength(1);
-      expect(workspaces['reused-workspace']).toBe(workspace);
+      expect(workspaces['reused-workspace']!.workspace).toBe(workspace);
     });
   });
 });

@@ -907,7 +907,11 @@ export class Agent<
 
       // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
       if (this.#mastra) {
-        this.#mastra.addWorkspace(resolvedWorkspace);
+        this.#mastra.addWorkspace(resolvedWorkspace, undefined, {
+          source: 'agent',
+          agentId: this.id,
+          agentName: this.name,
+        });
       }
 
       return resolvedWorkspace;
@@ -1801,7 +1805,11 @@ export class Agent<
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
       workspace.__setLogger(this.logger);
-      this.#mastra.addWorkspace(workspace);
+      this.#mastra.addWorkspace(workspace, undefined, {
+        source: 'agent',
+        agentId: this.id,
+        agentName: this.name,
+      });
     }
   }
 

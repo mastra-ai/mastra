@@ -33,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { AnyWorkspace, Workspace } from '../workspace';
+import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -324,7 +324,7 @@ export class Mastra<
     new Map();
   #memory?: TMemory;
   #workspace?: Workspace;
-  #workspaces: Record<string, Workspace> = {};
+  #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -632,7 +632,7 @@ export class Mastra<
     if (config?.workspace) {
       this.#workspace = config.workspace;
       // Also register in the workspaces registry for direct lookup by ID
-      this.addWorkspace(config.workspace);
+      this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
     }
 
     if (config?.scorers) {
@@ -902,7 +902,11 @@ export class Mastra<
       Promise.resolve(mastraAgent.getWorkspace?.())
         .then(workspace => {
           if (workspace) {
-            this.addWorkspace(workspace);
+            this.addWorkspace(workspace, undefined, {
+              source: 'agent',
+              agentId: agentKey,
+              agentName: mastraAgent.name,
+            });
           }
         })
         .catch(err => {
@@ -1199,8 +1203,8 @@ export class Mastra<
    * ```
    */
   public getWorkspaceById(id: string): Workspace {
-    const workspace = this.#workspaces[id];
-    if (!workspace) {
+    const entry = this.#workspaces[id];
+    if (!entry) {
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
@@ -1215,7 +1219,7 @@ export class Mastra<
       this.#logger?.trackException(error);
       throw error;
     }
-    return workspace;
+    return entry.workspace;
   }
 
   /**
@@ -1229,7 +1233,7 @@ export class Mastra<
    * }
    * ```
    */
-  public listWorkspaces(): Record<string, Workspace> {
+  public listWorkspaces(): Record<string, RegisteredWorkspace> {
     return { ...this.#workspaces };
   }
 
@@ -1249,7 +1253,11 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: AnyWorkspace, key?: string): void {
+  public addWorkspace(
+    workspace: AnyWorkspace,
+    key?: string,
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+  ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }
@@ -1260,7 +1268,12 @@ export class Mastra<
       return;
     }
 
-    this.#workspaces[workspaceKey] = workspace;
+    this.#workspaces[workspaceKey] = {
+      workspace,
+      source: metadata?.source ?? 'mastra',
+      ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
+      ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+    };
   }
 
   /**
