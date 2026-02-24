@@ -33,11 +33,44 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     ),
 });
 
+/**
+ * Extract `| tail -N` or `| tail -n N` from the end of a command.
+ * LLMs are trained to pipe to tail for long outputs, but this prevents streaming —
+ * the user sees nothing until the command finishes. By stripping the tail pipe and
+ * applying it programmatically afterward, all output streams in real time while
+ * the final result sent to the model is still truncated.
+ *
+ * Returns the cleaned command and extracted tail line count (if any).
+ */
+function extractTailPipe(command: string): { command: string; tail?: number } {
+  const match = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
+  if (match) {
+    const lines = Math.abs(parseInt(match[1]!, 10));
+    if (lines > 0) {
+      return {
+        command: command.replace(/\|\s*tail\s+(?:-n\s+)?-?\d+\s*$/, '').trim(),
+        tail: lines,
+      };
+    }
+  }
+  return { command };
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  const { command, timeout, cwd, tail } = input;
+  let { command, timeout, cwd, tail } = input;
   const background = input.background as boolean | undefined;
   const { sandbox } = requireSandbox(context);
+
+  // Extract tail pipe from command so output can stream in real time
+  if (!background) {
+    const extracted = extractTailPipe(command);
+    command = extracted.command;
+    // Extracted tail overrides schema tail param (explicit pipe intent takes priority)
+    if (extracted.tail != null) {
+      tail = extracted.tail;
+    }
+  }
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
