@@ -50,7 +50,6 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
         const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
         if (defaultModel) {
           await ctx.state.harness.switchModel({ modelId: defaultModel });
-          ctx.updateStatusLine();
           ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
         } else {
           ctx.showInfo(`Successfully logged in to ${providerName}`);

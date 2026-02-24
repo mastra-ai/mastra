@@ -7,7 +7,6 @@
  * These handlers focus on UI component creation/removal.
  */
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessEvent, TokenUsage } from '@mastra/core/harness';
 
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
@@ -31,18 +30,6 @@ function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): vo
     }
   }
   state.chatContainer.addChild(child);
-}
-
-/**
- * Update the status line when token usage changes.
- * Token accumulation is handled by the Harness display state.
- */
-export function handleUsageUpdate(_ctx: EventHandlerContext, _usage: TokenUsage): void {
-  // Token accumulation and status line update handled by Harness display state
-}
-
-export function handleOMStatus(_ctx: EventHandlerContext, _event: Extract<HarnessEvent, { type: 'om_status' }>): void {
-  // All state updates handled by Harness applyDisplayStateUpdate
 }
 
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {

@@ -19,11 +19,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
       onYoloChange: async enabled => {
         await ctx.state.harness.setState({ yolo: enabled } as any);
-        ctx.updateStatusLine();
       },
       onThinkingLevelChange: async level => {
         await ctx.state.harness.setState({ thinkingLevel: level } as any);
-        ctx.updateStatusLine();
       },
       onEscapeAsCancelChange: async enabled => {
         ctx.state.editor.escapeEnabled = enabled;

@@ -87,7 +87,6 @@ export function handleToolApprovalRequired(
       } else if (action.type === 'yolo') {
         state.harness.setState({ yolo: true } as any);
         state.harness.respondToToolApproval({ decision: 'approve' });
-        ctx.updateStatusLine();
       } else {
         state.harness.respondToToolApproval({ decision: 'decline' });
       }

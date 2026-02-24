@@ -11,8 +11,6 @@ import {
   handleMessageStart,
   handleMessageUpdate,
   handleMessageEnd,
-  handleUsageUpdate,
-  handleOMStatus,
   handleOMObservationStart,
   handleOMObservationEnd,
   handleOMReflectionStart,
@@ -151,12 +149,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     }
 
     case 'usage_update':
-      handleUsageUpdate(ectx, event.usage);
+      // Token accumulation handled by Harness display state
       break;
 
     // Observational Memory events
     case 'om_status':
-      handleOMStatus(ectx, event);
+      // All state updates handled by Harness applyDisplayStateUpdate
       break;
 
     case 'om_observation_start':

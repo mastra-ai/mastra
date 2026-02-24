@@ -152,7 +152,6 @@ export class MastraTUI {
         if (this.state.pendingNewThread) {
           await this.state.harness.createThread();
           this.state.pendingNewThread = false;
-          updateStatusLine(this.state);
         }
 
         // Check if a model is selected
@@ -499,7 +498,6 @@ export class MastraTUI {
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.harness.switchModel({ modelId: defaultModel });
-            updateStatusLine(this.state);
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);

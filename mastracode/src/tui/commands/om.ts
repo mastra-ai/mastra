@@ -29,11 +29,9 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         },
         onObservationThresholdChange: value => {
           ctx.state.harness.setState({ observationThreshold: value } as any);
-          ctx.updateStatusLine();
         },
         onReflectionThresholdChange: value => {
           ctx.state.harness.setState({ reflectionThreshold: value } as any);
-          ctx.updateStatusLine();
         },
         onClose: () => {
           ctx.state.ui.hideOverlay();
