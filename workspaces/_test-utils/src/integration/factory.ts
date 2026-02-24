@@ -106,9 +106,13 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
         // absolute path on disk.  Without this, the generated path (e.g.
         // /int-test-xxx) would be treated as a host-root path by the sandbox
         // while the filesystem resolves it relative to basePath.
-        const fsBasePath = (workspace.filesystem as { basePath: string }).basePath;
-        const relativeBasePath = basePath.replace(/^[/\\]+/, '');
-        currentTestPath = join(fsBasePath, relativeBasePath);
+        const fsBasePath = (workspace.filesystem as { basePath?: unknown }).basePath;
+        if (typeof fsBasePath === 'string' && fsBasePath.length > 0) {
+          const relativeBasePath = basePath.replace(/^[/\\]+/, '');
+          currentTestPath = join(fsBasePath, relativeBasePath);
+        } else {
+          currentTestPath = basePath;
+        }
       } else {
         currentTestPath = basePath;
       }

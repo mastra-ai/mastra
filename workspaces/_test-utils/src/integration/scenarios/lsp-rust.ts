@@ -15,10 +15,10 @@ export function createLspRustTests(getContext: () => TestContext): void {
   describe('LSP Rust Diagnostics (rust-analyzer)', () => {
     it(
       'detects type errors in Rust files when rust-analyzer is available',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
@@ -39,7 +39,7 @@ export function createLspRustTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip: if rust-analyzer is not installed, getDiagnostics returns []
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
       },
@@ -48,10 +48,10 @@ export function createLspRustTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Rust when rust-analyzer is available',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'src', 'main.rs');
@@ -71,7 +71,7 @@ export function createLspRustTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip if rust-analyzer not available
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         const errors = diagnostics.filter(d => d.severity === 'error');
         expect(errors).toHaveLength(0);

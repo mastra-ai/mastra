@@ -19,13 +19,13 @@ export function createLspEslintTests(getContext: () => TestContext): void {
   describe('LSP ESLint Diagnostics', () => {
     it(
       'detects ESLint rule violations when ESLint language server is available',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -50,7 +50,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'lint-error.js'), content);
 
         // Graceful skip: if ESLint language server not available, returns []
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.message.toLowerCase().includes('var') || d.message.includes('no-var'))).toBe(
           true,
@@ -61,16 +61,16 @@ export function createLspEslintTests(getContext: () => TestContext): void {
 
     it(
       'getDiagnosticsMulti returns diagnostics from both TypeScript and ESLint servers',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         // getDiagnosticsMulti may not be available on all workspace types
-        if (!('getDiagnosticsMulti' in lsp)) return;
+        if (!('getDiagnosticsMulti' in lsp)) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -93,7 +93,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         const diagnostics: LSPDiagnostic[] = await lsp.getDiagnosticsMulti(join(testDir, 'multi.ts'), content);
 
         // Graceful skip if neither server is available
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         // Should have at least one diagnostic (could be TS type error, ESLint, or both)
         expect(diagnostics.length).toBeGreaterThan(0);

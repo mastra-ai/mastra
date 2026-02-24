@@ -15,10 +15,10 @@ export function createLspGoTests(getContext: () => TestContext): void {
   describe('LSP Go Diagnostics (gopls)', () => {
     it(
       'detects type errors in Go files when gopls is available',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'main.go');
@@ -34,7 +34,7 @@ export function createLspGoTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip: if gopls is not installed, getDiagnostics returns []
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
       },
@@ -43,10 +43,10 @@ export function createLspGoTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for valid Go when gopls is available',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'valid.go');
@@ -61,7 +61,7 @@ export function createLspGoTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip if gopls not available
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         const errors = diagnostics.filter(d => d.severity === 'error');
         expect(errors).toHaveLength(0);

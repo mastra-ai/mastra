@@ -267,27 +267,41 @@ describe('LSPManager', () => {
 
   describe('initialization timeout', () => {
     it('returns null when initialization times out', async () => {
-      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
-      // Make initialize hang longer than the timeout
-      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+      vi.useFakeTimers();
+      try {
+        const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+        // Make initialize hang — fake timers prevent a real 5s delay
+        mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-      const client = await timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        await vi.advanceTimersByTimeAsync(5000);
+        const client = await clientPromise;
 
-      expect(client).toBeNull();
-      await timeoutManager.shutdownAll();
+        expect(client).toBeNull();
+        await timeoutManager.shutdownAll();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('cleans up client after timeout', async () => {
-      const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
-      mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
+      vi.useFakeTimers();
+      try {
+        const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
+        mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-      await timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        await vi.advanceTimersByTimeAsync(5000);
+        await clientPromise;
 
-      // Subsequent call should attempt a fresh initialization
-      mockInitialize.mockResolvedValueOnce(undefined);
-      const client = await timeoutManager.getClient('/project/src/app.ts');
-      expect(client).not.toBeNull();
-      await timeoutManager.shutdownAll();
+        // Subsequent call should attempt a fresh initialization
+        mockInitialize.mockResolvedValueOnce(undefined);
+        const client = await timeoutManager.getClient('/project/src/app.ts');
+        expect(client).not.toBeNull();
+        await timeoutManager.shutdownAll();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('returns null when initialization throws', async () => {
@@ -505,15 +519,18 @@ describe('LSPManager', () => {
       const unhandledHandler = vi.fn();
       process.on('unhandledRejection', unhandledHandler);
 
-      mockWaitForDiagnostics.mockRejectedValueOnce(new Error('Connection lost'));
+      try {
+        mockWaitForDiagnostics.mockRejectedValueOnce(new Error('Connection lost'));
 
-      await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+        await manager.getDiagnostics('/project/src/app.ts', 'const x = 1');
 
-      // Give the event loop a tick to surface any unhandled rejections
-      await new Promise(resolve => setTimeout(resolve, 50));
+        // Give the event loop time to surface any unhandled rejections
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(unhandledHandler).not.toHaveBeenCalled();
-      process.removeListener('unhandledRejection', unhandledHandler);
+        expect(unhandledHandler).not.toHaveBeenCalled();
+      } finally {
+        process.removeListener('unhandledRejection', unhandledHandler);
+      }
     });
 
     it('returns empty array when waitForDiagnostics hangs past timeout', async () => {

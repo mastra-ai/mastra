@@ -33,17 +33,17 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'detects type errors in files outside workspace basePath',
-      async () => {
+      async (ctx) => {
         const { workspace, sandboxPathsAligned } = getContext();
 
         // Only meaningful when the filesystem can see absolute host paths
-        if (!sandboxPathsAligned) return;
+        if (!sandboxPathsAligned) return ctx.skip();
 
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         // Create a completely separate temp dir outside the workspace
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
@@ -64,16 +64,16 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
     it(
       'returns no errors for valid code in external project',
-      async () => {
+      async (ctx) => {
         const { workspace, sandboxPathsAligned } = getContext();
 
-        if (!sandboxPathsAligned) return;
+        if (!sandboxPathsAligned) return ctx.skip();
 
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
 

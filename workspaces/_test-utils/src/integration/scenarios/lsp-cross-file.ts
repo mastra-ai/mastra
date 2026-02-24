@@ -19,13 +19,13 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
   describe('LSP Cross-File Import Diagnostics', () => {
     it(
       'detects type errors across file imports',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -45,7 +45,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
         // Graceful skip: if TS server can't read math.ts from disk (remote FS),
         // diagnostics may be empty — test passes without assertions
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
         expect(diagnostics.some(d => d.message.includes('not assignable'))).toBe(true);
@@ -55,13 +55,13 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
     it(
       'returns no errors for correct cross-file import usage',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const fs = workspace.filesystem;
-        if (!fs) return;
+        if (!fs) return ctx.skip();
 
         const testDir = getTestPath();
 
@@ -78,7 +78,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 
         // Graceful skip if TS server can't resolve the import
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) return ctx.skip();
 
         const errors = diagnostics.filter(d => d.severity === 'error');
         expect(errors).toHaveLength(0);

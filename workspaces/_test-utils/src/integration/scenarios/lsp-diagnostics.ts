@@ -26,10 +26,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
   describe('LSP Diagnostics', () => {
     it(
       'reports type errors in TypeScript files',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return; // LSP not configured or deps unavailable
+        if (!lsp) return ctx.skip(); // LSP not configured or deps unavailable
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'error.ts');
@@ -55,10 +55,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'returns empty diagnostics for valid TypeScript',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'valid.ts');
@@ -80,10 +80,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'diagnostics include line and character positions',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'positions.ts');
@@ -109,10 +109,10 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
     it(
       'returns empty array for unsupported file types',
-      async () => {
+      async (ctx) => {
         const { workspace, getTestPath } = getContext();
         const lsp = workspace.lsp;
-        if (!lsp) return;
+        if (!lsp) return ctx.skip();
 
         const testDir = getTestPath();
         const filePath = join(testDir, 'readme.md');
