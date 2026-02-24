@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaNotFoundError } from '@daytonaio/sdk';
+import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
@@ -243,7 +243,8 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Start the Daytona sandbox.
-   * Creates a Daytona client and sandbox instance.
+   * Reconnects to an existing sandbox with the same logical ID if one exists,
+   * otherwise creates a new sandbox instance.
    */
   async start(): Promise<void> {
     if (this._sandbox) {
@@ -253,6 +254,15 @@ export class DaytonaSandbox extends MastraSandbox {
     // Create Daytona client if not exists
     if (!this._daytona) {
       this._daytona = new Daytona(this.connectionOpts);
+    }
+
+    // Try to reconnect to an existing sandbox with the same logical ID
+    const existing = await this.findExistingSandbox();
+    if (existing) {
+      this._sandbox = existing;
+      this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
+      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+      return;
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -395,6 +405,40 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Try to find and reconnect to an existing Daytona sandbox with the same
+   * logical ID (via the mastra-sandbox-id label). Returns the sandbox if
+   * found and usable, or null if a fresh sandbox should be created.
+   */
+  private async findExistingSandbox(): Promise<Sandbox | null> {
+    const DEAD_STATES: SandboxState[] = [
+      SandboxState.DESTROYED,
+      SandboxState.DESTROYING,
+      SandboxState.ERROR,
+      SandboxState.BUILD_FAILED,
+    ];
+
+    try {
+      const sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
+      const state = sandbox.state;
+
+      if (state && DEAD_STATES.includes(state)) {
+        this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), creating fresh`);
+        return null;
+      }
+
+      if (state !== SandboxState.STARTED) {
+        this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
+        await this._daytona!.start(sandbox);
+      }
+
+      return sandbox;
+    } catch {
+      // Not found or any error — create a fresh sandbox
+      return null;
+    }
+  }
 
   /**
    * Ensure the sandbox is started and return the Daytona Sandbox instance.

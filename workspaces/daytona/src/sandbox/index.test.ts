@@ -50,6 +50,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
   const mockDaytona = {
     create: vi.fn().mockResolvedValue(mockSandbox),
     get: vi.fn().mockResolvedValue(mockSandbox),
+    findOne: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     delete: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     start: vi.fn().mockResolvedValue(undefined),
@@ -59,6 +60,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
   const resetMockDefaults = () => {
     mockDaytona.create.mockResolvedValue(mockSandbox);
     mockDaytona.get.mockResolvedValue(mockSandbox);
+    mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
     mockDaytona.delete.mockResolvedValue(undefined);
     mockDaytona.stop.mockResolvedValue(undefined);
     mockDaytona.start.mockResolvedValue(undefined);
@@ -93,6 +95,15 @@ vi.mock('@daytonaio/sdk', () => ({
     return mockDaytona;
   }),
   DaytonaNotFoundError,
+  SandboxState: {
+    DESTROYED: 'destroyed',
+    DESTROYING: 'destroying',
+    STARTED: 'started',
+    STOPPED: 'stopped',
+    ERROR: 'error',
+    BUILD_FAILED: 'build_failed',
+    ARCHIVED: 'archived',
+  },
 }));
 
 describe('DaytonaSandbox', () => {
@@ -417,6 +428,72 @@ describe('DaytonaSandbox', () => {
         apiUrl: 'https://custom.api',
         target: 'eu',
       });
+    });
+  });
+
+  describe('Start - Reconnection', () => {
+    it('reconnects to an existing started sandbox without calling create', async () => {
+      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.findOne).toHaveBeenCalledWith({ labels: { 'mastra-sandbox-id': 'my-id' } });
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+    });
+
+    it('restarts a stopped sandbox and reconnects without calling create', async () => {
+      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'stopped' });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.start).toHaveBeenCalledTimes(1);
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+    });
+
+    it('restarts an archived sandbox and reconnects without calling create', async () => {
+      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'archived' });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.start).toHaveBeenCalledTimes(1);
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+    });
+
+    it('creates fresh sandbox when existing sandbox is in a dead state', async () => {
+      for (const state of ['destroyed', 'destroying', 'error', 'build_failed']) {
+        vi.clearAllMocks();
+        resetMockDefaults();
+        mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state });
+        const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+        await sandbox._start();
+
+        expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('creates fresh sandbox when no existing sandbox is found', async () => {
+      mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses createdAt from existing sandbox on reconnect', async () => {
+      const createdAt = '2024-01-15T10:00:00.000Z';
+      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+      const info = await sandbox.getInfo();
+
+      expect(info.createdAt).toEqual(new Date(createdAt));
     });
   });
 
@@ -932,7 +1009,7 @@ describe('DaytonaSandbox', () => {
       sandbox: conformanceSandbox as any,
       capabilities: {
         supportsMounting: false,
-        supportsReconnection: false,
+        supportsReconnection: true,
         supportsConcurrency: false,
         supportsEnvVars: true,
         supportsWorkingDirectory: true,

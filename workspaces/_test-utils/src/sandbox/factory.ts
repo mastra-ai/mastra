@@ -19,7 +19,7 @@ import type { SandboxTestConfig, SandboxCapabilities } from './types';
  */
 const DEFAULT_CAPABILITIES: Required<SandboxCapabilities> = {
   supportsMounting: false,
-  supportsReconnection: false,
+  supportsReconnection: true,
   supportsConcurrency: true,
   supportsEnvVars: true,
   supportsWorkingDirectory: true,

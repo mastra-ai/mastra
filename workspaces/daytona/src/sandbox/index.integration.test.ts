@@ -116,7 +116,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
       }),
     capabilities: {
       supportsMounting: false,
-      supportsReconnection: false,
+      supportsReconnection: true,
       supportsEnvVars: true,
       supportsWorkingDirectory: true,
       supportsTimeout: true,
