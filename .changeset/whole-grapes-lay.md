@@ -2,15 +2,14 @@
 '@mastra/core': minor
 ---
 
-Added local and cloud mount support to `LocalSandbox` so sandboxed commands can access mounted filesystems.
+**Added** local and cloud mounts in `LocalSandbox` so sandboxed commands can access mounted paths.
+**Improved** mount path resolution under the sandbox working directory and cleanup on stop/destroy.
+**Improved** workspace instructions to show the resolved mount location.
 
-- **Local mounts** use symlinks (no extra tools needed)
-- **S3 mounts** use s3fs-fuse (`apt install s3fs` on Linux, `brew install gromgit/fuse/s3fs-mac` + macFUSE on macOS)
-- **GCS mounts** use gcsfuse (`apt install gcsfuse` on Linux; macOS not officially supported)
+**Why:** Local sandboxes can now run commands against mounted data without manual path workarounds, aligning local behavior with cloud sandbox environments.
 
-Mount paths resolve under the sandbox's working directory and are automatically allowed by sandbox isolation. All mounts are cleaned up on stop/destroy. Workspace instructions show the resolved mount location so agents use correct paths in sandbox commands.
-
-When a required FUSE tool is not installed, the mount is marked `unavailable` with install guidance — filesystem methods still work, only sandbox process access is affected.
+**Platform notes**
+- S3/GCS mounts require host FUSE tools; if missing, mounts are marked unavailable with install guidance and only filesystem methods work.
 
 Related issues: COR-725, COR-554, COR-495.
 

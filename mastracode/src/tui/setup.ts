@@ -175,13 +175,13 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     .map(line => fg('muted', line as string))
     .join('\n');
 
-  const keyStyle = (k: string) => fg('accent', k);
   const sep = fg('dim', ' · ');
-  const instructions = [
-    `  ${keyStyle('Ctrl+C')} ${fg('muted', 'interrupt/clear')}${sep}${keyStyle('Ctrl+C×2')} ${fg('muted', 'exit')}`,
-    `  ${keyStyle('Enter')} ${fg('muted', 'while working → steer')}${sep}${keyStyle('Ctrl+F')} ${fg('muted', '→ queue follow-up')}`,
-    `  ${keyStyle('/')} ${fg('muted', 'commands')}${sep}${keyStyle('!')} ${fg('muted', 'shell')}${sep}${keyStyle('Ctrl+T')} ${fg('muted', 'thinking')}${sep}${keyStyle('Ctrl+E')} ${fg('muted', 'tools')}${state.harness.listModes().length > 1 ? `${sep}${keyStyle('⇧Tab')} ${fg('muted', 'mode')}` : ''}`,
-  ].join('\n');
+  const hintParts: string[] = [];
+  if (state.harness.listModes().length > 1) {
+    hintParts.push(`${fg('accent', '⇧+Tab')} ${fg('muted', 'cycle modes')}`);
+  }
+  hintParts.push(`${fg('accent', '/help')} ${fg('muted', 'info & shortcuts')}`);
+  const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(new Text(banner, 1, 0));
