@@ -167,7 +167,7 @@ jobs:
 
       - name: Check formatting
         working-directory: ./docs
-        run: prettier --check .
+        run: pnpm prettier --check .
 
       - name: Lint with remark
         working-directory: ./docs
