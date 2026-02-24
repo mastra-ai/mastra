@@ -49,10 +49,7 @@ function getCommands(modes: number): HelpEntry[] {
     cmds.push({ key: '/mode', description: 'Switch or list modes' });
   }
 
-  cmds.push(
-    { key: '/exit', description: 'Exit' },
-    { key: '/help', description: 'Show this help' },
-  );
+  cmds.push({ key: '/exit', description: 'Exit' }, { key: '/help', description: 'Show this help' });
 
   return cmds;
 }
@@ -74,10 +71,7 @@ function getShortcuts(modes: number): HelpEntry[] {
     shortcuts.push({ key: '⇧Tab', description: 'Cycle agent modes' });
   }
 
-  shortcuts.push(
-    { key: '/', description: 'Commands' },
-    { key: '!', description: 'Shell' },
-  );
+  shortcuts.push({ key: '/', description: 'Commands' }, { key: '!', description: 'Shell' });
 
   return shortcuts;
 }
