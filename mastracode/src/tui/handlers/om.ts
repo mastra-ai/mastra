@@ -37,13 +37,12 @@ function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): vo
  * Update the status line when token usage changes.
  * Token accumulation is handled by the Harness display state.
  */
-export function handleUsageUpdate(ctx: EventHandlerContext, _usage: TokenUsage): void {
-  ctx.updateStatusLine();
+export function handleUsageUpdate(_ctx: EventHandlerContext, _usage: TokenUsage): void {
+  // Token accumulation and status line update handled by Harness display state
 }
 
-export function handleOMStatus(ctx: EventHandlerContext, _event: Extract<HarnessEvent, { type: 'om_status' }>): void {
+export function handleOMStatus(_ctx: EventHandlerContext, _event: Extract<HarnessEvent, { type: 'om_status' }>): void {
   // All state updates handled by Harness applyDisplayStateUpdate
-  ctx.updateStatusLine();
 }
 
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {
@@ -55,7 +54,6 @@ export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: stri
     operationType: 'observation',
   });
   addChildBeforeStreaming(ctx, state.activeOMMarker);
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -90,7 +88,6 @@ export function handleOMObservationEnd(
     observationTokens,
   });
   addChildBeforeStreaming(ctx, outputComponent);
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -103,7 +100,6 @@ export function handleOMReflectionStart(ctx: EventHandlerContext, cycleId: strin
     operationType: 'reflection',
   });
   addChildBeforeStreaming(ctx, state.activeOMMarker);
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -139,8 +135,6 @@ export function handleOMReflectionEnd(
     tokensObserved: ds.omProgress.preReflectionTokens,
   });
   addChildBeforeStreaming(ctx, outputComponent);
-  // Revert spinner to "Working..."
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -163,7 +157,6 @@ export function handleOMFailed(
   } else {
     addChildBeforeStreaming(ctx, new OMMarkerComponent(failData));
   }
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -180,7 +173,6 @@ export function handleOMBufferingStart(
     tokensToBuffer,
   });
   addChildBeforeStreaming(ctx, state.activeBufferingMarker);
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -202,7 +194,6 @@ export function handleOMBufferingEnd(
     });
   }
   state.activeBufferingMarker = undefined;
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -220,7 +211,6 @@ export function handleOMBufferingFailed(
     });
   }
   state.activeBufferingMarker = undefined;
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -240,6 +230,5 @@ export function handleOMActivation(
   state.activeActivationMarker = new OMMarkerComponent(activationData);
   addChildBeforeStreaming(ctx, state.activeActivationMarker);
   state.activeBufferingMarker = undefined;
-  ctx.updateStatusLine();
   state.ui.requestRender();
 }

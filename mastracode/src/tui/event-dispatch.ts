@@ -122,11 +122,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
-      ectx.resetStatusLineState();
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
-      ectx.syncOMThresholdsFromHarness();
-      ectx.updateStatusLine();
       // Restore tasks from thread state
       const threadState = state.harness.getState() as {
         tasks?: TaskItem[];
@@ -150,7 +147,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.taskProgress.updateTasks([]);
       }
       state.taskWriteInsertIndex = -1;
-      ectx.updateStatusLine();
       break;
     }
 

@@ -17,7 +17,6 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
     });
   }
   state.gradientAnimator.start();
-  ctx.updateStatusLine();
 }
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
@@ -25,7 +24,6 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
 
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
@@ -53,7 +51,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
 
   // Update streaming message to show it was interrupted
   if (state.streamingComponent && state.streamingMessage) {
@@ -81,7 +78,6 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
-  ctx.updateStatusLine();
 
   if (state.streamingComponent) {
     state.streamingComponent = undefined;

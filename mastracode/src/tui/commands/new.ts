@@ -14,7 +14,7 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   }
   state.taskWriteInsertIndex = -1;
 
-  ctx.resetStatusLineState();
+  ctx.updateStatusLine();
   state.ui.requestRender();
   ctx.showInfo('Ready for new conversation');
 }

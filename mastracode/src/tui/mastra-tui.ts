@@ -262,11 +262,9 @@ export class MastraTUI {
     }
 
     // Load OM progress now that we're subscribed (the event during
-    // thread selection fired before we were listening)
+    // thread selection fired before we were listening).
+    // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
-
-    // Sync OM thresholds from thread metadata (may differ from OM defaults)
-    this.syncOMThresholdsFromHarness();
 
     // Start the UI
     this.state.ui.start();
@@ -313,20 +311,6 @@ export class MastraTUI {
   }
 
   // ===========================================================================
-  // Status Line Reset
-  // ===========================================================================
-
-  /**
-   * Sync OM status line from harness display state.
-   * Called after thread load — loadOMProgress() already propagates thresholds.
-   */
-  private syncOMThresholdsFromHarness(): void {
-    updateStatusLine(this.state);
-  }
-  private resetStatusLineState(): void {
-    updateStatusLine(this.state);
-  }
-
   /**
    * Insert a child into the chat container before any follow-up user messages.
    * If no follow-ups are pending, appends to end.
@@ -431,7 +415,6 @@ export class MastraTUI {
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       stop: () => this.stop(),
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
@@ -447,14 +430,12 @@ export class MastraTUI {
       showError: msg => showError(this.state, msg),
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       notify: (reason, message) => notify(this.state, reason, message),
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
       renderExistingMessages: () => renderExistingMessages(this.state),
-      syncOMThresholdsFromHarness: () => this.syncOMThresholdsFromHarness(),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
         renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
