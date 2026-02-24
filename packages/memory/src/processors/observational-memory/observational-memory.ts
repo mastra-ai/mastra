@@ -3325,8 +3325,13 @@ ${suggestedResponse}
     const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
+    omDebug(
+      `[OM:processInputStep:ENTER] step=${stepNumber}, hasMastraMemory=${!!requestContext?.get('MastraMemory')}, hasMemoryInfo=${!!messageList?.serialize()?.memoryInfo?.threadId}`,
+    );
+
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
+      omDebug(`[OM:processInputStep:NO-CONTEXT] getThreadContext returned null — returning early`);
       return messageList;
     }
 

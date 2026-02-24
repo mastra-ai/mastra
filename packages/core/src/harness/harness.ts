@@ -520,7 +520,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const thread: HarnessThread = {
       id: this.generateId(),
       resourceId: this.resourceId,
-      title: title || 'New Thread',
+      title: title || '',
       createdAt: now,
       updatedAt: now,
     };
@@ -2351,7 +2351,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
 
     if (this.workspaceFn) {
-      harnessContext.workspace = await Promise.resolve(this.workspaceFn({ requestContext }));
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
+      harnessContext.workspace = resolved;
+      // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
+      this.workspace = resolved;
     }
 
     return requestContext;
@@ -2391,6 +2394,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   getWorkspace(): Workspace | undefined {
     return this.workspace;
+  }
+
+  /**
+   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
+   * this triggers resolution and caches the result so getWorkspace() returns it.
+   * Useful for code paths outside the request flow (e.g. slash commands).
+   */
+  async resolveWorkspace(): Promise<Workspace | undefined> {
+    if (this.workspace) return this.workspace;
+    if (this.workspaceFn) {
+      // buildRequestContext resolves the workspace and caches it on this.workspace
+      await this.buildRequestContext();
+      return this.workspace;
+    }
+    return undefined;
   }
 
   hasWorkspace(): boolean {

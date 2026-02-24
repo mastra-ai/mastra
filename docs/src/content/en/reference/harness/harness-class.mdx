@@ -632,6 +632,52 @@ const category = harness.getToolCategory({ toolName: 'mastra_workspace_write_fil
 // 'edit'
 ```
 
+### Workspace
+
+#### `getWorkspace()`
+
+Return the current workspace instance, or `undefined` if no workspace is configured or it hasn't been resolved yet.
+
+```typescript
+const workspace = harness.getWorkspace()
+```
+
+#### `resolveWorkspace()`
+
+Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
+
+```typescript
+const workspace = await harness.resolveWorkspace()
+```
+
+#### `hasWorkspace()`
+
+Return whether a workspace is configured (static, config-based, or dynamic).
+
+```typescript
+if (harness.hasWorkspace()) {
+  const workspace = await harness.resolveWorkspace()
+}
+```
+
+#### `isWorkspaceReady()`
+
+Return whether the workspace is ready to use. For dynamic workspaces (factory function), always returns `true`. For static workspaces, returns `true` after `init()` succeeds.
+
+```typescript
+if (harness.isWorkspaceReady()) {
+  const workspace = harness.getWorkspace()
+}
+```
+
+#### `destroyWorkspace()`
+
+Destroy the workspace and release resources. Only applies to static workspaces — dynamic workspaces are not destroyed.
+
+```typescript
+await harness.destroyWorkspace()
+```
+
 ### Observational memory
 
 #### `loadOMProgress()`

@@ -1,5 +1,241 @@
 # @mastra/core
 
+## 1.7.0
+
+### Minor Changes
+
+- Added `getObservationalMemoryRecord()` method to the `Harness` class. Fixes #13392. ([#13395](https://github.com/mastra-ai/mastra/pull/13395))
+
+  This provides public access to the full `ObservationalMemoryRecord` for the current thread, including `activeObservations`, `generationCount`, and `observationTokenCount`. Previously, accessing raw observation text required bypassing the Harness abstraction by reaching into private storage internals.
+
+  ```typescript
+  const record = await harness.getObservationalMemoryRecord();
+  if (record) {
+    console.log(record.activeObservations);
+  }
+  ```
+
+- Added `Workspace.setToolsConfig()` method for dynamically updating per-tool configuration at runtime without recreating the workspace instance. Passing `undefined` re-enables all tools. ([#13439](https://github.com/mastra-ai/mastra/pull/13439))
+
+  ```ts
+  const workspace = new Workspace({ filesystem, sandbox });
+
+  // Disable write tools (e.g., in plan/read-only mode)
+  workspace.setToolsConfig({
+    mastra_workspace_write_file: { enabled: false },
+    mastra_workspace_edit_file: { enabled: false },
+  });
+
+  // Re-enable all tools
+  workspace.setToolsConfig(undefined);
+  ```
+
+- Added `HarnessDisplayState` so any UI can read a single state snapshot instead of handling 35+ individual events. ([#13427](https://github.com/mastra-ai/mastra/pull/13427))
+
+  **Why:** Previously, every UI (TUI, web, desktop) had to subscribe to dozens of granular Harness events and independently reconstruct what to display. This led to duplicated state tracking and inconsistencies across UI implementations. Now the Harness maintains a single canonical display state that any UI can read.
+
+  **Before:** UIs subscribed to raw events and built up display state locally:
+
+  ```ts
+  harness.subscribe((event) => {
+    if (event.type === 'agent_start') localState.isRunning = true;
+    if (event.type === 'agent_end') localState.isRunning = false;
+    if (event.type === 'tool_start') localState.tools.set(event.toolCallId, ...);
+    // ... 30+ more event types to handle
+  });
+  ```
+
+  **After:** UIs read a single snapshot from the Harness:
+
+  ```ts
+  import type { HarnessDisplayState } from '@mastra/core/harness';
+
+  harness.subscribe(event => {
+    const ds: HarnessDisplayState = harness.getDisplayState();
+    // ds.isRunning, ds.tokenUsage, ds.omProgress, ds.activeTools, etc.
+    renderUI(ds);
+  });
+  ```
+
+- Prompt blocks can now define their own variables schema (`requestContextSchema`), allowing you to create reusable prompt blocks with typed variable placeholders. The server now correctly computes and returns draft/published status for prompt blocks. Existing databases are automatically migrated when upgrading. ([#13351](https://github.com/mastra-ai/mastra/pull/13351))
+
+- **Workspace instruction improvements** ([#13304](https://github.com/mastra-ai/mastra/pull/13304))
+  - Added `Workspace.getInstructions()`: agents now receive accurate workspace context that distinguishes sandbox-accessible paths from workspace-only paths.
+  - Added `WorkspaceInstructionsProcessor`: workspace context is injected directly into the agent system message instead of embedded in tool descriptions.
+  - Deprecated `Workspace.getPathContext()` in favour of `getInstructions()`.
+
+  Added `instructions` option to `LocalFilesystem` and `LocalSandbox`. Pass a string to fully replace default instructions, or a function to extend them with access to the current `requestContext` for per-request customization (e.g. by tenant or locale).
+
+  ```typescript
+  const filesystem = new LocalFilesystem({
+    basePath: './workspace',
+    instructions: ({ defaultInstructions, requestContext }) => {
+      const locale = requestContext?.get('locale') ?? 'en';
+      return `${defaultInstructions}\nLocale: ${locale}`;
+    },
+  });
+  ```
+
+- Added background process management to workspace sandboxes. ([#13293](https://github.com/mastra-ai/mastra/pull/13293))
+
+  You can now spawn, monitor, and manage long-running background processes (dev servers, watchers, REPLs) inside sandbox environments.
+
+  ```typescript
+  // Spawn a background process
+  const handle = await sandbox.processes.spawn('node server.js');
+
+  // Stream output and wait for exit
+  const result = await handle.wait({
+    onStdout: data => console.log(data),
+  });
+
+  // List and manage running processes
+  const procs = await sandbox.processes.list();
+  await sandbox.processes.kill(handle.pid);
+  ```
+
+  - `SandboxProcessManager` abstract base class with `spawn()`, `list()`, `get(pid)`, `kill(pid)`
+  - `ProcessHandle` base class with stdout/stderr accumulation, streaming callbacks, and `wait()`
+  - `LocalProcessManager` implementation wrapping Node.js `child_process`
+  - Node.js stream interop via `handle.reader` / `handle.writer`
+  - Default `executeCommand` implementation built on process manager (spawn + wait)
+
+- Added workspace tools for background process management and improved sandbox execution UI. ([#13309](https://github.com/mastra-ai/mastra/pull/13309))
+  - `execute_command` now supports `background: true` to spawn long-running processes and return a PID
+  - New `get_process_output` tool to check output/status of background processes (supports `wait` to block until exit)
+  - New `kill_process` tool to terminate background processes
+  - Output truncation helpers with configurable tail lines
+  - Sandbox execution badge UI: terminal-style output display with streaming, exit codes, killed status, and workspace metadata
+
+### Patch Changes
+
+- Fixed agents-as-tools failing with OpenAI when using the model router. The auto-injected `resumeData` field (from `z.any()`) produced a JSON Schema without a `type` key, which OpenAI rejects. Tool schemas are now post-processed to ensure all properties have valid type information. ([#13326](https://github.com/mastra-ai/mastra/pull/13326))
+
+- Fixed `stopWhen` callback receiving empty `toolResults` on steps. `step.toolResults` now correctly reflects the tool results present in `step.content`. ([#13319](https://github.com/mastra-ai/mastra/pull/13319))
+
+- Added `hasJudge` metadata to scorer records so the studio can distinguish code-based scorers (e.g., textual-difference, content-similarity) from LLM-based scorers. This metadata is now included in all four score-saving paths: `runEvals`, scorer hooks, trace scoring, and dataset experiments. ([#13386](https://github.com/mastra-ai/mastra/pull/13386))
+
+- Fixed a bug where custom output processors could not emit stream events during final output processing. The `writer` object was always `undefined` when passed to output processors in the finish phase, preventing use cases like streaming moderation updates or custom UI events back to the client. ([#13454](https://github.com/mastra-ai/mastra/pull/13454))
+
+- Added per-file write locking to workspace tools (edit_file, write_file, ast_edit, delete). Concurrent tool calls targeting the same file are now serialized, preventing race conditions where parallel edits could silently overwrite each other. ([#13302](https://github.com/mastra-ai/mastra/pull/13302))
+
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Added `getObservationalMemoryRecord()` method to the `Harness` class. Fixes #13392. ([#13395](https://github.com/mastra-ai/mastra/pull/13395))
+
+  This provides public access to the full `ObservationalMemoryRecord` for the current thread, including `activeObservations`, `generationCount`, and `observationTokenCount`. Previously, accessing raw observation text required bypassing the Harness abstraction by reaching into private storage internals.
+
+  ```typescript
+  const record = await harness.getObservationalMemoryRecord();
+  if (record) {
+    console.log(record.activeObservations);
+  }
+  ```
+
+- Added `Workspace.setToolsConfig()` method for dynamically updating per-tool configuration at runtime without recreating the workspace instance. Passing `undefined` re-enables all tools. ([#13439](https://github.com/mastra-ai/mastra/pull/13439))
+
+  ```ts
+  const workspace = new Workspace({ filesystem, sandbox });
+
+  // Disable write tools (e.g., in plan/read-only mode)
+  workspace.setToolsConfig({
+    mastra_workspace_write_file: { enabled: false },
+    mastra_workspace_edit_file: { enabled: false },
+  });
+
+  // Re-enable all tools
+  workspace.setToolsConfig(undefined);
+  ```
+
+- Added `HarnessDisplayState` so any UI can read a single state snapshot instead of handling 35+ individual events. ([#13427](https://github.com/mastra-ai/mastra/pull/13427))
+
+  **Why:** Previously, every UI (TUI, web, desktop) had to subscribe to dozens of granular Harness events and independently reconstruct what to display. This led to duplicated state tracking and inconsistencies across UI implementations. Now the Harness maintains a single canonical display state that any UI can read.
+
+  **Before:** UIs subscribed to raw events and built up display state locally:
+
+  ```ts
+  harness.subscribe((event) => {
+    if (event.type === 'agent_start') localState.isRunning = true;
+    if (event.type === 'agent_end') localState.isRunning = false;
+    if (event.type === 'tool_start') localState.tools.set(event.toolCallId, ...);
+    // ... 30+ more event types to handle
+  });
+  ```
+
+  **After:** UIs read a single snapshot from the Harness:
+
+  ```ts
+  import type { HarnessDisplayState } from '@mastra/core/harness';
+
+  harness.subscribe(event => {
+    const ds: HarnessDisplayState = harness.getDisplayState();
+    // ds.isRunning, ds.tokenUsage, ds.omProgress, ds.activeTools, etc.
+    renderUI(ds);
+  });
+  ```
+
+- Prompt blocks can now define their own variables schema (`requestContextSchema`), allowing you to create reusable prompt blocks with typed variable placeholders. The server now correctly computes and returns draft/published status for prompt blocks. Existing databases are automatically migrated when upgrading. ([#13351](https://github.com/mastra-ai/mastra/pull/13351))
+
+- **Workspace instruction improvements** ([#13304](https://github.com/mastra-ai/mastra/pull/13304))
+  - Added `Workspace.getInstructions()`: agents now receive accurate workspace context that distinguishes sandbox-accessible paths from workspace-only paths.
+  - Added `WorkspaceInstructionsProcessor`: workspace context is injected directly into the agent system message instead of embedded in tool descriptions.
+  - Deprecated `Workspace.getPathContext()` in favour of `getInstructions()`.
+
+  Added `instructions` option to `LocalFilesystem` and `LocalSandbox`. Pass a string to fully replace default instructions, or a function to extend them with access to the current `requestContext` for per-request customization (e.g. by tenant or locale).
+
+  ```typescript
+  const filesystem = new LocalFilesystem({
+    basePath: './workspace',
+    instructions: ({ defaultInstructions, requestContext }) => {
+      const locale = requestContext?.get('locale') ?? 'en';
+      return `${defaultInstructions}\nLocale: ${locale}`;
+    },
+  });
+  ```
+
+- Added background process management to workspace sandboxes. ([#13293](https://github.com/mastra-ai/mastra/pull/13293))
+
+  You can now spawn, monitor, and manage long-running background processes (dev servers, watchers, REPLs) inside sandbox environments.
+
+  ```typescript
+  // Spawn a background process
+  const handle = await sandbox.processes.spawn('node server.js');
+
+  // Stream output and wait for exit
+  const result = await handle.wait({
+    onStdout: data => console.log(data),
+  });
+
+  // List and manage running processes
+  const procs = await sandbox.processes.list();
+  await sandbox.processes.kill(handle.pid);
+  ```
+
+  - `SandboxProcessManager` abstract base class with `spawn()`, `list()`, `get(pid)`, `kill(pid)`
+  - `ProcessHandle` base class with stdout/stderr accumulation, streaming callbacks, and `wait()`
+  - `LocalProcessManager` implementation wrapping Node.js `child_process`
+  - Node.js stream interop via `handle.reader` / `handle.writer`
+  - Default `executeCommand` implementation built on process manager (spawn + wait)
+
+- Added workspace tools for background process management and improved sandbox execution UI. ([#13309](https://github.com/mastra-ai/mastra/pull/13309))
+  - `execute_command` now supports `background: true` to spawn long-running processes and return a PID
+  - New `get_process_output` tool to check output/status of background processes (supports `wait` to block until exit)
+  - New `kill_process` tool to terminate background processes
+  - Output truncation helpers with configurable tail lines
+  - Sandbox execution badge UI: terminal-style output display with streaming, exit codes, killed status, and workspace metadata
+
+### Patch Changes
+
+- Fixed agents-as-tools failing with OpenAI when using the model router. The auto-injected `resumeData` field (from `z.any()`) produced a JSON Schema without a `type` key, which OpenAI rejects. Tool schemas are now post-processed to ensure all properties have valid type information. ([#13326](https://github.com/mastra-ai/mastra/pull/13326))
+
+- Fixed `stopWhen` callback receiving empty `toolResults` on steps. `step.toolResults` now correctly reflects the tool results present in `step.content`. ([#13319](https://github.com/mastra-ai/mastra/pull/13319))
+
+- Added `hasJudge` metadata to scorer records so the studio can distinguish code-based scorers (e.g., textual-difference, content-similarity) from LLM-based scorers. This metadata is now included in all four score-saving paths: `runEvals`, scorer hooks, trace scoring, and dataset experiments. ([#13386](https://github.com/mastra-ai/mastra/pull/13386))
+
+- Added per-file write locking to workspace tools (edit_file, write_file, ast_edit, delete). Concurrent tool calls targeting the same file are now serialized, preventing race conditions where parallel edits could silently overwrite each other. ([#13302](https://github.com/mastra-ai/mastra/pull/13302))
+
 ## 1.6.0
 
 ### Minor Changes

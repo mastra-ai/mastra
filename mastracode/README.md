@@ -34,25 +34,73 @@ On first launch, an interactive onboarding wizard guides you through:
 
 You can re-run setup anytime with `/setup`.
 
+## Prerequisites
+
+### Optional: `fd` for file autocomplete
+
+The `@` file autocomplete feature uses [`fd`](https://github.com/sharkdp/fd), a fast file finder that respects `.gitignore`. Without it, `@` autocomplete silently does nothing.
+
+Install with your package manager:
+
+```bash
+# macOS
+brew install fd
+
+# Ubuntu/Debian
+sudo apt install fd-find
+
+# Arch
+sudo pacman -S fd
+```
+
+On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` and `fdfind` automatically.
+
 ## Usage
 
 ### Starting a conversation
 
-Simply type your message and press Enter. The agent will respond with streaming text.
+Type your message and press Enter. The agent responds with streaming text.
+
+### `@` file references
+
+Type `@` followed by a partial filename to fuzzy-search project files and reference them in your message. This requires `fd` to be installed (see [Prerequisites](#prerequisites)).
+
+- `@setup` — fuzzy-matches files like `setup.ts`, `setup.py`, etc.
+- `@src/tui` — scoped search within a directory
+- `@"path with spaces"` — quoted form for paths containing spaces
+
+Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command    | Description                               |
-| ---------- | ----------------------------------------- |
-| `/new`     | Start a new conversation thread           |
-| `/threads` | List all threads for this project         |
-| `/models`  | Select a different AI model               |
-| `/cost`    | Show token usage for current conversation |
-| `/login`   | Authenticate with OAuth providers         |
-| `/logout`  | Log out from a provider                   |
-| `/setup`   | Re-run the interactive setup wizard       |
-| `/help`    | Show available commands                   |
-| `/exit`    | Exit the TUI                              |
+| Command           | Description                                  |
+| ----------------- | -------------------------------------------- |
+| `/new`            | Start a new conversation thread              |
+| `/threads`        | List and switch between threads              |
+| `/models`         | Configure model (global/thread/mode)         |
+| `/models:pack`    | Switch model pack                            |
+| `/mode`           | Switch agent mode                            |
+| `/subagents`      | Configure subagent model defaults            |
+| `/om`             | Configure Observational Memory models        |
+| `/think`          | Set thinking level (Anthropic)               |
+| `/skills`         | List available skills                        |
+| `/diff`           | Show modified files or git diff              |
+| `/name`           | Rename current thread                        |
+| `/cost`           | Show token usage and estimated costs         |
+| `/review`         | Review a GitHub pull request                 |
+| `/hooks`          | Show/reload configured hooks                 |
+| `/mcp`            | Show/reload MCP server connections           |
+| `/sandbox`        | Manage allowed paths (add/remove dirs)       |
+| `/permissions`    | View/manage tool approval permissions        |
+| `/settings`       | General settings (notifications, YOLO, etc.) |
+| `/yolo`           | Toggle YOLO mode (auto-approve all tools)    |
+| `/resource`       | Show/switch resource ID (tag for sharing)    |
+| `/thread:tag-dir` | Tag current thread with this directory       |
+| `/login`          | Authenticate with OAuth providers            |
+| `/logout`         | Log out from a provider                      |
+| `/setup`          | Re-run the interactive setup wizard          |
+| `/help`           | Show available commands                      |
+| `/exit`           | Exit the TUI                                 |
 
 ### Keyboard shortcuts
 
