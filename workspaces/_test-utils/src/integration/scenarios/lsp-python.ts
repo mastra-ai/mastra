@@ -26,10 +26,7 @@ export function createLspPythonTests(getContext: () => TestContext): void {
         const fs = workspace.filesystem;
         if (fs) {
           // Write a minimal pyproject.toml so walkUpAsync finds a project root
-          await fs.writeFile(
-            join(testDir, 'pyproject.toml'),
-            '[project]\nname = "test"\nversion = "0.1.0"\n',
-          );
+          await fs.writeFile(join(testDir, 'pyproject.toml'), '[project]\nname = "test"\nversion = "0.1.0"\n');
         }
 
         const content = 'x: int = "hello"';
@@ -57,10 +54,7 @@ export function createLspPythonTests(getContext: () => TestContext): void {
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'pyproject.toml'),
-            '[project]\nname = "test"\nversion = "0.1.0"\n',
-          );
+          await fs.writeFile(join(testDir, 'pyproject.toml'), '[project]\nname = "test"\nversion = "0.1.0"\n');
         }
 
         const content = 'x: int = 42';

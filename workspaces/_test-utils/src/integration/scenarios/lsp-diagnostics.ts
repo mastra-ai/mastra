@@ -38,10 +38,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
         // can find the project root on any provider (local, S3, GCS).
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = "hello";';
@@ -68,10 +65,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = 42;';
@@ -96,10 +90,7 @@ export function createLspDiagnosticsTests(getContext: () => TestContext): void {
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const content = 'const x: number = "hello";';

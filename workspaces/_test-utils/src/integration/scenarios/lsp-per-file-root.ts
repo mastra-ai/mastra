@@ -49,16 +49,10 @@ export function createLspPerFileRootTests(getContext: () => TestContext): void {
         );
 
         // Get diagnostics for a type error in project-a
-        const diagsA = await lsp.getDiagnostics(
-          join(testDir, 'project-a', 'error.ts'),
-          'const x: number = "hello";',
-        );
+        const diagsA = await lsp.getDiagnostics(join(testDir, 'project-a', 'error.ts'), 'const x: number = "hello";');
 
         // Get diagnostics for a type error in project-b
-        const diagsB = await lsp.getDiagnostics(
-          join(testDir, 'project-b', 'error.ts'),
-          'const y: number = "world";',
-        );
+        const diagsB = await lsp.getDiagnostics(join(testDir, 'project-b', 'error.ts'), 'const y: number = "world";');
 
         // Both should report at least one type error — proves separate LSP roots resolved
         expect(diagsA.length).toBeGreaterThan(0);

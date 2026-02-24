@@ -30,10 +30,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
 
         // Write tsconfig.json so the TS server knows this is a project
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         // Write the dependency file to disk — the TS server reads this to resolve imports
         await fs.writeFile(
@@ -42,11 +39,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         );
 
         // Import add() and call it with a wrong argument type
-        const content = [
-          'import { add } from "./math";',
-          '',
-          'const result = add(1, "hello");',
-        ].join('\n');
+        const content = ['import { add } from "./math";', '', 'const result = add(1, "hello");'].join('\n');
 
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 
@@ -72,10 +65,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
         const testDir = getTestPath();
 
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         await fs.writeFile(
           join(testDir, 'math.ts'),
@@ -83,11 +73,7 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         );
 
         // Correct usage — both arguments are numbers
-        const content = [
-          'import { add } from "./math";',
-          '',
-          'const result = add(1, 2);',
-        ].join('\n');
+        const content = ['import { add } from "./math";', '', 'const result = add(1, 2);'].join('\n');
 
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 

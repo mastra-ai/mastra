@@ -38,10 +38,7 @@ export function createLspLargeFileTests(getContext: () => TestContext): void {
 
         const fs = workspace.filesystem;
         if (fs) {
-          await fs.writeFile(
-            join(testDir, 'tsconfig.json'),
-            JSON.stringify({ compilerOptions: { strict: true } }),
-          );
+          await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
         }
 
         const errorLine = 400;

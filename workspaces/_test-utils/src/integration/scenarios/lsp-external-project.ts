@@ -50,10 +50,7 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
 
         // Write tsconfig.json in the external dir — walkUpAsync should find it
-        await fs.writeFile(
-          join(externalDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(externalDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         const content = 'const x: number = "hello";';
 
@@ -81,10 +78,7 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
         externalDir = mkdtempSync(join(tmpdir(), 'ws-external-project-'));
 
-        await fs.writeFile(
-          join(externalDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(externalDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         const content = 'const x: number = 42;';
 

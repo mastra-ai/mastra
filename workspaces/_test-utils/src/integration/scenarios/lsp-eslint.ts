@@ -37,22 +37,11 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         // ESLint flat config with no-var rule
         await fs.writeFile(
           join(testDir, 'eslint.config.js'),
-          [
-            'export default [',
-            '  {',
-            '    rules: {',
-            '      "no-var": "error",',
-            '    },',
-            '  },',
-            '];',
-          ].join('\n'),
+          ['export default [', '  {', '    rules: {', '      "no-var": "error",', '    },', '  },', '];'].join('\n'),
         );
 
         // Write tsconfig so TS server also resolves this directory
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         // Code that violates no-var
         const content = 'var x = 1;\n';
@@ -85,10 +74,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         const testDir = getTestPath();
 
         // Set up both TS and ESLint project markers
-        await fs.writeFile(
-          join(testDir, 'tsconfig.json'),
-          JSON.stringify({ compilerOptions: { strict: true } }),
-        );
+        await fs.writeFile(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
 
         await fs.writeFile(
           join(testDir, 'package.json'),
@@ -97,15 +83,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
 
         await fs.writeFile(
           join(testDir, 'eslint.config.js'),
-          [
-            'export default [',
-            '  {',
-            '    rules: {',
-            '      "no-var": "error",',
-            '    },',
-            '  },',
-            '];',
-          ].join('\n'),
+          ['export default [', '  {', '    rules: {', '      "no-var": "error",', '    },', '  },', '];'].join('\n'),
         );
 
         // Code with both a type error (TS) and a lint error (ESLint no-var)

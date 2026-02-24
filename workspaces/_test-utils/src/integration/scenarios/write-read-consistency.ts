@@ -129,7 +129,10 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
 
         // Write via sandbox (same path — mountPath baked into getTestPath)
         // Use printf instead of echo -n for POSIX portability (macOS sh prints -n literally)
-        const writeResult = await workspace.sandbox.executeCommand('sh', ['-c', `printf '%s' "${content}" > ${filePath}`]);
+        const writeResult = await workspace.sandbox.executeCommand('sh', [
+          '-c',
+          `printf '%s' "${content}" > ${filePath}`,
+        ]);
         expect(writeResult.exitCode).toBe(0);
 
         // Poll via API until consistent (FUSE caching may cause delay)
