@@ -1,6 +1,6 @@
 ---
 title: "Configuration | Mastra Code"
-description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
+description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, storage backends (LibSQL and PostgreSQL), and environment variables."
 packages:
   - "mastracode"
 ---
@@ -205,11 +205,26 @@ For global instructions (first match wins):
 
 `AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
 
-## Database
+## Storage
 
-Mastra Code uses LibSQL (SQLite) for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
+Mastra Code uses a pluggable storage backend for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
 
-### Database location
+### Storage backends
+
+| Backend | Package | Description |
+| - | - | - |
+| **LibSQL** (default) | `@mastra/libsql` | Local SQLite file or remote Turso database. Zero configuration required. |
+| **PostgreSQL** | `@mastra/pg` | Remote PostgreSQL server. Opt-in via `/settings` or environment variables. |
+
+LibSQL is the default backend. No setup is needed — Mastra Code creates a local database file automatically.
+
+### Selecting a backend
+
+The quickest way to switch backends is through the `/settings` command in Mastra Code. Open `/settings` and change **Storage backend** to PostgreSQL. The change takes effect after a restart.
+
+You can also set the backend through environment variables or the global settings file. See [storage config resolution](#storage-config-resolution) for the full priority order.
+
+### LibSQL configuration
 
 By default, the database is stored in the platform-specific app data directory:
 
@@ -218,8 +233,6 @@ By default, the database is stored in the platform-specific app data directory:
 | macOS | `~/Library/Application Support/mastracode/mastra.db` |
 | Linux | `~/.local/share/mastracode/mastra.db` |
 | Windows | `%APPDATA%/mastracode/mastra.db` |
-
-### Remote database
 
 Connect to a remote Turso database for cross-device thread sharing:
 
@@ -230,14 +243,68 @@ Connect to a remote Turso database for cross-device thread sharing:
 }
 ```
 
-### Database config resolution
+Or use environment variables:
+
+```sh
+export MASTRA_DB_URL="libsql://your-db.turso.io"
+export MASTRA_DB_AUTH_TOKEN="your-auth-token"
+```
+
+### PostgreSQL configuration
+
+To use PostgreSQL, set the backend to `pg` and provide connection details.
+
+**With a connection string:**
+
+```sh
+export MASTRA_STORAGE_BACKEND=pg
+export MASTRA_PG_CONNECTION_STRING="postgresql://user:password@localhost:5432/mastracode"
+```
+
+**With individual parameters:**
+
+```sh
+export MASTRA_STORAGE_BACKEND=pg
+export MASTRA_PG_HOST=localhost
+export MASTRA_PG_PORT=5432
+export MASTRA_PG_DATABASE=mastracode
+export MASTRA_PG_USER=postgres
+export MASTRA_PG_PASSWORD=secret
+```
+
+**Optional PostgreSQL settings:**
+
+| Variable | Description |
+| - | - |
+| `MASTRA_PG_SCHEMA_NAME` | PostgreSQL schema name (default: `public`) |
+
+You can also configure PostgreSQL through the global settings file at `~/Library/Application Support/mastracode/settings.json` (macOS):
+
+```json
+{
+  "storage": {
+    "backend": "pg",
+    "pg": {
+      "connectionString": "postgresql://user:password@localhost:5432/mastracode"
+    }
+  }
+}
+```
+
+The `pg` block supports all connection fields: `connectionString`, `host`, `port`, `database`, `user`, `password`, `schemaName`, `disableInit`, and `skipDefaultIndexes`.
+
+### Storage config resolution
 
 | Priority | Source |
 | - | - |
-| 1 | `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` environment variables |
-| 2 | `.mastracode/database.json` (project) |
-| 3 | `~/.mastracode/database.json` (global) |
-| 4 | Local file database (default) |
+| 1 | `MASTRA_STORAGE_BACKEND` + backend-specific environment variables |
+| 2 | Global settings (`settings.json` → `storage` block) |
+| 3 | `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` environment variables (LibSQL only) |
+| 4 | `.mastracode/database.json` (project, LibSQL only) |
+| 5 | `~/.mastracode/database.json` (global, LibSQL only) |
+| 6 | Local LibSQL file database (default) |
+
+When `MASTRA_STORAGE_BACKEND` is set to `pg`, Mastra Code reads `MASTRA_PG_CONNECTION_STRING` or `MASTRA_PG_HOST`/`PORT`/`DATABASE`/`USER`/`PASSWORD` for connection details. If the backend isn't explicitly set, Mastra Code defaults to LibSQL.
 
 ## Observational memory
 
@@ -273,9 +340,17 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 
 | Variable | Description |
 | - | - |
+| `MASTRA_STORAGE_BACKEND` | Storage backend: `libsql` (default) or `pg` |
 | `MASTRA_DB_URL` | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
 | `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database |
 | `MASTRA_DB_PATH` | Override the local database file path |
+| `MASTRA_PG_CONNECTION_STRING` | PostgreSQL connection string (e.g., `postgresql://user:pass@host:5432/db`) |
+| `MASTRA_PG_HOST` | PostgreSQL host (alternative to connection string) |
+| `MASTRA_PG_PORT` | PostgreSQL port (default: `5432`) |
+| `MASTRA_PG_DATABASE` | PostgreSQL database name |
+| `MASTRA_PG_USER` | PostgreSQL user |
+| `MASTRA_PG_PASSWORD` | PostgreSQL password |
+| `MASTRA_PG_SCHEMA_NAME` | PostgreSQL schema name (default: `public`) |
 | `MASTRA_USER_ID` | Override the auto-detected user identity |
 | `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
 | `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
