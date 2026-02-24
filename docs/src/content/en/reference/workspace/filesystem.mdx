@@ -364,7 +364,7 @@ interface FilesystemInfo {
 
 ### `getInstructions()`
 
-Get a description of how this filesystem works. Used in tool descriptions to help agents understand path semantics.
+Returns a description of how this filesystem works. Injected into the agent's system message when the workspace is assigned to an agent.
 
 ```typescript
 const instructions = filesystem.getInstructions?.()
