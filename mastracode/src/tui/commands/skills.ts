@@ -1,7 +1,13 @@
 import type { SlashCommandContext } from './types.js';
 
 export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<void> {
-  const workspace = ctx.getResolvedWorkspace();
+  // Eagerly resolve the workspace so /skills works before any message is sent.
+  // The harness uses a dynamic workspace function that is normally only invoked
+  // during sendMessage(); resolveWorkspace() triggers it on demand.
+  let workspace = ctx.getResolvedWorkspace();
+  if (!workspace) {
+    workspace = await ctx.harness.resolveWorkspace();
+  }
   if (!workspace?.skills) {
     ctx.showInfo(
       'No skills configured.\n\n' +

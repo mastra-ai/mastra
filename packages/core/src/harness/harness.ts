@@ -1928,7 +1928,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
 
     if (this.workspaceFn) {
-      harnessContext.workspace = await Promise.resolve(this.workspaceFn({ requestContext }));
+      if (!this.workspace) {
+        this.workspace = await Promise.resolve(this.workspaceFn({ requestContext }));
+      }
+      harnessContext.workspace = this.workspace;
     }
 
     return requestContext;
@@ -1967,6 +1970,33 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // ===========================================================================
 
   getWorkspace(): Workspace | undefined {
+    return this.workspace;
+  }
+
+  /**
+   * Eagerly resolve the workspace, invoking the dynamic workspace function
+   * if one was provided. This allows callers (e.g. slash commands) to access
+   * the workspace without requiring an active agent request.
+   *
+   * The resolved workspace is cached so subsequent calls and agent requests
+   * reuse the same instance.
+   */
+  async resolveWorkspace(): Promise<Workspace | undefined> {
+    // Already resolved — return cached instance
+    if (this.workspace) {
+      return this.workspace;
+    }
+
+    // No workspace configured at all
+    if (!this.workspaceFn) {
+      return undefined;
+    }
+
+    // Build a minimal request context so the workspace function can read harness state
+    const requestContext = await this.buildRequestContext();
+    const harnessCtx = requestContext.get('harness') as HarnessRequestContext<TState> | undefined;
+    this.workspace = harnessCtx?.workspace;
+
     return this.workspace;
   }
 
