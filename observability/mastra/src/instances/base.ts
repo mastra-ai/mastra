@@ -322,6 +322,47 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return this.observabilityBus;
   }
 
+  // ============================================================================
+  // Context-factory bridge methods
+  // ============================================================================
+
+  /**
+   * Get a LoggerContext correlated to a span.
+   * Called by the context-factory in core (deriveLoggerContext) so that
+   * `observabilityContext.loggerVNext` is a real logger instead of no-op.
+   */
+  getLoggerContext(span?: AnySpan): LoggerContext {
+    return new LoggerContextImpl({
+      currentSpan: span,
+      observabilityBus: this.observabilityBus,
+    });
+  }
+
+  /**
+   * Get a MetricsContext, optionally tagged from a span's entity info.
+   * Called by the context-factory in core (deriveMetricsContext) so that
+   * `observabilityContext.metrics` is a real metrics context instead of no-op.
+   */
+  getMetricsContext(span?: AnySpan): MetricsContext {
+    const baseLabels: Record<string, string> = {};
+    if (span?.entityType) baseLabels.entity_type = span.entityType;
+    if (span?.entityName) baseLabels.entity_name = span.entityName;
+
+    const context: Record<string, unknown> = {};
+    if (this.config.serviceName) context.serviceName = this.config.serviceName;
+
+    return new MetricsContextImpl({
+      baseLabels,
+      observabilityBus: this.observabilityBus,
+      cardinalityFilter: this.cardinalityFilter,
+      context,
+    });
+  }
+
+  // ============================================================================
+  // Direct context creation methods
+  // ============================================================================
+
   /**
    * Create a LoggerContext for a given TracingContext.
    * Logs emitted through this context are automatically correlated with
