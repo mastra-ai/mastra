@@ -29,15 +29,15 @@ describe('buildHelpText', () => {
     expect(text).toContain('Ctrl+Z');
   });
 
-  it('shows ⇧Tab and /mode when multiple modes', () => {
+  it('shows ⇧+Tab and /mode when multiple modes', () => {
     const text = buildHelpText({ ...baseOpts, modes: 3 });
-    expect(text).toContain('⇧Tab');
+    expect(text).toContain('⇧+Tab');
     expect(text).toMatch(/\/mode\s+Switch/);
   });
 
-  it('hides ⇧Tab and /mode when single mode', () => {
+  it('hides ⇧+Tab and /mode when single mode', () => {
     const text = buildHelpText(baseOpts);
-    expect(text).not.toContain('⇧Tab');
+    expect(text).not.toContain('⇧+Tab');
     expect(text).not.toMatch(/\/mode\s+Switch/);
   });
 
