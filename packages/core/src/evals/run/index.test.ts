@@ -721,10 +721,7 @@ describe('runEvals', () => {
         targetOptions: { maxSteps: 3 },
       });
 
-      expect(mockAgent.generate).toHaveBeenCalledWith(
-        'test input',
-        expect.objectContaining({ maxSteps: 3 }),
-      );
+      expect(mockAgent.generate).toHaveBeenCalledWith('test input', expect.objectContaining({ maxSteps: 3 }));
     });
 
     it('should not allow targetOptions to override scorers or returnScorerData', async () => {
@@ -785,7 +782,7 @@ describe('runEvals', () => {
 
       const startSpy = vi.fn();
       const origCreateRun = workflow.createRun.bind(workflow);
-      vi.spyOn(workflow, 'createRun').mockImplementation(async (opts) => {
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
         const run = await origCreateRun(opts);
         startSpy.mockImplementation(run.start.bind(run));
         run.start = startSpy;
@@ -799,9 +796,7 @@ describe('runEvals', () => {
         targetOptions: { perStep: true },
       });
 
-      expect(startSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ perStep: true }),
-      );
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ perStep: true }));
     });
   });
 
@@ -827,7 +822,7 @@ describe('runEvals', () => {
 
       const startSpy = vi.fn();
       const origCreateRun = workflow.createRun.bind(workflow);
-      vi.spyOn(workflow, 'createRun').mockImplementation(async (opts) => {
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
         const run = await origCreateRun(opts);
         startSpy.mockImplementation(run.start.bind(run));
         run.start = startSpy;
@@ -842,9 +837,7 @@ describe('runEvals', () => {
         target: workflow,
       });
 
-      expect(startSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ initialState }),
-      );
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ initialState }));
     });
 
     it('per-item startOptions should override targetOptions for the same key', async () => {
@@ -868,7 +861,7 @@ describe('runEvals', () => {
 
       const startSpy = vi.fn();
       const origCreateRun = workflow.createRun.bind(workflow);
-      vi.spyOn(workflow, 'createRun').mockImplementation(async (opts) => {
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
         const run = await origCreateRun(opts);
         startSpy.mockImplementation(run.start.bind(run));
         run.start = startSpy;
@@ -891,9 +884,7 @@ describe('runEvals', () => {
         targetOptions: { initialState: globalState },
       });
 
-      expect(startSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ initialState: itemState }),
-      );
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ initialState: itemState }));
     });
   });
 });
