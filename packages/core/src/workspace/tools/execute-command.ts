@@ -72,6 +72,16 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
   }
 
+  // Extract tail pipe from command so output can stream in real time
+  if (!background) {
+    const extracted = extractTailPipe(command);
+    command = extracted.command;
+    // Extracted tail overrides schema tail param (explicit pipe intent takes priority)
+    if (extracted.tail != null) {
+      tail = extracted.tail;
+    }
+  }
+
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
   const toolConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
