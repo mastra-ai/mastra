@@ -91,7 +91,6 @@ describe('getStorageConfig', () => {
       backend: 'libsql',
       libsql: { url: 'libsql://test.turso.io' },
       pg: {},
-      vectorEnabled: false,
     });
     // Env should win
     expect(config.backend).toBe('pg');
@@ -109,7 +108,6 @@ describe('getStorageConfig', () => {
         connectionString: 'postgresql://settings@localhost/db',
         schemaName: 'test_schema',
       },
-      vectorEnabled: false,
     });
     expect(config.backend).toBe('pg');
     if (config.backend === 'pg') {
@@ -124,7 +122,6 @@ describe('getStorageConfig', () => {
       backend: 'libsql',
       libsql: { url: 'libsql://test.turso.io', authToken: 'tok' },
       pg: {},
-      vectorEnabled: false,
     });
     expect(config.backend).toBe('libsql');
     if (config.backend === 'libsql') {
@@ -183,36 +180,4 @@ describe('createStorage', () => {
   }, 15000);
 });
 
-describe('createVector', () => {
-  it('returns null when vector is not enabled', async () => {
-    const { createVector } = await import('../vector-factory.js');
-    const result = await createVector(
-      { backend: 'libsql', url: 'file::memory:', isRemote: false },
-      false,
-    );
-    expect(result).toBeNull();
-  });
 
-  it('creates LibSQLVector when vector is enabled with libsql backend', async () => {
-    const { createVector } = await import('../vector-factory.js');
-    const vector = await createVector(
-      { backend: 'libsql', url: 'file::memory:', isRemote: false },
-      true,
-    );
-    expect(vector).toBeDefined();
-    expect(vector!.constructor.name).toBe('LibSQLVector');
-  });
-
-  it('creates PgVector when vector is enabled with pg backend', async () => {
-    const { createVector } = await import('../vector-factory.js');
-    const vector = await createVector(
-      {
-        backend: 'pg',
-        connectionString: 'postgresql://user:pass@localhost:5432/testdb',
-      },
-      true,
-    );
-    expect(vector).toBeDefined();
-    expect(vector!.constructor.name).toBe('PgVector');
-  });
-});

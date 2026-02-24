@@ -45,8 +45,6 @@ export interface StorageSettings {
   libsql: LibSQLStorageSettings;
   /** PostgreSQL-specific config (used when backend is 'pg'). */
   pg: PgStorageSettings;
-  /** Whether to enable vector store for the selected backend. */
-  vectorEnabled: boolean;
 }
 
 export interface GlobalSettings {
@@ -98,7 +96,6 @@ export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
   libsql: {},
   pg: {},
-  vectorEnabled: false,
 };
 
 const DEFAULTS: GlobalSettings = {
