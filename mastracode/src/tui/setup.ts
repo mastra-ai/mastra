@@ -1,6 +1,7 @@
 /**
  * TUI setup: keyboard shortcuts, layout building, autocomplete, key handlers.
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
@@ -213,6 +214,22 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 // Autocomplete
 // =============================================================================
 
+/** Detect the fd binary (fast file finder) for @ fuzzy file autocomplete */
+function detectFdPath(): string | null {
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  for (const bin of ['fd', 'fdfind']) {
+    try {
+      const resolved = execFileSync(whichCmd, [bin], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] })
+        .trim()
+        .split(/\r?\n/)[0];
+      if (resolved) return resolved;
+    } catch {
+      // not found, try next
+    }
+  }
+  return null;
+}
+
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
@@ -275,7 +292,8 @@ export function setupAutocomplete(state: TUIState): void {
     });
   }
 
-  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd());
+  const fdPath = detectFdPath();
+  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 

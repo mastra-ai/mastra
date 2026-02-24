@@ -277,6 +277,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           item.id,
           execResult.scorerInput,
           execResult.scorerOutput,
+          execResult.traceId ?? undefined,
         );
 
         // Persist result with scores (if storage available)
