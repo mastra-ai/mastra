@@ -485,7 +485,19 @@ export class Workspace<
     // Initialize LSP if configured and a process manager is available
     if (config.lsp) {
       const processes = this._sandbox?.processes;
-      if (processes && isLSPAvailable()) {
+      if (!this._sandbox) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
+        );
+      } else if (!processes) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. Sandbox "${this._sandbox.name ?? 'unknown'}" does not provide one — LSP disabled.`,
+        );
+      } else if (!isLSPAvailable()) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages. Install them to enable LSP diagnostics.`,
+        );
+      } else {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
         this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);

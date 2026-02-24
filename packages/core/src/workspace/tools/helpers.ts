@@ -85,17 +85,21 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     const lspManager = workspace.lsp;
     if (!lspManager) return '';
 
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
+    // Use the filesystem's path resolution to get the real disk path.
+    // This correctly handles contained: true (virtual paths → basePath)
+    // and contained: false (absolute paths used as-is).
+    const absolutePath =
+      workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
+      path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
 
     const DIAG_TIMEOUT_MS = 10_000;
+    let diagTimer: ReturnType<typeof setTimeout>;
     const diagnostics: LSPDiagnostic[] = await Promise.race([
       lspManager.getDiagnostics(absolutePath, content),
-      new Promise<LSPDiagnostic[]>((_, reject) =>
-        setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS),
-      ),
-    ]);
+      new Promise<LSPDiagnostic[]>((_, reject) => {
+        diagTimer = setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(diagTimer!));
     if (diagnostics.length === 0) return '';
 
     // Deduplicate by severity + location + message

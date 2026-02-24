@@ -255,21 +255,50 @@ describe('getEditDiagnosticsText', () => {
     expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 'code');
   });
 
-  it('treats paths starting with / as absolute on Unix', async () => {
+  it('treats /-prefixed paths as virtual when no resolveAbsolutePath', async () => {
     const { workspace, mockLsp } = createMockLSPWorkspace([]);
 
-    // /src/app.ts is an absolute path — passes through as-is
+    // Without resolveAbsolutePath, /src/app.ts is treated as virtual
+    // and resolved relative to lspManager.root
     await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
 
-    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/src/app.ts', 'code');
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 'code');
   });
 
-  it('passes absolute paths through as-is', async () => {
+  it('uses resolveAbsolutePath from filesystem when available', async () => {
     const { workspace, mockLsp } = createMockLSPWorkspace([]);
+    // Mock filesystem with resolveAbsolutePath (simulates contained: true)
+    Object.defineProperty(workspace, 'filesystem', {
+      get: () => ({ resolveAbsolutePath: (p: string) => '/my-base' + (p.startsWith('/') ? p : '/' + p) }),
+    });
+
+    await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/my-base/src/app.ts', 'code');
+  });
+
+  it('uses resolveAbsolutePath for contained: false (absolute paths pass through)', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+    // Mock filesystem with resolveAbsolutePath (simulates contained: false)
+    Object.defineProperty(workspace, 'filesystem', {
+      get: () => ({ resolveAbsolutePath: (p: string) => p }),
+    });
 
     await getEditDiagnosticsText(workspace, '/Users/me/project/src/app.ts', 'code');
 
     expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/Users/me/project/src/app.ts', 'code');
+  });
+
+  it('falls back to lspManager.root when resolveAbsolutePath returns undefined', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+    // Mock filesystem that can't resolve the path (e.g. remote filesystem)
+    Object.defineProperty(workspace, 'filesystem', {
+      get: () => ({ resolveAbsolutePath: () => undefined }),
+    });
+
+    await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 'code');
   });
 
   it('truncates long output', async () => {
