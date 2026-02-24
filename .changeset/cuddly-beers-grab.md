@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed /skills command showing 'No skills configured' by eagerly resolving the workspace when needed.
+Fixed `/skills` so it lists skills even before the first message is sent.

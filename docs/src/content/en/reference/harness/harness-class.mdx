@@ -644,7 +644,7 @@ const workspace = harness.getWorkspace()
 
 #### `resolveWorkspace()`
 
-Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace.
+Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
 
 ```typescript
 const workspace = await harness.resolveWorkspace()

@@ -4,7 +4,12 @@ export async function handleSkillsCommand(ctx: SlashCommandContext): Promise<voi
   // Eagerly resolve workspace if not yet cached (e.g. /skills called before first message)
   let workspace = ctx.getResolvedWorkspace();
   if (!workspace && ctx.harness.hasWorkspace()) {
-    workspace = await ctx.harness.resolveWorkspace();
+    try {
+      workspace = await ctx.harness.resolveWorkspace();
+    } catch (error) {
+      ctx.showError(`Failed to resolve workspace: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
   }
   if (!workspace?.skills) {
     ctx.showInfo(
