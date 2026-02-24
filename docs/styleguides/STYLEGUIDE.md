@@ -218,15 +218,17 @@ Use lists for a group of related items, such as a complete set of configuration 
 
 ### Do not use em-dashes in lists
 
-To not use em-dashes in lists, if you want to separate the concise summary from the description of a list item, use bold text and colons instead.
+To not use em-dashes in lists, if you want to separate the concise summary from the description of a list item, use a colon instead of an em-dash.
 
 > ❌
 >
 > - **Memory** — Memory allows your agent to do stuff.
+> - `some-code` — Memory allows your agent to do stuff.
 
 > ✅
 >
 > - **Memory**: Memory allows your agent to do stuff.
+> - `some-code`: Memory allows your agent to do stuff.
 
 ### Capitalize the first letter after colons in lists
 
