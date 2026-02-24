@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -366,6 +367,7 @@ async function main(): Promise<void> {
     const tmpPath = sidebarPath + '.tmp'
     await fs.writeFile(tmpPath, output, 'utf-8')
     await fs.rename(tmpPath, sidebarPath)
+    execFileSync('pnpm', ['prettier', '--write', sidebarPath], { stdio: 'ignore' })
     console.log(`Fixed ${sortErrors.length} sorting issue(s) in sidebars.js`)
   }
 
