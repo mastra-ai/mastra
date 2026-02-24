@@ -2,4 +2,5 @@
 '@mastra/core': patch
 ---
 
-Fixed workspace registry to track source ownership. `listWorkspaces()` now returns `RegisteredWorkspace` entries that include `source` (`'mastra'` or `'agent'`), `agentId`, and `agentName` metadata, so consumers can distinguish global workspaces from agent-scoped ones without re-deriving ownership.
+Fixed workspace listing to show whether each workspace is global or agent-owned.
+Agent-owned workspaces now include the owning agent's ID and name so clients can distinguish them from global workspaces.

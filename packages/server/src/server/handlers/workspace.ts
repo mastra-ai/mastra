@@ -266,7 +266,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
             name: ws.name,
             status: ws.status,
             source,
-            ...(source === 'agent' && agentId ? { agentId, agentName } : {}),
+            ...(source === 'agent' && agentId ? { agentId, ...(agentName != null ? { agentName } : {}) } : {}),
             capabilities: {
               hasFilesystem: !!ws.filesystem,
               hasSandbox: !!ws.sandbox,

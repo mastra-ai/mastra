@@ -258,6 +258,15 @@ function createMastra(workspace?: Workspace): Mastra {
   return mastra;
 }
 
+/** Polls until a workspace with the given ID appears in the registry. */
+async function waitForWorkspace(mastra: Mastra, id: string, timeout = 2000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!mastra.listWorkspaces()[id]) {
+    if (Date.now() > deadline) throw new Error(`Workspace ${id} not registered within ${timeout}ms`);
+    await new Promise(r => setTimeout(r, 10));
+  }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -346,8 +355,7 @@ describe('Workspace Handlers', () => {
         agents: { testAgent: agent },
       });
 
-      // Allow async workspace registration from addAgent to settle
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForWorkspace(mastra, 'agent-ws');
 
       const result = await LIST_WORKSPACES_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -388,8 +396,7 @@ describe('Workspace Handlers', () => {
         agents: { soloAgent: agent },
       });
 
-      // Allow async workspace registration from addAgent to settle
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForWorkspace(mastra, 'only-agent-ws');
 
       const result = await LIST_WORKSPACES_ROUTE.handler({
         ...createTestServerContext({ mastra }),
