@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { pathToFileURL } from 'url'
 
 /**
  * Validates that every MDX file under the content directories is referenced
@@ -79,14 +80,16 @@ async function collectMdxFiles(dir: string): Promise<string[]> {
 
   async function walk(current: string): Promise<void> {
     const entries = await fs.readdir(current, { withFileTypes: true })
+    const subdirs: Promise<void>[] = []
     for (const entry of entries) {
       const fullPath = path.join(current, entry.name)
       if (entry.isDirectory()) {
-        await walk(fullPath)
+        subdirs.push(walk(fullPath))
       } else if (entry.name.endsWith('.mdx')) {
         results.push(fullPath)
       }
     }
+    await Promise.all(subdirs)
   }
 
   await walk(dir)
@@ -106,7 +109,7 @@ async function validateSection(section: SectionConfig, rootDir: string): Promise
   const sidebarFullPath = path.join(rootDir, section.sidebarPath)
   const contentFullDir = path.join(rootDir, section.contentDir)
 
-  const sidebarModule = await import(sidebarFullPath)
+  const sidebarModule = await import(pathToFileURL(sidebarFullPath).href)
   const sidebars = sidebarModule.default ?? sidebarModule
   const items: SidebarItem[] = sidebars[section.sidebarKey]
 
@@ -140,16 +143,7 @@ async function main(): Promise<void> {
 
   console.log('Checking for docs not linked in sidebars...\n')
 
-  const results: ValidationResult[] = []
-
-  for (const section of SECTIONS) {
-    try {
-      results.push(await validateSection(section, rootDir))
-    } catch (error) {
-      console.error(`Error processing ${section.name}: ${error instanceof Error ? error.message : error}`)
-      process.exit(1)
-    }
-  }
+  const results = await Promise.all(SECTIONS.map(section => validateSection(section, rootDir)))
 
   const totalGhostPages = results.reduce((sum, r) => sum + r.ghostPages.length, 0)
 
