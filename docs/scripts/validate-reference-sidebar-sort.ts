@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
 /**
  * Validates (and optionally fixes) the sorting order of items in the reference sidebar.
@@ -62,6 +63,18 @@ function sortKey(label: string): string {
   return label.toLowerCase().replace(/^\./, '')
 }
 
+/** Locale-independent comparison using pre-lowercased sort keys. */
+function compareKeys(a: string, b: string): number {
+  const ka = sortKey(a)
+  const kb = sortKey(b)
+  return ka < kb ? -1 : ka > kb ? 1 : 0
+}
+
+/** Escape a string for safe embedding in a single-quoted JS string literal. */
+function escapeJsString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
 function pinnedOrder(label: string): number {
   if (label === 'Overview') return 0
   if (label === 'Configuration') return 1
@@ -73,6 +86,7 @@ function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {
   const nonDotDocs: SidebarDoc[] = []
   const dotDocs: SidebarDoc[] = []
   const categories: SidebarCategory[] = []
+  const unknowns: SidebarItem[] = []
 
   for (const item of items) {
     if (isCategory(item)) {
@@ -85,14 +99,18 @@ function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {
       } else {
         nonDotDocs.push(item)
       }
+    } else {
+      // Preserve unknown types (e.g. 'link', 'html') so they aren't silently dropped
+      unknowns.push(item)
     }
   }
 
   return [
     ...pinnedItems.sort((a, b) => pinnedOrder(a.label) - pinnedOrder(b.label)),
-    ...nonDotDocs.sort((a, b) => sortKey(a.label).localeCompare(sortKey(b.label))),
-    ...dotDocs.sort((a, b) => sortKey(a.label).localeCompare(sortKey(b.label))),
-    ...categories.sort((a, b) => sortKey(a.label).localeCompare(sortKey(b.label))),
+    ...nonDotDocs.sort((a, b) => compareKeys(a.label, b.label)),
+    ...dotDocs.sort((a, b) => compareKeys(a.label, b.label)),
+    ...categories.sort((a, b) => compareKeys(a.label, b.label)),
+    ...unknowns,
   ]
 }
 
@@ -143,8 +161,8 @@ function serializeItem(item: SidebarItem, indent: number): string {
   const innerPad = ' '.repeat(indent + 2)
 
   if (isDoc(item)) {
-    const idStr = `id: '${item.id}'`
-    const labelStr = `label: '${item.label.replace(/'/g, "\\'")}'`
+    const idStr = `id: '${escapeJsString(item.id)}'`
+    const labelStr = `label: '${escapeJsString(item.label)}'`
     const oneLine = `${pad}{ type: 'doc', ${idStr}, ${labelStr} },`
     if (oneLine.length <= 100) {
       return oneLine
@@ -159,7 +177,7 @@ function serializeItem(item: SidebarItem, indent: number): string {
   const lines: string[] = []
   lines.push(`${pad}{`)
   lines.push(`${innerPad}type: 'category',`)
-  lines.push(`${innerPad}label: '${cat.label.replace(/'/g, "\\'")}',`)
+  lines.push(`${innerPad}label: '${escapeJsString(cat.label)}',`)
   if (cat.collapsed !== undefined) {
     lines.push(`${innerPad}collapsed: ${cat.collapsed},`)
   }
@@ -201,6 +219,76 @@ function formatLabels(labels: string[]): string {
   return labels.slice(0, 4).join(', ') + ', ..., ' + labels.slice(-2).join(', ')
 }
 
+const KNOWN_DOC_KEYS = new Set(['type', 'id', 'label'])
+const KNOWN_CATEGORY_KEYS = new Set(['type', 'label', 'collapsed', 'items'])
+
+/** Warn about item types that the script doesn't know how to sort/serialize. */
+function validateItemTypes(items: SidebarItem[], contextPath: string): SortError[] {
+  const errors: SortError[] = []
+  for (const item of items) {
+    if (!isDoc(item) && !isCategory(item)) {
+      errors.push({
+        path: contextPath,
+        message: `Unknown item type "${(item as Record<string, unknown>).type}" — item will be preserved but not sorted`,
+      })
+    }
+    if (isCategory(item)) {
+      const childPath = contextPath ? `${contextPath} > ${item.label}` : item.label
+      errors.push(...validateItemTypes(item.items, childPath))
+    }
+  }
+  return errors
+}
+
+/** Warn about properties that the serializer would drop in --fix mode. */
+function validateKnownProperties(items: SidebarItem[], contextPath: string): SortError[] {
+  const errors: SortError[] = []
+  for (const item of items) {
+    const knownKeys = isDoc(item) ? KNOWN_DOC_KEYS : isCategory(item) ? KNOWN_CATEGORY_KEYS : null
+    if (knownKeys) {
+      const extraKeys = Object.keys(item).filter(k => !knownKeys.has(k))
+      if (extraKeys.length > 0) {
+        errors.push({
+          path: contextPath,
+          message: `"${item.label}" has unrecognized properties: ${extraKeys.join(', ')}. These will be lost if --fix is used.`,
+        })
+      }
+    }
+    if (isCategory(item)) {
+      const childPath = contextPath ? `${contextPath} > ${item.label}` : item.label
+      errors.push(...validateKnownProperties(item.items, childPath))
+    }
+  }
+  return errors
+}
+
+/** Detect duplicate doc IDs across the entire sidebar tree. */
+function validateDuplicateIds(
+  items: SidebarItem[],
+  contextPath: string,
+  seen: Map<string, string> = new Map(),
+): SortError[] {
+  const errors: SortError[] = []
+  for (const item of items) {
+    if (isDoc(item)) {
+      const existing = seen.get(item.id)
+      if (existing) {
+        errors.push({
+          path: contextPath,
+          message: `Duplicate doc id "${item.id}" — first seen at "${existing}"`,
+        })
+      } else {
+        seen.set(item.id, contextPath)
+      }
+    }
+    if (isCategory(item)) {
+      const childPath = contextPath ? `${contextPath} > ${item.label}` : item.label
+      errors.push(...validateDuplicateIds(item.items, childPath, seen))
+    }
+  }
+  return errors
+}
+
 function printErrors(errors: SortError[]): void {
   for (const error of errors) {
     console.log(`  ${error.path}:`)
@@ -214,7 +302,8 @@ async function main(): Promise<void> {
 
   console.log(`${fixMode ? 'Fixing' : 'Validating'} reference sidebar sort order...\n`)
 
-  const sidebarPath = path.join(process.cwd(), 'src/content/en/reference/sidebars.js')
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+  const sidebarPath = path.resolve(scriptDir, '../src/content/en/reference/sidebars.js')
 
   try {
     await fs.stat(sidebarPath)
@@ -233,26 +322,57 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  const errors = validateItemOrder(items, 'referenceSidebar')
+  // Run all validations
+  const sortErrors = validateItemOrder(items, 'referenceSidebar')
+  const typeWarnings = validateItemTypes(items, 'referenceSidebar')
+  const propertyWarnings = validateKnownProperties(items, 'referenceSidebar')
+  const duplicateErrors = validateDuplicateIds(items, 'referenceSidebar')
+
+  // Always print warnings (non-blocking)
+  if (typeWarnings.length > 0) {
+    console.log(`Warnings — unknown item types:\n`)
+    printErrors(typeWarnings)
+  }
+  if (propertyWarnings.length > 0) {
+    console.log(`Warnings — unrecognized properties (would be lost with --fix):\n`)
+    printErrors(propertyWarnings)
+  }
+
+  const errors = [...duplicateErrors, ...sortErrors]
 
   if (errors.length === 0) {
     console.log('All sidebar items are correctly sorted')
     return
   }
 
+  if (duplicateErrors.length > 0) {
+    console.log(`Found ${duplicateErrors.length} duplicate ID(s):\n`)
+    printErrors(duplicateErrors)
+  }
+
   if (!fixMode) {
-    console.log(`Found ${errors.length} sorting issue(s):\n`)
-    printErrors(errors)
+    if (sortErrors.length > 0) {
+      console.log(`Found ${sortErrors.length} sorting issue(s):\n`)
+      printErrors(sortErrors)
+    }
     console.log('Run with --fix to auto-sort: pnpm validate:reference-sidebar:fix')
     process.exit(1)
   }
 
-  // Fix mode: sort and write back
-  const sorted = sortItemsRecursive(items)
-  const output = serializeSidebar(sorted)
-  await fs.writeFile(sidebarPath, output, 'utf-8')
+  if (sortErrors.length > 0) {
+    // Fix mode: sort and write back atomically
+    const sorted = sortItemsRecursive(items)
+    const output = serializeSidebar(sorted)
+    const tmpPath = sidebarPath + '.tmp'
+    await fs.writeFile(tmpPath, output, 'utf-8')
+    await fs.rename(tmpPath, sidebarPath)
+    console.log(`Fixed ${sortErrors.length} sorting issue(s) in sidebars.js`)
+  }
 
-  console.log(`Fixed ${errors.length} sorting issue(s) in sidebars.js`)
+  // Duplicate IDs can't be auto-fixed — always fail CI
+  if (duplicateErrors.length > 0) {
+    process.exit(1)
+  }
 }
 
 main().catch(error => {
