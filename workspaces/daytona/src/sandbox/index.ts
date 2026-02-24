@@ -350,10 +350,19 @@ export class DaytonaSandbox extends MastraSandbox {
             filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
           }))
         : [],
+      ...(this._sandbox && {
+        resources: {
+          cpuCores: this._sandbox.cpu,
+          memoryMB: this._sandbox.memory * 1024,
+          diskMB: this._sandbox.disk * 1024,
+        },
+      }),
       metadata: {
         language: this.language,
-        ...(this.resources && { resources: this.resources }),
+        ephemeral: this.ephemeral,
         ...(this.snapshotId && { snapshot: this.snapshotId }),
+        ...(this.image && { image: this.image }),
+        ...(this._sandbox && { target: this._sandbox.target }),
       },
     };
   }

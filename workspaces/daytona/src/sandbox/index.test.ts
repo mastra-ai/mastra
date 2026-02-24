@@ -22,6 +22,10 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
   const mockSandbox = {
     id: 'mock-sandbox-id',
     state: 'started',
+    cpu: 1,
+    memory: 1,
+    disk: 3,
+    target: 'us',
     process: {
       executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
       codeRun: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
@@ -174,13 +178,13 @@ describe('DaytonaSandbox', () => {
       const sandbox = new DaytonaSandbox({
         apiKey: 'test-key',
         apiUrl: 'https://custom.api.io',
-        target: 'us-east',
+        target: 'us',
       });
 
       expect((sandbox as any).connectionOpts).toEqual({
         apiKey: 'test-key',
         apiUrl: 'https://custom.api.io',
-        target: 'us-east',
+        target: 'us',
       });
     });
   });
@@ -387,7 +391,7 @@ describe('DaytonaSandbox', () => {
       const sandbox = new DaytonaSandbox({
         apiKey: 'key-123',
         apiUrl: 'https://custom.api',
-        target: 'eu-west',
+        target: 'eu',
       });
 
       await sandbox._start();
@@ -395,7 +399,7 @@ describe('DaytonaSandbox', () => {
       expect(Daytona).toHaveBeenCalledWith({
         apiKey: 'key-123',
         apiUrl: 'https://custom.api',
-        target: 'eu-west',
+        target: 'eu',
       });
     });
   });
@@ -501,11 +505,11 @@ describe('DaytonaSandbox', () => {
 
   describe('getInfo()', () => {
     it('returns correct sandbox info', async () => {
-      const sandbox = new DaytonaSandbox({
-        id: 'test-info',
-        language: 'python',
-        resources: { cpu: 2, memory: 4 },
-      });
+      mockSandbox.cpu = 4;
+      mockSandbox.memory = 8;
+      mockSandbox.disk = 50;
+
+      const sandbox = new DaytonaSandbox({ id: 'test-info', language: 'python' });
 
       await sandbox._start();
       const info = await sandbox.getInfo();
@@ -515,12 +519,63 @@ describe('DaytonaSandbox', () => {
       expect(info.provider).toBe('daytona');
       expect(info.status).toBe('running');
       expect(info.createdAt).toBeInstanceOf(Date);
-      expect(info.metadata).toEqual(
-        expect.objectContaining({
-          language: 'python',
-          resources: { cpu: 2, memory: 4 },
-        }),
-      );
+      expect(info.resources).toEqual({ cpuCores: 4, memoryMB: 8 * 1024, diskMB: 50 * 1024 });
+      expect(info.metadata).toEqual(expect.objectContaining({
+        language: 'python',
+        ephemeral: false,
+        target: 'us',
+      }));
+    });
+
+    it('resources reflect actual sandbox values not constructor options', async () => {
+      mockSandbox.cpu = 8;
+      mockSandbox.memory = 16;
+      mockSandbox.disk = 100;
+
+      const sandbox = new DaytonaSandbox({ image: 'debian:12.9', resources: { cpu: 2, memory: 4 } });
+      await sandbox._start();
+      const info = await sandbox.getInfo();
+
+      expect(info.resources).toEqual({ cpuCores: 8, memoryMB: 16 * 1024, diskMB: 100 * 1024 });
+    });
+
+    it('resources absent when sandbox not started', async () => {
+      const sandbox = new DaytonaSandbox();
+      const info = await sandbox.getInfo();
+
+      expect(info.resources).toBeUndefined();
+    });
+
+    it('includes image in metadata when set', async () => {
+      const sandbox = new DaytonaSandbox({ image: 'debian:12.9' });
+      await sandbox._start();
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata?.image).toBe('debian:12.9');
+    });
+
+    it('excludes image from metadata when not set', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata).not.toHaveProperty('image');
+    });
+
+    it('includes target from actual sandbox after start', async () => {
+      mockSandbox.target = 'eu';
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata?.target).toBe('eu');
+    });
+
+    it('excludes target from metadata before start', async () => {
+      const sandbox = new DaytonaSandbox();
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata).not.toHaveProperty('target');
     });
 
     it('includes snapshot in metadata when set', async () => {
