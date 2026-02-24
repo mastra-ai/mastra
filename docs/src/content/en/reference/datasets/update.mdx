@@ -14,18 +14,20 @@ Updates dataset metadata, name, description, and/or schemas. Zod schemas are aut
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { z } from "zod";
+import { Mastra } from '@mastra/core'
+import { z } from 'zod'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 // Update with plain metadata
 const updated = await dataset.update({
-  name: "Updated QA pairs",
-  description: "Revised evaluation set",
-});
+  name: 'Updated QA pairs',
+  description: 'Revised evaluation set',
+})
 
 // Update with Zod schema (auto-converted to JSON Schema)
 const updated2 = await dataset.update({
@@ -33,54 +35,54 @@ const updated2 = await dataset.update({
     question: z.string(),
     context: z.string().optional(),
   }),
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      isOptional: true,
-      description: "New display name.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description: "New description.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "Updated metadata.",
-    },
-    {
-      name: "inputSchema",
-      type: "unknown",
-      isOptional: true,
-      description: "JSON Schema or Zod schema for item inputs.",
-    },
-    {
-      name: "groundTruthSchema",
-      type: "unknown",
-      isOptional: true,
-      description: "JSON Schema or Zod schema for item ground truths.",
-    },
-  ]}
+{
+name: "name",
+type: "string",
+isOptional: true,
+description: "New display name.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "New description.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Updated metadata.",
+},
+{
+name: "inputSchema",
+type: "unknown",
+isOptional: true,
+description: "JSON Schema or Zod schema for item inputs.",
+},
+{
+name: "groundTruthSchema",
+type: "unknown",
+isOptional: true,
+description: "JSON Schema or Zod schema for item ground truths.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<DatasetRecord>",
-      description: "The updated dataset record. See dataset.getDetails() for the full shape.",
-    },
-  ]}
+{
+name: "result",
+type: "Promise<DatasetRecord>",
+description: "The updated dataset record. See dataset.getDetails() for the full shape.",
+},
+]}
 />

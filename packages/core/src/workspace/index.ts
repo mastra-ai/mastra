@@ -78,7 +78,7 @@ export type {
   SandboxInfo,
   SandboxLifecycleHook,
   MastraSandboxOptions,
-  // Background process types
+  // Process management types
   ProcessInfo,
   SpawnProcessOptions,
 } from './sandbox';
@@ -88,12 +88,11 @@ export type { MountManagerConfig, MountFn, OnMountHook, OnMountArgs, OnMountResu
 export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './sandbox';
 export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from './sandbox';
 
-// LSP
-export type { LSPConfig, LSPDiagnostic, DiagnosticSeverity } from './lsp/types';
-export { LANGUAGE_EXTENSIONS, getLanguageId } from './lsp/language';
-
 // Constants
 export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
+
+// Shared types
+export type { InstructionsOption } from './types';
 
 // Glob Utilities
 export {

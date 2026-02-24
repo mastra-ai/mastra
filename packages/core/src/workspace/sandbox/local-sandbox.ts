@@ -9,98 +9,21 @@
  * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
-import * as childProcess from 'node:child_process';
-import type { SpawnOptions } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { RequestContext } from '../../request-context';
 import type { ProviderStatus } from '../lifecycle';
+import type { InstructionsOption } from '../types';
+import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
-
-/** Shell-quote an argument for safe interpolation into a shell command string. */
-function shellQuote(arg: string): string {
-  // If the arg only contains safe characters, no quoting needed
-  if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
-  // Wrap in single quotes, escaping embedded single quotes
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
-  /** Timeout in ms - handled manually for custom exit code 124 */
-  timeout?: number;
-  onStdout?: (data: string) => void;
-  onStderr?: (data: string) => void;
-}
-
-/**
- * Execute a command with optional streaming callbacks.
- * Uses spawn when callbacks are provided for real-time output.
- */
-function execWithStreaming(
-  command: string,
-  args: string[],
-  options: ExecStreamingOptions,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const { timeout, onStdout, onStderr, cwd, env, ...spawnOptions } = options;
-  return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(command, args, { cwd, env, ...spawnOptions });
-
-    let stdout = '';
-    let stderr = '';
-    let killed = false;
-
-    // Set up timeout
-    const timeoutId = timeout
-      ? setTimeout(() => {
-          killed = true;
-          proc.kill('SIGTERM');
-        }, timeout)
-      : undefined;
-
-    proc.stdout.on('data', (data: Buffer) => {
-      const str = data.toString();
-      stdout += str;
-      onStdout?.(str);
-    });
-
-    proc.stderr.on('data', (data: Buffer) => {
-      const str = data.toString();
-      stderr += str;
-      onStderr?.(str);
-    });
-
-    proc.on('error', err => {
-      if (timeoutId) clearTimeout(timeoutId);
-      const errorMsg = err.message;
-      stderr += errorMsg;
-      onStderr?.(errorMsg);
-      reject(err);
-    });
-
-    proc.on('close', (code, signal) => {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (killed) {
-        const timeoutMsg = `\nProcess timed out after ${timeout}ms`;
-        onStderr?.(timeoutMsg);
-        resolve({ stdout, stderr: stderr + timeoutMsg, exitCode: 124 });
-      } else if (signal) {
-        // When terminated by signal, code is null but signal contains the signal name
-        const signalMsg = `\nProcess terminated by ${signal}`;
-        onStderr?.(signalMsg);
-        resolve({ stdout, stderr: stderr + signalMsg, exitCode: 128 });
-      } else {
-        resolve({ stdout, stderr, exitCode: code ?? 0 });
-      }
-    });
-  });
-}
+import type { SandboxInfo } from './types';
 
 // =============================================================================
 // Local Sandbox
@@ -149,6 +72,16 @@ export interface LocalSandboxOptions extends MastraSandboxOptions {
    * Only used when isolation is 'seatbelt' or 'bwrap'.
    */
   nativeSandbox?: NativeSandboxConfig;
+  /**
+   * Custom instructions that override the default instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the default instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the default instructions and
+   *   optional request context so you can extend or customise per-request.
+   */
+  instructions?: InstructionsOption;
 }
 
 /**
@@ -177,89 +110,44 @@ export class LocalSandbox extends MastraSandbox {
 
   status: ProviderStatus = 'pending';
 
-  private readonly _workingDirectory: string;
+  readonly workingDirectory: string;
+  readonly isolation: IsolationBackend;
+  declare readonly processes: LocalProcessManager;
   private readonly env: NodeJS.ProcessEnv;
-  private readonly timeout?: number;
-  private readonly _isolation: IsolationBackend;
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
   private _sandboxFolderPath?: string;
   private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
-
-  /**
-   * Background process manager.
-   * Provides methods to spawn, list, and retrieve background processes.
-   */
-  readonly processes: LocalProcessManager;
-
-  /**
-   * The working directory where commands are executed.
-   */
-  get workingDirectory(): string {
-    return this._workingDirectory;
-  }
-
-  /**
-   * The isolation backend being used.
-   */
-  get isolation(): IsolationBackend {
-    return this._isolation;
-  }
-
-  /**
-   * Detect the best available isolation backend for this platform.
-   * Returns detection result with backend recommendation and availability.
-   *
-   * @example
-   * ```typescript
-   * const result = LocalSandbox.detectIsolation();
-   * const sandbox = new LocalSandbox({
-   *   isolation: result.available ? result.backend : 'none',
-   * });
-   * ```
-   */
-  static detectIsolation() {
-    return detectIsolation();
-  }
+  private readonly _instructionsOverride?: InstructionsOption;
 
   constructor(options: LocalSandboxOptions = {}) {
-    super({ ...options, name: 'LocalSandbox' });
-    this.id = options.id ?? this.generateId();
-    this._createdAt = new Date();
-    // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
-    this._workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
-    this.env = options.env ?? {};
-    this.timeout = options.timeout;
-    this._nativeSandboxConfig = options.nativeSandbox ?? {};
-
-    // Validate and set isolation backend
+    // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
     if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
       const detection = detectIsolation();
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
-    this._isolation = requestedIsolation;
-    this.processes = new LocalProcessManager({ sandbox: this, env: this.env });
+
+    super({
+      ...options,
+      name: 'LocalSandbox',
+      processes: new LocalProcessManager({ env: options.env ?? {} }),
+    });
+
+    this.id = options.id ?? this.generateId();
+    this._createdAt = new Date();
+    this.workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
+    this.env = options.env ?? {};
+    this._nativeSandboxConfig = options.nativeSandbox ?? {};
+    this.isolation = requestedIsolation;
+    this._instructionsOverride = options.instructions;
   }
 
-  private generateId(): string {
-    return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  /**
-   * Build the environment object for execution.
-   * Always includes PATH by default (needed for finding executables).
-   * Merges the sandbox's configured env with any additional env from the command.
-   */
-  private buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    return {
-      PATH: process.env.PATH, // Always include PATH for finding executables
-      ...this.env,
-      ...additionalEnv,
-    };
-  }
+  // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
 
   /**
    * Start the local sandbox.
@@ -268,14 +156,14 @@ export class LocalSandbox extends MastraSandbox {
    */
   async start(): Promise<void> {
     this.logger.debug('[LocalSandbox] Starting sandbox', {
-      workingDirectory: this._workingDirectory,
-      isolation: this._isolation,
+      workingDirectory: this.workingDirectory,
+      isolation: this.isolation,
     });
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
 
     // Set up seatbelt profile for macOS sandboxing
-    if (this._isolation === 'seatbelt') {
+    if (this.isolation === 'seatbelt') {
       const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
 
       if (userProvidedPath) {
@@ -318,7 +206,7 @@ export class LocalSandbox extends MastraSandbox {
       }
     }
 
-    this.logger.debug('[LocalSandbox] Sandbox started', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Sandbox started', { workingDirectory: this.workingDirectory });
   }
 
   /**
@@ -326,7 +214,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
-    this.logger.debug('[LocalSandbox] Stopping sandbox', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Stopping sandbox', { workingDirectory: this.workingDirectory });
   }
 
   /**
@@ -335,7 +223,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this._workingDirectory });
+    this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this.workingDirectory });
 
     // Kill all background processes
     const procs = await this.processes.list();
@@ -384,9 +272,9 @@ export class LocalSandbox extends MastraSandbox {
         workingDirectory: this.workingDirectory,
         platform: os.platform(),
         nodeVersion: process.version,
-        isolation: this._isolation,
+        isolation: this.isolation,
         isolationConfig:
-          this._isolation !== 'none'
+          this.isolation !== 'none'
             ? {
                 allowNetwork: this._nativeSandboxConfig.allowNetwork ?? false,
                 readOnlyPaths: this._nativeSandboxConfig.readOnlyPaths,
@@ -397,83 +285,66 @@ export class LocalSandbox extends MastraSandbox {
     };
   }
 
-  getInstructions(): string {
-    if (this.workingDirectory) {
-      return `Local command execution. Working directory: "${this.workingDirectory}".`;
-    }
-    return 'Local command execution on the host machine.';
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
+  }
+
+  private _getDefaultInstructions(): string {
+    return `Local command execution. Working directory: "${this.workingDirectory}".`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal Utils
+  // ---------------------------------------------------------------------------
+
+  private generateId(): string {
+    return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Build the environment object for execution.
+   * Always includes PATH by default (needed for finding executables).
+   * Merges the sandbox's configured env with any additional env from the command.
+   * @internal Used by LocalProcessManager.
+   */
+  buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    return {
+      PATH: process.env.PATH, // Always include PATH for finding executables
+      ...this.env,
+      ...additionalEnv,
+    };
   }
 
   /**
    * Wrap a command with the configured isolation backend.
+   * @internal Used by LocalProcessManager for background process isolation.
    */
-  private wrapCommandForIsolation(command: string): { command: string; args: string[] } {
-    if (this._isolation === 'none') {
+  wrapCommandForIsolation(command: string): { command: string; args: string[] } {
+    if (this.isolation === 'none') {
       return { command, args: [] };
     }
 
     return wrapCommand(command, {
-      backend: this._isolation,
+      backend: this.isolation,
       workspacePath: this.workingDirectory,
       seatbeltProfile: this._seatbeltProfile,
       config: this._nativeSandboxConfig,
     });
   }
 
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    this.logger.debug('[LocalSandbox] Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
-
-    // Auto-start if not running (lazy initialization)
-    await this.ensureRunning();
-
-    const startTime = Date.now();
-
-    // Combine command + args into a single shell string, then wrap with isolation
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const wrapped = this.wrapCommandForIsolation(fullCommand);
-
-    try {
-      const result = await execWithStreaming(wrapped.command, wrapped.args, {
-        cwd: options.cwd ?? this.workingDirectory,
-        timeout: options.timeout ?? this.timeout ?? 30000,
-        env: this.buildEnv(options.env),
-        onStdout: options.onStdout,
-        onStderr: options.onStderr,
-        // Non-isolated: use shell mode so the host shell interprets the command string.
-        // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
-        // sandbox, so we spawn the wrapper binary directly — no host shell needed.
-        shell: this._isolation === 'none',
-      });
-
-      const commandResult: CommandResult = {
-        success: result.exitCode === 0,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        executionTimeMs: Date.now() - startTime,
-      };
-
-      this.logger.debug('[LocalSandbox] Command completed', {
-        command,
-        exitCode: commandResult.exitCode,
-        executionTimeMs: commandResult.executionTimeMs,
-      });
-
-      return commandResult;
-    } catch (error: unknown) {
-      const executionTimeMs = Date.now() - startTime;
-      this.logger.error('[LocalSandbox] Command failed', { command, error, executionTimeMs });
-      return {
-        success: false,
-        stdout: '',
-        stderr: error instanceof Error ? error.message : String(error),
-        exitCode: 1,
-        executionTimeMs,
-      };
-    }
+  /**
+   * Detect the best available isolation backend for this platform.
+   * Returns detection result with backend recommendation and availability.
+   *
+   * @example
+   * ```typescript
+   * const result = LocalSandbox.detectIsolation();
+   * const sandbox = new LocalSandbox({
+   *   isolation: result.available ? result.backend : 'none',
+   * });
+   * ```
+   */
+  static detectIsolation() {
+    return detectIsolation();
   }
 }

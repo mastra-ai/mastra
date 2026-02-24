@@ -23,7 +23,6 @@ import type { E2BSandbox } from './index';
  */
 class E2BProcessHandle extends ProcessHandle {
   readonly pid: number;
-  exitCode: number | undefined;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -37,10 +36,14 @@ class E2BProcessHandle extends ProcessHandle {
     this._startTime = startTime;
   }
 
+  /** Delegates to E2B's handle so exitCode reflects server-side state without needing wait(). */
+  get exitCode(): number | undefined {
+    return this._e2bHandle.exitCode;
+  }
+
   async wait(): Promise<CommandResult> {
     try {
       const result = await this._e2bHandle.wait();
-      this.exitCode = result.exitCode;
       return {
         success: result.exitCode === 0,
         exitCode: result.exitCode,
@@ -49,14 +52,23 @@ class E2BProcessHandle extends ProcessHandle {
         executionTimeMs: Date.now() - this._startTime,
       };
     } catch (error) {
-      // E2B throws CommandExitError for non-zero exit codes
-      const errorObj = error as { exitCode?: number };
-      this.exitCode = errorObj.exitCode ?? 1;
+      // E2B throws CommandExitError for non-zero exit codes (has .exitCode directly)
+      // Some E2B errors also carry stdout/stderr in error.result
+      const errorObj = error as {
+        exitCode?: number;
+        result?: { exitCode: number; stdout: string; stderr: string };
+      };
+      const exitCode = errorObj.result?.exitCode ?? errorObj.exitCode ?? this.exitCode ?? 1;
+
+      // Emit any output attached to the error (E2B sometimes puts it in .result)
+      if (errorObj.result?.stdout) this.emitStdout(errorObj.result.stdout);
+      if (errorObj.result?.stderr) this.emitStderr(errorObj.result.stderr);
+
       return {
         success: false,
-        exitCode: this.exitCode,
+        exitCode,
         stdout: this.stdout,
-        stderr: this.stderr,
+        stderr: this.stderr || (error instanceof Error ? error.message : String(error)),
         executionTimeMs: Date.now() - this._startTime,
       };
     }
@@ -85,31 +97,34 @@ class E2BProcessHandle extends ProcessHandle {
  */
 export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const e2b = this.sandbox.instance;
+    return this.sandbox.retryOnDead(async () => {
+      const e2b = this.sandbox.e2b;
 
-    // Merge default env with per-spawn env
-    const mergedEnv = { ...this.env, ...options.env };
-    const envs = Object.fromEntries(
-      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
-    );
+      // Merge default env with per-spawn env
+      const mergedEnv = { ...this.env, ...options.env };
+      const envs = Object.fromEntries(
+        Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      );
 
-    // Deferred reference — E2B requires callbacks at run() time, but data
-    // arrives asynchronously after the promise resolves, so handle is always
-    // assigned by the time the first callback fires.
-    let handle: E2BProcessHandle;
+      // Deferred reference — E2B requires callbacks at run() time, but data
+      // arrives asynchronously after the promise resolves, so handle is always
+      // assigned by the time the first callback fires.
+      let handle: E2BProcessHandle;
 
-    const e2bHandle = await e2b.commands.run(command, {
-      background: true,
-      stdin: true,
-      cwd: options.cwd,
-      envs,
-      onStdout: (data: string) => handle.emitStdout(data),
-      onStderr: (data: string) => handle.emitStderr(data),
+      const e2bHandle = await e2b.commands.run(command, {
+        background: true,
+        stdin: true,
+        cwd: options.cwd,
+        envs,
+        timeoutMs: options.timeout,
+        onStdout: (data: string) => handle.emitStdout(data),
+        onStderr: (data: string) => handle.emitStderr(data),
+      });
+
+      handle = new E2BProcessHandle(e2bHandle, e2b, Date.now(), options);
+      this._tracked.set(handle.pid, handle);
+      return handle;
     });
-
-    handle = new E2BProcessHandle(e2bHandle, e2b, Date.now(), options);
-    this._tracked.set(handle.pid, handle);
-    return handle;
   }
 
   /**
@@ -117,7 +132,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
    * E2B manages all state server-side — no local tracking needed.
    */
   async list(): Promise<ProcessInfo[]> {
-    const e2b = this.sandbox.instance;
+    const e2b = this.sandbox.e2b;
     const procs = await e2b.commands.list();
     return procs.map(proc => ({
       pid: proc.pid,
@@ -136,7 +151,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     if (tracked) return tracked;
 
     // Fall back to connect() for unknown PIDs (e.g., pre-existing processes)
-    const e2b = this.sandbox.instance;
+    const e2b = this.sandbox.e2b;
     let handle: E2BProcessHandle;
     try {
       const e2bHandle = await e2b.commands.connect(pid, {

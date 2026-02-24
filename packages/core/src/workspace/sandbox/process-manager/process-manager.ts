@@ -16,7 +16,7 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
 // =============================================================================
 
 /**
- * Abstract base class for background process management in sandboxes.
+ * Abstract base class for process management in sandboxes.
  *
  * Wraps subclass overrides of `spawn()`, `list()`, and `get()` with
  * `sandbox.ensureRunning()` so the sandbox is lazily started before
@@ -37,20 +37,27 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
  * await proc?.kill();
  * ```
  */
-export interface ProcessManagerOptions<TSandbox extends MastraSandbox = MastraSandbox> {
-  sandbox: TSandbox;
+export interface ProcessManagerOptions {
   env?: Record<string, string | undefined>;
 }
 
 export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = MastraSandbox> {
-  protected readonly sandbox: TSandbox;
+  /**
+   * The sandbox this process manager belongs to.
+   * Set automatically by MastraSandbox when processes are passed into the constructor.
+   * @internal
+   */
+  sandbox!: TSandbox;
+
   protected readonly env: Record<string, string | undefined>;
 
   /** Tracked process handles keyed by PID. Populated by spawn(), used by get()/kill(). */
   protected readonly _tracked = new Map<number, ProcessHandle>();
 
-  constructor({ sandbox, env = {} }: ProcessManagerOptions<TSandbox>) {
-    this.sandbox = sandbox;
+  /** PIDs that have been read after exit and should not be re-discovered by subclass fallbacks. */
+  protected readonly _dismissed = new Set<number>();
+
+  constructor({ env = {} }: ProcessManagerOptions = {}) {
     this.env = env;
 
     // Capture subclass overrides (via prototype chain) before shadowing
@@ -63,7 +70,6 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.spawn = async (...args: Parameters<typeof impl.spawn>) => {
       await this.sandbox.ensureRunning();
-      this._pruneExited();
       const handle = await impl.spawn(...args);
       handle.command = args[0];
       return handle;
@@ -76,39 +82,37 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.get = async (...args: Parameters<typeof impl.get>) => {
       await this.sandbox.ensureRunning();
-      return impl.get(...args);
+      // Skip PIDs that were already read after exit and dismissed.
+      if (this._dismissed.has(args[0])) return undefined;
+      const handle = await impl.get(...args);
+      // Prune exited processes when their output is read — this is the
+      // only automatic cleanup path. Keeps output available until the
+      // consumer has seen it at least once.
+      if (handle?.exitCode !== undefined) {
+        this._tracked.delete(handle.pid);
+        this._dismissed.add(handle.pid);
+      }
+      return handle;
     };
   }
 
-  /** Spawn a background process. */
+  /** Spawn a process. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     throw new Error(`${this.constructor.name} must implement spawn()`);
   }
 
-  /** List all background processes. */
+  /** List all tracked processes. */
   async list(): Promise<ProcessInfo[]> {
     throw new Error(`${this.constructor.name} must implement list()`);
   }
 
-  /** Get a handle to a background process by PID. Subclasses can override for fallback behavior. */
+  /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
   async get(pid: number): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
   }
 
-  /**
-   * Prune exited processes from the tracked map to free memory.
-   * Called automatically before spawning new processes.
-   */
-  protected _pruneExited(): void {
-    for (const [pid, handle] of this._tracked) {
-      if (handle.exitCode !== undefined) {
-        this._tracked.delete(pid);
-      }
-    }
-  }
-
-  /** Kill a background process by PID. Returns true if killed, false if not found. */
+  /** Kill a process by PID. Returns true if killed, false if not found. */
   async kill(pid: number): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;
@@ -120,6 +124,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     }
     // Release tracked handle to free accumulated output buffers.
     this._tracked.delete(pid);
+    this._dismissed.add(pid);
     return killed;
   }
 }

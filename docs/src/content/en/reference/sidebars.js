@@ -269,7 +269,7 @@ const sidebars = {
           id: 'evals/context-relevance',
           label: 'Context Relevance Scorer',
         },
-        { type: 'doc', id: 'evals/create-scorer', label: 'createScorer' },
+        { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
         { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
         { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
         {
@@ -288,7 +288,7 @@ const sidebars = {
           id: 'evals/prompt-alignment',
           label: 'Prompt Alignment Scorer',
         },
-        { type: 'doc', id: 'evals/run-evals', label: 'runEvals' },
+        { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
         {
           type: 'doc',
@@ -306,6 +306,30 @@ const sidebars = {
           label: 'Tool Call Accuracy Scorers',
         },
         { type: 'doc', id: 'evals/toxicity', label: 'Toxicity' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Harness',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/harness-class',
+          label: 'Harness Class',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Code',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-code/createMastraCode',
+          label: 'createMastraCode()',
+        },
       ],
     },
     {
@@ -647,44 +671,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Workspaces',
-      collapsed: true,
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'workspace/workspace-class',
-          label: 'Workspace Class',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/local-filesystem',
-          label: 'LocalFilesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/s3-filesystem',
-          label: 'S3Filesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/gcs-filesystem',
-          label: 'GCSFilesystem',
-        },
-        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
-        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
-        {
-          type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'WorkspaceFilesystem',
-        },
-        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Streaming',
       collapsed: true,
       items: [
@@ -777,7 +763,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'vectors/s3vectors',
-          label: 'Amazon S3 Vectors Store',
+          label: 'Amazon S3 Vector Store',
         },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
@@ -980,6 +966,41 @@ const sidebars = {
         },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Workspaces',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/workspace-class',
+          label: 'Workspace Class',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/local-filesystem',
+          label: 'LocalFilesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/s3-filesystem',
+          label: 'S3Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/gcs-filesystem',
+          label: 'GCSFilesystem',
+        },
+        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'WorkspaceFilesystem',
+        },
+        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
       ],
     },
   ],

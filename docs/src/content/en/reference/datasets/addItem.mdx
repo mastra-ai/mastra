@@ -14,100 +14,102 @@ Adds a single item to the dataset. Each item has an input, optional ground truth
 ## Usage example
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({ /* storage config */ });
+const mastra = new Mastra({
+  /* storage config */
+})
 
-const dataset = await mastra.datasets.get({ id: "dataset-id" });
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const item = await dataset.addItem({
-  input: { question: "What is TypeScript?" },
-  groundTruth: { answer: "A typed superset of JavaScript" },
-  metadata: { source: "manual" },
-});
+  input: { question: 'What is TypeScript?' },
+  groundTruth: { answer: 'A typed superset of JavaScript' },
+  metadata: { source: 'manual' },
+})
 
-console.log(item.id);
+console.log(item.id)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "input",
-      type: "unknown",
-      description: "Input data for the item.",
-    },
-    {
-      name: "groundTruth",
-      type: "unknown",
-      isOptional: true,
-      description: "Expected output or ground truth for scoring.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      isOptional: true,
-      description: "Arbitrary metadata for the item.",
-    },
-  ]}
+{
+name: "input",
+type: "unknown",
+description: "Input data for the item.",
+},
+{
+name: "groundTruth",
+type: "unknown",
+isOptional: true,
+description: "Expected output or ground truth for scoring.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Arbitrary metadata for the item.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "result",
-      type: "Promise<DatasetItem>",
-      description: "The created dataset item.",
-      properties: [{
-        type: "DatasetItem",
-        parameters: [
-          {
-            name: "id",
-            type: "string",
-            description: "Unique identifier of the item.",
-          },
-          {
-            name: "datasetId",
-            type: "string",
-            description: "ID of the parent dataset.",
-          },
-          {
-            name: "datasetVersion",
-            type: "number",
-            description: "Dataset version when the item was created.",
-          },
-          {
-            name: "input",
-            type: "unknown",
-            description: "Input data.",
-          },
-          {
-            name: "groundTruth",
-            type: "unknown",
-            isOptional: true,
-            description: "Ground truth data.",
-          },
-          {
-            name: "metadata",
-            type: "Record<string, unknown>",
-            isOptional: true,
-            description: "Item metadata.",
-          },
-          {
-            name: "createdAt",
-            type: "Date",
-            description: "When the item was created.",
-          },
-          {
-            name: "updatedAt",
-            type: "Date",
-            description: "When the item was last updated.",
-          },
-        ],
-      }],
-    },
-  ]}
+{
+name: "result",
+type: "Promise<DatasetItem>",
+description: "The created dataset item.",
+properties: [{
+type: "DatasetItem",
+parameters: [
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the item.",
+},
+{
+name: "datasetId",
+type: "string",
+description: "ID of the parent dataset.",
+},
+{
+name: "datasetVersion",
+type: "number",
+description: "Dataset version when the item was created.",
+},
+{
+name: "input",
+type: "unknown",
+description: "Input data.",
+},
+{
+name: "groundTruth",
+type: "unknown",
+isOptional: true,
+description: "Ground truth data.",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+isOptional: true,
+description: "Item metadata.",
+},
+{
+name: "createdAt",
+type: "Date",
+description: "When the item was created.",
+},
+{
+name: "updatedAt",
+type: "Date",
+description: "When the item was last updated.",
+},
+],
+}],
+},
+]}
 />

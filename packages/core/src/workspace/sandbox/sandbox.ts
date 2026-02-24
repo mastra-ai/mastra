@@ -24,6 +24,7 @@
  * ```
  */
 
+import type { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
@@ -72,9 +73,10 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Get instructions describing how this sandbox works.
    * Used in tool descriptions to help agents understand execution context.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this sandbox
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
   // Command Execution
@@ -83,18 +85,30 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   /**
    * Execute a shell command and wait for it to complete.
    * Optional - if not implemented, the workspace_execute_command tool won't be available.
+   *
+   * @example
+   * ```typescript
+   * await sandbox.executeCommand('npm install');
+   *
+   * // With options
+   * await sandbox.executeCommand('npm install', [], { timeout: 60000 });
+   *
+   * // With args array (each arg is shell-quoted automatically)
+   * await sandbox.executeCommand('npm', ['install'], { timeout: 60000 });
+   * ```
+   *
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   // ---------------------------------------------------------------------------
-  // Background Process Management (Optional)
+  // Process Management (Optional)
   // ---------------------------------------------------------------------------
 
   /**
-   * Background process manager.
-   * Optional - if not implemented, background process tools won't be available.
+   * Process manager.
+   * Optional - if not implemented, process management tools won't be available.
    *
    * Provides methods to spawn long-running processes, list them, and interact
    * with them via their {@link ProcessHandle} (kill, sendStdin, wait, read output).

@@ -323,11 +323,14 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'retrieved handle has accumulated stdout while still running',
         async () => {
-          // Single-process command: outputs then stays alive without forking
-          const handle = await processes.spawn(`node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`);
+          // Use onStdout to know when output has actually arrived (avoids flaky setTimeout)
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          // Wait for output to arrive
-          await new Promise(r => setTimeout(r, 100));
+          const handle = await processes.spawn(`node -e "console.log('running-get-test'); setInterval(()=>{},60000)"`, {
+            onStdout: () => gotOutput(),
+          });
+          await outputArrived;
 
           const retrieved = await processes.get(handle.pid);
           expect(retrieved).toBeDefined();
@@ -343,11 +346,15 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawn then get output then kill (tool flow)',
         async () => {
           // Simulates the full tool flow: execute_command(background:true) → get_process_output → kill_process
-          const handle = await processes.spawn(`node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`);
-          const pid = handle.pid;
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
 
-          // Wait for output
-          await new Promise(r => setTimeout(r, 100));
+          const handle = await processes.spawn(`node -e "console.log('spawn-get-kill'); setInterval(()=>{},60000)"`, {
+            onStdout: () => gotOutput(),
+          });
+          await outputArrived;
+
+          const pid = handle.pid;
 
           // Get output via PID (simulates get_process_output tool)
           const retrieved = await processes.get(pid);
@@ -359,6 +366,39 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           expect(killed).toBe(true);
 
           await handle.wait();
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'first get() after natural exit returns output, second get() returns undefined (pruned)',
+        async () => {
+          // Spawn a short-lived process and let it exit on its own (no wait() call)
+          let gotOutput: () => void;
+          const outputArrived = new Promise<void>(r => (gotOutput = r));
+
+          const handle = await processes.spawn('echo prune-test', {
+            onStdout: () => gotOutput(),
+          });
+          const pid = handle.pid;
+
+          // Wait for output to arrive, then poll until process has exited
+          await outputArrived;
+          const deadline = Date.now() + 5000;
+          while (handle.exitCode === undefined && Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+          expect(handle.exitCode).toBeDefined();
+
+          // First get() — process exited, should return handle with output
+          const first = await processes.get(pid);
+          expect(first).toBeDefined();
+          expect(first!.stdout).toContain('prune-test');
+          expect(first!.exitCode).toBeDefined();
+
+          // Second get() — handle was pruned on first read, should be gone
+          const second = await processes.get(pid);
+          expect(second).toBeUndefined();
         },
         getContext().testTimeout,
       );

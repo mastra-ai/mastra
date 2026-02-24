@@ -1,7 +1,7 @@
 /**
  * Process Handle (Base Class)
  *
- * Abstract base class for background process handles.
+ * Abstract base class for process handles.
  * Manages stdout/stderr callback dispatch and provides lazy
  * reader/writer stream getters — subclasses only implement
  * the platform-specific primitives.
@@ -13,7 +13,7 @@ import type { CommandResult } from '../types';
 import type { SpawnProcessOptions } from './types';
 
 /**
- * Handle to a spawned background process.
+ * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
  * wait). The base class handles stdout/stderr accumulation, callback
@@ -146,7 +146,10 @@ export abstract class ProcessHandle {
   get reader(): Readable {
     if (!this._reader) {
       this._reader = new Readable({ read() {} });
-      void this.wait().then(() => this._reader!.push(null));
+      void this.wait().then(
+        () => this._reader!.push(null),
+        () => this._reader!.push(null),
+      );
     }
     return this._reader;
   }
@@ -156,29 +159,9 @@ export abstract class ProcessHandle {
     if (!this._writer) {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
-          this.sendStdin(chunk.toString()).then(
-            () => cb(),
-            err => {
-              // Swallow EPIPE and stream-destroyed errors — the process has
-              // exited and stdin is gone. This commonly happens during LSP
-              // shutdown when buffered writes race with process termination.
-              const code = (err as NodeJS.ErrnoException).code;
-              if (code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED') {
-                cb();
-                return;
-              }
-              // Also swallow errors from our own destroyed-stream guard
-              if (err?.message?.includes('stdin stream is destroyed')) {
-                cb();
-                return;
-              }
-              cb(err);
-            },
-          );
+          this.sendStdin(chunk.toString()).then(() => cb(), cb);
         },
       });
-      // Prevent unhandled 'error' events from propagating as exceptions
-      this._writer.on('error', () => {});
     }
     return this._writer;
   }
