@@ -721,9 +721,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
                   const originalText = lastStep?.text || '';
 
-                  // Create a writer from the controller so processOutputResult can emit custom chunks
+                  // Create a writer from the controller so processOutputResult can emit custom chunks.
+                  // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
+                  // controller.enqueue (for raw stream consumers) to ensure visibility.
                   const outputResultWriter = {
-                    custom: async (data: { type: string }) => controller.enqueue(data as ChunkType<OUTPUT>),
+                    custom: async (data: { type: string }) => {
+                      self.#emitChunk(data as ChunkType<OUTPUT>);
+                      controller.enqueue(data as ChunkType<OUTPUT>);
+                    },
                   };
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
