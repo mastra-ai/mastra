@@ -415,6 +415,61 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
     });
 
+    describe('setBufferingObservationFlag', () => {
+      it('should set isBufferingObservation to true and capture token count', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 5000);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.isBufferingObservation).toBe(true);
+        expect(updated?.lastBufferedAtTokens).toBe(5000);
+      });
+
+      it('should set isBufferingObservation to false', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 5000);
+        await memoryStorage.setBufferingObservationFlag(record.id, false);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.isBufferingObservation).toBe(false);
+      });
+
+      it('should throw error for non-existent record', async () => {
+        await expect(memoryStorage.setBufferingObservationFlag('non-existent-id', true)).rejects.toThrow(/not found/);
+      });
+    });
+
+    describe('setBufferingReflectionFlag', () => {
+      it('should set isBufferingReflection to true', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.setBufferingReflectionFlag(record.id, true);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.isBufferingReflection).toBe(true);
+      });
+
+      it('should set isBufferingReflection to false', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.setBufferingReflectionFlag(record.id, true);
+        await memoryStorage.setBufferingReflectionFlag(record.id, false);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.isBufferingReflection).toBe(false);
+      });
+
+      it('should throw error for non-existent record', async () => {
+        await expect(memoryStorage.setBufferingReflectionFlag('non-existent-id', true)).rejects.toThrow(/not found/);
+      });
+    });
+
     describe('clearObservationalMemory', () => {
       it('should clear all observational memory for a resource', async () => {
         const input = createSampleOMInput();
