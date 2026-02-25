@@ -2279,6 +2279,18 @@ export class Workflow<
       throw res.error;
     }
 
+    if (res.status === 'tripwire') {
+      const tripwire = res.tripwire;
+      throw new TripWire(
+        tripwire?.reason || 'Processor tripwire triggered',
+        {
+          retry: tripwire?.retry,
+          metadata: tripwire?.metadata,
+        },
+        tripwire?.processorId,
+      );
+    }
+
     return res.status === 'success' ? res.result : undefined;
   }
 
