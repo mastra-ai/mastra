@@ -380,6 +380,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(providerResultMessage, 'response');
         }
 
+        // Check if any delegation hook called ctx.bail() — signal the loop to stop.
+        // The bail flag is communicated via requestContext because Zod output validation
+        // strips unknown fields (like _bailed) from the tool result object.
+        if (rest.requestContext?.get('__mastra_delegationBailed') && _internal) {
+          _internal._delegationBailed = true;
+          rest.requestContext.set('__mastra_delegationBailed', false);
+        }
+
         return {
           ...initialResult,
           messages: {

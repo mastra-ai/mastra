@@ -134,7 +134,7 @@ export const mastra = new Mastra({
 
 ### Registering subagents
 
-You can register subagents within an agent. They'll be executed as tools from the parent agent. Read the [using agents as tools](/docs/agents/using-tools#using-agents-as-tools) documentation to learn more.
+You can register subagents within an agent using the `agents` property. Adding subagents makes the parent agent a supervisor. A supervisor can delegate tasks to subagents, control delegations with hooks, filter context, and monitor progress using the [supervisor pattern](/docs/agents/supervisor-agents). Read the [using agents as tools](/docs/agents/using-tools#using-agents-as-tools) documentation for setup details.
 
 ### Registering subworkflows
 
@@ -344,4 +344,5 @@ Use [Studio](/docs/getting-started/studio) to test agents with different message
 
 - [Using Tools](/docs/agents/using-tools)
 - [Agent Memory](/docs/agents/agent-memory)
+- [Supervisor Agents](/docs/agents/supervisor-agents)
 - [Request Context](/docs/server/request-context)
