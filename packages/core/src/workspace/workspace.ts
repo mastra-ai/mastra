@@ -761,7 +761,7 @@ export class Workspace<
           try {
             const files = await this.getAllFiles(dir);
             for (const filePath of files) {
-              if (!filesToIndex.has(filePath) && !indexedPaths.has(filePath)) {
+              if (!indexedPaths.has(filePath)) {
                 await this.indexFileForSearch(filePath);
                 indexedPaths.add(filePath);
               }
