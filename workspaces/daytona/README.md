@@ -2,7 +2,7 @@
 
 Daytona cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
 
-Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, and sandbox reconnection.
+Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, and filesystem mounting (S3, GCS).
 
 ## Install
 
@@ -75,6 +75,52 @@ await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; 
   onStdout: chunk => process.stdout.write(chunk),
   onStderr: chunk => process.stderr.write(chunk),
 });
+```
+
+### Reconnection
+
+Reconnect to an existing sandbox by providing the same `id`. The sandbox resumes with its files and state intact:
+
+```typescript
+const sandbox = new DaytonaSandbox({ id: 'my-persistent-sandbox' });
+
+// First session
+await sandbox._start();
+await sandbox.executeCommand('sh', ['-c', 'echo "session 1" > /tmp/state.txt']);
+await sandbox._stop();
+
+// Later — reconnects to the same sandbox
+const sandbox2 = new DaytonaSandbox({ id: 'my-persistent-sandbox' });
+await sandbox2._start();
+const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt']);
+console.log(result.stdout); // "session 1"
+```
+
+### Filesystem mounting
+
+Mount S3 or GCS buckets into the sandbox filesystem via FUSE tools (`s3fs`, `gcsfuse`). The tools are installed automatically on first mount.
+
+```typescript
+import { DaytonaSandbox } from '@mastra/daytona';
+import { S3Filesystem } from '@mastra/s3';
+
+const sandbox = new DaytonaSandbox({ language: 'python' });
+
+const s3 = new S3Filesystem({
+  bucket: 'my-data-bucket',
+  region: 'us-east-1',
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+});
+
+await sandbox._start();
+await sandbox.mount(s3, '/data');
+
+// Files in the bucket are now accessible at /data
+const result = await sandbox.executeCommand('ls', ['/data']);
+console.log(result.stdout);
+
+await sandbox._stop(); // Unmounts before stopping
 ```
 
 ### Network isolation

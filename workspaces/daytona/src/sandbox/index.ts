@@ -15,14 +15,38 @@ import type {
   Sandbox,
   VolumeMount,
 } from '@daytonaio/sdk';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions } from '@mastra/core/workspace';
+import type {
+  SandboxInfo,
+  ProviderStatus,
+  MastraSandboxOptions,
+  WorkspaceFilesystem,
+  MountResult,
+  FilesystemMountConfig,
+  MountManager,
+} from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { DaytonaProcessManager } from './process-manager';
+import { mountS3, mountGCS } from './mounts';
+import type { DaytonaMountConfig, MountContext } from './mounts';
 import type { DaytonaResources } from './types';
 
-const LOG_PREFIX = '[@mastra/daytona]';
+export const LOG_PREFIX = '[@mastra/daytona]';
+
+/** Allowlist pattern for mount paths — absolute path with safe characters only. */
+const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
+
+/** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
+const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
+
+function validateMountPath(mountPath: string): void {
+  if (!SAFE_MOUNT_PATH.test(mountPath)) {
+    throw new Error(
+      `Invalid mount path: ${mountPath}. Must be an absolute path with alphanumeric, dash, dot, underscore, or slash characters only.`,
+    );
+  }
+}
 
 /** Patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
 const SANDBOX_DEAD_PATTERNS: RegExp[] = [
@@ -152,6 +176,7 @@ export class DaytonaSandbox extends MastraSandbox {
   readonly provider = 'daytona';
 
   status: ProviderStatus = 'pending';
+  declare readonly mounts: MountManager; // Non-optional (initialized by MastraSandbox base class)
 
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
@@ -265,6 +290,12 @@ export class DaytonaSandbox extends MastraSandbox {
       this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
       await this.detectWorkingDir();
+
+      // Reconcile FUSE mounts — clean up stale mounts from a previous session
+      const expectedPaths = Array.from(this.mounts.entries.keys());
+      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+      await this.reconcileMounts(expectedPaths);
+      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
       return;
     }
 
@@ -316,9 +347,17 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Stop the Daytona sandbox.
-   * Stops the sandbox instance and releases the reference.
+   * Unmounts all filesystems, then stops the sandbox.
    */
   async stop(): Promise<void> {
+    for (const mountPath of [...this.mounts.entries.keys()]) {
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Best-effort unmount; sandbox may already be dead
+      }
+    }
+
     if (this._sandbox && this._daytona) {
       try {
         await this._daytona.stop(this._sandbox);
@@ -427,6 +466,334 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
+  // Mount Support
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Mount a filesystem at a path in the sandbox using FUSE tools (s3fs, gcsfuse).
+   */
+  async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
+    validateMountPath(mountPath);
+
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+    const sandbox = this._sandbox;
+
+    this.logger.debug(`${LOG_PREFIX} Mounting "${mountPath}"...`);
+
+    const config = filesystem.getMountConfig?.() as DaytonaMountConfig | undefined;
+    if (!config) {
+      const error = `Filesystem "${filesystem.id}" does not provide a mount config`;
+      this.logger.error(`${LOG_PREFIX} ${error}`);
+      this.mounts.set(mountPath, { filesystem, state: 'error', error });
+      return { success: false, mountPath, error };
+    }
+
+    // Check if already mounted with matching config (e.g., when reconnecting)
+    const existingMount = await this.checkExistingMount(mountPath, config);
+    if (existingMount === 'matching') {
+      this.logger.debug(`${LOG_PREFIX} Existing mount at "${mountPath}" matches config, skipping`);
+      this.mounts.set(mountPath, { state: 'mounted', config });
+      return { success: true, mountPath };
+    } else if (existingMount === 'mismatched') {
+      this.logger.debug(`${LOG_PREFIX} Config mismatch at "${mountPath}", re-mounting...`);
+      await this.unmount(mountPath);
+    }
+
+    this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+
+    // Check if directory is non-empty (mounting would shadow existing files)
+    try {
+      const response = await sandbox.process.executeCommand(
+        `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
+      );
+      if (response.result.trim() === 'non-empty') {
+        const error = `Cannot mount at ${mountPath}: directory exists and is not empty`;
+        this.logger.error(`${LOG_PREFIX} ${error}`);
+        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+        return { success: false, mountPath, error };
+      }
+    } catch {
+      // Check failed, proceed anyway
+    }
+
+    // Create mount directory
+    try {
+      const mkdirResponse = await sandbox.process.executeCommand(
+        `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`,
+      );
+      if (mkdirResponse.exitCode !== 0) {
+        const error = mkdirResponse.result || 'Failed to create mount directory';
+        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+        return { success: false, mountPath, error };
+      }
+    } catch (err) {
+      const error = `Failed to create mount directory: ${err}`;
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+      return { success: false, mountPath, error };
+    }
+
+    // Build mount context — run() timeout is in ms, SDK expects seconds
+    const ctx: MountContext = {
+      run: async (cmd, timeoutMs) => {
+        const response = await sandbox.process.executeCommand(
+          cmd,
+          undefined,
+          undefined,
+          timeoutMs !== undefined ? Math.ceil(timeoutMs / 1000) : undefined,
+        );
+        return {
+          exitCode: response.exitCode,
+          stdout: response.result,
+          stderr: response.exitCode !== 0 ? response.result : '',
+        };
+      },
+      writeFile: async (path, content) => {
+        await sandbox.fs.uploadFile(Buffer.from(content), path);
+      },
+      logger: this.logger,
+    };
+
+    try {
+      switch (config.type) {
+        case 's3':
+          this.logger.debug(`${LOG_PREFIX} Mounting S3 at "${mountPath}"...`);
+          await mountS3(mountPath, config, ctx);
+          this.logger.debug(`${LOG_PREFIX} Mounted S3 bucket at ${mountPath}`);
+          break;
+        case 'gcs':
+          this.logger.debug(`${LOG_PREFIX} Mounting GCS at "${mountPath}"...`);
+          await mountGCS(mountPath, config, ctx);
+          this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
+          break;
+        default:
+          this.mounts.set(mountPath, {
+            filesystem,
+            state: 'unsupported',
+            config,
+            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
+          });
+          return {
+            success: false,
+            mountPath,
+            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
+          };
+      }
+    } catch (error) {
+      this.logger.error(`${LOG_PREFIX} Error mounting "${filesystem.provider}" at "${mountPath}":`, error);
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
+      await sandbox.process.executeCommand(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
+      this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
+      return { success: false, mountPath, error: String(error) };
+    }
+
+    // Mark as mounted
+    this.mounts.set(mountPath, { state: 'mounted', config });
+
+    await this.writeMarkerFile(mountPath);
+
+    this.logger.debug(`${LOG_PREFIX} Mounted "${mountPath}"`);
+    return { success: true, mountPath };
+  }
+
+  /**
+   * Write a marker file so we can detect config changes on reconnect.
+   */
+  private async writeMarkerFile(mountPath: string): Promise<void> {
+    if (!this._sandbox) return;
+
+    const markerContent = this.mounts.getMarkerContent(mountPath);
+    if (!markerContent) return;
+
+    const filename = this.mounts.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+
+    try {
+      await this._sandbox.process.executeCommand('mkdir -p /tmp/.mastra-mounts');
+      await this._sandbox.fs.uploadFile(Buffer.from(markerContent), markerPath);
+    } catch {
+      this.logger.debug(`${LOG_PREFIX} Warning: could not write marker file at ${markerPath}`);
+    }
+  }
+
+  /**
+   * Unmount a filesystem from a path in the sandbox.
+   */
+  async unmount(mountPath: string): Promise<void> {
+    validateMountPath(mountPath);
+
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+    const sandbox = this._sandbox;
+
+    this.logger.debug(`${LOG_PREFIX} Unmounting "${mountPath}"...`);
+
+    // Use fusermount for FUSE mounts; on any failure, try lazy umount as last resort
+    try {
+      const response = await sandbox.process.executeCommand(
+        `sudo fusermount -u "${mountPath}" 2>/dev/null || sudo umount "${mountPath}"`,
+      );
+      if (response.exitCode !== 0) {
+        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${response.result}`);
+      }
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Unmount failed, trying lazy umount: ${err}`);
+      await sandbox.process.executeCommand(`sudo umount -l "${mountPath}" 2>/dev/null || true`);
+    }
+
+    this.mounts.delete(mountPath);
+
+    // Clean up marker file
+    const markerPath = `/tmp/.mastra-mounts/${this.mounts.markerFilename(mountPath)}`;
+    await sandbox.process.executeCommand(`rm -f "${markerPath}" 2>/dev/null || true`);
+
+    // Remove mount directory if empty
+    const rmdirResponse = await sandbox.process.executeCommand(`sudo rmdir "${mountPath}" 2>&1`);
+    if (rmdirResponse.exitCode === 0) {
+      this.logger.debug(`${LOG_PREFIX} Removed mount directory ${mountPath}`);
+    } else {
+      this.logger.debug(`${LOG_PREFIX} Could not remove ${mountPath}: ${rmdirResponse.result.trim() || 'not empty'}`);
+    }
+
+    this.logger.debug(`${LOG_PREFIX} Unmounted "${mountPath}"`);
+  }
+
+  /**
+   * Check if a path is already mounted and whether the config matches.
+   */
+  private async checkExistingMount(
+    mountPath: string,
+    newConfig: DaytonaMountConfig,
+  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+    if (!this._sandbox) throw new SandboxNotReadyError(this.id);
+    const sandbox = this._sandbox;
+
+    try {
+      const mountResponse = await sandbox.process.executeCommand(
+        `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
+      );
+      if (mountResponse.result.trim() !== 'mounted') {
+        return 'not_mounted';
+      }
+    } catch {
+      return 'not_mounted';
+    }
+
+    const filename = this.mounts.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+    let parsed;
+    try {
+      const markerResponse = await sandbox.process.executeCommand(`cat "${markerPath}" 2>/dev/null || echo ""`);
+      parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
+    } catch {
+      return 'mismatched';
+    }
+
+    if (!parsed) return 'mismatched';
+
+    const newConfigHash = this.mounts.computeConfigHash(newConfig);
+    if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
+      return 'matching';
+    }
+
+    return 'mismatched';
+  }
+
+  /**
+   * Unmount stale FUSE mounts not in the expected list.
+   * Called after reconnecting to clean up mounts from a previous session.
+   */
+  private async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
+    if (!this._sandbox) return;
+    const sandbox = this._sandbox;
+
+    this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected:`, expectedMountPaths);
+
+    // Get current FUSE mounts
+    let currentMounts: string[] = [];
+    try {
+      const mountsResponse = await sandbox.process.executeCommand(
+        `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+      );
+      currentMounts = mountsResponse.result
+        .trim()
+        .split('\n')
+        .filter(p => p.length > 0);
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read /proc/mounts: ${err}`);
+      return;
+    }
+
+    // Read marker files to know which mounts we created
+    let markerFiles: string[] = [];
+    try {
+      const markersResponse = await sandbox.process.executeCommand('ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""');
+      markerFiles = markersResponse.result
+        .trim()
+        .split('\n')
+        .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read marker files: ${err}`);
+    }
+
+    // Build map of mount paths we manage
+    const managedMountPaths = new Map<string, string>();
+    for (const markerFile of markerFiles) {
+      const markerResponse = await sandbox.process.executeCommand(
+        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
+      );
+      const parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
+      if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
+        managedMountPaths.set(parsed.path, markerFile);
+      }
+    }
+
+    // Unmount stale managed FUSE mounts
+    for (const stalePath of currentMounts.filter(p => !expectedMountPaths.includes(p))) {
+      if (managedMountPaths.has(stalePath)) {
+        this.logger.debug(`${LOG_PREFIX} Unmounting stale mount at "${stalePath}"`);
+        try {
+          await this.unmount(stalePath);
+        } catch (err) {
+          this.logger.debug(`${LOG_PREFIX} Failed to unmount stale mount at "${stalePath}": ${err}`);
+        }
+      } else this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
+    }
+
+    // Clean up orphaned marker files and empty directories
+    try {
+      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
+      const markerToPath = new Map<string, string>();
+      for (const [path, file] of managedMountPaths) {
+        markerToPath.set(file, path);
+      }
+
+      for (const markerFile of markerFiles) {
+        if (!expectedMarkerFiles.has(markerFile)) {
+          const mountPath = markerToPath.get(markerFile);
+
+          if (mountPath) {
+            if (!currentMounts.includes(mountPath)) {
+              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
+              await sandbox.process.executeCommand(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
+              await sandbox.process.executeCommand(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
+            }
+          } else {
+            // Malformed marker file - just delete it
+            this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
+            await sandbox.process.executeCommand(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
+          }
+        }
+      }
+    } catch {
+      // Ignore errors during orphan cleanup
+      this.logger.debug(`${LOG_PREFIX} Error during orphan cleanup (non-fatal)`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
@@ -487,6 +854,21 @@ export class DaytonaSandbox extends MastraSandbox {
       // Not found or any error — create a fresh sandbox
       return null;
     }
+  }
+
+  /**
+   * Ensure the sandbox is started and return the Daytona Sandbox instance.
+   *
+   * When called from within start() (e.g. from mount helpers during reconnection),
+   * this._sandbox is already set, so we skip ensureRunning() to avoid deadlock.
+   */
+  private async ensureSandbox(): Promise<Sandbox> {
+    if (this._sandbox) return this._sandbox;
+    await this.ensureRunning();
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+    return this._sandbox;
   }
 
   /**

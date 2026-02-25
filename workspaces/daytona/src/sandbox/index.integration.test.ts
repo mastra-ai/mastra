@@ -121,7 +121,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
         image: 'nonexistent/fake-image:latest',
       }),
     capabilities: {
-      supportsMounting: false,
+      supportsMounting: true,
       supportsReconnection: true,
       supportsEnvVars: true,
       supportsWorkingDirectory: true,

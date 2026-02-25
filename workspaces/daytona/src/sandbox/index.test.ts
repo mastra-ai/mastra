@@ -1015,7 +1015,7 @@ describe('DaytonaSandbox', () => {
     createSandboxLifecycleTests(() => ({
       sandbox: conformanceSandbox as any,
       capabilities: {
-        supportsMounting: false,
+        supportsMounting: true,
         supportsReconnection: true,
         supportsConcurrency: true,
         supportsEnvVars: true,
