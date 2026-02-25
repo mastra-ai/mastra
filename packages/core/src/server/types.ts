@@ -2,6 +2,7 @@ import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
+import type { ZodError } from 'zod';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
@@ -111,6 +112,18 @@ export type HttpLoggingConfig = {
    */
   redactHeaders?: string[];
 };
+
+export type ValidationErrorContext = 'query' | 'body' | 'path';
+
+export type ValidationErrorResponse = {
+  status: number;
+  body: unknown;
+};
+
+export type ValidationErrorHook = (
+  error: ZodError,
+  context: ValidationErrorContext,
+) => ValidationErrorResponse | undefined | void;
 
 export type ServerConfig = {
   /**
@@ -283,4 +296,35 @@ export type ServerConfig = {
    * ```
    */
   onError?: (err: Error, c: Context) => Response | Promise<Response>;
+
+  /**
+   * Custom validation error handler for the server. Called when a request fails
+   * Zod schema validation (query parameters, request body, or path parameters).
+   *
+   * Return a `{ status, body }` object to override the default 400 response,
+   * or return `undefined` to fall back to the default behavior.
+   *
+   * @param error - The ZodError from schema validation
+   * @param context - Which part of the request failed: 'query', 'body', or 'path'
+   *
+   * @example
+   * ```ts
+   * const mastra = new Mastra({
+   *   server: {
+   *     onValidationError: (error, context) => ({
+   *       status: 422,
+   *       body: {
+   *         ok: false,
+   *         errors: error.issues.map(i => ({
+   *           path: i.path.join('.'),
+   *           message: i.message,
+   *         })),
+   *         source: context,
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  onValidationError?: ValidationErrorHook;
 };

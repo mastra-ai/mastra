@@ -114,6 +114,12 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
     description: 'Mark route as deprecated',
     isOptional: true,
   },
+  {
+    name: 'onValidationError',
+    type: "(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined",
+    description: 'Custom validation error handler for this route. Overrides the server-level `onValidationError` hook. Return `{ status, body }` to customize the response, or `undefined` to use the default.',
+    isOptional: true,
+  },
 ]}
 />
 

@@ -726,6 +726,41 @@ export const mastra = new Mastra({
 })
 ```
 
+### server.onValidationError
+
+**Type:** `(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined`
+
+Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses, change the status code, or format errors to match your API standards.
+
+Return a `{ status, body }` object to override the default `400` response, or `undefined` to fall through to the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
+
+The `context` parameter indicates which part of the request failed validation:
+- `'query'` — query parameters
+- `'body'` — request body
+- `'path'` — path parameters
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    onValidationError: (error, context) => ({
+      status: 422,
+      body: {
+        ok: false,
+        errors: error.issues.map(i => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+        source: context,
+      },
+    }),
+  },
+})
+```
+
+You can also set `onValidationError` on individual routes created with `createRoute()`. A route-level hook takes precedence over the server-level hook.
+
 ### server.port
 
 **Type:** `number`\

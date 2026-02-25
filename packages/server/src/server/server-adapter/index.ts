@@ -2,11 +2,13 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { ApiRoute, HttpLoggingConfig } from '@mastra/core/server';
+import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
+import type { ZodError } from 'zod';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
+import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
@@ -660,5 +662,35 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     return bodySchema.parseAsync(body);
+  }
+
+  private static readonly CONTEXT_LABELS: Record<ValidationErrorContext, string> = {
+    query: 'query parameters',
+    body: 'request body',
+    path: 'path parameters',
+  };
+
+  protected resolveValidationError(
+    route: ServerRoute,
+    error: ZodError,
+    context: ValidationErrorContext,
+  ): ValidationErrorResponse {
+    const hook = route.onValidationError ?? this.mastra.getServer()?.onValidationError;
+
+    if (hook) {
+      try {
+        const result = hook(error, context);
+        if (result) {
+          return result;
+        }
+      } catch {
+        // Hook threw — fall through to default
+      }
+    }
+
+    return {
+      status: 400,
+      body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
+    };
   }
 }
