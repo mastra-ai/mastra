@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { fg, mastra, tintHex } from './theme.js';
+import { fg, mastra, tintHex, getContrastText } from './theme.js';
 
 // Colors for OM modes
 const OBSERVER_COLOR = mastra.orange;
@@ -67,7 +67,7 @@ export function updateStatusLine(state: TUIState): void {
       Math.floor(mcg * badgeBrightness),
       Math.floor(mcb * badgeBrightness),
     ];
-    modeBadge = chalk.bgRgb(mr, mg, mb).hex(mastra.bg).bold(` ${badgeName.toLowerCase()} `);
+    modeBadge = chalk.bgRgb(mr, mg, mb).hex(getContrastText(`#${mr.toString(16).padStart(2, '0')}${mg.toString(16).padStart(2, '0')}${mb.toString(16).padStart(2, '0')}`)).bold(` ${badgeName.toLowerCase()} `);
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
     modeBadge = fg('dim', badgeName) + ' ';
@@ -176,7 +176,7 @@ export function updateStatusLine(state: TUIState): void {
       Math.floor(mcg * sBadgeBrightness),
       Math.floor(mcb * sBadgeBrightness),
     ];
-    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex(mastra.bg).bold(` ${shortName} `);
+    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex(getContrastText(`#${sr.toString(16).padStart(2, '0')}${sg.toString(16).padStart(2, '0')}${sb.toString(16).padStart(2, '0')}`)).bold(` ${shortName} `);
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);

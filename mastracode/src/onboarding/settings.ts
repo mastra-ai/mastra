@@ -83,6 +83,7 @@ export interface GlobalSettings {
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
+    theme: 'auto' | 'dark' | 'light';
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -115,6 +116,7 @@ const DEFAULTS: GlobalSettings = {
   },
   preferences: {
     yolo: null,
+    theme: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],

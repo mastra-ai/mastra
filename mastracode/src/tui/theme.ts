@@ -7,11 +7,22 @@ import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } f
 import chalk from 'chalk';
 
 // =============================================================================
-// Mastra Brand Palette
+// Theme Mode
 // =============================================================================
 
-/** Mastra brand colors — single source of truth for all hex values. */
-export const mastra = {
+export type ThemeMode = 'dark' | 'light';
+
+let currentThemeMode: ThemeMode = 'dark';
+
+export function getThemeMode(): ThemeMode {
+  return currentThemeMode;
+}
+
+// =============================================================================
+// Mastra Brand Palette (immutable — stays constant regardless of theme)
+// =============================================================================
+
+export const mastraBrand = {
   purple: '#7f45e0', // #b588fe brand is too washed out for terminal
   green: '#059669', // #7aff78 too vibrant
   orange: '#fdac53',
@@ -19,21 +30,73 @@ export const mastra = {
   blue: '#2563eb', // #6ccdfb brand is to washed out
   red: '#DC5663', // #ff4758 too intense
   yellow: '#e7e67b',
-  // Surface colors
+} as const;
+
+// =============================================================================
+// Mastra Surface Palette (theme-dependent)
+// =============================================================================
+
+interface MastraSurface {
+  bg: string;
+  antiGrid: string;
+  elevationSm: string;
+  elevationLg: string;
+  hover: string;
+  white: string;
+  specialGray: string;
+  mainGray: string;
+  darkGray: string;
+  borderAntiGrid: string;
+  borderElevation: string;
+}
+
+const darkSurface: MastraSurface = {
   bg: '#020202',
   antiGrid: '#0d0d0d',
   elevationSm: '#1a1a1a',
   elevationLg: '#141414',
   hover: '#262626',
-  // Text colors
   white: '#f0f0f0',
   specialGray: '#cccccc',
   mainGray: '#939393',
   darkGray: '#424242',
-  // Border colors
   borderAntiGrid: '#141414',
   borderElevation: '#1a1a1a',
-} as const;
+};
+
+const lightSurface: MastraSurface = {
+  bg: '#ffffff',
+  antiGrid: '#eaeaea',
+  elevationSm: '#ebebeb',
+  elevationLg: '#f0f0f0',
+  hover: '#e0e0e0',
+  white: '#1a1a1a',
+  specialGray: '#444444',
+  mainGray: '#6b6b6b',
+  darkGray: '#b0b0b0',
+  borderAntiGrid: '#e5e5e5',
+  borderElevation: '#e0e0e0',
+};
+
+type MastraPalette = typeof mastraBrand & MastraSurface;
+
+function getSurface(): MastraSurface {
+  return currentThemeMode === 'dark' ? darkSurface : lightSurface;
+}
+
+/** Mastra palette — brand colors are constant, surface colors adapt to theme mode. */
+export const mastra: MastraPalette = new Proxy({} as MastraPalette, {
+  get(_target, prop: string) {
+    if (prop in mastraBrand) {
+      return mastraBrand[prop as keyof typeof mastraBrand];
+    }
+    const surface = getSurface();
+    if (prop in surface) {
+      return surface[prop as keyof MastraSurface];
+    }
+    return undefined;
+  },
+});
 
 /** Tint a hex color by a brightness factor (0–1). e.g. tintHex("#ff8800", 0.15) → near-black orange */
 export function tintHex(hex: string, factor: number): string {
@@ -118,10 +181,10 @@ export interface ThemeColors {
 }
 
 // =============================================================================
-// Default Dark Theme
+// Dark Theme
 // =============================================================================
 
-const darkTheme: ThemeColors = {
+export const darkTheme: ThemeColors = {
   // Core UI
   accent: '#7c3aed', // Purple
   border: '#3f3f46',
@@ -154,9 +217,51 @@ const darkTheme: ThemeColors = {
   number: '#fbbf24', // Yellow for line numbers
   function: '#60a5fa', // Light blue for function names
   // Selection
-  selectedBg: mastra.hover,
+  selectedBg: darkSurface.hover,
   // Overlays
-  overlayBg: mastra.antiGrid,
+  overlayBg: darkSurface.antiGrid,
+};
+
+// =============================================================================
+// Light Theme
+// =============================================================================
+
+export const lightTheme: ThemeColors = {
+  // Core UI
+  accent: '#7c3aed', // Purple stays the same
+  border: '#d4d4d8',
+  borderAccent: '#7c3aed',
+  borderMuted: '#e4e4e7',
+  success: '#16a34a',
+  error: '#dc2626',
+  warning: '#d97706',
+  muted: '#71717a',
+  dim: '#a1a1aa',
+  text: '#18181b',
+  thinkingText: '#71717a',
+  // User messages
+  userMessageBg: '#eff6ff', // Light blue
+  userMessageText: '#18181b',
+  // System reminders
+  systemReminderBg: '#fefce8', // Light yellow
+  // Tool execution
+  toolPendingBg: '#f5f3ff', // Light purple
+  toolSuccessBg: '#f5f3ff', // Light purple (same as pending)
+  toolErrorBg: '#fef2f2', // Light red
+  toolBorderPending: '#6366f1', // Indigo for pending
+  toolBorderSuccess: '#16a34a', // Green for success
+  toolBorderError: '#dc2626', // Red for error
+  toolTitle: '#7c3aed',
+  toolOutput: '#3f3f46',
+  // Error display
+  errorBg: '#fef2f2', // Light red
+  path: '#6b7280', // Gray for file paths
+  number: '#b45309', // Amber for line numbers
+  function: '#2563eb', // Blue for function names
+  // Selection
+  selectedBg: lightSurface.hover,
+  // Overlays
+  overlayBg: lightSurface.antiGrid,
 };
 
 // =============================================================================
@@ -177,6 +282,14 @@ export function getTheme(): ThemeColors {
  */
 export function setTheme(colors: ThemeColors): void {
   currentTheme = colors;
+}
+
+/**
+ * Apply a theme mode, updating both the surface palette and the theme colors.
+ */
+export function applyThemeMode(mode: ThemeMode): void {
+  currentThemeMode = mode;
+  currentTheme = mode === 'light' ? lightTheme : darkTheme;
 }
 
 // =============================================================================

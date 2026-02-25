@@ -6,6 +6,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { loadSettings } from './onboarding/settings.js';
+import { applyThemeMode } from './tui/theme.js';
+import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -64,6 +66,14 @@ async function main() {
   console.warn = (...args: unknown[]) => {
     logStream.write(`[WARN] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
   };
+
+  // Detect and apply terminal theme
+  const settings = loadSettings();
+  const themePref = settings.preferences.theme;
+  const themeMode = themePref === 'dark' || themePref === 'light'
+    ? themePref
+    : await detectTerminalTheme();
+  applyThemeMode(themeMode);
 
   const tui = new MastraTUI({
     harness,
