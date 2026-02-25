@@ -19,8 +19,6 @@ export { LoginSelectorComponent } from './components/login-selector.js';
 export { LoginDialogComponent } from './components/login-dialog.js';
 export {
   theme,
-  getTheme,
-  setTheme,
   applyThemeMode,
   getThemeMode,
   getMarkdownTheme,

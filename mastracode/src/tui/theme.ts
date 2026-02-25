@@ -273,14 +273,14 @@ let currentTheme: ThemeColors = darkTheme;
 /**
  * Get the current theme colors.
  */
-export function getTheme(): ThemeColors {
+function getTheme(): ThemeColors {
   return currentTheme;
 }
 
 /**
  * Set the current theme.
  */
-export function setTheme(colors: ThemeColors): void {
+function setTheme(colors: ThemeColors): void {
   currentTheme = colors;
 }
 
