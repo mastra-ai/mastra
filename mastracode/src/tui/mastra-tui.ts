@@ -319,7 +319,9 @@ export class MastraTUI {
   private async handleEvent(event: HarnessEvent): Promise<void> {
     await dispatchEvent(event, this.getEventContext(), this.state);
 
-    if (event.type === 'thread_changed' || event.type === 'thread_created') {
+    if (event.type === 'thread_created') {
+      await this.syncThreadActivePackMetadata(event.thread);
+    } else if (event.type === 'thread_changed') {
       await this.syncThreadActivePackMetadata();
     }
 
@@ -329,29 +331,44 @@ export class MastraTUI {
     }
   }
 
-  private async syncThreadActivePackMetadata(): Promise<void> {
+  private async buildProviderAccess(): Promise<ProviderAccess> {
+    const models = await this.state.harness.listAvailableModels();
+    const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+    const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
+      if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
+      if (hasEnv(provider)) return 'apikey';
+      return false;
+    };
+    return {
+      anthropic: accessLevel('anthropic', 'anthropic'),
+      openai: accessLevel('openai', 'openai-codex'),
+      cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
+      google: hasEnv('google') ? ('apikey' as const) : false,
+      deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+    };
+  }
+
+  private async syncThreadActivePackMetadata(thread?: { id: string; metadata?: Record<string, unknown> }): Promise<void> {
     const settings = loadSettings();
     const currentThreadId = this.state.harness.getCurrentThreadId();
     if (!currentThreadId) return;
 
-    const thread = (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
-    const allPackAccess: ProviderAccess = {
-      anthropic: 'oauth',
-      openai: 'oauth',
-      cerebras: 'apikey',
-      google: 'apikey',
-      deepseek: 'apikey',
-    };
-    const packs = getAvailableModePacks(allPackAccess, settings.customModelPacks).filter(p => p.id !== 'custom');
+    const resolvedThread = thread ?? (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+    const access = await this.buildProviderAccess();
+    const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
       settings,
       packs,
-      thread?.metadata as Record<string, unknown> | undefined,
+      resolvedThread?.metadata as Record<string, unknown> | undefined,
     );
 
     if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
-      settings.models.activeModelPackId = resolvedPackId;
-      saveSettings(settings);
+      // Re-read settings to avoid overwriting concurrent changes
+      const fresh = loadSettings();
+      if (fresh.models.activeModelPackId !== resolvedPackId) {
+        fresh.models.activeModelPackId = resolvedPackId;
+        saveSettings(fresh);
+      }
     }
   }
 
@@ -639,24 +656,7 @@ export class MastraTUI {
       loggedIn: this.state.authStorage?.isLoggedIn(p.id) ?? false,
     }));
 
-    const buildAccess = async (): Promise<ProviderAccess> => {
-      const models = await this.state.harness.listAvailableModels();
-      const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-      const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
-        if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
-        if (hasEnv(provider)) return 'apikey';
-        return false;
-      };
-      return {
-        anthropic: accessLevel('anthropic', 'anthropic'),
-        openai: accessLevel('openai', 'openai-codex'),
-        cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
-        google: hasEnv('google') ? ('apikey' as const) : false,
-        deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
-      };
-    };
-
-    const access = await buildAccess();
+    const access = await this.buildProviderAccess();
     const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
@@ -708,7 +708,7 @@ export class MastraTUI {
           }
           this.performLogin(providerId).then(async () => {
             try {
-              const updatedAccess = await buildAccess();
+              const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
               component.updateOmPacks(getAvailableOmPacks(updatedAccess));
@@ -808,7 +808,10 @@ export class MastraTUI {
 
     let activeModePackId = modePack.id;
     if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
-      const customName = modePack.id === 'custom' ? (modePack.name?.trim() || 'Custom') : modePack.id.slice('custom:'.length);
+      const customName =
+        modePack.id === 'custom'
+          ? (modePack.name?.trim() || 'Custom')
+          : (modePack.id.slice('custom:'.length) || 'Custom');
       activeModePackId = `custom:${customName}`;
       const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
       const idx = settings.customModelPacks.findIndex(p => p.name === customName);
@@ -824,7 +827,9 @@ export class MastraTUI {
 
     settings.onboarding.modePackId = activeModePackId;
     settings.models.activeModelPackId = activeModePackId;
-    await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+    if (harness.getCurrentThreadId()) {
+      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+    }
 
     settings.models.activeOmPackId = omPack.id;
     settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;

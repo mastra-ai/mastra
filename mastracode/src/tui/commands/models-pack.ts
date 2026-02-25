@@ -145,9 +145,7 @@ async function askCustomPackAction(
 
     const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
     ctx.state.activeInlineQuestion = inputShim;
-    ctx.state.chatContainer.addChild(new Spacer(1));
     ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
     ctx.state.ui.requestRender();
     ctx.state.chatContainer.invalidate();
   });
@@ -174,23 +172,23 @@ async function askCustomPackEditTarget(
       getSelectListTheme(),
     );
 
+    const cleanup = () => {
+      if (ctx.state.chatContainer.children.includes(container as any)) {
+        ctx.state.chatContainer.removeChild(container as any);
+      }
+      ctx.state.ui.requestRender();
+      ctx.state.chatContainer.invalidate();
+    };
+
     selectList.onSelect = item => {
       ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      const label =
-        item.value === 'save'
-          ? `${theme.fg('success', '✓')} Saved custom pack edits`
-          : `${theme.fg('success', '✓')} Edit target → ${theme.bold(item.value)}`;
-      container.addChild(new Text(theme.fg('text', label), 0, 0));
-      ctx.state.ui.requestRender();
+      cleanup();
       resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'save');
     };
 
     selectList.onCancel = () => {
       ctx.state.activeInlineQuestion = undefined;
-      container.clear();
-      container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} Edit custom pack (cancelled)`), 0, 0));
-      ctx.state.ui.requestRender();
+      cleanup();
       resolve(null);
     };
 
@@ -200,9 +198,7 @@ async function askCustomPackEditTarget(
 
     const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
     ctx.state.activeInlineQuestion = inputShim;
-    ctx.state.chatContainer.addChild(new Spacer(1));
     ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
     ctx.state.ui.requestRender();
     ctx.state.chatContainer.invalidate();
   });
@@ -324,11 +320,22 @@ export function upsertCustomPackInSettings(
 export function removeCustomPackFromSettings(settings: GlobalSettings, packId: string): void {
   if (!packId.startsWith('custom:')) return;
   const packName = packId.slice('custom:'.length);
+  const removedPack = settings.customModelPacks.find(p => p.name === packName);
   settings.customModelPacks = settings.customModelPacks.filter(p => p.name !== packName);
+
+  const modeDefaultsMatchRemovedPack =
+    !!removedPack &&
+    settings.models.modeDefaults.plan === removedPack.models.plan &&
+    settings.models.modeDefaults.build === removedPack.models.build &&
+    settings.models.modeDefaults.fast === removedPack.models.fast;
 
   if (settings.models.activeModelPackId === packId) {
     settings.models.activeModelPackId = null;
+    settings.models.modeDefaults = {};
+  } else if (modeDefaultsMatchRemovedPack) {
+    settings.models.modeDefaults = {};
   }
+
   if (settings.onboarding.modePackId === packId) {
     settings.onboarding.modePackId = null;
   }
@@ -399,7 +406,7 @@ function getPackDetail(pack: ModePack): string {
   ].join('\n');
 }
 
-async function saveCustomPackEdits(pack: ModePack, previousPackId?: string): Promise<void> {
+async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
   const settings = loadSettings();
   const wasActive = previousPackId ? settings.models.activeModelPackId === previousPackId : settings.models.activeModelPackId === pack.id;
   const wasOnboarding = previousPackId ? settings.onboarding.modePackId === previousPackId : settings.onboarding.modePackId === pack.id;
@@ -420,17 +427,33 @@ async function saveCustomPackEdits(pack: ModePack, previousPackId?: string): Pro
   }
 
   saveSettings(settings);
+
+  if (previousPackId && previousPackId !== pack.id) {
+    const harness = ctx.state.harness;
+    const threadId = harness.getCurrentThreadId();
+    const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
+    const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
+    if (threadPackId === previousPackId) {
+      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+    }
+  }
 }
 
 async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
   if (!pack.id.startsWith('custom:')) return;
 
+  const harness = ctx.state.harness;
+  const threadId = harness.getCurrentThreadId();
+  const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
+  const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
+
   const settings = loadSettings();
   removeCustomPackFromSettings(settings, pack.id);
   saveSettings(settings);
 
-  const harness = ctx.state.harness;
-  await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
+  if (threadPackId === pack.id) {
+    await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
+  }
 }
 
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
@@ -534,7 +557,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
           previousPackId = edited.previousPackId;
           pack = edited.pack;
-          await saveCustomPackEdits(pack, previousPackId);
+          await saveCustomPackEdits(ctx, pack, previousPackId);
           previousPackId = undefined;
           ctx.showInfo(`Updated custom pack: ${pack.name}`);
         }

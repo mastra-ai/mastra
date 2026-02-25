@@ -277,9 +277,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
-      const settings = loadSettings();
-      settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
-      saveSettings(settings);
+      try {
+        const settings = loadSettings();
+        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        saveSettings(settings);
+      } catch (error) {
+        console.error('Failed to persist model usage count', error);
+      }
     },
     threadLock: {
       acquire: acquireThreadLock,

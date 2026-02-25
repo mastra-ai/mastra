@@ -61,8 +61,8 @@ export interface GlobalSettings {
   // Global model preferences (applied to new threads)
   models: {
     /**
-     * Active model pack ID. Built-in packs use their id directly ("varied",
-     * "anthropic", "openai"). Custom packs use "custom:<name>".
+     * Active model pack ID. Built-in packs use their id directly ("anthropic",
+     * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
      * (e.g. new model versions) apply automatically.
      * Cleared when the user manually overrides via /models (falls back to modeDefaults).
@@ -215,6 +215,43 @@ function migrateFromAuth(settingsPath: string): boolean {
   return true;
 }
 
+const LEGACY_VARIED_MODELS: Record<string, string> = {
+  plan: 'openai/gpt-5.3-codex',
+  build: 'anthropic/claude-sonnet-4-5',
+  fast: 'anthropic/claude-haiku-4-5',
+};
+
+export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
+  const legacyPackId = 'varied';
+  const customPackId = 'custom:varied';
+  const hasLegacyReference =
+    settings.models.activeModelPackId === legacyPackId || settings.onboarding.modePackId === legacyPackId;
+
+  if (!hasLegacyReference) return false;
+
+  const existingIdx = settings.customModelPacks.findIndex(p => p.name === 'varied');
+  if (existingIdx < 0) {
+    settings.customModelPacks.push({
+      name: 'varied',
+      models: { ...LEGACY_VARIED_MODELS },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (settings.models.activeModelPackId === legacyPackId) {
+    settings.models.activeModelPackId = customPackId;
+    if (Object.keys(settings.models.modeDefaults).length === 0) {
+      settings.models.modeDefaults = { ...LEGACY_VARIED_MODELS };
+    }
+  }
+
+  if (settings.onboarding.modePackId === legacyPackId) {
+    settings.onboarding.modePackId = customPackId;
+  }
+
+  return true;
+}
+
 export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
@@ -237,8 +274,17 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     };
 
     // Migrate legacy omModelId → omModelOverride
+    let settingsChanged = false;
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
+      settingsChanged = true;
+    }
+
+    if (migrateLegacyVariedPack(settings)) {
+      settingsChanged = true;
+    }
+
+    if (settingsChanged) {
       saveSettings(settings, filePath);
     }
 
@@ -310,7 +356,11 @@ export function resolveThreadActiveModelPackId(
     if (matches) return pack.id;
   }
 
-  return settings.models.activeModelPackId;
+  if (settings.models.activeModelPackId && isKnownPack(settings.models.activeModelPackId)) {
+    return settings.models.activeModelPackId;
+  }
+
+  return null;
 }
 
 /**
