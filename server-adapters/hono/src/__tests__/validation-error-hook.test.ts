@@ -27,7 +27,7 @@ describe('Validation Error Hook', () => {
 
   async function registerTestRoute(
     app: Hono,
-    overrides?: { onValidationError?: any; queryParamSchema?: any; path?: string },
+    overrides?: { onValidationError?: any; queryParamSchema?: any; pathParamSchema?: any; path?: string },
   ) {
     const adapter = new MastraServer({
       app,
@@ -42,6 +42,7 @@ describe('Validation Error Hook', () => {
       responseType: 'json' as const,
       bodySchema,
       queryParamSchema: overrides?.queryParamSchema,
+      pathParamSchema: overrides?.pathParamSchema,
       handler: async (params: any) => ({ ok: true, name: params.name, age: params.age }),
       onValidationError: overrides?.onValidationError,
     };
@@ -104,6 +105,33 @@ describe('Validation Error Hook', () => {
       const data = await response.json();
       expect(data).toEqual({ ok: false, type: 'query_error' });
       expect(hook).toHaveBeenCalledWith(expect.any(z.ZodError), 'query');
+    });
+
+    it('should use custom hook response for path validation errors', async () => {
+      const hook = vi.fn().mockReturnValue({
+        status: 422,
+        body: { ok: false, type: 'path_error' },
+      });
+
+      mockServerHook(hook);
+      const app = new Hono();
+      await registerTestRoute(app, {
+        path: '/test/:id',
+        pathParamSchema: z.object({ id: z.coerce.number() }),
+      });
+
+      const response = await app.request(
+        new Request('http://localhost/test/not-a-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Alice', age: 30 }),
+        }),
+      );
+
+      expect(response.status).toBe(422);
+      const data = await response.json();
+      expect(data).toEqual({ ok: false, type: 'path_error' });
+      expect(hook).toHaveBeenCalledWith(expect.any(z.ZodError), 'path');
     });
 
     it('should fall back to default when hook returns undefined', async () => {

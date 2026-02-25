@@ -683,8 +683,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         if (result) {
           return result;
         }
-      } catch {
-        // Hook threw — fall through to default
+      } catch (hookError) {
+        this.mastra.getLogger()?.error('Error in custom onValidationError hook', {
+          error: hookError instanceof Error ? { message: hookError.message, stack: hookError.stack } : hookError,
+        });
       }
     }
 
