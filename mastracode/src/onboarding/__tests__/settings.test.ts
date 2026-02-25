@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseThreadSettings,
-  resolveThreadActiveModelPackId,
-  type GlobalSettings,
-  type StorageSettings,
-} from '../settings.js';
+import { parseThreadSettings, resolveThreadActiveModelPackId } from '../settings.js';
+import type { GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
