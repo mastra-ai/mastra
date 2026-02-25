@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { fg, mastra, tintHex, getThemeMode } from './theme.js';
+import { theme, mastra, tintHex, getThemeMode } from './theme.js';
 
 // Colors for OM modes
 const OBSERVER_COLOR = mastra.orange;
@@ -90,7 +90,7 @@ export function updateStatusLine(state: TUIState): void {
     modeBadge = chalk.bgRgb(mr, mg, mb).hex('#000000').bold(` ${badgeName.toLowerCase()} `);
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
-    modeBadge = fg('dim', badgeName) + ' ';
+    modeBadge = theme.fg('dim', badgeName) + ' ';
     modeBadgeWidth = badgeName.length + 1;
   }
 
@@ -135,7 +135,7 @@ export function updateStatusLine(state: TUIState): void {
   const styleModelId = (id: string): string => {
     if (!state.modelAuthStatus.hasAuth) {
       const envVar = state.modelAuthStatus.apiKeyEnvVar;
-      return fg('dim', id) + fg('error', ' ✗') + fg('muted', envVar ? ` (${envVar})` : ' (no key)');
+      return theme.fg('dim', id) + theme.fg('error', ' ✗') + theme.fg('muted', envVar ? ` (${envVar})` : ' (no key)');
     }
     // Tinted near-black background from mode color
     const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
@@ -202,7 +202,7 @@ export function updateStatusLine(state: TUIState): void {
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);
-    shortModeBadge = fg('dim', shortName) + ' ';
+    shortModeBadge = theme.fg('dim', shortName) + ' ';
     shortModeBadgeWidth = shortName.length + 1;
   }
 
@@ -266,7 +266,7 @@ export function updateStatusLine(state: TUIState): void {
     if (dirText) {
       parts.push({
         plain: dirText,
-        styled: fg('dim', dirText),
+        styled: theme.fg('dim', dirText),
       });
     }
     const totalPlain =

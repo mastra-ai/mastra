@@ -576,14 +576,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const color = diag.severity === 'error' ? t.error : diag.severity === 'warning' ? t.warning : t.muted;
         const icon = diag.severity === 'error' ? '✗' : diag.severity === 'warning' ? '⚠' : 'ℹ';
         const location = diag.location ? chalk.hex(color)(diag.location) + ' ' : '';
-        const line = `  ${chalk.hex(color)(icon)} ${location}${fg('thinkingText', diag.message)}`;
+        const line = `  ${chalk.hex(color)(icon)} ${location}${theme.fg('thinkingText', diag.message)}`;
         this.contentBox.addChild(new Text(line, 0, 0));
       }
       if (shouldCollapse) {
         const remaining = diagnostics.entries.length - COLLAPSED_DIAG_LINES;
         this.contentBox.addChild(
           new Text(
-            fg('muted', `  ... ${remaining} more diagnostic${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
+            theme.fg('muted', `  ... ${remaining} more diagnostic${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
             0,
             0,
           ),
