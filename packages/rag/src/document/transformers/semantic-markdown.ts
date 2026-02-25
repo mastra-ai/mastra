@@ -123,7 +123,11 @@ export class SemanticMarkdownTransformer extends TextTransformer {
 
           const title = `${'#'.repeat(current.depth)} ${current.title}`;
           const formattedTitle = `\n\n${title}`;
-          const headerLength = this.countTokens(`${formattedTitle}\n`);
+          const headerLength = this.tokenizer.encode(
+            `${formattedTitle}\n`,
+            this.allowedArray,
+            this.disallowedArray,
+          ).length;
           const mergedLength = prev.length + current.length + headerLength;
 
           if (mergedLength < this.joinThreshold && prev.depth <= current.depth) {
