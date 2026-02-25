@@ -258,10 +258,10 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 ### Detection order
 
 1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
-2. Persisted setting from `/theme` command (stored in `settings.json`)
-3. OSC 11 query — asks your terminal for its actual background color
-4. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
-5. Falls back to dark theme
+1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. OSC 11 query — asks your terminal for its actual background color
+1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
+1. Falls back to dark theme
 
 ### Switching themes
 
