@@ -72,8 +72,8 @@ Stream command output in real time via callbacks:
 
 ```typescript
 await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
-  onStdout: (chunk) => process.stdout.write(chunk),
-  onStderr: (chunk) => process.stderr.write(chunk),
+  onStdout: chunk => process.stdout.write(chunk),
+  onStderr: chunk => process.stderr.write(chunk),
 });
 ```
 
@@ -127,29 +127,29 @@ console.log(response.text);
 
 ## Configuration
 
-| Option                | Type      | Default               | Description                    |
-| --------------------- | --------- | --------------------- | ------------------------------ |
-| `id`                  | `string`  | auto-generated        | Sandbox identifier             |
-| `apiKey`              | `string`  | `DAYTONA_API_KEY` env | API key                        |
-| `apiUrl`              | `string`  | `DAYTONA_API_URL` env | API endpoint                   |
-| `target`              | `string`  | `DAYTONA_TARGET` env  | Runner region                  |
-| `timeout`             | `number`  | `300000`              | Default execution timeout (ms) |
-| `language`            | `string`  | `'typescript'`        | Runtime language               |
-| `snapshot`            | `string`  | —                     | Pre-built snapshot ID. Takes precedence over `image`. |
+| Option                | Type      | Default               | Description                                                                                                                                  |
+| --------------------- | --------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | `string`  | auto-generated        | Sandbox identifier                                                                                                                           |
+| `apiKey`              | `string`  | `DAYTONA_API_KEY` env | API key                                                                                                                                      |
+| `apiUrl`              | `string`  | `DAYTONA_API_URL` env | API endpoint                                                                                                                                 |
+| `target`              | `string`  | `DAYTONA_TARGET` env  | Runner region                                                                                                                                |
+| `timeout`             | `number`  | `300000`              | Default execution timeout (ms)                                                                                                               |
+| `language`            | `string`  | `'typescript'`        | Runtime language                                                                                                                             |
+| `snapshot`            | `string`  | —                     | Pre-built snapshot ID. Takes precedence over `image`.                                                                                        |
 | `image`               | `string`  | —                     | Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with `resources`. Ignored when `snapshot` is set. |
-| `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk }`. Only used with `image`. |
-| `env`                 | `object`  | `{}`                  | Environment variables          |
-| `labels`              | `object`  | `{}`                  | Custom metadata labels         |
-| `name`                | `string`  | sandbox `id`          | Sandbox display name           |
-| `user`                | `string`  | `daytona`             | OS user to run commands as     |
-| `public`              | `boolean` | `false`               | Make port previews public      |
-| `ephemeral`           | `boolean` | `false`               | Delete sandbox immediately on stop |
-| `autoStopInterval`    | `number`  | `15`                  | Auto-stop interval in minutes (0 = disabled) |
-| `autoArchiveInterval` | `number`  | `7 days`              | Auto-archive interval in minutes (0 = 7 days) |
-| `autoDeleteInterval`  | `number`  | `disabled`            | Auto-delete interval in minutes (negative = disabled, 0 = delete on stop) |
-| `volumes`             | `array`   | —                     | `[{ volumeId, mountPath }]`    |
-| `networkBlockAll`     | `boolean` | `false`               | Block all network access       |
-| `networkAllowList`    | `string`  | —                     | Comma-separated allowed CIDR addresses |
+| `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk }`. Only used with `image`.                                                                                             |
+| `env`                 | `object`  | `{}`                  | Environment variables                                                                                                                        |
+| `labels`              | `object`  | `{}`                  | Custom metadata labels                                                                                                                       |
+| `name`                | `string`  | sandbox `id`          | Sandbox display name                                                                                                                         |
+| `user`                | `string`  | `daytona`             | OS user to run commands as                                                                                                                   |
+| `public`              | `boolean` | `false`               | Make port previews public                                                                                                                    |
+| `ephemeral`           | `boolean` | `false`               | Delete sandbox immediately on stop                                                                                                           |
+| `autoStopInterval`    | `number`  | `15`                  | Auto-stop interval in minutes (0 = disabled)                                                                                                 |
+| `autoArchiveInterval` | `number`  | `7 days`              | Auto-archive interval in minutes (0 = 7 days)                                                                                                |
+| `autoDeleteInterval`  | `number`  | `disabled`            | Auto-delete interval in minutes (negative = disabled, 0 = delete on stop)                                                                    |
+| `volumes`             | `array`   | —                     | `[{ volumeId, mountPath }]`                                                                                                                  |
+| `networkBlockAll`     | `boolean` | `false`               | Block all network access                                                                                                                     |
+| `networkAllowList`    | `string`  | —                     | Comma-separated allowed CIDR addresses                                                                                                       |
 
 ## Direct SDK Access
 
