@@ -459,7 +459,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: inputData.toolName,
                 args,
                 suspendPayload,
-                suspendedToolRunId: options?.isAgentSuspend ? options.runId : undefined,
+                suspendedToolRunId: options?.runId,
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
               });
@@ -483,8 +483,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeData: resumeDataToPassToToolOptions,
         };
 
-        //if resuming a subAgent tool, we want to find the runId from when the subAgent got suspended.
-        if (resumeDataToPassToToolOptions && isAgentTool && !isResumeToolCall) {
+        //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
+        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
