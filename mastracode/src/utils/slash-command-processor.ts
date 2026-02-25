@@ -33,6 +33,10 @@ export async function processSlashCommand(
 function replaceArguments(template: string, args: string[]): string {
   let result = template;
 
+  // Check if template references any argument variables
+  const hasArgumentsVar = /\$ARGUMENTS/.test(template);
+  const hasPositionalVar = /\$\d+/.test(template);
+
   // Replace $ARGUMENTS with all args joined
   result = result.replace(/\$ARGUMENTS/g, args.join(' '));
 
@@ -44,6 +48,12 @@ function replaceArguments(template: string, args: string[]): string {
 
   // Clear unused positional arguments
   result = result.replace(/\$\d+/g, '');
+
+  // If the template didn't reference any argument variables, append
+  // the arguments so the model can still see what the user provided.
+  if (!hasArgumentsVar && !hasPositionalVar && args.length > 0) {
+    result = result.trimEnd() + `\n\nARGUMENTS: ${args.join(' ')}`;
+  }
 
   return result;
 }
