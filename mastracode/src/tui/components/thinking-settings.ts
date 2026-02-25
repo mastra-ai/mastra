@@ -50,7 +50,7 @@ export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[
 
   return BASE_THINKING_LEVELS.map(level => ({
     ...level,
-    label: level.id === 'xhigh' ? 'Very High (xhigh)' : `${level.label} (${level.providerValue})`,
+    label: level.providerValue,
   }));
 }
 
