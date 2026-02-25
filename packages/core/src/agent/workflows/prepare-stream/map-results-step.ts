@@ -260,6 +260,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
+      // IsTaskComplete scoring for supervisor patterns
+      isTaskComplete: options.isTaskComplete,
+      // Iteration hook for supervisor patterns
+      onIterationComplete: options.onIterationComplete,
       processorStates: memoryData.processorStates,
     };
 

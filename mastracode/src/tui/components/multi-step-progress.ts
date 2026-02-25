@@ -133,11 +133,11 @@ export class MultiStepProgressComponent extends Container {
       if (activeStep) {
         const spinner = this.getSpinner();
         const summaryText = `  ${spinner} ${activeStep.title}${activeStep.progress ? ` (${activeStep.progress}%)` : ''}`;
-        this.addChild(new Text(chalk.yellow(summaryText), 0, 0));
+        this.addChild(new Text(fg('warning', summaryText), 0, 0));
       } else if (failed > 0) {
-        this.addChild(new Text(chalk.red(`  ✗ ${failed} step${failed > 1 ? 's' : ''} failed`), 0, 0));
+        this.addChild(new Text(fg('error', `  ✗ ${failed} step${failed > 1 ? 's' : ''} failed`), 0, 0));
       } else if (completed === total) {
-        this.addChild(new Text(chalk.green('  ✓ All steps completed'), 0, 0));
+        this.addChild(new Text(fg('success', '  ✓ All steps completed'), 0, 0));
       }
     } else {
       // Full detail view
@@ -155,7 +155,7 @@ export class MultiStepProgressComponent extends Container {
         if (step.status === 'failed' && step.error) {
           const errorLines = step.error.split('\n');
           errorLines.forEach(line => {
-            this.addChild(new Text(chalk.red(`      ${line}`), 0, 0));
+            this.addChild(new Text(fg('error', `      ${line}`), 0, 0));
           });
         }
       });
@@ -166,7 +166,7 @@ export class MultiStepProgressComponent extends Container {
         const estimatedRemaining = Math.max(0, this.options.estimatedTime - elapsed);
         if (estimatedRemaining > 0) {
           const remaining = this.formatDuration(estimatedRemaining);
-          this.addChild(new Text(chalk.dim(`  Est. time remaining: ${remaining}`), 0, 0));
+          this.addChild(new Text(fg('dim', `  Est. time remaining: ${remaining}`), 0, 0));
         }
       }
     }
@@ -181,25 +181,25 @@ export class MultiStepProgressComponent extends Container {
 
     switch (step.status) {
       case 'completed':
-        icon = chalk.green('✓');
-        color = chalk.green;
+        icon = fg('success', '✓');
+        color = (t: string) => fg('success', t);
         break;
       case 'active':
-        icon = chalk.yellow(this.getSpinner());
-        color = chalk.yellow.bold;
+        icon = fg('warning', this.getSpinner());
+        color = (t: string) => bold(fg('warning', t));
         break;
       case 'failed':
-        icon = chalk.red('✗');
-        color = chalk.red;
+        icon = fg('error', '✗');
+        color = (t: string) => fg('error', t);
         break;
       case 'skipped':
-        icon = chalk.dim('—');
-        color = chalk.dim;
+        icon = fg('dim', '—');
+        color = (t: string) => fg('dim', t);
         break;
       case 'pending':
       default:
-        icon = chalk.dim('○');
-        color = chalk.dim;
+        icon = fg('dim', '○');
+        color = (t: string) => fg('dim', t);
         break;
     }
 
@@ -209,10 +209,10 @@ export class MultiStepProgressComponent extends Container {
     if (this.options.showTimings && step.startTime) {
       if (step.endTime) {
         const duration = this.formatDuration(step.endTime - step.startTime);
-        text += chalk.dim(` (${duration})`);
+        text += fg('dim', ` (${duration})`);
       } else if (step.status === 'active') {
         const elapsed = this.formatDuration(Date.now() - step.startTime);
-        text += chalk.dim(` (${elapsed})`);
+        text += fg('dim', ` (${elapsed})`);
       }
     }
 
