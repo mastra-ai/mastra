@@ -217,7 +217,11 @@ export class SettingsComponent extends Box implements Focusable {
       { value: 'low', label: showProviderValues ? 'Low (low)' : 'Low', desc: 'Light reasoning' },
       { value: 'medium', label: showProviderValues ? 'Medium (medium)' : 'Medium', desc: 'Balanced reasoning' },
       { value: 'high', label: showProviderValues ? 'High (high)' : 'High', desc: 'Deep reasoning' },
-      { value: 'xhigh', label: showProviderValues ? 'Very High (xhigh)' : 'Very High', desc: 'Maximum reasoning depth' },
+      {
+        value: 'xhigh',
+        label: showProviderValues ? 'Very High (xhigh)' : 'Very High',
+        desc: 'Maximum reasoning depth',
+      },
     ];
 
     const getNotifLabel = (mode: NotificationMode) => notificationModes.find(m => m.value === mode)?.label ?? mode;
