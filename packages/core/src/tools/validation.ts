@@ -194,7 +194,17 @@ function stripNullishValues(input: unknown, schema?: z.ZodTypeAny): unknown {
   if (Array.isArray(input)) {
     // For arrays, recursively process elements but keep nulls in arrays
     // (array elements with null may be intentional)
-    return input.map(item => (item === null ? null : stripNullishValues(item)));
+    // Pass the array's element schema so nested objects preserve nullable fields
+    let itemSchema: z.ZodTypeAny | undefined;
+    if (schema) {
+      const unwrappedArray = unwrapZodType(schema);
+      if (isZodArray(unwrappedArray)) {
+        // Zod 4: def.element, Zod 3: _def.type
+        const arrAny = unwrappedArray as any;
+        itemSchema = arrAny.element ?? arrAny._zod?.def?.element ?? arrAny._def?.type;
+      }
+    }
+    return input.map(item => (item === null ? null : stripNullishValues(item, itemSchema)));
   }
 
   // Only recurse into plain objects - preserve class instances, built-in objects

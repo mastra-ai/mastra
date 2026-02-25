@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-fix: schema-aware null stripping for optional fields (#13419)
+Fixed input validation to preserve null for nullable fields and strip null for optional-only fields.
