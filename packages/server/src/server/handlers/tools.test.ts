@@ -387,6 +387,8 @@ describe('Tools Handlers', () => {
         });
         expect(result).toHaveProperty('web_search');
         expect(result['web_search']).toHaveProperty('type', 'provider-defined');
+        // Verify the lazy inputSchema was actually resolved and serialized
+        expect(result['web_search'].inputSchema).toBeDefined();
       });
 
       it('should serialize a mix of regular and provider-defined tools', async () => {
