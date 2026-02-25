@@ -737,16 +737,19 @@ export class Workspace<
       try {
         const resolved = await resolvePathPattern(pathOrGlob, readdir);
         const filesToIndex = new Set<string>();
+        const directoryRoots: string[] = [];
         for (const entry of resolved) {
           if (entry.type === 'file') {
             filesToIndex.add(entry.path);
-          } else {
-            // Directory: recurse and collect all files inside
-            const files = await this.getAllFiles(entry.path);
-            for (const filePath of files) {
-              filesToIndex.add(filePath);
-            }
+            continue;
           }
+          // Skip directories already covered by a parent directory
+          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
+          if (!alreadyCovered) directoryRoots.push(entry.path);
+        }
+        for (const dir of directoryRoots) {
+          const files = await this.getAllFiles(dir);
+          for (const filePath of files) filesToIndex.add(filePath);
         }
         for (const filePath of filesToIndex) {
           await this.indexFileForSearch(filePath);

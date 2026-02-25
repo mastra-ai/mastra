@@ -521,7 +521,7 @@ export default function Workspace() {
               }}
               onViewSkillResult={skillName => {
                 if (effectiveWorkspaceId) {
-                  navigate(`/workspaces/${effectiveWorkspaceId}/skills/${skillName}`);
+                  navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
                 }
               }}
             />
