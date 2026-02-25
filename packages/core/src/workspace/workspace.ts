@@ -744,15 +744,27 @@ export class Workspace<
             continue;
           }
           // Skip directories already covered by a parent directory
-          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
+          const alreadyCovered = directoryRoots.some(
+            root =>
+              entry.path === root || (root === '/' ? entry.path.startsWith('/') : entry.path.startsWith(`${root}/`)),
+          );
           if (!alreadyCovered) directoryRoots.push(entry.path);
         }
-        for (const dir of directoryRoots) {
-          const files = await this.getAllFiles(dir);
-          for (const filePath of files) filesToIndex.add(filePath);
-        }
+        // Index direct file matches first so they aren't lost if a directory scan fails
         for (const filePath of filesToIndex) {
           await this.indexFileForSearch(filePath);
+        }
+        for (const dir of directoryRoots) {
+          try {
+            const files = await this.getAllFiles(dir);
+            for (const filePath of files) {
+              if (!filesToIndex.has(filePath)) {
+                await this.indexFileForSearch(filePath);
+              }
+            }
+          } catch {
+            // Skip directories that can't be read
+          }
         }
       } catch {
         // Skip paths that don't exist or can't be read
