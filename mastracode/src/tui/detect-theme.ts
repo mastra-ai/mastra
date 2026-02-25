@@ -33,6 +33,7 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     let settled = false;
     let buffer = '';
     let wasRaw: boolean;
+    let wasPaused: boolean;
 
     const cleanup = () => {
       if (settled) return;
@@ -46,7 +47,10 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
       } catch {
         // ignore
       }
-      process.stdin.pause();
+      // Only pause stdin if it was paused before we resumed it
+      if (wasPaused) {
+        process.stdin.pause();
+      }
     };
 
     const onData = (data: Buffer) => {
@@ -91,8 +95,9 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     if (timer.unref) timer.unref();
 
     try {
-      // Save current raw mode state and switch to raw mode for reading the response
+      // Save current state and switch to raw mode for reading the response
       wasRaw = process.stdin.isRaw ?? false;
+      wasPaused = process.stdin.isPaused();
       process.stdin.setRawMode(true);
       process.stdin.resume();
       process.stdin.on('data', onData);
