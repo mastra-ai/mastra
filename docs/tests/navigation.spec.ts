@@ -76,7 +76,7 @@ test.describe('Tab switcher navigation', () => {
       const tabLink = tabBar.locator('a', { hasText: tab.label }).first()
       await tabLink.click()
       await page.waitForLoadState('networkidle')
-      expect(page.url()).toContain(tab.expectedPath)
+      await expect(page).toHaveURL(new RegExp(tab.expectedPath))
       await expect(tabLink).toHaveAttribute('data-active', 'true')
     }
 
@@ -121,7 +121,7 @@ test.describe('Mobile docs dropdown', () => {
     await page.waitForLoadState('networkidle')
 
     // Should have navigated to /models
-    expect(page.url()).toContain('/models')
+    await expect(page).toHaveURL(/\/models/)
 
     expect(getErrors(), 'JS errors during mobile docs dropdown navigation').toEqual([])
   })
@@ -152,7 +152,7 @@ test.describe('Sidebar navigation', () => {
     await page.waitForLoadState('networkidle')
 
     // Verify navigation happened
-    expect(page.url()).toContain(href!)
+    await expect(page).toHaveURL(new RegExp(href!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 
     expect(getErrors(), 'JS errors during sidebar navigation').toEqual([])
   })
@@ -183,7 +183,7 @@ test.describe('Sidebar navigation', () => {
     await page.waitForLoadState('networkidle')
 
     // Verify navigation happened
-    expect(page.url()).toContain(href!)
+    await expect(page).toHaveURL(new RegExp(href!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 
     // Mobile sidebar should close after navigation
     await expect(mobileSidebar).not.toBeVisible({ timeout: 5000 })
