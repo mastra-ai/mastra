@@ -18,7 +18,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { getMarkdownTheme, fg, bold, mastra } from './theme.js';
+import { getMarkdownTheme, fg, bold, mastra, getTheme } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -76,7 +76,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   container.addChild(new Text(fg('accent', `${label} cleared`), 0, 0));
   for (const task of clearedTasks) {
     const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-    const text = chalk.dim.strikethrough(task.content);
+    const text = chalk.hex(getTheme().dim).strikethrough(task.content);
     container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
   }
   if (insertIndex >= 0) {
