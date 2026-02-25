@@ -11,16 +11,17 @@ const OG_TEST_PAGES = [
 
 /**
  * Extract og:image content from HTML.
- * Handles both quoted and unquoted attribute values (Docusaurus may omit quotes).
+ * Handles double-quoted, single-quoted, and unquoted attribute values
+ * (Docusaurus may omit quotes on attributes).
  */
 function extractOgImage(html: string): string | null {
-  // Pattern 1: property before content (both quoted and unquoted)
-  const m1 = html.match(/<meta\s[^>]*property=["']?og:image["']?\s[^>]*content="([^"]+)"/i)
-  if (m1) return m1[1]
+  // Pattern 1: property before content
+  const m1 = html.match(/<meta\s[^>]*property=["']?og:image["']?\s[^>]*content=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i)
+  if (m1) return m1[1] ?? m1[2] ?? m1[3] ?? null
 
-  // Pattern 2: content before property (both quoted and unquoted)
-  const m2 = html.match(/<meta\s[^>]*content="([^"]+)"\s[^>]*property=["']?og:image["']?/i)
-  if (m2) return m2[1]
+  // Pattern 2: content before property
+  const m2 = html.match(/<meta\s[^>]*content=(?:"([^"]+)"|'([^']+)'|([^\s>]+))\s[^>]*property=["']?og:image["']?/i)
+  if (m2) return m2[1] ?? m2[2] ?? m2[3] ?? null
 
   return null
 }
