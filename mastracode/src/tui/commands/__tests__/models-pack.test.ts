@@ -198,6 +198,7 @@ describe('removeCustomPackFromSettings', () => {
       models: {
         ...createSettings().models,
         activeModelPackId: 'custom:Alpha',
+        modeDefaults: { ...alphaPack.models },
       },
       onboarding: {
         ...createSettings().onboarding,
@@ -209,6 +210,7 @@ describe('removeCustomPackFromSettings', () => {
 
     expect(settings.customModelPacks).toEqual([]);
     expect(settings.models.activeModelPackId).toBeNull();
+    expect(settings.models.modeDefaults).toEqual({});
     expect(settings.onboarding.modePackId).toBeNull();
   });
 
@@ -242,6 +244,28 @@ describe('removeCustomPackFromSettings', () => {
     expect(settings.customModelPacks[0]?.name).toBe('Beta');
     expect(settings.models.activeModelPackId).toBe('custom:Beta');
     expect(settings.onboarding.modePackId).toBe('custom:Beta');
+  });
+
+  it('clears stale mode defaults that exactly match deleted custom pack', () => {
+    const settings = createSettings({
+      customModelPacks: [
+        {
+          name: 'Alpha',
+          models: alphaPack.models,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'openai',
+        modeDefaults: { ...alphaPack.models },
+      },
+    });
+
+    removeCustomPackFromSettings(settings, 'custom:Alpha');
+
+    expect(settings.models.activeModelPackId).toBe('openai');
+    expect(settings.models.modeDefaults).toEqual({});
   });
 
   it('does nothing when pack id is not custom', () => {

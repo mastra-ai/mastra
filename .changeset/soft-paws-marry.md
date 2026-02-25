@@ -3,10 +3,10 @@
 'mastracode': patch
 ---
 
-Unified model selection around packs and fixed model ranking/persistence behavior in mastracode.
+Model pack selection is now more consistent and reliable in mastracode.
 
-- Added `modelUseCountTracker` to harness config and wired it from mastracode so selecting a model now increments persisted `modelUseCounts`, restoring usage-based model sorting.
-- Added thread-aware active mode-pack resolution helpers and persisted `activeModelPackId` in thread metadata so pack selection restores per thread.
-- Updated `/models` to be the single pack command path and removed `/models:pack` from user-facing surfaces.
-- Expanded custom pack management to support named custom packs with create/edit/delete flows and persisted updates in settings.
-- Updated onboarding + README text to align with pack-first model management.
+- `/models` is now the single command for choosing and managing model packs.
+- Model picker ranking now learns from your recent selections and keeps those preferences across sessions.
+- Pack choice now restores correctly per thread when switching between threads.
+- Custom packs now support full create, rename, targeted edit, and delete workflows.
+- The built-in **Varied** option has been retired; users who had it selected are automatically migrated to a saved custom pack named `varied`.

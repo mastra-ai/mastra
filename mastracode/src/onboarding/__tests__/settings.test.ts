@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseThreadSettings, resolveThreadActiveModelPackId } from '../settings.js';
+import { migrateLegacyVariedPack, parseThreadSettings, resolveThreadActiveModelPackId } from '../settings.js';
 import type { GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
@@ -73,6 +73,13 @@ describe('parseThreadSettings', () => {
       build: 'anthropic/claude-sonnet-4-5',
     });
   });
+
+  it('returns empty values when metadata is undefined', () => {
+    const parsed = parseThreadSettings(undefined);
+
+    expect(parsed.activeModelPackId).toBeNull();
+    expect(parsed.modeModelIds).toEqual({});
+  });
 });
 
 describe('resolveThreadActiveModelPackId', () => {
@@ -106,5 +113,40 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBe('anthropic');
+  });
+
+  it('returns null when global activeModelPackId points to a deleted custom pack', () => {
+    const settings = createSettings({
+      customModelPacks: [],
+      models: { ...createSettings().models, activeModelPackId: 'custom:Deleted Pack' },
+    });
+
+    const resolved = resolveThreadActiveModelPackId(settings, builtinPacks, {
+      modeModelId_plan: 'unknown/model',
+    });
+
+    expect(resolved).toBeNull();
+  });
+});
+
+describe('migrateLegacyVariedPack', () => {
+  it('migrates legacy varied active selection to a custom varied pack', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, activeModelPackId: 'varied', modeDefaults: {} },
+      onboarding: { ...createSettings().onboarding, modePackId: 'varied' },
+      customModelPacks: [],
+    });
+
+    const migrated = migrateLegacyVariedPack(settings);
+
+    expect(migrated).toBe(true);
+    expect(settings.models.activeModelPackId).toBe('custom:varied');
+    expect(settings.onboarding.modePackId).toBe('custom:varied');
+    expect(settings.customModelPacks.find(p => p.name === 'varied')).toBeDefined();
+    expect(settings.models.modeDefaults).toEqual({
+      plan: 'openai/gpt-5.3-codex',
+      build: 'anthropic/claude-sonnet-4-5',
+      fast: 'anthropic/claude-haiku-4-5',
+    });
   });
 });
