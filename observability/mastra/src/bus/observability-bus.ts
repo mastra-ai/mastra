@@ -12,8 +12,6 @@
 import type {
   ObservabilityExporter,
   TracingEvent,
-  LogEvent,
-  MetricEvent,
   ScoreEvent,
   FeedbackEvent,
   ObservabilityEvent,
@@ -22,6 +20,7 @@ import { TracingEventType } from '@mastra/core/observability';
 
 import { AutoExtractedMetrics } from '../metrics/auto-extract';
 import { BaseObservabilityEventBus } from './base';
+import { routeToHandler } from './route-event';
 
 function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   return (
@@ -83,7 +82,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   emit(event: ObservabilityEvent): void {
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      this.routeToHandler(exporter, event);
+      routeToHandler(exporter, event, this.logger);
     }
 
     // Auto-extract metrics from tracing, score, and feedback events
@@ -99,81 +98,5 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
     // Deliver to subscribers
     super.emit(event);
-  }
-
-  /**
-   * Route a single event to the appropriate handler on an exporter.
-   * If the exporter does not implement the handler, the event is silently skipped.
-   */
-  private routeToHandler(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
-    try {
-      switch (event.type) {
-        // TracingEvent uses TracingEventType enum (snake_case values)
-        case TracingEventType.SPAN_STARTED:
-        case TracingEventType.SPAN_UPDATED:
-        case TracingEventType.SPAN_ENDED: {
-          // Prefer onTracingEvent if available, fall back to exportTracingEvent.
-          // This ensures exporters that only implement the required exportTracingEvent
-          // (without the optional onTracingEvent handler) still receive tracing events.
-          const handler = exporter.onTracingEvent
-            ? exporter.onTracingEvent.bind(exporter)
-            : exporter.exportTracingEvent.bind(exporter);
-          const result = handler(event as TracingEvent);
-          // Handle async handlers - catch errors without blocking
-          if (result && typeof (result as Promise<void>).catch === 'function') {
-            (result as Promise<void>).catch(err => {
-              this.logger.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
-            });
-          }
-          break;
-        }
-
-        case 'log':
-          if (exporter.onLogEvent) {
-            const result = exporter.onLogEvent(event as LogEvent);
-            if (result && typeof (result as Promise<void>).catch === 'function') {
-              (result as Promise<void>).catch(err => {
-                this.logger.error(`[ObservabilityBus] Log handler error [exporter=${exporter.name}]:`, err);
-              });
-            }
-          }
-          break;
-
-        case 'metric':
-          if (exporter.onMetricEvent) {
-            const result = exporter.onMetricEvent(event as MetricEvent);
-            if (result && typeof (result as Promise<void>).catch === 'function') {
-              (result as Promise<void>).catch(err => {
-                this.logger.error(`[ObservabilityBus] Metric handler error [exporter=${exporter.name}]:`, err);
-              });
-            }
-          }
-          break;
-
-        case 'score':
-          if (exporter.onScoreEvent) {
-            const result = exporter.onScoreEvent(event as ScoreEvent);
-            if (result && typeof (result as Promise<void>).catch === 'function') {
-              (result as Promise<void>).catch(err => {
-                this.logger.error(`[ObservabilityBus] Score handler error [exporter=${exporter.name}]:`, err);
-              });
-            }
-          }
-          break;
-
-        case 'feedback':
-          if (exporter.onFeedbackEvent) {
-            const result = exporter.onFeedbackEvent(event as FeedbackEvent);
-            if (result && typeof (result as Promise<void>).catch === 'function') {
-              (result as Promise<void>).catch(err => {
-                this.logger.error(`[ObservabilityBus] Feedback handler error [exporter=${exporter.name}]:`, err);
-              });
-            }
-          }
-          break;
-      }
-    } catch (err) {
-      this.logger.error(`[ObservabilityBus] Sync handler error [exporter=${exporter.name}]:`, err);
-    }
   }
 }
