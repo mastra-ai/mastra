@@ -30,10 +30,10 @@ import type { DaytonaResources } from './types';
 
 const LOG_PREFIX = '[@mastra/daytona]';
 
-/** String patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
-const SANDBOX_DEAD_PATTERNS: (string | RegExp)[] = [
-  'Sandbox is not running',
-  'Sandbox already destroyed',
+/** Patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
+const SANDBOX_DEAD_PATTERNS: RegExp[] = [
+  /sandbox is not running/i,
+  /sandbox already destroyed/i,
   /sandbox.*not found/i,
 ];
 
@@ -286,6 +286,12 @@ export class DaytonaSandbox extends MastraSandbox {
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.
     // Resources without image fall back to snapshot-based creation (resources are ignored).
+    if (this.resources && !this.image) {
+      this.logger.warn(
+        `${LOG_PREFIX} 'resources' option requires 'image' to take effect — falling back to snapshot-based creation without custom resources`,
+      );
+    }
+
     const createParams: CreateSandboxFromSnapshotParams | CreateSandboxFromImageParams =
       this.image && !this.snapshotId
         ? (compact({
@@ -315,7 +321,6 @@ export class DaytonaSandbox extends MastraSandbox {
       }
     }
     this._sandbox = null;
-    this.status = 'stopped';
   }
 
   /**
@@ -334,7 +339,6 @@ export class DaytonaSandbox extends MastraSandbox {
     this._sandbox = null;
     this._daytona = null;
     this.mounts?.clear();
-    this.status = 'destroyed';
   }
 
   /**
@@ -463,9 +467,7 @@ export class DaytonaSandbox extends MastraSandbox {
     if (!error) return false;
     if (error instanceof DaytonaNotFoundError) return true;
     const errorStr = String(error);
-    return SANDBOX_DEAD_PATTERNS.some(pattern =>
-      pattern instanceof RegExp ? pattern.test(errorStr) : errorStr.includes(pattern),
-    );
+    return SANDBOX_DEAD_PATTERNS.some(pattern => pattern.test(errorStr));
   }
 
   /**
@@ -536,7 +538,8 @@ export class DaytonaSandbox extends MastraSandbox {
       let stderr = '';
 
       // Stream logs until the command finishes, with a client-side timeout.
-      // deleteSession in the finally block kills the process if timeout fires.
+      // On timeout, deleteSession in the finally block terminates the session and
+      // its running process server-side. Any partial output is still returned.
       const logsPromise = sandbox.process.getSessionCommandLogs(
         sessionId,
         cmdId,
@@ -550,7 +553,9 @@ export class DaytonaSandbox extends MastraSandbox {
         },
       );
       // Suppress the rejection that occurs when the session is deleted after timeout
-      logsPromise.catch(() => {});
+      logsPromise.catch(err => {
+        this.logger.debug(`${LOG_PREFIX} Log stream ended: ${err}`);
+      });
 
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {

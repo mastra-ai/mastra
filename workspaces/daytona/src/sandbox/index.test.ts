@@ -969,16 +969,17 @@ describe('DaytonaSandbox', () => {
 
       // SDK error class (preferred detection)
       expect((sandbox as any).isSandboxDeadError(new DaytonaNotFoundError('gone'))).toBe(true);
-      // Exact string matches
+      // Regex matches (case-insensitive)
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox is not running'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error('sandbox is not running'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox already destroyed'))).toBe(true);
-      // Regex match (case-insensitive)
+      expect((sandbox as any).isSandboxDeadError(new Error('SANDBOX ALREADY DESTROYED'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox abc not found'))).toBe(true);
       // Non-dead errors
       expect((sandbox as any).isSandboxDeadError(new Error('timeout'))).toBe(false);
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox is not running'))).toBe(false); // wrong case
+      expect((sandbox as any).isSandboxDeadError(new Error('command failed'))).toBe(false);
       expect((sandbox as any).isSandboxDeadError(null)).toBe(false);
     });
 
