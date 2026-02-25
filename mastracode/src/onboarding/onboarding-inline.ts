@@ -293,7 +293,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       box.addChild(new Text(fg('text', 'for Anthropic, OpenAI, or another supported provider.'), 0, 0));
       box.addChild(new Spacer(1));
       box.addChild(
-        new Text(fg('dim', 'See https://mastra.ai/docs/models for supported providers and API key env vars.'), 0, 0),
+        new Text(fg('dim', 'See https://mastra.ai/models for supported providers and API key env vars.'), 0, 0),
       );
       box.addChild(new Spacer(1));
       box.addChild(new Text(fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0));
