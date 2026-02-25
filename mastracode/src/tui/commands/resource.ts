@@ -29,9 +29,8 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
-  ctx.resetStatusLineState();
+  ctx.updateStatusLine();
   state.ui.requestRender();
 
   ctx.showInfo(sub === 'reset' ? `Resource ID reset to: ${defaultId}` : `Switched to resource: ${newId}`);

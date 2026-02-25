@@ -136,6 +136,8 @@ const memory = new Memory({
 })
 ```
 
+Thread scope requires a valid `threadId` to be provided when calling the agent. If `threadId` is missing, Observational Memory throws an error. This prevents multiple threads from silently sharing a single observation record, which can cause database deadlocks.
+
 ### Resource scope (experimental)
 
 Observations are shared across all threads for a resource (typically a user). Enables cross-conversation memory.

@@ -907,7 +907,11 @@ export class Agent<
 
       // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
       if (this.#mastra) {
-        this.#mastra.addWorkspace(resolvedWorkspace);
+        this.#mastra.addWorkspace(resolvedWorkspace, undefined, {
+          source: 'agent',
+          agentId: this.id,
+          agentName: this.name,
+        });
       }
 
       return resolvedWorkspace;
@@ -1128,6 +1132,7 @@ export class Agent<
         convertTools: this.convertTools.bind(this),
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
         __runInputProcessors: this.__runInputProcessors.bind(this),
+        __runProcessInputStep: this.__runProcessInputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
@@ -1526,7 +1531,9 @@ export class Agent<
     this.model = this.model.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
-      return aIndex - bIndex;
+      const aPos = aIndex === -1 ? Infinity : aIndex;
+      const bPos = bIndex === -1 ? Infinity : bIndex;
+      return aPos - bPos;
     });
     this.logger.debug(`[Agents:${this.name}] Models reordered`);
   }
@@ -1798,7 +1805,11 @@ export class Agent<
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
       workspace.__setLogger(this.logger);
-      this.#mastra.addWorkspace(workspace);
+      this.#mastra.addWorkspace(workspace, undefined, {
+        source: 'agent',
+        agentId: this.id,
+        agentName: this.name,
+      });
     }
   }
 
@@ -1997,6 +2008,82 @@ export class Agent<
               domain: ErrorDomain.AGENT,
               category: ErrorCategory.USER,
               text: `[Agent:${this.name}] - Input processor error`,
+            },
+            error,
+          );
+        }
+      }
+    }
+
+    return {
+      messageList,
+      tripwire,
+    };
+  }
+
+  /**
+   * Runs processInputStep phase on input processors.
+   * Used by legacy path to execute per-step input processing (e.g., Observational Memory)
+   * that would otherwise only run in the v5 agentic loop.
+   * @internal
+   */
+  private async __runProcessInputStep({
+    requestContext,
+    tracingContext,
+    messageList,
+    stepNumber = 0,
+    processorStates,
+  }: {
+    requestContext: RequestContext;
+    tracingContext: TracingContext;
+    messageList: MessageList;
+    stepNumber?: number;
+    processorStates?: Map<string, ProcessorState>;
+  }): Promise<{
+    messageList: MessageList;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
+  }> {
+    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+
+    if (this.#inputProcessors || this.#memory) {
+      const runner = await this.getProcessorRunner({
+        requestContext,
+        processorStates,
+      });
+      try {
+        const llm = await this.getLLM({ requestContext });
+        const model = llm.getModel();
+        await runner.runProcessInputStep({
+          messageList,
+          stepNumber,
+          steps: [],
+          tracingContext,
+          requestContext,
+          // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
+          // OM's processInputStep doesn't use the model parameter, so this is safe.
+          model: model as MastraLanguageModel,
+          retryCount: 0,
+        });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          tripwire = {
+            reason: error.message,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+            processorId: error.processorId,
+          };
+        } else {
+          throw new MastraError(
+            {
+              id: 'AGENT_INPUT_STEP_PROCESSOR_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Input step processor error`,
             },
             error,
           );

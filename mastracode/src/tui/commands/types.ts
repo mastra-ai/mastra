@@ -20,7 +20,6 @@ export interface SlashCommandContext {
   showInfo: (message: string) => void;
   showError: (message: string) => void;
   updateStatusLine: () => void;
-  resetStatusLineState: () => void;
   stop: () => void;
   getResolvedWorkspace: () => Workspace | undefined;
   addUserMessage: (message: HarnessMessage) => void;
