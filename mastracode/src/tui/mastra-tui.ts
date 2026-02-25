@@ -639,12 +639,17 @@ export class MastraTUI {
         },
         onLogin: (providerId: string, done: () => void) => {
           this.performLogin(providerId).then(async () => {
-            const updatedAccess = await buildAccess();
-            const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
-            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
-            component.updateHasProviderAccess(updatedHasAccess);
-            done();
+            try {
+              const updatedAccess = await buildAccess();
+              const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
+              component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              component.updateHasProviderAccess(updatedHasAccess);
+            } catch (err) {
+              console.error('Failed to refresh provider access after login:', err);
+            } finally {
+              done();
+            }
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
