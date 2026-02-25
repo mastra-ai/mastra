@@ -389,6 +389,8 @@ export function validateToolInput<T = any>(
   // making fields required in the processed schema. When the LLM omits optional
   // fields entirely (key not present in input), the processed schema rejects it.
   // The original schema still has .optional() and accepts missing keys.
+  // Note: We intentionally only apply normalizeNullishInput here (not convertUndefinedToNull
+  // or coerceStringifiedJsonValues) because the original schema accepts undefined natively.
   if (originalSchema && 'safeParse' in originalSchema) {
     const originalNormalized = normalizeNullishInput(originalSchema, input);
     const originalValidation = originalSchema.safeParse(originalNormalized);
