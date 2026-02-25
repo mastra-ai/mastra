@@ -9,7 +9,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
-import { theme, mastra, getTheme, fg as fgTheme } from '../theme.js';
+import { theme, mastra, getTheme } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';

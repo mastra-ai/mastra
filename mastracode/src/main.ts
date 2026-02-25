@@ -6,9 +6,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { loadSettings } from './onboarding/settings.js';
-import { applyThemeMode } from './tui/theme.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
+import { applyThemeMode } from './tui/theme.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';

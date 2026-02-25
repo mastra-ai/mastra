@@ -4,7 +4,6 @@
  */
 
 import { Container, Text } from '@mariozechner/pi-tui';
-import chalk from 'chalk';
 import { fg } from '../theme.js';
 
 export interface SimpleProgressOptions {

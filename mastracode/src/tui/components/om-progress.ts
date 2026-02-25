@@ -6,7 +6,7 @@ import { Container, Text } from '@mariozechner/pi-tui';
 import { defaultOMProgressState } from '@mastra/core/harness';
 import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { fg, mastra, getTheme } from '../theme.js';
+import { fg, mastra } from '../theme.js';
 
 // Re-export types from core for backward compatibility
 export type { OMBufferedStatus, OMProgressState, OMStatus };
