@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.0.7",
+  "version": "1.0.8-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

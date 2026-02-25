@@ -1,6 +1,6 @@
 {
   "name": "@mastra/convex",
-  "version": "1.0.3",
+  "version": "1.0.4-alpha.0",
   "description": "Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers",
   "type": "module",
   "main": "dist/index.js",
