@@ -28,6 +28,7 @@ import { Workflow, Run } from '../../workflows';
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
+import { forwardAgentStreamChunk, type StreamChunkWriter } from '../stream-utils';
 import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
@@ -41,7 +42,7 @@ import type {
   DefaultEngineType,
   StepMetadata,
 } from '../../workflows/types';
-import { PUBSUB_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -323,9 +324,11 @@ async function processAgentStream(params: {
   pubsub: { publish: (channel: string, data: any) => Promise<void> };
   runId: string;
   toolData: { name: string; args: unknown };
+  writer?: StreamChunkWriter;
+  streamFormat?: 'legacy' | 'vnext';
   logger?: { debug: (msg: string, data?: unknown) => void };
 }): Promise<{ tripwireChunk: TripwireChunk | null }> {
-  const { fullStream, isV2Model, pubsub, runId, toolData, logger } = params;
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger, writer, streamFormat } = params;
 
   // Publish stream start event
   try {
@@ -363,6 +366,10 @@ async function processAgentStream(params: {
           logger?.debug('Failed to publish stream delta event', { runId, error: err });
         }
       }
+    }
+
+    if (streamFormat !== 'legacy') {
+      await forwardAgentStreamChunk({ writer, chunk });
     }
   }
 
@@ -429,10 +436,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       runId,
       mastra,
       [PUBSUB_SYMBOL]: pubsub,
+      [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
       tracingContext,
       abortSignal,
       abort,
+      writer,
     }) => {
       const logger = mastra?.getLogger();
       const toolData = {
@@ -507,6 +516,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         runId,
         toolData,
         logger,
+        writer,
+        streamFormat,
       });
 
       // Handle tripwire if detected
