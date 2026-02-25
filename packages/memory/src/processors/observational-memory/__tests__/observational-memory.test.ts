@@ -7075,7 +7075,7 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[0].cycleId).toBe('c-1');
     });
 
-    it('low retention floor: allows over boundary when remaining >= retention floor', async () => {
+    it('low retention floor: allows activation at target boundary when remaining >= retention floor', async () => {
       // threshold=1024, ratio=31/32 → retentionFloor=32, target=992
       // currentPending=1024
       // Chunk 1: 400 (under)
