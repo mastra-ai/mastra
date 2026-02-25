@@ -2,9 +2,9 @@
 '@mastra/core': patch
 ---
 
-Fix ListTracesResponse type export from @mastra/core
+Fix ListTracesResponse and other storage types resolving to `any`
 
-The `ListTracesResponse` type (and other storage types) were not properly exported from the main `@mastra/core` package entry point. This caused TypeScript to show `any` type when importing `ListTracesResponse` from `@mastra/core/storage`.
+Consumer-facing storage types (`ListTracesResponse`, `SpanRecord`, `ListTracesArgs`, etc.) were defined as `z.infer<typeof schema>` / `z.input<typeof schema>`. This caused TypeScript to resolve them to `any` when the consumer's zod version differed from the one used to build the declarations.
 
-The fix adds `export * from './storage';` to the main index.ts to ensure all storage module types are properly exported and can be used by consumers.
+Replaced all 19 zod-inferred type aliases in `storage/domains/observability/types.ts` and 2 in `storage/domains/shared.ts` with explicit interface definitions. The zod schemas remain unchanged for runtime validation.
 

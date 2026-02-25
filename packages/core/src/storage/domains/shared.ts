@@ -24,7 +24,13 @@ export const paginationArgsSchema = z
   })
   .describe('Pagination options for list queries');
 
-export type PaginationArgs = z.input<typeof paginationArgsSchema>;
+/** Pagination arguments (input type — fields are optional, defaults applied at parse time) */
+export interface PaginationArgs {
+  /** Zero-indexed page number */
+  page?: number;
+  /** Number of items per page */
+  perPage?: number;
+}
 
 /**
  * Pagination response info
@@ -58,7 +64,17 @@ export const dateRangeSchema = z
   })
   .describe('Date range filter for timestamps');
 
-export type DateRange = z.infer<typeof dateRangeSchema>;
+/** Date range for filtering by time */
+export interface DateRange {
+  /** Start of date range (inclusive by default) */
+  start?: Date;
+  /** End of date range (inclusive by default) */
+  end?: Date;
+  /** When true, excludes the start date from results (uses > instead of >=) */
+  startExclusive?: boolean;
+  /** When true, excludes the end date from results (uses < instead of <=) */
+  endExclusive?: boolean;
+}
 
 export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
 

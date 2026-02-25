@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { scoreRowDataSchema } from '../../../evals/types';
-import { SpanType } from '../../../observability/types';
+import { EntityType, SpanType } from '../../../observability/types';
+import type { PaginationInfo } from '../../types';
 import {
   dateRangeSchema,
   dbTimestamps,
@@ -21,6 +22,7 @@ import {
   threadIdField,
   userIdField,
 } from '../shared';
+import type { DateRange, PaginationArgs } from '../shared';
 
 /** Strategy for how tracing data is persisted to storage */
 export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
@@ -134,7 +136,10 @@ export const spanIdsSchema = z.object({
 });
 
 /** Span identifier pair (traceId and spanId) */
-export type SpanIds = z.infer<typeof spanIdsSchema>;
+export interface SpanIds {
+  traceId: string;
+  spanId: string;
+}
 
 // Omit key objects derived from schema shapes for use with .omit()
 const omitDbTimestamps = createOmitKeys(dbTimestamps);
@@ -168,7 +173,56 @@ export const spanRecordSchema = z
   .describe('Span record data');
 
 /** Complete span record as stored in the database */
-export type SpanRecord = z.infer<typeof spanRecordSchema>;
+export interface SpanRecord {
+  // Required identifiers
+  traceId: string;
+  spanId: string;
+  name: string;
+  spanType: SpanType;
+  isEvent: boolean;
+  startedAt: Date;
+
+  // Parent span reference (null = root span)
+  parentSpanId?: string | null;
+
+  // Entity identification
+  entityType?: EntityType | null;
+  entityId?: string | null;
+  entityName?: string | null;
+
+  // Identity & tenancy
+  userId?: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
+
+  // Correlation IDs
+  runId?: string | null;
+  sessionId?: string | null;
+  threadId?: string | null;
+  requestId?: string | null;
+
+  // Deployment context
+  environment?: string | null;
+  source?: string | null;
+  serviceName?: string | null;
+  scope?: Record<string, unknown> | null;
+
+  // Filterable data
+  metadata?: Record<string, unknown> | null;
+  tags?: string[] | null;
+
+  // Span-specific fields
+  attributes?: Record<string, unknown> | null;
+  links?: unknown[] | null;
+  input?: unknown | null;
+  output?: unknown | null;
+  error?: unknown | null;
+  endedAt?: Date | null;
+
+  // Database timestamps
+  createdAt: Date;
+  updatedAt: Date | null;
+}
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
@@ -194,7 +248,9 @@ export const traceSpanSchema = spanRecordSchema
   .describe('Trace span with computed status (root spans only)');
 
 /** Trace span (root span with computed status) */
-export type TraceSpan = z.infer<typeof traceSpanSchema>;
+export interface TraceSpan extends SpanRecord {
+  status: TraceStatus;
+}
 
 /**
  * Converts a SpanRecord to a TraceSpan by adding computed status.
@@ -225,7 +281,7 @@ export function toTraceSpans(spans: SpanRecord[]): TraceSpan[] {
 export const createSpanRecordSchema = spanRecordSchema.omit(omitDbTimestamps);
 
 /** Span record for creation (excludes db timestamps) */
-export type CreateSpanRecord = z.infer<typeof createSpanRecordSchema>;
+export type CreateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt'>;
 
 /**
  * Schema for createSpan operation arguments
@@ -237,7 +293,9 @@ export const createSpanArgsSchema = z
   .describe('Arguments for creating a single span');
 
 /** Arguments for creating a single span */
-export type CreateSpanArgs = z.infer<typeof createSpanArgsSchema>;
+export interface CreateSpanArgs {
+  span: CreateSpanRecord;
+}
 
 /**
  * Schema for batchCreateSpans operation arguments
@@ -249,7 +307,9 @@ export const batchCreateSpansArgsSchema = z
   .describe('Arguments for batch creating spans');
 
 /** Arguments for batch creating multiple spans */
-export type BatchCreateSpansArgs = z.infer<typeof batchCreateSpansArgsSchema>;
+export interface BatchCreateSpansArgs {
+  records: CreateSpanRecord[];
+}
 
 /**
  * Schema for getSpan operation arguments
@@ -262,7 +322,10 @@ export const getSpanArgsSchema = z
   .describe('Arguments for getting a single span');
 
 /** Arguments for retrieving a single span */
-export type GetSpanArgs = z.infer<typeof getSpanArgsSchema>;
+export interface GetSpanArgs {
+  traceId: string;
+  spanId: string;
+}
 
 /**
  * Response schema for getSpan operation
@@ -272,7 +335,9 @@ export const getSpanResponseSchema = z.object({
 });
 
 /** Response containing a single span */
-export type GetSpanResponse = z.infer<typeof getSpanResponseSchema>;
+export interface GetSpanResponse {
+  span: SpanRecord;
+}
 
 /**
  * Schema for getRootSpan operation arguments
@@ -284,7 +349,9 @@ export const getRootSpanArgsSchema = z
   .describe('Arguments for getting a root span');
 
 /** Arguments for retrieving a root span */
-export type GetRootSpanArgs = z.infer<typeof getRootSpanArgsSchema>;
+export interface GetRootSpanArgs {
+  traceId: string;
+}
 
 /**
  * Response schema for getRootSpan operation
@@ -294,7 +361,9 @@ export const getRootSpanResponseSchema = z.object({
 });
 
 /** Response containing a single root span */
-export type GetRootSpanResponse = z.infer<typeof getRootSpanResponseSchema>;
+export interface GetRootSpanResponse {
+  span: SpanRecord;
+}
 
 /**
  * Schema for getTrace operation arguments
@@ -306,7 +375,9 @@ export const getTraceArgsSchema = z
   .describe('Arguments for getting a single trace');
 
 /** Arguments for retrieving a single trace */
-export type GetTraceArgs = z.infer<typeof getTraceArgsSchema>;
+export interface GetTraceArgs {
+  traceId: string;
+}
 
 /**
  * Response schema for getTrace operation
@@ -317,7 +388,10 @@ export const getTraceResponseSchema = z.object({
 });
 
 /** Response containing a trace with all its spans */
-export type GetTraceResponse = z.infer<typeof getTraceResponseSchema>;
+export interface GetTraceResponse {
+  traceId: string;
+  spans: SpanRecord[];
+}
 
 export type TraceRecord = GetTraceResponse;
 
@@ -370,8 +444,56 @@ export const listTracesArgsSchema = z
   })
   .describe('Arguments for listing traces');
 
+/** Filter criteria for querying traces */
+export interface TracesFilter {
+  /** Filter by span start time range */
+  startedAt?: DateRange;
+  /** Filter by span end time range */
+  endedAt?: DateRange;
+  /** Filter by span type */
+  spanType?: SpanType;
+
+  // Shared fields (matched against the root span)
+  entityType?: EntityType | null;
+  entityId?: string | null;
+  entityName?: string | null;
+  userId?: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
+  runId?: string | null;
+  sessionId?: string | null;
+  threadId?: string | null;
+  requestId?: string | null;
+  environment?: string | null;
+  source?: string | null;
+  serviceName?: string | null;
+  scope?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  tags?: string[] | null;
+
+  /** Filter by trace status */
+  status?: TraceStatus;
+  /** Filter by whether any child span has an error */
+  hasChildError?: boolean;
+}
+
+/** Order by configuration for trace queries */
+export interface TracesOrderBy {
+  /** Field to order by (defaults to 'startedAt') */
+  field?: 'startedAt' | 'endedAt';
+  /** Sort direction (defaults to 'DESC') */
+  direction?: 'ASC' | 'DESC';
+}
+
 /** Arguments for listing traces with optional filters, pagination, and ordering */
-export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
+export interface ListTracesArgs {
+  /** Optional filters to apply */
+  filters?: TracesFilter;
+  /** Pagination settings (defaults to page 0, perPage 10) */
+  pagination?: PaginationArgs;
+  /** Ordering configuration (defaults to startedAt desc) */
+  orderBy?: TracesOrderBy;
+}
 
 /** Schema for listTraces operation response */
 export const listTracesResponseSchema = z.object({
@@ -380,7 +502,10 @@ export const listTracesResponseSchema = z.object({
 });
 
 /** Response containing paginated root spans with computed status */
-export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
+export interface ListTracesResponse {
+  pagination: PaginationInfo;
+  spans: TraceSpan[];
+}
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)
@@ -388,7 +513,7 @@ export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 export const updateSpanRecordSchema = createSpanRecordSchema.omit(omitSpanIds);
 
 /** Partial span data for updates (excludes db timestamps and span IDs) */
-export type UpdateSpanRecord = z.infer<typeof updateSpanRecordSchema>;
+export type UpdateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt' | 'traceId' | 'spanId'>;
 
 /**
  * Schema for updateSpan operation arguments
@@ -402,7 +527,11 @@ export const updateSpanArgsSchema = z
   .describe('Arguments for updating a single span');
 
 /** Arguments for updating a single span */
-export type UpdateSpanArgs = z.infer<typeof updateSpanArgsSchema>;
+export interface UpdateSpanArgs {
+  spanId: string;
+  traceId: string;
+  updates: Partial<UpdateSpanRecord>;
+}
 
 /**
  * Schema for batchUpdateSpans operation arguments
@@ -420,7 +549,13 @@ export const batchUpdateSpansArgsSchema = z
   .describe('Arguments for batch updating spans');
 
 /** Arguments for batch updating multiple spans */
-export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
+export interface BatchUpdateSpansArgs {
+  records: Array<{
+    traceId: string;
+    spanId: string;
+    updates: Partial<UpdateSpanRecord>;
+  }>;
+}
 
 /**
  * Schema for batchDeleteTraces operation arguments
@@ -432,7 +567,9 @@ export const batchDeleteTracesArgsSchema = z
   .describe('Arguments for batch deleting traces');
 
 /** Arguments for batch deleting multiple traces */
-export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
+export interface BatchDeleteTracesArgs {
+  traceIds: string[];
+}
 
 // ============================================================================
 // Scoring related schemas
@@ -458,7 +595,13 @@ export const scoreTracesRequestSchema = z.object({
 });
 
 /** Request to score traces using a specific scorer */
-export type ScoreTracesRequest = z.infer<typeof scoreTracesRequestSchema>;
+export interface ScoreTracesRequest {
+  scorerName: string;
+  targets: Array<{
+    traceId: string;
+    spanId?: string;
+  }>;
+}
 
 /** Schema for scoreTraces operation response */
 export const scoreTracesResponseSchema = z.object({
@@ -468,4 +611,8 @@ export const scoreTracesResponseSchema = z.object({
 });
 
 /** Response from scoring traces */
-export type ScoreTracesResponse = z.infer<typeof scoreTracesResponseSchema>;
+export interface ScoreTracesResponse {
+  status: string;
+  message: string;
+  traceCount: number;
+}
