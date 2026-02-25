@@ -17,6 +17,7 @@ interface ContentItem {
   metadata?: {
     mode?: string;
     completionResult?: unknown;
+    isTaskCompleteResult?: unknown;
   };
 }
 
@@ -32,7 +33,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
     ({ type, metadata }) =>
       type === 'tool-call' ||
       type === 'reasoning' ||
-      (type === 'text' && metadata?.mode === 'network' && metadata?.completionResult),
+      (type === 'text' && (metadata?.completionResult || metadata?.isTaskCompleteResult)),
   );
 
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
@@ -41,7 +42,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
 
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId} data-message-index={data.index}>
-      <div className="text-neutral6 text-ui-lg leading-ui-lg" style={{ paddingTop: '0.5rem' }}>
+      <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,

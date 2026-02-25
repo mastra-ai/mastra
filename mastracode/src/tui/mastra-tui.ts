@@ -160,6 +160,11 @@ export class MastraTUI {
           continue;
         }
 
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          continue;
+        }
+
         // Collect any pending images from clipboard paste
         const images = this.state.pendingImages.length > 0 ? [...this.state.pendingImages] : undefined;
         this.state.pendingImages = [];
@@ -307,6 +312,52 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     await dispatchEvent(event, this.getEventContext(), this.state);
+
+    if (event.type === 'agent_end') {
+      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+      await this.runStopHook(stopReason);
+    }
+  }
+
+  private showHookWarnings(event: string, warnings: string[]): void {
+    for (const warning of warnings) {
+      showInfo(this.state, `[${event}] ${warning}`);
+    }
+  }
+
+  private async runStopHook(stopReason: 'complete' | 'aborted' | 'error'): Promise<void> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+
+    try {
+      const result = await hookMgr.runStop(undefined, stopReason);
+      this.showHookWarnings('Stop', result.warnings);
+      if (!result.allowed && result.blockReason) {
+        showError(this.state, `Stop hook blocked: ${result.blockReason}`);
+      }
+    } catch (error) {
+      showError(this.state, `Stop hook failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async runUserPromptHook(userInput: string): Promise<boolean> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return true;
+
+    try {
+      const result = await hookMgr.runUserPromptSubmit(userInput);
+      this.showHookWarnings('UserPromptSubmit', result.warnings);
+
+      if (!result.allowed) {
+        showError(this.state, result.blockReason || 'Blocked by UserPromptSubmit hook');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      showError(this.state, `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   // ===========================================================================
@@ -545,6 +596,7 @@ export class MastraTUI {
     };
 
     const access = await buildAccess();
+    const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
@@ -568,6 +620,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
@@ -586,10 +639,17 @@ export class MastraTUI {
         },
         onLogin: (providerId: string, done: () => void) => {
           this.performLogin(providerId).then(async () => {
-            const updatedAccess = await buildAccess();
-            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
-            done();
+            try {
+              const updatedAccess = await buildAccess();
+              const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
+              component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              component.updateHasProviderAccess(updatedHasAccess);
+            } catch (err) {
+              console.error('Failed to refresh provider access after login:', err);
+            } finally {
+              done();
+            }
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {

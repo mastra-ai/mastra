@@ -2383,6 +2383,7 @@ export async function networkLoop<OUTPUT = undefined>({
           timedOut: completionResult.timedOut,
           reason: completionResult.completionReason,
           maxIterationReached: !!maxIterationReached,
+          suppressFeedback: !!validation?.suppressFeedback,
         },
         from: ChunkFrom.NETWORK,
         runId: runIdToUse,
@@ -2404,42 +2405,40 @@ export async function networkLoop<OUTPUT = undefined>({
 
       // Format feedback (needed for return value even if not persisted)
       const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
-
-      // Not complete - inject feedback for next iteration (unless suppressed)
-      if (!validation?.suppressFeedback) {
-        // Save feedback to memory so the next iteration can see it
-        const memoryInstance = await routingAgent.getMemory({ requestContext });
-        await saveMessagesWithProcessors(
-          memoryInstance,
-          [
-            {
-              id: generateId(),
-              type: 'text',
-              role: 'assistant',
-              content: {
-                parts: [
-                  {
-                    type: 'text',
-                    text: feedback,
-                  },
-                ],
-                format: 2,
-                metadata: {
-                  mode: 'network',
-                  completionResult: {
-                    passed: completionResult.complete,
-                  },
+      // Save feedback to memory so the next iteration can see it
+      const memoryInstance = await routingAgent.getMemory({ requestContext });
+      await saveMessagesWithProcessors(
+        memoryInstance,
+        [
+          {
+            id: generateId(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'text',
+                  text: feedback,
+                },
+              ],
+              format: 2,
+              metadata: {
+                mode: 'network',
+                completionResult: {
+                  passed: completionResult.complete,
+                  suppressFeedback: !!validation?.suppressFeedback,
                 },
               },
-              createdAt: new Date(),
-              threadId: inputData.threadId || runIdToUse,
-              resourceId: inputData.threadResourceId || networkName,
             },
-          ] as MastraDBMessage[],
-          processorRunner,
-          { requestContext },
-        );
-      }
+            createdAt: new Date(),
+            threadId: inputData.threadId || runIdToUse,
+            resourceId: inputData.threadResourceId || networkName,
+          },
+        ] as MastraDBMessage[],
+        processorRunner,
+        { requestContext },
+      );
+
       await new Promise(resolve => setTimeout(resolve, 10));
 
       if (isComplete) {

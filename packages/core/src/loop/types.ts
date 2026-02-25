@@ -8,6 +8,7 @@ import type {
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import z from 'zod';
+import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -52,6 +53,8 @@ export type StreamInternal = {
   stepTools?: ToolSet;
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   stepWorkspace?: Workspace;
+  // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
+  _delegationBailed?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -130,6 +133,21 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+
+  /**
+   * isTaskComplete scoring configuration for supervisor patterns.
+   * Scorers evaluate whether the task is complete after each iteration.
+   *
+   * When scorers fail, feedback is automatically added to the message list
+   * so the LLM can see why the task isn't complete and adjust its approach.
+   */
+  isTaskComplete?: IsTaskCompleteConfig;
+
+  /**
+   * Callback fired after each iteration completes.
+   * Allows monitoring and controlling iteration flow with feedback.
+   */
+  onIterationComplete?: OnIterationCompleteHandler;
   /**
    * Default workspace for the agent. This workspace will be passed to tool execution
    * context unless overridden by prepareStep or processInputStep.

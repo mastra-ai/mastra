@@ -7,7 +7,7 @@
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { fg, bold } from '../theme.js';
+import { theme } from '../theme.js';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItem[] = [];
@@ -43,7 +43,8 @@ export class TaskProgressComponent extends Container {
 
     // Hide the component when all tasks are completed
     if (completed === total) return;
-    const headerText = '  ' + bold(fg('accent', 'Tasks')) + fg('dim', ` [${completed}/${total} completed]`);
+    const headerText =
+      '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
 
     this.addChild(new Spacer(1));
     this.addChild(new Text(headerText, 0, 0));
@@ -59,18 +60,18 @@ export class TaskProgressComponent extends Container {
 
     switch (task.status) {
       case 'completed': {
-        const icon = chalk.green('\u2713');
-        const text = chalk.green.strikethrough(task.content);
+        const icon = theme.fg('success', '\u2713');
+        const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
         return `${indent}${icon} ${text}`;
       }
       case 'in_progress': {
-        const icon = chalk.yellow('\u25B6');
-        const text = chalk.yellow.bold(task.activeForm);
+        const icon = theme.fg('warning', '\u25B6');
+        const text = theme.bold(theme.fg('warning', task.activeForm));
         return `${indent}${icon} ${text}`;
       }
       case 'pending': {
-        const icon = chalk.dim('\u25CB');
-        const text = chalk.dim(task.content);
+        const icon = theme.fg('dim', '\u25CB');
+        const text = theme.fg('dim', task.content);
         return `${indent}${icon} ${text}`;
       }
     }
