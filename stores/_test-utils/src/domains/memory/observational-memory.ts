@@ -805,6 +805,71 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
     });
 
+    describe('Buffered Reflection', () => {
+      it('should buffer reflection content and update token counts', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: 'Reflected content from observations',
+          tokenCount: 50,
+          inputTokenCount: 120,
+          reflectedObservationLineCount: 5,
+        });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.bufferedReflection).toContain('Reflected content from observations');
+        expect(updated?.bufferedReflectionTokens).toBe(50);
+        expect(updated?.bufferedReflectionInputTokens).toBe(120);
+        expect(updated?.reflectedObservationLineCount).toBe(5);
+      });
+
+      it('should swap buffered reflection to active and create new generation', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7',
+          tokenCount: 30,
+          lastObservedAt: new Date(),
+        });
+
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: 'Condensed reflection',
+          tokenCount: 20,
+          inputTokenCount: 50,
+          reflectedObservationLineCount: 5,
+        });
+
+        const reflection = await memoryStorage.swapBufferedReflectionToActive({
+          currentRecord: record,
+          tokenCount: 25,
+        });
+
+        expect(reflection.generationCount).toBe(record.generationCount + 1);
+        expect(reflection.activeObservations).toContain('Condensed reflection');
+        expect(reflection.activeObservations).toContain('Line 6');
+        expect(reflection.activeObservations).toContain('Line 7');
+        expect(reflection.bufferedReflection).toBeUndefined();
+        expect(reflection.bufferedReflectionTokens).toBeUndefined();
+      });
+
+      it('should throw when swapping buffered reflection with no buffered content', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await expect(
+          memoryStorage.swapBufferedReflectionToActive({
+            currentRecord: record,
+            tokenCount: 10,
+          }),
+        ).rejects.toThrow('No buffered reflection to swap');
+      });
+    });
+
     describe('Concurrent Updates', () => {
       it('should tolerate concurrent flag and buffer updates', async () => {
         const input = createSampleOMInput();
