@@ -69,8 +69,7 @@ export type StepMetadata = Record<string, any>;
 export type StepSuccess<Payload, Resume, Suspend, Output> = {
   status: 'success';
   output: Output;
-  /** Payload may be omitted in the execution log if it matches the output of the previous step */
-  payload?: Payload;
+  payload: Payload;
   resumePayload?: Resume;
   suspendPayload?: Suspend;
   suspendOutput?: Output;
@@ -92,7 +91,7 @@ export interface StepTripwireInfo {
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: Error;
-  payload?: P;
+  payload: P;
   resumePayload?: R;
   suspendPayload?: S;
   suspendOutput?: T;
@@ -107,7 +106,7 @@ export type StepFailure<P, R, S, T> = {
 
 export type StepSuspended<P, S, T> = {
   status: 'suspended';
-  payload?: P;
+  payload: P;
   suspendPayload?: S;
   suspendOutput?: T;
   startedAt: number;
@@ -117,7 +116,7 @@ export type StepSuspended<P, S, T> = {
 
 export type StepRunning<P, R, S, T> = {
   status: 'running';
-  payload?: P;
+  payload: P;
   resumePayload?: R;
   suspendPayload?: S;
   suspendOutput?: T;
@@ -129,7 +128,7 @@ export type StepRunning<P, R, S, T> = {
 
 export type StepWaiting<P, R, S, T> = {
   status: 'waiting';
-  payload?: P;
+  payload: P;
   suspendPayload?: S;
   resumePayload?: R;
   suspendOutput?: T;
@@ -139,7 +138,7 @@ export type StepWaiting<P, R, S, T> = {
 
 export type StepPaused<P, R, S, T> = {
   status: 'paused';
-  payload?: P;
+  payload: P;
   suspendPayload?: S;
   resumePayload?: R;
   suspendOutput?: T;
