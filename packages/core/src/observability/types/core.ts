@@ -365,18 +365,9 @@ export interface InitBridgeOptions {
 }
 
 /**
- * Interface for tracing exporters
+ * Shared Observability event interface for Exporters & Bridges
  */
-export interface ObservabilityExporter {
-  /** Exporter name */
-  name: string;
-
-  /** Initialize exporter with tracing configuration and/or access to Mastra */
-  init?(options: InitExporterOptions): void;
-
-  /** Sets logger instance on the exporter.  */
-  __setLogger?(logger: IMastraLogger): void;
-
+export interface ObservabilityEvents {
   /** Handle tracing events */
   onTracingEvent?(event: TracingEvent): void | Promise<void>;
 
@@ -394,6 +385,20 @@ export interface ObservabilityExporter {
 
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>;
+}
+
+/**
+ * Interface for tracing exporters
+ */
+export interface ObservabilityExporter extends ObservabilityEvents {
+  /** Exporter name */
+  name: string;
+
+  /** Initialize exporter with tracing configuration and/or access to Mastra */
+  init?(options: InitExporterOptions): void;
+
+  /** Sets logger instance on the exporter.  */
+  __setLogger?(logger: IMastraLogger): void;
 
   addScoreToTrace?({
     traceId,
@@ -428,7 +433,7 @@ export interface ObservabilityExporter {
 /**
  * Interface for observability bridges
  */
-export interface ObservabilityBridge {
+export interface ObservabilityBridge extends ObservabilityEvents {
   /** Bridge name */
   name: string;
 
@@ -437,14 +442,6 @@ export interface ObservabilityBridge {
 
   /** Sets logger instance on the bridge  */
   __setLogger?(logger: IMastraLogger): void;
-
-  /**
-   * Export Mastra tracing events to OTEL infrastructure
-   * Called for SPAN_STARTED, SPAN_UPDATED, SPAN_ENDED events
-   *
-   * @param event - Tracing event with exported span
-   */
-  exportTracingEvent(event: TracingEvent): Promise<void>;
 
   /**
    * Execute an async function within the tracing context of a Mastra span.
