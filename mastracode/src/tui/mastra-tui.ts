@@ -160,6 +160,11 @@ export class MastraTUI {
           continue;
         }
 
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          continue;
+        }
+
         // Collect any pending images from clipboard paste
         const images = this.state.pendingImages.length > 0 ? [...this.state.pendingImages] : undefined;
         this.state.pendingImages = [];
@@ -307,6 +312,52 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     await dispatchEvent(event, this.getEventContext(), this.state);
+
+    if (event.type === 'agent_end') {
+      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+      await this.runStopHook(stopReason);
+    }
+  }
+
+  private showHookWarnings(event: string, warnings: string[]): void {
+    for (const warning of warnings) {
+      showInfo(this.state, `[${event}] ${warning}`);
+    }
+  }
+
+  private async runStopHook(stopReason: 'complete' | 'aborted' | 'error'): Promise<void> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+
+    try {
+      const result = await hookMgr.runStop(undefined, stopReason);
+      this.showHookWarnings('Stop', result.warnings);
+      if (!result.allowed && result.blockReason) {
+        showError(this.state, `Stop hook blocked: ${result.blockReason}`);
+      }
+    } catch (error) {
+      showError(this.state, `Stop hook failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async runUserPromptHook(userInput: string): Promise<boolean> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return true;
+
+    try {
+      const result = await hookMgr.runUserPromptSubmit(userInput);
+      this.showHookWarnings('UserPromptSubmit', result.warnings);
+
+      if (!result.allowed) {
+        showError(this.state, result.blockReason || 'Blocked by UserPromptSubmit hook');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      showError(this.state, `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   // ===========================================================================
