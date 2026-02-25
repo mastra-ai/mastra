@@ -1419,7 +1419,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Resolve blockAfter config value.
-   * Values between 1 and 2 (exclusive) are treated as multipliers of the threshold.
+   * Values in [1, 100) are treated as multipliers of the threshold.
    * e.g. blockAfter: 1.5 with messageTokens: 20_000 → 30_000
    * Values >= 100 are treated as absolute token counts.
    * Defaults to 1.2 (120% of threshold) when async buffering is enabled but blockAfter is omitted.
