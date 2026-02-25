@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { RequestContext } from '../../../request-context';
 import { WORKSPACE_TOOLS } from '../../constants';
-import { WorkspaceError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
