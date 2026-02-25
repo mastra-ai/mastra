@@ -312,9 +312,12 @@ function coerceStringifiedJsonValues(schema: SchemaWithValidation<unknown>, inpu
 /**
  * Validates raw input data against a Zod schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The Zod schema to validate against (may be processed by OpenAI compat layer)
  * @param input The raw input data to validate
  * @param toolId Optional tool ID for better error messages
+ * @param originalSchema The original unmodified schema before compat processing. Used as a
+ *   fallback when the processed schema rejects valid input (e.g., compat layer converts
+ *   `.optional()` to `.nullable().transform()`, making optional fields required). (GitHub #13480)
  * @returns The validated data or a validation error
  */
 export function validateToolInput<T = any>(
