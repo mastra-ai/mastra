@@ -72,7 +72,9 @@ export function renderBanner(version: string, appName?: string): string {
 
   // Narrow terminal — compact single line
   if (cols < 30) {
-    return theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', 'Mastra Code')) + theme.fg('dim', ` v${version}`);
+    return (
+      theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', 'Mastra Code')) + theme.fg('dim', ` v${version}`)
+    );
   }
 
   // Select art based on available width

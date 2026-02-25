@@ -43,7 +43,8 @@ export class TaskProgressComponent extends Container {
 
     // Hide the component when all tasks are completed
     if (completed === total) return;
-    const headerText = '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
+    const headerText =
+      '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
 
     this.addChild(new Spacer(1));
     this.addChild(new Text(headerText, 0, 0));

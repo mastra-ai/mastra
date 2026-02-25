@@ -13,7 +13,13 @@ export class ShellOutputComponent extends Container {
     // Command header
     const statusIcon = exitCode === 0 ? '✓' : '✗';
     const statusColor = exitCode === 0 ? 'success' : 'error';
-    this.addChild(new Text(`${theme.fg(statusColor, statusIcon)} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`, 1, 0));
+    this.addChild(
+      new Text(
+        `${theme.fg(statusColor, statusIcon)} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`,
+        1,
+        0,
+      ),
+    );
 
     // Output
     const output = (stdout + (stderr ? (stdout ? '\n' : '') + stderr : '')).trimEnd();

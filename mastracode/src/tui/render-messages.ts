@@ -36,7 +36,8 @@ export function renderCompletedTasksInline(
   insertIndex = -1,
   collapsed = false,
 ): void {
-  const headerText = theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
+  const headerText =
+    theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
   const container = new Container();
   container.addChild(new Spacer(1));
@@ -53,7 +54,11 @@ export function renderCompletedTasksInline(
   }
   if (remaining > 0) {
     container.addChild(
-      new Text(theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`), 0, 0),
+      new Text(
+        theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
+        0,
+        0,
+      ),
     );
   }
 

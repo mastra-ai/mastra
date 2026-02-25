@@ -81,19 +81,19 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
     const categoryHint = this.categoryLabel
       ? `lways allow ${this.categoryLabel.toLowerCase()}`
       : 'lways allow category';
-    const dim = chalk.hex(getTheme().dim);
+    const dimColor = chalk.hex(getTheme().dim);
     const key = chalk.hex(getTheme().text).bold;
     this.addChild(
       new Text(
         theme.fg('accent', 'Allow? ') +
           key('y') +
-          theme.dim('es  ') +
+          dimColor('es  ') +
           key('n') +
-          theme.dim('o  ') +
+          dimColor('o  ') +
           key('a') +
-          theme.dim(categoryHint + '  ') +
+          dimColor(categoryHint + '  ') +
           key('Y') +
-          theme.dim('olo'),
+          dimColor('olo'),
         0,
         0,
       ),

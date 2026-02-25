@@ -257,7 +257,10 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       value: p.value,
       label: p.loggedIn ? `  ${p.label}  ${theme.fg('success', '✓ logged in')}` : `  ${p.label}`,
     }));
-    items.push({ value: '__skip', label: `  ${theme.fg('dim', 'Skip (use API keys or configure later with /login)')}` });
+    items.push({
+      value: '__skip',
+      label: `  ${theme.fg('dim', 'Skip (use API keys or configure later with /login)')}`,
+    });
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
     this.selectList.onSelect = (item: SelectItem) => {
@@ -303,7 +306,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
         new Text(theme.fg('dim', 'See https://mastra.ai/models for supported providers and API key env vars.'), 0, 0),
       );
       box.addChild(new Spacer(1));
-      box.addChild(new Text(theme.fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0));
+      box.addChild(
+        new Text(theme.fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0),
+      );
       this._finished = true;
       // Give the TUI time to render the message before exiting
       setTimeout(() => process.exit(1), 3000);

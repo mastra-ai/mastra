@@ -58,7 +58,9 @@ export class DiffOutputComponent extends Container {
     this.addChild(new Spacer(1));
 
     // Command header
-    this.addChild(new Text(`${theme.fg('success', '✓')} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`, 1, 0));
+    this.addChild(
+      new Text(`${theme.fg('success', '✓')} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`, 1, 0),
+    );
 
     const output = diffOutput.trimEnd();
     if (output) {
