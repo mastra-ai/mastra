@@ -15,36 +15,38 @@ interface MarkdownNode {
 export class SemanticMarkdownTransformer extends TextTransformer {
   private tokenizer: Tiktoken;
   private joinThreshold: number;
-  private allowedSpecial: Set<string> | 'all';
-  private disallowedSpecial: Set<string> | 'all';
+  private allowedArray: string[] | 'all';
+  private disallowedArray: string[] | 'all';
 
   constructor({
     joinThreshold = 500,
     encodingName = 'cl100k_base',
     modelName,
+    tokenizer: existingTokenizer,
     allowedSpecial = new Set(),
     disallowedSpecial = 'all',
     ...baseOptions
-  }: SemanticMarkdownChunkOptions = {}) {
+  }: SemanticMarkdownChunkOptions & { tokenizer?: Tiktoken } = {}) {
     super(baseOptions);
 
     this.joinThreshold = joinThreshold;
-    this.allowedSpecial = allowedSpecial;
-    this.disallowedSpecial = disallowedSpecial;
+    this.allowedArray = allowedSpecial === 'all' ? 'all' : Array.from(allowedSpecial);
+    this.disallowedArray = disallowedSpecial === 'all' ? 'all' : Array.from(disallowedSpecial);
 
-    try {
-      this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
-    } catch {
-      throw new Error('Could not load tiktoken encoding. Please install it with `npm install js-tiktoken`.');
+    if (existingTokenizer) {
+      this.tokenizer = existingTokenizer;
+    } else {
+      try {
+        this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
+      } catch {
+        throw new Error('Could not load tiktoken encoding. Please install it with `npm install js-tiktoken`.');
+      }
     }
   }
 
   private countTokens(text: string): number {
-    const allowed = this.allowedSpecial === 'all' ? 'all' : Array.from(this.allowedSpecial);
-    const disallowed = this.disallowedSpecial === 'all' ? 'all' : Array.from(this.disallowedSpecial);
-
     const processedText = this.stripWhitespace ? text.trim() : text;
-    return this.tokenizer.encode(processedText, allowed, disallowed).length;
+    return this.tokenizer.encode(processedText, this.allowedArray, this.disallowedArray).length;
   }
 
   private splitMarkdownByHeaders(markdown: string): MarkdownNode[] {
@@ -125,7 +127,7 @@ export class SemanticMarkdownTransformer extends TextTransformer {
 
             prev.content += `${formattedTitle}\n${current.content}`;
 
-            prev.length = this.countTokens(prev.content);
+            prev.length = prev.length + current.length;
 
             workingSections.splice(j, 1);
             j--;
@@ -221,6 +223,7 @@ export class SemanticMarkdownTransformer extends TextTransformer {
       ...options,
       encodingName,
       modelName,
+      tokenizer,
       lengthFunction: tikTokenCounter,
     });
   }
