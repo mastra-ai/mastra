@@ -1,4 +1,4 @@
-# Database Introspection and Natural Language to SQL Workflow
+# Chat with Database
 
 This project provides a Mastra workflow system for database introspection and natural language to SQL conversion. It includes tools for analyzing database schemas, generating SQL queries from natural language descriptions, and executing queries safely.
 
