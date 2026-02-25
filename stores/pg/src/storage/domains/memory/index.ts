@@ -788,6 +788,19 @@ export class MemoryPG extends MemoryStorage {
       );
     }
 
+    // Validate metadata keys to prevent prototype pollution and enforce safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_METADATA_KEY'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid metadata key',
+        details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+      });
+    }
+
     if (page < 0) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_PAGE'),

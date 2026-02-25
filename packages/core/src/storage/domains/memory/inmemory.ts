@@ -141,8 +141,21 @@ export class InMemoryMemory extends MemoryStorage {
       return true;
     });
 
+    // Validate metadata keys to prevent prototype pollution and enforce safe key patterns
+    this.validateMetadataKeys(filter?.metadata);
+
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+
+    // Apply metadata filtering
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threadMessages = threadMessages.filter((msg: any) => {
+        const content = typeof msg.content === 'string' ? safelyParseJSON(msg.content) : msg.content;
+        const msgMetadata = content?.metadata;
+        if (!msgMetadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => msgMetadata[key] === value);
+      });
+    }
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {

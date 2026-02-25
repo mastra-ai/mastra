@@ -1,4 +1,5 @@
 ---
+'@mastra/core': patch
 '@mastra/pg': patch
 ---
 
