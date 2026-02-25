@@ -33,10 +33,7 @@ export async function processSlashCommand(
  * $ARGUMENTS - all arguments joined
  * $1, $2, etc. - positional arguments
  */
-function replaceArguments(
-  template: string,
-  args: string[],
-): { result: string; shouldAppendRawArgs: boolean } {
+function replaceArguments(template: string, args: string[]): { result: string; shouldAppendRawArgs: boolean } {
   let result = template;
 
   // Check if template references any argument variables
