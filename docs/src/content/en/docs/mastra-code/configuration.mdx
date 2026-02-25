@@ -22,6 +22,12 @@ Mastra Code authenticates with AI providers through OAuth. Run `/login` in the T
 
 OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location).
 
+### Anthropic OAuth warning
+
+Authenticating with a Claude Max subscription is a grey area that may violate Anthropic's Terms of Service. Mastra Code displays a warning each time you start the Anthropic OAuth flow (via `/login` or during onboarding) with **Continue** and **Cancel** options. Cancel returns you to the provider selection screen.
+
+If you already have Anthropic OAuth credentials and have not previously acknowledged the warning, Mastra Code also shows the warning once at startup with **Continue** (keep credentials) and **Remove OAuth** (log out from Anthropic) options.
+
 ### Model routing
 
 For providers not covered by OAuth, Mastra Code uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
@@ -252,10 +258,10 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 ### Detection order
 
 1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
-2. Persisted setting from `/theme` command (stored in `settings.json`)
-3. OSC 11 query — asks your terminal for its actual background color
-4. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
-5. Falls back to dark theme
+1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. OSC 11 query — asks your terminal for its actual background color
+1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
+1. Falls back to dark theme
 
 ### Switching themes
 

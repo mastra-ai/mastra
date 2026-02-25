@@ -6,6 +6,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
+import { ANTHROPIC_OAUTH_PROVIDER_ID } from '../auth/claude-max-warning.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
   OnboardingInlineComponent,
@@ -18,6 +19,7 @@ import {
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import type { SlashCommandContext } from './commands/types.js';
+import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -281,6 +283,9 @@ export class MastraTUI {
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
+    // One-time Claude Max OAuth warning at startup
+    await this.checkClaudeMaxOAuthWarning();
+
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.state.pendingLockConflict) {
       this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
@@ -433,6 +438,31 @@ export class MastraTUI {
     this.state.chatContainer.addChild(new Spacer(1));
     this.state.ui.requestRender();
     this.state.chatContainer.invalidate();
+  }
+
+  /**
+   * One-time startup check: if the user has Anthropic OAuth credentials and
+   * hasn't yet acknowledged the Claude Max ToS warning, show it now.
+   */
+  private async checkClaudeMaxOAuthWarning(): Promise<void> {
+    const authStorage = this.state.authStorage;
+    if (!authStorage || !authStorage.isLoggedIn(ANTHROPIC_OAUTH_PROVIDER_ID)) return;
+
+    const settings = loadSettings();
+    if (settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt) return;
+
+    const result = await showClaudeMaxOAuthWarning(this.state, 'startup');
+
+    if (result === 'continue') {
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+    } else if (result === 'remove') {
+      authStorage.logout(ANTHROPIC_OAUTH_PROVIDER_ID);
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+      await this.refreshModelAuthStatus();
+    }
+    // 'cancel' (Esc) — leave settings unchanged, will show again next startup
   }
 
   /**
@@ -636,6 +666,13 @@ export class MastraTUI {
           resolve();
         },
         onLogin: (providerId: string, done: () => void) => {
+          // Persist Claude Max OAuth warning acknowledgement when proceeding
+          // through onboarding (the warning step already showed in the wizard).
+          if (providerId === ANTHROPIC_OAUTH_PROVIDER_ID) {
+            const s = loadSettings();
+            s.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+            saveSettings(s);
+          }
           this.performLogin(providerId).then(async () => {
             const updatedAccess = await buildAccess();
             component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
