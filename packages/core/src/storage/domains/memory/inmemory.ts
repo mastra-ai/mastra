@@ -973,6 +973,7 @@ export class InMemoryMemory extends MemoryStorage {
     const overshoot = bestOverTokens - targetMessageTokens;
     const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
     const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
     const minRemaining = Math.min(1000, retentionFloor);
 
     let chunksToActivate: number;

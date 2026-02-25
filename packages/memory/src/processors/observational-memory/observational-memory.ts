@@ -880,6 +880,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const overshoot = bestOverTokens - targetMessageTokens;
     const remainingAfterOver = currentPendingTokens - bestOverTokens;
     const remainingAfterUnder = currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
     const minRemaining = Math.min(1000, retentionFloor);
 
     let bestBoundaryMessageTokens: number;
