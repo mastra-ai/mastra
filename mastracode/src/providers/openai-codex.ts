@@ -42,9 +42,12 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
+/** Valid thinking level values. */
+export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
+
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
-const THINKING_LEVEL_TO_REASONING_EFFORT: Record<string, string | undefined> = {
+const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   minimal: 'low',
   low: 'low',
@@ -60,7 +63,7 @@ function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddlewar
     specificationVersion: 'v3',
     transformParams: async ({ params }) => {
       // Remove topP if temperature is set (OpenAI doesn't like both)
-      if (params.temperature) {
+      if (params.temperature !== undefined && params.temperature !== null) {
         delete params.topP;
       }
 
@@ -94,14 +97,12 @@ function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddlewar
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: string },
+  options?: { thinkingLevel?: ThinkingLevel },
 ): MastraModelConfig {
   // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
   // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
-  const level = options?.thinkingLevel ?? 'medium';
-  const reasoningEffort = level in THINKING_LEVEL_TO_REASONING_EFFORT
-    ? THINKING_LEVEL_TO_REASONING_EFFORT[level]
-    : 'medium';
+  const level: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[level];
   const middleware = createCodexMiddleware(reasoningEffort);
 
   // Test environment: use API key

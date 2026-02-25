@@ -16,7 +16,7 @@ export const stateSchema = z.object({
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
   // Thinking level for model reasoning effort
-  thinkingLevel: z.string().default('off'),
+  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).default('off'),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies

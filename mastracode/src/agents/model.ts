@@ -7,6 +7,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { AuthStorage } from '../auth/storage.js';
 import { opencodeClaudeMaxProvider } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
+import type { ThinkingLevel } from '../providers/openai-codex.js';
 import type { stateSchema } from '../schema.js';
 
 const authStorage = new AuthStorage();
@@ -22,7 +23,7 @@ const authStorage = new AuthStorage();
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: string },
+  options?: { thinkingLevel?: ThinkingLevel },
 ): LanguageModelV1 | MastraLanguageModel {
   authStorage.reload();
   const isAnthropicModel = modelId.startsWith('anthropic/');
@@ -65,7 +66,7 @@ export function getDynamicModel({
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = (harnessContext?.state as any)?.thinkingLevel as string | undefined;
+  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
   return resolveModel(modelId, { thinkingLevel });
 }
