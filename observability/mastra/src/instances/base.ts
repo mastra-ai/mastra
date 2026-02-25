@@ -734,7 +734,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
 
-    // Flush the ObservabilityBus (delivers any buffered events to subscribers)
+    // Flush the ObservabilityBus (no-op today, but keeps the interface contract)
     const flushPromises: Promise<void>[] = [this.observabilityBus.flush()];
 
     // Flush all exporters and bridge

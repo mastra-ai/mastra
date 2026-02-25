@@ -1,52 +1,34 @@
 /**
- * BaseObservabilityEventBus - Generic event bus with buffering support.
+ * BaseObservabilityEventBus - Generic event bus for observability events.
  *
- * Provides a generic pub/sub mechanism for observability events with:
- * - Buffered emission (events accumulate until buffer is full or flushed)
- * - Configurable buffer size and flush interval
+ * Provides a synchronous pub/sub mechanism:
+ * - Events are dispatched to subscribers immediately on emit()
  * - Graceful error handling (handler errors don't break other handlers)
- * - Clean shutdown with final flush
+ * - Clean shutdown clears subscribers
+ *
+ * Buffering/batching is intentionally NOT done here — individual exporters
+ * own their own batching strategy (e.g. CloudExporter batches uploads).
  */
 
 import type { ObservabilityEventBus } from '@mastra/core/observability';
 
-export interface BaseObservabilityEventBusOptions {
-  /**
-   * Maximum number of events to buffer before auto-flushing.
-   * @default 100
-   */
-  bufferSize?: number;
-
-  /**
-   * Interval in milliseconds to auto-flush buffered events.
-   * When set to 0 or undefined, no periodic flushing occurs.
-   */
-  flushIntervalMs?: number;
-}
-
 export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<TEvent> {
   private subscribers: Set<(event: TEvent) => void> = new Set();
-  private buffer: TEvent[] = [];
-  private bufferSize: number;
-  private flushInterval: ReturnType<typeof setInterval> | null = null;
-
-  constructor(options: BaseObservabilityEventBusOptions = {}) {
-    this.bufferSize = options.bufferSize ?? 100;
-    if (options.flushIntervalMs && options.flushIntervalMs > 0) {
-      this.flushInterval = setInterval(() => this.flush(), options.flushIntervalMs);
-      // Allow the process to exit even if the interval is still running
-      if (typeof this.flushInterval === 'object' && 'unref' in this.flushInterval) {
-        this.flushInterval.unref();
-      }
-    }
-  }
 
   emit(event: TEvent): void {
-    this.buffer.push(event);
-    if (this.buffer.length >= this.bufferSize) {
-      this.flush().catch(err => {
-        console.error('[ObservabilityEventBus] Auto-flush error:', err);
-      });
+    for (const handler of this.subscribers) {
+      try {
+        // Handler is typed as () => void, but at runtime an async fn returns a Promise.
+        // Defensively catch rejected promises so they don't become unhandled rejections.
+        const result: unknown = handler(event);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(err => {
+            console.error('[ObservabilityEventBus] Handler error:', err);
+          });
+        }
+      } catch (err) {
+        console.error('[ObservabilityEventBus] Handler error:', err);
+      }
     }
   }
 
@@ -57,29 +39,10 @@ export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<
     };
   }
 
-  async flush(): Promise<void> {
-    const events = this.buffer.splice(0);
-    if (events.length === 0) return;
-
-    await Promise.all(
-      events.flatMap(event =>
-        Array.from(this.subscribers).map(handler =>
-          Promise.resolve()
-            .then(() => handler(event))
-            .catch(err => {
-              console.error('[ObservabilityEventBus] Handler error:', err);
-            }),
-        ),
-      ),
-    );
-  }
+  /** No-op — events are dispatched immediately, nothing to flush. Kept for interface compat. */
+  async flush(): Promise<void> {}
 
   async shutdown(): Promise<void> {
-    if (this.flushInterval) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
-    await this.flush();
     this.subscribers.clear();
   }
 }

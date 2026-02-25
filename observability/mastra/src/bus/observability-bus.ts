@@ -22,7 +22,6 @@ import { TracingEventType } from '@mastra/core/observability';
 
 import { AutoExtractedMetrics } from '../metrics/auto-extract';
 import { BaseObservabilityEventBus } from './base';
-import type { BaseObservabilityEventBusOptions } from './base';
 
 function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   return (
@@ -36,8 +35,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   private exporters: ObservabilityExporter[] = [];
   private autoExtractor?: AutoExtractedMetrics;
 
-  constructor(options?: BaseObservabilityEventBusOptions) {
-    super(options);
+  constructor() {
+    super();
   }
 
   /**
@@ -78,8 +77,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Override emit to route events to exporter handlers immediately,
-   * then pass to the base class for buffered subscriber delivery.
+   * Emit an event: route to exporter handlers, run auto-extraction,
+   * then forward to base class for subscriber delivery.
    */
   emit(event: ObservabilityEvent): void {
     // Route to appropriate handler on each registered exporter
@@ -98,7 +97,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       }
     }
 
-    // Also buffer for subscriber-based batch processing
+    // Deliver to subscribers
     super.emit(event);
   }
 

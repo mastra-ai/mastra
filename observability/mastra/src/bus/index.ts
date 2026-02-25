@@ -2,5 +2,5 @@
  * Observability Event Bus
  */
 
-export { BaseObservabilityEventBus, type BaseObservabilityEventBusOptions } from './base';
+export { BaseObservabilityEventBus } from './base';
 export { ObservabilityBus } from './observability-bus';
