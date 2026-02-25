@@ -19,7 +19,7 @@ function getModelNote(ctx: SlashCommandContext): string | null {
   const modelId = ctx.state.harness.getCurrentModelId() ?? '';
   if (!modelId) return 'No model selected.';
   if (!supportsThinking(modelId)) {
-    return `Current model (${modelId}) does not support thinking. Supported: OpenAI Codex models.`;
+    return `Current model (${modelId}) does not support thinking. Supported: OpenAI models.`;
   }
   return null;
 }
@@ -69,10 +69,15 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.activeInlineQuestion = undefined;
-      await ctx.harness.setState({ thinkingLevel: item.value } as any);
-      collapseResult(`Thinking → ${bold(item.value === currentLevel ? `${item.value} (unchanged)` : item.value)}`);
-      ctx.state.ui.requestRender();
-      resolve();
+      try {
+        await ctx.harness.setState({ thinkingLevel: item.value } as any);
+        collapseResult(`Thinking → ${bold(item.value === currentLevel ? `${item.value} (unchanged)` : item.value)}`);
+      } catch {
+        collapseResult('cancelled');
+      } finally {
+        ctx.state.ui.requestRender();
+        resolve();
+      }
     };
 
     selectList.onCancel = () => {
