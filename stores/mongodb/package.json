@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.5.1",
+  "version": "1.5.2-alpha.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",

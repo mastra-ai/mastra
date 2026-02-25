@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.7.0",
+  "version": "1.8.0-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -237,10 +237,6 @@
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
-  "optionalDependencies": {
-    "vscode-jsonrpc": "^8.2.0",
-    "vscode-languageserver-protocol": "^3.17.0"
-  },
   "devDependencies": {
     "@ast-grep/napi": "^0.40.0",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
@@ -283,6 +279,8 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageserver-protocol": "^3.17.0",
     "zod": "^3.25.76"
   },
   "engines": {

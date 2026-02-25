@@ -6,7 +6,7 @@ import { exec } from 'node:child_process';
 import { Box, Container, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import { getOAuthProviders } from '../../auth/index.js';
-import { bg, fg } from '../theme.js';
+import { theme } from '../theme.js';
 
 export class LoginDialogComponent extends Box implements Focusable {
   private contentContainer: Container;
@@ -32,14 +32,14 @@ export class LoginDialogComponent extends Box implements Focusable {
     private onComplete: (success: boolean, message?: string) => void,
   ) {
     // Box with padding and background
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
     this.tui = tui;
 
     const providerInfo = getOAuthProviders().find(p => p.id === providerId);
     const providerName = providerInfo?.name || providerId;
 
     // Title
-    this.addChild(new Text(fg('warning', `Login to ${providerName}`)));
+    this.addChild(new Text(theme.fg('warning', `Login to ${providerName}`)));
     this.addChild(new Spacer(1));
 
     // Dynamic content area
@@ -82,15 +82,15 @@ export class LoginDialogComponent extends Box implements Focusable {
   showAuth(url: string, instructions?: string): void {
     this.contentContainer.clear();
 
-    this.contentContainer.addChild(new Text(fg('accent', url)));
+    this.contentContainer.addChild(new Text(theme.fg('accent', url)));
 
     const clickHint = process.platform === 'darwin' ? 'Cmd+click to open' : 'Ctrl+click to open';
     const hyperlink = `\x1b]8;;${url}\x07${clickHint}\x1b]8;;\x07`;
-    this.contentContainer.addChild(new Text(fg('muted', hyperlink)));
+    this.contentContainer.addChild(new Text(theme.fg('muted', hyperlink)));
 
     if (instructions) {
       this.contentContainer.addChild(new Spacer(1));
-      this.contentContainer.addChild(new Text(fg('warning', instructions)));
+      this.contentContainer.addChild(new Text(theme.fg('warning', instructions)));
     }
 
     // Try to open browser
@@ -105,12 +105,12 @@ export class LoginDialogComponent extends Box implements Focusable {
    */
   showPrompt(message: string, placeholder?: string): Promise<string> {
     this.contentContainer.addChild(new Spacer(1));
-    this.contentContainer.addChild(new Text(fg('text', message)));
+    this.contentContainer.addChild(new Text(theme.fg('text', message)));
     if (placeholder) {
-      this.contentContainer.addChild(new Text(fg('muted', `e.g., ${placeholder}`)));
+      this.contentContainer.addChild(new Text(theme.fg('muted', `e.g., ${placeholder}`)));
     }
     this.contentContainer.addChild(this.input);
-    this.contentContainer.addChild(new Text(fg('muted', '(Escape to cancel, Enter to submit)')));
+    this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to cancel, Enter to submit)')));
 
     this.input.setValue('');
     this.tui.requestRender();
@@ -125,7 +125,7 @@ export class LoginDialogComponent extends Box implements Focusable {
    * Show progress message
    */
   showProgress(message: string): void {
-    this.contentContainer.addChild(new Text(fg('muted', message)));
+    this.contentContainer.addChild(new Text(theme.fg('muted', message)));
     this.tui.requestRender();
   }
 

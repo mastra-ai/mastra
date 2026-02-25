@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",

@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
@@ -125,6 +127,87 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
         const hasStopped = conditions.some(condition => condition);
         hasFinishedSteps = hasStopped;
+      }
+
+      // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
+      if (rest.onIterationComplete) {
+        const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
+        const iterationContext = {
+          iteration: accumulatedSteps.length,
+          maxIterations: rest.maxSteps,
+          text: typedInputData.output.text || '',
+          toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
+            id: tc.toolCallId || tc.id || '',
+            name: tc.toolName || tc.name || '',
+            args: (tc.args || {}) as Record<string, unknown>,
+          })),
+          toolResults: (typedInputData.output.toolResults || []).map((tr: any) => ({
+            id: tr.toolCallId || tr.id || '',
+            name: tr.toolName || tr.name || '',
+            result: tr.result,
+            error: tr.error,
+          })),
+          isFinal,
+          finishReason: typedInputData.stepResult?.reason || 'unknown',
+          runId: runId,
+          threadId: _internal?.threadId,
+          resourceId: _internal?.resourceId,
+          agentId: rest.agentId,
+          agentName: rest.agentName || rest.agentId,
+          messages: messageList.get.all.db(),
+        };
+
+        try {
+          const iterationResult = await rest.onIterationComplete(iterationContext);
+
+          if (iterationResult) {
+            // Check if iteration should stop (only apply if we're still continuing)
+            if (iterationResult.continue === false && !hasFinishedSteps) {
+              hasFinishedSteps = true;
+            }
+
+            // Add feedback if provided (only if we're continuing to next iteration)
+            if (iterationResult.feedback && typedInputData.stepResult?.isContinued && !hasFinishedSteps) {
+              messageList.add(
+                {
+                  id: rest.mastra?.generateId() || randomUUID(),
+                  createdAt: new Date(),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [
+                      {
+                        type: 'text',
+                        text: iterationResult.feedback,
+                      },
+                    ],
+                    metadata: {
+                      mode: 'stream',
+                      completionResult: {
+                        suppressFeedback: true,
+                      },
+                    },
+                    format: 2,
+                  },
+                } as MastraDBMessage,
+                'response',
+              );
+              if (iterationResult.continue && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+                hasFinishedSteps = false;
+                typedInputData.stepResult.isContinued = true;
+              }
+            }
+          }
+        } catch (error) {
+          // Log error but don't fail the iteration
+          rest.logger?.error('Error in onIterationComplete hook:', error);
+        }
+      }
+
+      // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
+      if (!hasFinishedSteps && _internal?._delegationBailed) {
+        hasFinishedSteps = true;
+        _internal._delegationBailed = false;
       }
 
       if (typedInputData.stepResult) {

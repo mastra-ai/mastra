@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "1.0.8",
+  "version": "1.0.9-alpha.0",
   "description": "",
   "type": "module",
   "files": [

@@ -55,6 +55,8 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
+    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -83,6 +85,7 @@ export interface GlobalSettings {
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
+    theme: 'auto' | 'dark' | 'light';
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -105,6 +108,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,
@@ -115,6 +119,7 @@ const DEFAULTS: GlobalSettings = {
   },
   preferences: {
     yolo: null,
+    theme: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
