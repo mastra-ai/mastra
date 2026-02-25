@@ -34,10 +34,15 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     let buffer = '';
     let wasRaw: boolean;
     let wasResumed = false;
+    let timer: NodeJS.Timeout | undefined;
 
     const cleanup = () => {
       if (settled) return;
       settled = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       process.stdin.removeListener('data', onData);
       // Restore original raw mode state
       try {
@@ -86,7 +91,7 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     };
 
     // Timeout — terminal didn't respond (or doesn't support OSC 11)
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       cleanup();
       resolve(null);
     }, timeoutMs);
