@@ -732,7 +732,8 @@ export class Workspace<
       return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
     };
 
-    // Index all files from specified paths
+    // Index all files from specified paths (track across patterns to avoid re-indexing overlaps)
+    const indexedPaths = new Set<string>();
     for (const pathOrGlob of paths) {
       try {
         const resolved = await resolvePathPattern(pathOrGlob, readdir);
@@ -752,14 +753,17 @@ export class Workspace<
         }
         // Index direct file matches first so they aren't lost if a directory scan fails
         for (const filePath of filesToIndex) {
+          if (indexedPaths.has(filePath)) continue;
           await this.indexFileForSearch(filePath);
+          indexedPaths.add(filePath);
         }
         for (const dir of directoryRoots) {
           try {
             const files = await this.getAllFiles(dir);
             for (const filePath of files) {
-              if (!filesToIndex.has(filePath)) {
+              if (!filesToIndex.has(filePath) && !indexedPaths.has(filePath)) {
                 await this.indexFileForSearch(filePath);
+                indexedPaths.add(filePath);
               }
             }
           } catch {
