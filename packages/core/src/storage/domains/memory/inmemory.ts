@@ -153,7 +153,7 @@ export class InMemoryMemory extends MemoryStorage {
         const content = typeof msg.content === 'string' ? safelyParseJSON(msg.content) : msg.content;
         const msgMetadata = content?.metadata;
         if (!msgMetadata) return false;
-        return Object.entries(filter.metadata!).every(([key, value]) => msgMetadata[key] === value);
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
       });
     }
 

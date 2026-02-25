@@ -575,6 +575,45 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         ).rejects.toThrow('Invalid metadata key');
       });
+
+      it('should filter by non-primitive metadata values (object/array)', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: {
+              content: 'With nested metadata',
+              metadata: { traceContext: { spanId: 'span-1', traceId: 'trace-1' } },
+            },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: {
+              content: 'Different nested metadata',
+              metadata: { traceContext: { spanId: 'span-2', traceId: 'trace-2' } },
+            },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'No traceContext' },
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { traceContext: { spanId: 'span-1', traceId: 'trace-1' } } },
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.metadata.traceContext.spanId).toBe('span-1');
+      });
     });
 
     describe('perPage and page parameters', () => {
