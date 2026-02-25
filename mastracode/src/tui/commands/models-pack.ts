@@ -8,7 +8,7 @@ import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { updateStatusLine } from '../status-line.js';
-import { getSelectListTheme, fg, bold, mastra } from '../theme.js';
+import { getSelectListTheme, theme, mastra } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 async function selectModel(ctx: SlashCommandContext, title: string, modeColor?: string): Promise<string | undefined> {
@@ -121,12 +121,12 @@ function applyPack(ctx: SlashCommandContext, pack: ModePack): void {
 
 function getPackDetail(pack: ModePack): string {
   if (pack.id === 'custom') {
-    return fg('dim', "  You'll pick a model for each mode.");
+    return theme.fg('dim', "  You'll pick a model for each mode.");
   }
   return [
-    `  ${chalk.hex(mastra.blue)('plan')}  → ${fg('text', pack.models.plan)}`,
-    `  ${chalk.hex(mastra.purple)('build')} → ${fg('text', pack.models.build)}`,
-    `  ${chalk.hex(mastra.green)('fast')}  → ${fg('text', pack.models.fast)}`,
+    `  ${chalk.hex(mastra.blue)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
+    `  ${chalk.hex(mastra.purple)('build')} → ${theme.fg('text', pack.models.build)}`,
+    `  ${chalk.hex(mastra.green)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
   ].join('\n');
 }
 
@@ -160,12 +160,12 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
   const items: SelectItem[] = packs.map(p => ({
     value: p.id,
-    label: `  ${p.name}  ${fg('dim', p.description)}${p.id === currentPackId ? fg('dim', ' (current)') : ''}`,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
   }));
 
   return new Promise<void>(resolve => {
     const container = new Box(1, 1);
-    container.addChild(new Text(bold(fg('accent', 'Switch model pack')), 0, 0));
+    container.addChild(new Text(theme.bold(theme.fg('accent', 'Switch model pack')), 0, 0));
     container.addChild(new Spacer(1));
 
     const selectList = new SelectList(items, items.length, getSelectListTheme());
@@ -195,14 +195,14 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         const customPack = await runCustomFlow(ctx);
         if (customPack) {
           applyPack(ctx, customPack);
-          collapseResult(`Model pack → ${bold('Custom')}`);
+          collapseResult(`Model pack → ${theme.bold('Custom')}`);
           ctx.showInfo('Switched to Custom pack');
         } else {
           collapseResult('cancelled');
         }
       } else {
         applyPack(ctx, pack);
-        collapseResult(`Model pack → ${bold(pack.name)}`);
+        collapseResult(`Model pack → ${theme.bold(pack.name)}`);
         ctx.showInfo(`Switched to ${pack.name} pack`);
       }
 
@@ -223,7 +223,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     container.addChild(new Spacer(1));
     container.addChild(detailText);
     container.addChild(new Spacer(1));
-    container.addChild(new Text(fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
     // Initialize detail for first item
     const currentIdx = packs.findIndex(p => p.id === currentPackId);
@@ -238,9 +238,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     const collapseResult = (result: string | null) => {
       container.clear();
       if (result === 'cancelled') {
-        container.addChild(new Text(fg('dim', `${fg('error', '✗')} Model pack (cancelled)`), 0, 0));
+        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} Model pack (cancelled)`), 0, 0));
       } else if (result) {
-        container.addChild(new Text(fg('text', `${fg('success', '✓')} ${result}`), 0, 0));
+        container.addChild(new Text(theme.fg('text', `${theme.fg('success', '✓')} ${result}`), 0, 0));
       }
     };
 

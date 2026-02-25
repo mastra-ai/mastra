@@ -1,5 +1,5 @@
 import { DiffOutputComponent } from '../components/diff-output.js';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: string): Promise<void> {
@@ -75,10 +75,10 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
     const ops = Array.from(opCounts.entries())
       .map(([op, count]) => (count > 1 ? `${op}×${count}` : op))
       .join(', ');
-    lines.push(`  ${fg('path', fp)} ${fg('muted', `(${ops})`)}`);
+    lines.push(`  ${theme.fg('path', fp)} ${theme.fg('muted', `(${ops})`)}`);
   }
   lines.push('');
-  lines.push(fg('muted', 'Use /diff <path> to see the git diff for a specific file.'));
+  lines.push(theme.fg('muted', 'Use /diff <path> to see the git diff for a specific file.'));
 
   ctx.showInfo(lines.join('\n'));
 }

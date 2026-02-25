@@ -273,14 +273,14 @@ let currentTheme: ThemeColors = darkTheme;
 /**
  * Get the current theme colors.
  */
-export function getTheme(): ThemeColors {
+function getTheme(): ThemeColors {
   return currentTheme;
 }
 
 /**
  * Set the current theme.
  */
-export function setTheme(colors: ThemeColors): void {
+function setTheme(colors: ThemeColors): void {
   currentTheme = colors;
 }
 
@@ -299,7 +299,7 @@ export function applyThemeMode(mode: ThemeMode): void {
 /**
  * Apply foreground color from theme.
  */
-export function fg(color: ThemeColor, text: string): string {
+function fg(color: ThemeColor, text: string): string {
   const hex = currentTheme[color];
   if (!hex) return text;
   return chalk.hex(hex)(text);
@@ -308,7 +308,7 @@ export function fg(color: ThemeColor, text: string): string {
 /**
  * Apply background color from theme.
  */
-export function bg(color: ThemeBg, text: string): string {
+function bg(color: ThemeBg, text: string): string {
   const hex = currentTheme[color];
   if (!hex) return text;
   return chalk.bgHex(hex)(text);
@@ -317,21 +317,21 @@ export function bg(color: ThemeBg, text: string): string {
 /**
  * Apply bold styling.
  */
-export function bold(text: string): string {
+function bold(text: string): string {
   return chalk.bold(text);
 }
 
 /**
  * Apply italic styling.
  */
-export function italic(text: string): string {
+function italic(text: string): string {
   return chalk.italic(text);
 }
 
 /**
  * Apply dim styling.
  */
-export function dim(text: string): string {
+function dim(text: string): string {
   return chalk.dim(text);
 }
 
@@ -350,7 +350,7 @@ export function getContrastText(hexBg: string): string {
 }
 
 // =============================================================================
-// Theme Object (for compatibility with pi-tui components)
+// Theme Object
 // =============================================================================
 
 export const theme = {

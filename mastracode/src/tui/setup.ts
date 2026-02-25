@@ -17,7 +17,7 @@ import { showError, showInfo } from './display.js';
 import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import { fg } from './theme.js';
+import { theme } from './theme.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -171,15 +171,15 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
-    .map(line => fg('muted', line as string))
+    .map(line => theme.fg('muted', line as string))
     .join('\n');
 
-  const sep = fg('dim', ' · ');
+  const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.harness.listModes().length > 1) {
-    hintParts.push(`${fg('accent', '⇧+Tab')} ${fg('muted', 'cycle modes')}`);
+    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
-  hintParts.push(`${fg('accent', '/help')} ${fg('muted', 'info & shortcuts')}`);
+  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
   const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));
