@@ -2,4 +2,4 @@
 '@mastra/rag': patch
 ---
 
-Fixed severe performance bottleneck in token-based chunking (`token` and `semantic-markdown` strategies). Eliminated redundant tiktoken encoder instantiation and excessive token re-encoding during section merging, resulting in significantly faster chunking for markdown knowledge bases.
+Improved token-based chunking performance in `token` and `semantic-markdown` strategies. Markdown knowledge bases now chunk significantly faster with lower tokenization overhead.

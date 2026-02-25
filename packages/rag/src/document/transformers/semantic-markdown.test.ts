@@ -3,12 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { SemanticMarkdownTransformer } from './semantic-markdown';
 
-let totalEncodeCallCount = 0;
+let totalCharsEncoded = 0;
 
 vi.mock('js-tiktoken', () => {
   const createMockTokenizer = () => ({
     encode: (text: string) => {
-      totalEncodeCallCount++;
+      totalCharsEncoded += text.length;
       return Array.from({ length: Math.ceil(text.length / 4) }, (_, i) => i);
     },
     decode: (tokens: number[]) => 'x'.repeat(tokens.length * 4),
@@ -24,7 +24,7 @@ describe('SemanticMarkdownTransformer', () => {
   beforeEach(() => {
     vi.mocked(getEncoding).mockClear();
     vi.mocked(encodingForModel).mockClear();
-    totalEncodeCallCount = 0;
+    totalCharsEncoded = 0;
   });
 
   describe('fromTikToken', () => {
@@ -64,15 +64,17 @@ describe('SemanticMarkdownTransformer', () => {
       });
 
       // Reset counter after construction (construction may call encode internally)
-      totalEncodeCallCount = 0;
+      totalCharsEncoded = 0;
 
-      transformer.splitText({ text: markdown });
+      const chunks = transformer.splitText({ text: markdown });
 
-      // splitMarkdownByHeaders calls countTokens once per section (11 sections total).
-      // mergeSemanticSections should combine token counts arithmetically,
+      // Verify merging actually occurred — all sections should merge into one chunk
+      expect(chunks).toHaveLength(1);
+
+      // mergeSemanticSections should encode only short header strings during merging,
       // NOT re-encode the entire growing merged content on every merge.
-      const sectionCount = 11; // 1 main + 10 subsections
-      expect(totalEncodeCallCount).toBeLessThanOrEqual(sectionCount);
+      // Total chars encoded should stay proportional to input size, not grow quadratically.
+      expect(totalCharsEncoded).toBeLessThan(markdown.length * 2);
     });
   });
 });

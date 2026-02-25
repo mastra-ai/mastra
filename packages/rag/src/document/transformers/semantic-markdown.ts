@@ -121,13 +121,15 @@ export class SemanticMarkdownTransformer extends TextTransformer {
         if (current.depth === depth) {
           const prev = workingSections[j - 1]!;
 
-          if (prev.length + current.length < this.joinThreshold && prev.depth <= current.depth) {
-            const title = `${'#'.repeat(current.depth)} ${current.title}`;
-            const formattedTitle = `\n\n${title}`;
+          const title = `${'#'.repeat(current.depth)} ${current.title}`;
+          const formattedTitle = `\n\n${title}`;
+          const headerLength = this.countTokens(`${formattedTitle}\n`);
+          const mergedLength = prev.length + current.length + headerLength;
 
+          if (mergedLength < this.joinThreshold && prev.depth <= current.depth) {
             prev.content += `${formattedTitle}\n${current.content}`;
 
-            prev.length = prev.length + current.length;
+            prev.length = mergedLength;
 
             workingSections.splice(j, 1);
             j--;
