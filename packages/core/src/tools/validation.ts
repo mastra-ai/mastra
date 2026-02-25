@@ -321,6 +321,7 @@ export function validateToolInput<T = any>(
   schema: SchemaWithValidation<T> | undefined,
   input: unknown,
   toolId?: string,
+  originalSchema?: SchemaWithValidation<T>,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return input as-is
   if (!schema || !('safeParse' in schema)) {
@@ -381,6 +382,19 @@ export function validateToolInput<T = any>(
 
   if (retryValidation.success) {
     return { data: retryValidation.data };
+  }
+
+  // Step 6: Fallback to original (pre-compat) schema (GitHub #13480)
+  // The OpenAI compat layer converts .optional() to .nullable().transform(),
+  // making fields required in the processed schema. When the LLM omits optional
+  // fields entirely (key not present in input), the processed schema rejects it.
+  // The original schema still has .optional() and accepts missing keys.
+  if (originalSchema && 'safeParse' in originalSchema) {
+    const originalNormalized = normalizeNullishInput(originalSchema, input);
+    const originalValidation = originalSchema.safeParse(originalNormalized);
+    if (originalValidation.success) {
+      return { data: originalValidation.data };
+    }
   }
 
   // All attempts failed - return the original (non-stripped) error since it's

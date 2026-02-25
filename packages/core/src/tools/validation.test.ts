@@ -1823,3 +1823,167 @@ describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => 
     });
   });
 });
+
+describe('validateToolInput - Original Schema Fallback (GitHub #13480)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/13480
+  // When schemas are processed through OpenAI compat layers, .optional() is converted
+  // to .nullable().transform(), which removes the optional wrapper and makes the field
+  // required (but nullable). When the LLM omits optional fields entirely (key not
+  // present in input), the processed schema rejects it because the field is now required.
+  // The fix adds a fallback to the original (pre-compat) schema which still has .optional().
+
+  it('should fallback to originalSchema when LLM omits optional fields (key not present)', () => {
+    // Original schema: field is optional
+    const originalSchema = z.object({
+      query: z.string(),
+      limit: z.number().optional(),
+    });
+
+    // Processed schema: compat layer converted .optional() to .nullable().transform()
+    // This makes `limit` required (but nullable)
+    const processedSchema = z.object({
+      query: z.string(),
+      limit: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+    });
+
+    // LLM omits the optional field entirely (key not in input)
+    const input = { query: 'hello' };
+
+    // Without originalSchema, this would fail because `limit` is required in processedSchema
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ query: 'hello' });
+  });
+
+  it('should fallback to originalSchema with multiple optional fields omitted', () => {
+    const originalSchema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+      email: z.string().email().optional(),
+      bio: z.string().optional(),
+    });
+
+    const processedSchema = z.object({
+      name: z.string(),
+      age: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+      email: z
+        .string()
+        .nullable()
+        .transform((val: string | null) => (val === null ? undefined : val)),
+      bio: z
+        .string()
+        .nullable()
+        .transform((val: string | null) => (val === null ? undefined : val)),
+    });
+
+    // LLM only provides the required field
+    const input = { name: 'Alice' };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Alice' });
+  });
+
+  it('should still use processedSchema when input is valid against it', () => {
+    const originalSchema = z.object({
+      query: z.string(),
+      limit: z.number().optional(),
+    });
+
+    const processedSchema = z.object({
+      query: z.string(),
+      limit: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+    });
+
+    // LLM provides null for the optional field (handled by Step 2: undefined→null)
+    const input = { query: 'hello', limit: null };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeUndefined();
+    // processedSchema's transform converts null → undefined
+    expect(result.data).toEqual({ query: 'hello', limit: undefined });
+  });
+
+  it('should still fail when input is invalid against both schemas', () => {
+    const originalSchema = z.object({
+      query: z.string(),
+      count: z.number(),
+    });
+
+    const processedSchema = z.object({
+      query: z.string(),
+      count: z.number(),
+    });
+
+    // Missing required field `count` in both schemas
+    const input = { query: 'hello' };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('Tool input validation failed');
+  });
+
+  it('should handle nested optional fields with originalSchema fallback', () => {
+    const originalSchema = z.object({
+      config: z.object({
+        host: z.string(),
+        port: z.number().optional(),
+        ssl: z.boolean().optional(),
+      }),
+    });
+
+    const processedSchema = z.object({
+      config: z.object({
+        host: z.string(),
+        port: z
+          .number()
+          .nullable()
+          .transform((val: number | null) => (val === null ? undefined : val)),
+        ssl: z
+          .boolean()
+          .nullable()
+          .transform((val: boolean | null) => (val === null ? undefined : val)),
+      }),
+    });
+
+    // LLM omits nested optional fields
+    const input = { config: { host: 'localhost' } };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ config: { host: 'localhost' } });
+  });
+
+  it('should not use originalSchema when not provided (backward compat)', () => {
+    const processedSchema = z.object({
+      query: z.string(),
+      limit: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+    });
+
+    // LLM omits optional field, no originalSchema provided
+    const input = { query: 'hello' };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool');
+
+    // Should fail because limit is required in processedSchema and no fallback
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('Tool input validation failed');
+  });
+});
