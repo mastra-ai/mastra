@@ -142,7 +142,7 @@ export class MastraLLMVNext extends MastraBase {
     resumeContext,
     runId,
     stopWhen = stepCountIs(5),
-    maxSteps = 5, //default to 5 steps
+    maxSteps,
     tools = {} as Tools,
     modelSettings,
     toolChoice = 'auto',
