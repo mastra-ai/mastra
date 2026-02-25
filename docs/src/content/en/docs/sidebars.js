@@ -74,6 +74,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
         },

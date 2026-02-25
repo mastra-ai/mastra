@@ -273,6 +273,7 @@ export function setupAutocomplete(state: TUIState): void {
     },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

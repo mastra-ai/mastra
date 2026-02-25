@@ -630,7 +630,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 usage: self.#usageCount,
                 warnings: self.#warnings,
                 providerMetadata: undefined,
-                response: {},
+                response: {
+                  dbMessages: self.messageList.get.response.db(),
+                },
                 request: {},
                 reasoning: [],
                 reasoningText: undefined,
@@ -811,7 +813,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 usage: self.#usageCount,
                 warnings: self.#warnings,
                 providerMetadata: chunk.payload.metadata?.providerMetadata,
-                response,
+                response: { ...response, dbMessages: self.messageList.get.response.db() },
                 request: self.#request || {},
                 reasoningText,
                 reasoning: Object.values(self.#bufferedReasoningDetails || {}),
@@ -847,6 +849,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     ...(await self.response),
                     ...baseFinishStep.response,
                     messages: messageList.get.response.aiV5.model(),
+                    dbMessages: self.messageList.get.response.db(),
                   },
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
@@ -931,7 +934,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               content: self.messageList.get.response.aiV5.stepContent(),
               object: undefined,
               request: self.#request,
-              response: {},
+              response: {
+                dbMessages: self.messageList.get.response.db(),
+              },
               providerMetadata: undefined,
             });
           }

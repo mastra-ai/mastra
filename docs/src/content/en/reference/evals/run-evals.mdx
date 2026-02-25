@@ -24,6 +24,7 @@ const result = await runEvals({
     { input: 'How does AI work?' },
   ],
   scorers: [myScorer1, myScorer2],
+  targetOptions: { maxSteps: 5 },
   concurrency: 2,
   onItemComplete: ({ item, targetResult, scorerResults }) => {
     console.log(`Completed: ${item.input}`)
@@ -58,6 +59,13 @@ type: "MastraScorer[] | WorkflowScorerConfig",
 description:
 "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
 isOptional: false,
+},
+{
+name: "targetOptions",
+type: "AgentExecutionOptions | WorkflowRunOptions",
+description:
+"Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState).",
+isOptional: true,
 },
 {
 name: "concurrency",
@@ -104,6 +112,12 @@ isOptional: true,
 name: "tracingContext",
 type: "TracingContext",
 description: "Tracing context for observability and debugging.",
+isOptional: true,
+},
+{
+name: "startOptions",
+type: "WorkflowRunOptions",
+description: "Per-item workflow run options (e.g. initialState, perStep, outputOptions). Merged on top of targetOptions, so per-item values take precedence. Only applicable when the target is a workflow.",
 isOptional: true,
 },
 ]}
@@ -188,6 +202,22 @@ const result = await runEvals({
 })
 ```
 
+### Agent with targetOptions
+
+Pass execution options like `maxSteps` or `modelSettings` to customize agent behavior during evaluation:
+
+```typescript
+const result = await runEvals({
+  target: chatAgent,
+  data: [{ input: 'Summarize this article' }, { input: 'Translate to French' }],
+  scorers: [relevancyScorer],
+  targetOptions: {
+    maxSteps: 5,
+    modelSettings: { temperature: 0 },
+  },
+})
+```
+
 ### Workflow Evaluation
 
 ```typescript
@@ -213,6 +243,28 @@ const workflowResult = await runEvals({
       console.log('Step scores:', scorerResults.steps)
     }
   },
+})
+```
+
+### Workflow with per-item startOptions
+
+Use `startOptions` on individual data items to customize each workflow run. Per-item values take precedence over `targetOptions`:
+
+```typescript
+const result = await runEvals({
+  target: myWorkflow,
+  data: [
+    {
+      input: { query: 'hello' },
+      startOptions: { initialState: { counter: 1 } },
+    },
+    {
+      input: { query: 'world' },
+      startOptions: { initialState: { counter: 2 } },
+    },
+  ],
+  scorers: [outputQualityScorer],
+  targetOptions: { perStep: true },
 })
 ```
 

@@ -2790,16 +2790,15 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    optionalDependencies:
       vscode-jsonrpc:
         specifier: ^8.2.0
         version: 8.2.1
       vscode-languageserver-protocol:
         specifier: ^3.17.0
         version: 3.17.5
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   packages/create-mastra:
     dependencies:

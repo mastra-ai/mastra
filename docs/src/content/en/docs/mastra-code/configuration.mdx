@@ -105,11 +105,13 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | - | - | - |
 | `PreToolUse` | Before a tool call executes | Yes |
 | `PostToolUse` | After a tool call completes | No |
-| `Stop` | When the agent finishes a response | Yes |
+| `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
 | `UserPromptSubmit` | When the user sends a message | Yes |
 | `SessionStart` | When a session begins | No |
 | `SessionEnd` | When a session ends | No |
 | `Notification` | When the TUI fires a notification | No |
+
+`UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
 ### Hook I/O protocol
 
@@ -243,6 +245,30 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 | Observation threshold | 30,000 tokens | Token count that triggers an observation pass |
 | Reflection threshold | 40,000 tokens | Token count that triggers a reflection pass |
 
+## Color theme
+
+Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. You can override the detected theme with the `/theme` slash command or the `MASTRA_THEME` environment variable.
+
+### Detection order
+
+1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
+2. Persisted setting from `/theme` command (stored in `settings.json`)
+3. OSC 11 query — asks your terminal for its actual background color
+4. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
+5. Falls back to dark theme
+
+### Switching themes
+
+Use the `/theme` command to change the theme at runtime:
+
+```
+/theme light
+/theme dark
+/theme auto
+```
+
+Running `/theme` with no arguments shows the current theme. The choice is persisted across sessions.
+
 ## Environment variables
 
 | Variable | Description |
@@ -254,6 +280,7 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 | `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
 | `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
+| `MASTRA_THEME` | Color theme override (`dark` or `light`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override
