@@ -107,9 +107,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     const collapseResult = (result: string) => {
       container.clear();
       if (result === 'cancelled') {
-        container.addChild(
-          new Text(theme.fg('dim', `${theme.fg('error', '✗')} Thinking level (cancelled)`), 0, 0),
-        );
+        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} Thinking level (cancelled)`), 0, 0));
       } else {
         container.addChild(new Text(theme.fg('text', `${theme.fg('success', '✓')} ${result}`), 0, 0));
       }
