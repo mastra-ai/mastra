@@ -736,16 +736,20 @@ export class Workspace<
     for (const pathOrGlob of paths) {
       try {
         const resolved = await resolvePathPattern(pathOrGlob, readdir);
+        const filesToIndex = new Set<string>();
         for (const entry of resolved) {
           if (entry.type === 'file') {
-            await this.indexFileForSearch(entry.path);
+            filesToIndex.add(entry.path);
           } else {
-            // Directory: recurse and index all files inside
+            // Directory: recurse and collect all files inside
             const files = await this.getAllFiles(entry.path);
             for (const filePath of files) {
-              await this.indexFileForSearch(filePath);
+              filesToIndex.add(filePath);
             }
           }
+        }
+        for (const filePath of filesToIndex) {
+          await this.indexFileForSearch(filePath);
         }
       } catch {
         // Skip paths that don't exist or can't be read
