@@ -4,10 +4,10 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { theme, mastra, getTheme } from '../theme.js';
+import { theme, mastra } from '../theme.js';
 
 function colorizeDiffLine(line: string): string {
-  const t = getTheme();
+  const t = theme.getTheme();
   const addedColor = chalk.hex(t.success);
   const hunkHeaderColor = chalk.hex(t.toolBorderPending);
   const fileHeaderColor = chalk.bold.hex(t.accent);

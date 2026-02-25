@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed fatal "fg is not defined" crash on startup by removing individual exports of theme functions (fg, bg, bold, italic, dim) from theme.ts. All TUI files now use the theme object exclusively, preventing undefined reference errors.
+Fixed a fatal crash on startup that caused the TUI to fail immediately on launch.

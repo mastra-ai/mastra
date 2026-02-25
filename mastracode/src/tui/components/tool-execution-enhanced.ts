@@ -9,7 +9,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
-import { theme, mastra, getTheme } from '../theme.js';
+import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
@@ -572,7 +572,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxDiags = shouldCollapse ? COLLAPSED_DIAG_LINES : diagnostics.entries.length;
       const entriesToShow = diagnostics.entries.slice(0, maxDiags);
       for (const diag of entriesToShow) {
-        const t = getTheme();
+        const t = theme.getTheme();
         const color = diag.severity === 'error' ? t.error : diag.severity === 'warning' ? t.warning : t.muted;
         const icon = diag.severity === 'error' ? '✗' : diag.severity === 'warning' ? '⚠' : 'ℹ';
         const location = diag.location ? chalk.hex(color)(diag.location) + ' ' : '';
@@ -649,7 +649,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // Use soft red for removed, green for added
     const removedColor = chalk.hex(mastra.red); // soft red
-    const addedColor = chalk.hex(getTheme().success); // soft green
+    const addedColor = chalk.hex(theme.getTheme().success); // soft green
 
     const maxLines = Math.max(oldLines.length, newLines.length);
 

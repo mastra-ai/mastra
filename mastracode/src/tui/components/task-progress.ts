@@ -7,7 +7,7 @@
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { theme, getTheme } from '../theme.js';
+import { theme } from '../theme.js';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItem[] = [];
@@ -61,7 +61,7 @@ export class TaskProgressComponent extends Container {
     switch (task.status) {
       case 'completed': {
         const icon = theme.fg('success', '\u2713');
-        const text = chalk.hex(getTheme().success).strikethrough(task.content);
+        const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
         return `${indent}${icon} ${text}`;
       }
       case 'in_progress': {

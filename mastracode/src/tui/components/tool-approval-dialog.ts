@@ -11,7 +11,7 @@
 import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { theme, getTheme } from '../theme.js';
+import { theme } from '../theme.js';
 
 export type ApprovalAction =
   | { type: 'approve' }
@@ -81,8 +81,8 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
     const categoryHint = this.categoryLabel
       ? `lways allow ${this.categoryLabel.toLowerCase()}`
       : 'lways allow category';
-    const dimColor = chalk.hex(getTheme().dim);
-    const key = chalk.hex(getTheme().text).bold;
+    const dimColor = chalk.hex(theme.getTheme().dim);
+    const key = chalk.hex(theme.getTheme().text).bold;
     this.addChild(
       new Text(
         theme.fg('accent', 'Allow? ') +
