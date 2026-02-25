@@ -101,6 +101,64 @@ const workspace = new Workspace({
 
 When `contained` is `false`, absolute paths are treated as real filesystem paths with no restriction.
 
+## Dynamic filesystem
+
+The `filesystem` option accepts a resolver function instead of a static instance. The resolver receives `requestContext` and returns a filesystem per request, allowing a single workspace to serve different filesystems based on the caller's identity, role, or tenant.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  // highlight-start
+  filesystem: ({ requestContext }) => {
+    const role = requestContext.get('agent-role')
+    return new LocalFilesystem({
+      basePath: `/workspaces/${role}`,
+      readOnly: role !== 'admin',
+    })
+  },
+  // highlight-end
+})
+
+const agent = new Agent({
+  id: 'multi-role-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+})
+```
+
+Each request resolves its own filesystem at tool execution time:
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+// Admin request — reads and writes from /workspaces/admin/
+const adminCtx = new RequestContext([['agent-role', 'admin']])
+await agent.generate('Write report.txt with Q4 results', { requestContext: adminCtx })
+
+// Viewer request — reads from /workspaces/viewer/, writes are blocked
+const viewerCtx = new RequestContext([['agent-role', 'viewer']])
+await agent.generate('Read info.txt', { requestContext: viewerCtx })
+```
+
+The resolver can also be asynchronous, for example to look up configuration from a database:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: async ({ requestContext }) => {
+    const tenantConfig = await db.getTenant(requestContext.get('tenant-id'))
+    return new LocalFilesystem({ basePath: tenantConfig.storagePath })
+  },
+})
+```
+
+:::note
+
+`filesystem` and `mounts` are mutually exclusive. You cannot use a resolver function together with `mounts` in the same workspace.
+
+:::
+
 ## Read-only mode
 
 To prevent agents from modifying files, enable read-only mode:
@@ -115,7 +173,9 @@ const workspace = new Workspace({
 })
 ```
 
-When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded from the agent's toolset entirely. The agent can still read and list files.
+
+When using a [dynamic filesystem](#dynamic-filesystem), write tools are always included because `readOnly` isn't known until the resolver runs. Instead, write operations are blocked at runtime — the tool returns an error if the resolved filesystem is read-only.
 
 ## Mounts and CompositeFilesystem
 
