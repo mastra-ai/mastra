@@ -33,7 +33,7 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     let settled = false;
     let buffer = '';
     let wasRaw: boolean;
-    let wasPaused: boolean;
+    let wasResumed = false;
 
     const cleanup = () => {
       if (settled) return;
@@ -47,8 +47,8 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
       } catch {
         // ignore
       }
-      // Only pause stdin if it was paused before we resumed it
-      if (wasPaused) {
+      // Only pause stdin if we were the ones who resumed it
+      if (wasResumed) {
         process.stdin.pause();
       }
     };
@@ -97,9 +97,11 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
     try {
       // Save current state and switch to raw mode for reading the response
       wasRaw = process.stdin.isRaw ?? false;
-      wasPaused = process.stdin.isPaused();
       process.stdin.setRawMode(true);
-      process.stdin.resume();
+      if (process.stdin.isPaused()) {
+        process.stdin.resume();
+        wasResumed = true;
+      }
       process.stdin.on('data', onData);
 
       // Send OSC 11 query — use BEL (\x07) terminator for broadest compatibility
