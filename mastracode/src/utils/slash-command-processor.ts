@@ -50,7 +50,7 @@ function replaceArguments(template: string, args: string[]): { result: string; s
   });
 
   // Clear unused positional arguments
-  result = result.replace(/\$\d+/g, '');
+  result = result.replace(/\$[1-9]\d*/g, '');
 
   return {
     result,
