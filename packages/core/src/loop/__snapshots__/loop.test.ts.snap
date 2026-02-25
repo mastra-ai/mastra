@@ -4501,6 +4501,23 @@ exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning
 
 exports[`Loop Tests > AISDK v5 > result.response > should resolve with response information 1`] = `
 {
+  "dbMessages": [
+    {
+      "content": {
+        "content": "Hello",
+        "format": 2,
+        "parts": [
+          {
+            "text": "Hello",
+            "type": "text",
+          },
+        ],
+      },
+      "createdAt": 2024-01-01T00:00:00.001Z,
+      "id": "msg-0",
+      "role": "assistant",
+    },
+  ],
   "headers": {
     "call": "2",
   },
@@ -10335,6 +10352,23 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoningText > should conta
 
 exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve with response information 1`] = `
 {
+  "dbMessages": [
+    {
+      "content": {
+        "content": "Hello",
+        "format": 2,
+        "parts": [
+          {
+            "text": "Hello",
+            "type": "text",
+          },
+        ],
+      },
+      "createdAt": 2024-01-01T00:00:00.001Z,
+      "id": "msg-0",
+      "role": "assistant",
+    },
+  ],
   "headers": {
     "call": "2",
   },
