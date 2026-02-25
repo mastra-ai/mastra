@@ -10,10 +10,16 @@
  * own their own batching strategy (e.g. CloudExporter batches uploads).
  */
 
+import { MastraBase } from '@mastra/core/base';
+import { RegisteredLogger } from '@mastra/core/logger';
 import type { ObservabilityEventBus } from '@mastra/core/observability';
 
-export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<TEvent> {
+export class BaseObservabilityEventBus<TEvent> extends MastraBase implements ObservabilityEventBus<TEvent> {
   private subscribers: Set<(event: TEvent) => void> = new Set();
+
+  constructor({ name }: { name?: string } = {}) {
+    super({ component: RegisteredLogger.OBSERVABILITY, name: name ?? 'EventBus' });
+  }
 
   emit(event: TEvent): void {
     for (const handler of this.subscribers) {
@@ -23,11 +29,11 @@ export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<
         const result: unknown = handler(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
           (result as Promise<void>).catch(err => {
-            console.error('[ObservabilityEventBus] Handler error:', err);
+            this.logger.error('[ObservabilityEventBus] Handler error:', err);
           });
         }
       } catch (err) {
-        console.error('[ObservabilityEventBus] Handler error:', err);
+        this.logger.error('[ObservabilityEventBus] Handler error:', err);
       }
     }
   }

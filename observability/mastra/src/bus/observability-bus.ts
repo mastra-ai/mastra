@@ -36,7 +36,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   private autoExtractor?: AutoExtractedMetrics;
 
   constructor() {
-    super();
+    super({ name: 'ObservabilityBus' });
   }
 
   /**
@@ -122,7 +122,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
           // Handle async handlers - catch errors without blocking
           if (result && typeof (result as Promise<void>).catch === 'function') {
             (result as Promise<void>).catch(err => {
-              console.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
+              this.logger.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
             });
           }
           break;
@@ -133,7 +133,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
             const result = exporter.onLogEvent(event as LogEvent);
             if (result && typeof (result as Promise<void>).catch === 'function') {
               (result as Promise<void>).catch(err => {
-                console.error(`[ObservabilityBus] Log handler error [exporter=${exporter.name}]:`, err);
+                this.logger.error(`[ObservabilityBus] Log handler error [exporter=${exporter.name}]:`, err);
               });
             }
           }
@@ -144,7 +144,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
             const result = exporter.onMetricEvent(event as MetricEvent);
             if (result && typeof (result as Promise<void>).catch === 'function') {
               (result as Promise<void>).catch(err => {
-                console.error(`[ObservabilityBus] Metric handler error [exporter=${exporter.name}]:`, err);
+                this.logger.error(`[ObservabilityBus] Metric handler error [exporter=${exporter.name}]:`, err);
               });
             }
           }
@@ -155,7 +155,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
             const result = exporter.onScoreEvent(event as ScoreEvent);
             if (result && typeof (result as Promise<void>).catch === 'function') {
               (result as Promise<void>).catch(err => {
-                console.error(`[ObservabilityBus] Score handler error [exporter=${exporter.name}]:`, err);
+                this.logger.error(`[ObservabilityBus] Score handler error [exporter=${exporter.name}]:`, err);
               });
             }
           }
@@ -166,14 +166,14 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
             const result = exporter.onFeedbackEvent(event as FeedbackEvent);
             if (result && typeof (result as Promise<void>).catch === 'function') {
               (result as Promise<void>).catch(err => {
-                console.error(`[ObservabilityBus] Feedback handler error [exporter=${exporter.name}]:`, err);
+                this.logger.error(`[ObservabilityBus] Feedback handler error [exporter=${exporter.name}]:`, err);
               });
             }
           }
           break;
       }
     } catch (err) {
-      console.error(`[ObservabilityBus] Sync handler error [exporter=${exporter.name}]:`, err);
+      this.logger.error(`[ObservabilityBus] Sync handler error [exporter=${exporter.name}]:`, err);
     }
   }
 }
