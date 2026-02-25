@@ -8,11 +8,7 @@ export const pageExtractTool = createTool({
   inputSchema: z.object({
     url: z.string().optional().describe('URL to navigate to (optional if already on a page)'),
     instruction: z.string().describe('What to extract (e.g., "extract all product prices")'),
-    schema: z.record(z.any()).optional().describe('Zod schema definition for data extraction'),
-    useTextExtract: z
-      .boolean()
-      .optional()
-      .describe('Set true for larger-scale extractions, false for small extractions'),
+    schema: z.record(z.any(), z.any()).optional().describe('Zod schema definition for data extraction'),
   }),
   outputSchema: z.any().describe('Extracted data according to schema'),
   execute: async input => {
@@ -25,7 +21,6 @@ export const pageExtractTool = createTool({
       input.url,
       input.instruction,
       input.schema || defaultSchema,
-      input.useTextExtract,
     );
   },
 });
@@ -34,13 +29,12 @@ const performWebExtraction = async (
   url?: string,
   instruction?: string,
   schemaObj?: Record<string, any>,
-  useTextExtract?: boolean,
 ) => {
   console.log(`Starting extraction${url ? ` for ${url}` : ''} with instruction: ${instruction}`);
 
   try {
     const stagehand = await sessionManager.ensureStagehand();
-    const page = stagehand.page;
+    const page = stagehand.context.pages()[0]; // Use the first page in the context
 
     try {
       // Navigate to the URL if provided
@@ -60,11 +54,7 @@ const performWebExtraction = async (
         try {
           const schema = z.object(finalSchemaObj);
 
-          const result = await page.extract({
-            instruction,
-            schema,
-            useTextExtract,
-          });
+          const result = await stagehand.extract(instruction, schema);
 
           console.log(`Extraction successful:`, result);
           return result;

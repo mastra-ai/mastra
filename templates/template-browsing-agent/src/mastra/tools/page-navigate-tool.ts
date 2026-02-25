@@ -17,13 +17,14 @@ export const pageNavigateTool = createTool({
   execute: async input => {
     try {
       const stagehand = await sessionManager.ensureStagehand();
+      const page = stagehand.context.pages()[0]; // Use the first page in the context
 
       // Navigate to the URL
-      await stagehand.page.goto(input.url);
+      await page.goto(input.url);
 
       // Get page title and current URL
-      const title = await stagehand.page.evaluate(() => document.title);
-      const currentUrl = await stagehand.page.evaluate(() => window.location.href);
+      const title = await page.evaluate(() => document.title);
+      const currentUrl = await page.evaluate(() => window.location.href);
 
       return {
         success: true,
