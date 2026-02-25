@@ -211,11 +211,11 @@ export class SettingsComponent extends Box implements Focusable {
     ];
 
     const thinkingLevels: { value: string; label: string; desc: string }[] = [
-      { value: 'off', label: 'Off', desc: 'No extended thinking' },
-      { value: 'minimal', label: 'Minimal', desc: '~1k budget tokens' },
-      { value: 'low', label: 'Low', desc: '~4k budget tokens' },
-      { value: 'medium', label: 'Medium', desc: '~10k budget tokens' },
-      { value: 'high', label: 'High', desc: '~32k budget tokens' },
+      { value: 'off', label: 'Off', desc: 'No extra reasoning' },
+      { value: 'minimal', label: 'Minimal', desc: 'Very light reasoning' },
+      { value: 'low', label: 'Low', desc: 'Light reasoning' },
+      { value: 'medium', label: 'Medium', desc: 'Balanced reasoning' },
+      { value: 'high', label: 'High', desc: 'Deep reasoning' },
     ];
 
     const getNotifLabel = (mode: NotificationMode) => notificationModes.find(m => m.value === mode)?.label ?? mode;
@@ -275,7 +275,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'thinking',
         label: 'Thinking level',
-        description: 'Extended thinking budget for Anthropic models (currently disabled)',
+        description: 'Reasoning depth level',
         currentValue: getThinkingLabel(config.thinkingLevel),
         submenu: (_currentValue, done) =>
           new SelectSubmenu(

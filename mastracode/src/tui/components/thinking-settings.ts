@@ -1,6 +1,6 @@
 /**
  * Thinking level settings component.
- * Simple selector for extended thinking budget levels (Anthropic models).
+ * Simple selector for reasoning depth levels.
  *
  * Changes apply immediately — Esc closes the panel.
  */
@@ -23,11 +23,11 @@ export interface ThinkingSettingsCallbacks {
 // =============================================================================
 
 export const THINKING_LEVELS = [
-  { id: 'off', label: 'Off', description: 'No extended thinking' },
-  { id: 'minimal', label: 'Minimal', description: '~1k budget tokens' },
-  { id: 'low', label: 'Low', description: '~4k budget tokens' },
-  { id: 'medium', label: 'Medium', description: '~10k budget tokens' },
-  { id: 'high', label: 'High', description: '~32k budget tokens' },
+  { id: 'off', label: 'Off', description: 'No extra reasoning' },
+  { id: 'minimal', label: 'Minimal', description: 'Very light reasoning' },
+  { id: 'low', label: 'Low', description: 'Light reasoning' },
+  { id: 'medium', label: 'Medium', description: 'Balanced reasoning' },
+  { id: 'high', label: 'High', description: 'Deep reasoning' },
 ] as const;
 
 // =============================================================================
@@ -52,7 +52,7 @@ export class ThinkingSettingsComponent extends Box implements Focusable {
     // Title
     this.addChild(new Text(bold(fg('accent', 'Thinking Level')), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Extended thinking for Anthropic models'), 0, 0));
+    this.addChild(new Text(fg('muted', 'Extended thinking / reasoning effort'), 0, 0));
     this.addChild(new Spacer(1));
 
     // Build items

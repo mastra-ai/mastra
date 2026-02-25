@@ -116,6 +116,13 @@ function applyPack(ctx: SlashCommandContext, pack: ModePack): void {
   s.models.subagentModels = {};
   saveSettings(s);
 
+  // Auto-enable reasoning when switching to a pack with OpenAI Codex models
+  const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
+  const currentThinking = ((harness.getState() as any)?.thinkingLevel ?? 'off') as string;
+  if (hasOpenAI && currentThinking === 'off') {
+    harness.setState({ thinkingLevel: 'low' } as any);
+  }
+
   updateStatusLine(ctx.state);
 }
 

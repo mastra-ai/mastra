@@ -15,7 +15,7 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
-  // Thinking level for extended thinking (Anthropic models)
+  // Thinking level for model reasoning effort
   thinkingLevel: z.string().default('off'),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),

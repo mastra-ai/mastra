@@ -20,7 +20,10 @@ const authStorage = new AuthStorage();
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */
-export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageModel {
+export function resolveModel(
+  modelId: string,
+  options?: { thinkingLevel?: string },
+): LanguageModelV1 | MastraLanguageModel {
   authStorage.reload();
   const isAnthropicModel = modelId.startsWith('anthropic/');
   const isOpenAIModel = modelId.startsWith('openai/');
@@ -38,7 +41,9 @@ export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageM
   } else if (isAnthropicModel) {
     return opencodeClaudeMaxProvider(modelId.substring(`anthropic/`.length));
   } else if (isOpenAIModel && authStorage.isLoggedIn('openai-codex')) {
-    return openaiCodexProvider(modelId.substring(`openai/`.length));
+    return openaiCodexProvider(modelId.substring(`openai/`.length), {
+      thinkingLevel: options?.thinkingLevel,
+    });
   } else {
     return new ModelRouterLanguageModel(modelId);
   }
@@ -60,5 +65,7 @@ export function getDynamicModel({
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  return resolveModel(modelId);
+  const thinkingLevel = (harnessContext?.state as any)?.thinkingLevel as string | undefined;
+
+  return resolveModel(modelId, { thinkingLevel });
 }
