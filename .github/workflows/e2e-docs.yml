@@ -42,10 +42,6 @@ jobs:
         working-directory: ./docs
         run: pnpm test:navigation
 
-      - name: Run cookie consent tests
-        working-directory: ./docs
-        run: pnpm test:cookie-consent
-
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

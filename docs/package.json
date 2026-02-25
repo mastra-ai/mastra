@@ -28,7 +28,6 @@
     "test:smoke": "pnpm exec playwright test tests/smoke.spec.ts --project=desktop",
     "test:og": "pnpm exec playwright test tests/og-image.spec.ts --project=desktop",
     "test:navigation": "pnpm exec playwright test tests/navigation.spec.ts",
-    "test:cookie-consent": "pnpm exec playwright test tests/cookie-consent.spec.ts --project=desktop",
     "test:e2e": "pnpm exec playwright test"
   },
   "dependencies": {
