@@ -18,6 +18,7 @@ import {
   StoredAgent,
   StoredPromptBlock,
   StoredMCPClient,
+  StoredMCPServer,
   StoredScorer,
   StoredSkill,
   ToolProvider,
@@ -73,6 +74,10 @@ import type {
   ListStoredMCPClientsResponse,
   CreateStoredMCPClientParams,
   StoredMCPClientResponse,
+  ListStoredMCPServersParams,
+  ListStoredMCPServersResponse,
+  CreateStoredMCPServerParams,
+  StoredMCPServerResponse,
   ListStoredSkillsParams,
   ListStoredSkillsResponse,
   CreateStoredSkillParams,
@@ -1081,6 +1086,64 @@ export class MastraClient extends BaseResource {
    */
   public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
     return new StoredMCPClient(this.options, storedMCPClientId);
+  }
+
+  // ============================================================================
+  // Stored MCP Servers
+  // ============================================================================
+
+  /**
+   * Lists all stored MCP servers with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored MCP servers
+   */
+  public listStoredMCPServers(params?: ListStoredMCPServersParams): Promise<ListStoredMCPServersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/mcp-servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored MCP server
+   * @param params - MCP server configuration
+   * @returns Promise containing the created stored MCP server
+   */
+  public createStoredMCPServer(params: CreateStoredMCPServerParams): Promise<StoredMCPServerResponse> {
+    return this.request('/stored/mcp-servers', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored MCP server instance by ID for further operations (details, update, delete)
+   * @param storedMCPServerId - ID of the stored MCP server
+   * @returns StoredMCPServer instance
+   */
+  public getStoredMCPServer(storedMCPServerId: string): StoredMCPServer {
+    return new StoredMCPServer(this.options, storedMCPServerId);
   }
 
   // ============================================================================

@@ -254,6 +254,8 @@ export interface ServerInfo {
   repository?: Repository;
   /** Detailed version information. */
   version_detail: VersionDetail;
+  /** Whether this server is defined in code or stored via the CMS editor. */
+  source?: 'code' | 'stored';
 }
 
 /** Detailed information about an MCP server, conforming to the MCP Registry 'ServerDetail' schema. */

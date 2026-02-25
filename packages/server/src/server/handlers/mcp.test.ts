@@ -32,6 +32,7 @@ describe('MCP Registry Handlers', () => {
       release_date: '2023-01-01T00:00:00Z',
       is_latest: true,
     },
+    source: 'code',
   };
 
   const server2Info: ServerInfo = {
@@ -42,6 +43,7 @@ describe('MCP Registry Handlers', () => {
       release_date: '2023-02-01T00:00:00Z',
       is_latest: true,
     },
+    source: 'code',
   };
 
   const serverDetail: ServerDetailInfo = {
@@ -229,7 +231,7 @@ describe('MCP Registry Handlers', () => {
         id: 'server1',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, source: 'code' });
       expect(mockMCPServer.getServerDetail).toHaveBeenCalledTimes(1);
     });
 
@@ -240,7 +242,7 @@ describe('MCP Registry Handlers', () => {
         version: '1.0.0',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, source: 'code' });
     });
 
     it('should throw 404 when version does not match', async () => {

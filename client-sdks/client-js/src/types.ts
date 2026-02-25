@@ -1173,6 +1173,82 @@ export interface DeleteStoredMCPClientResponse {
 }
 
 // ============================================================================
+// Stored MCP Server Types
+// ============================================================================
+
+/**
+ * Stored MCP server data returned from API
+ */
+export interface StoredMCPServerResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  version: string;
+  tools?: Record<string, { description?: string }>;
+}
+
+/**
+ * Parameters for listing stored MCP servers
+ */
+export interface ListStoredMCPServersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored MCP servers
+ */
+export interface ListStoredMCPServersResponse {
+  mcpServers: StoredMCPServerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored MCP server
+ */
+export interface CreateStoredMCPServerParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  version: string;
+  tools?: Record<string, { description?: string }>;
+}
+
+/**
+ * Parameters for updating a stored MCP server
+ */
+export interface UpdateStoredMCPServerParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  version?: string;
+  tools?: Record<string, { description?: string }>;
+}
+
+/**
+ * Response for deleting a stored MCP server
+ */
+export interface DeleteStoredMCPServerResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Agent Version Types
 // ============================================================================
 

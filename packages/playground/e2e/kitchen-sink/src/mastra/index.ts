@@ -67,6 +67,11 @@ export const mastra = new Mastra({
             clearTasks.push(scorerDefinitionsStore.dangerouslyClearAll());
           }
 
+          const mcpServersStore = await storage.getStore('mcpServers');
+          if (mcpServersStore) {
+            clearTasks.push(mcpServersStore.dangerouslyClearAll());
+          }
+
           await Promise.all(clearTasks);
 
           return c.json({ message: 'Custom route' }, 201);

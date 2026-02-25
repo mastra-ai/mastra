@@ -120,7 +120,7 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   }
 
   async list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryMCPServersStorage: list called`);

@@ -10,6 +10,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ToolIconMap } from '@/domains/tools';
 import { McpToolInfo } from '@mastra/client-js';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Pencil } from 'lucide-react';
+import { useIsCmsAvailable } from '@/domains/cms';
+import { MCPServerDialog } from './mcp-server-create';
 
 export interface MCPDetailProps {
   isLoading: boolean;
@@ -28,6 +32,11 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
     sseUrl: '',
     httpStreamUrl: '',
   });
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const { isCmsAvailable } = useIsCmsAvailable();
+
+  const isStoredServer = server?.source === 'stored';
+  const showEditButton = isCmsAvailable && isStoredServer;
 
   useEffect(() => {
     if (!server) return;
@@ -63,9 +72,26 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   return (
     <MainContentContent isDivided={true}>
       <div className="px-8 py-12 mx-auto max-w-2xl w-full">
-        <Txt as="h1" variant="header-md" className="text-neutral6 font-medium pb-4">
-          {server.name}
-        </Txt>
+        <div className="flex items-center gap-3 pb-4">
+          <Txt as="h1" variant="header-md" className="text-neutral6 font-medium">
+            {server.name}
+          </Txt>
+
+          {showEditButton && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => setIsEditOpen(true)} className="h-badge-default shrink-0">
+                    <Badge icon={<Pencil />} variant="default">
+                      Edit
+                    </Badge>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Edit MCP server configuration</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
 
         <div className="flex items-center gap-1 pb-6">
           <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm !text-neutral4">
@@ -131,6 +157,10 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       <div className="h-full overflow-y-scroll border-l border-border1">
         <McpToolList server={server} />
       </div>
+
+      {showEditButton && (
+        <MCPServerDialog isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} editServerId={server.id} />
+      )}
     </MainContentContent>
   );
 };

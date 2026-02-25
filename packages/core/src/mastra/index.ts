@@ -2785,8 +2785,7 @@ export class Mastra<
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
       const logger = this.getLogger();
-      logger.debug(`MCP server with key ${serverKey} already exists. Skipping addition.`);
-      return;
+      logger.debug(`MCP server with key ${serverKey} already exists. Replacing with updated instance.`);
     }
 
     // Initialize the server

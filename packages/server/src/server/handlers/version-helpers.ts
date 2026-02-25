@@ -9,6 +9,9 @@ export const DEFAULT_MAX_VERSIONS = 50;
 /** Snapshot config fields for MCP client versioning. */
 export const MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 
+/** Snapshot config fields for MCP server versioning. */
+export const MCP_SERVER_SNAPSHOT_CONFIG_FIELDS = ['name', 'version', 'tools'] as const;
+
 /**
  * Deep equality comparison for comparing two values.
  * Handles primitives, arrays, objects, and Date instances.

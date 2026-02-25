@@ -9,7 +9,7 @@ import {
   Button,
   DocsIcon,
   MCPDetail,
-  useMCPServers,
+  useMCPServer,
   MCPServerCombobox,
 } from '@mastra/playground-ui';
 
@@ -17,9 +17,7 @@ import { Link, useParams } from 'react-router';
 
 export const McpServerPage = () => {
   const { serverId } = useParams();
-  const { data: mcpServers = [], isLoading } = useMCPServers();
-
-  const server = mcpServers.find(server => server.id === serverId);
+  const { data: server, isLoading } = useMCPServer(serverId);
 
   return (
     <MainContentLayout>

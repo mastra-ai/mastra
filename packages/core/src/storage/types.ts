@@ -1567,7 +1567,7 @@ export type StorageListMCPServersInput = {
   metadata?: Record<string, unknown>;
   /**
    * Filter MCP servers by status.
-   * Defaults to 'published' if not specified.
+   * When not specified, no status filter is applied (all statuses returned).
    */
   status?: 'draft' | 'published' | 'archived';
 };

@@ -319,7 +319,7 @@ export class MongoDBMCPServersStorage extends MCPServersStorage {
 
   async list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -341,7 +341,9 @@ export class MongoDBMCPServersStorage extends MCPServersStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
-      filter.status = status;
+      if (status) {
+        filter.status = status;
+      }
       if (authorId) {
         filter.authorId = authorId;
       }

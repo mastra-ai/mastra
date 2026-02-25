@@ -38,6 +38,7 @@ export const serverInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   version_detail: versionDetailSchema,
+  source: z.enum(['code', 'stored']).optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -51,6 +52,7 @@ export const serverDetailSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   version_detail: versionDetailSchema,
+  source: z.enum(['code', 'stored']).optional(),
   package_canonical: z.string().optional(),
   packages: z.array(z.unknown()).optional(),
   remotes: z.array(z.unknown()).optional(),
