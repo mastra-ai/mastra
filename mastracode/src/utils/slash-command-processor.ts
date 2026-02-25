@@ -41,7 +41,7 @@ function replaceArguments(
 
   // Check if template references any argument variables
   const hasArgumentsVar = /\$ARGUMENTS/.test(template);
-  const hasPositionalVar = /\$\d+/.test(template);
+  const hasPositionalVar = /\$[1-9]\d*/.test(template);
 
   // Replace $ARGUMENTS with all args joined
   result = result.replace(/\$ARGUMENTS/g, args.join(' '));
