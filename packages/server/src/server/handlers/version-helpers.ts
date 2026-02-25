@@ -267,9 +267,10 @@ export async function handleAutoVersioning<TEntity>(
     return { entity: updatedEntity, versionCreated: false };
   }
 
-  const activeVersion = existingEntity.activeVersionId ? await store.getVersion(existingEntity.activeVersionId) : null;
-
-  const versionToCompare = activeVersion || (await store.getLatestVersion(parentId));
+  // Always compare against the latest version (not the active/published one).
+  // This ensures each draft save is diffed against the last edit, so intermediate
+  // draft changes are never silently reverted to the published baseline.
+  const versionToCompare = await store.getLatestVersion(parentId);
 
   const previousConfig = versionToCompare
     ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>, snapshotConfigFields)

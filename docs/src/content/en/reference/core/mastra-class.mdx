@@ -16,24 +16,24 @@ Think of `Mastra` as a top-level registry where you register agents, workflows, 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { weatherWorkflow } from "./workflows/weather-workflow";
-import { weatherAgent } from "./agents/weather-agent";
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+import { LibSQLStore } from '@mastra/libsql'
+import { weatherWorkflow } from './workflows/weather-workflow'
+import { weatherAgent } from './agents/weather-agent'
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: ":memory:",
+    url: ':memory:',
   }),
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
-});
+})
 ```
 
 ## Constructor parameters
@@ -42,126 +42,126 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
 
 <PropertiesTable
   content={[
-    {
-      name: "agents",
-      type: "Record<string, Agent>",
-      description: "Agent instances to register, keyed by name",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "tools",
-      type: "Record<string, ToolApi>",
-      description:
-        "Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "storage",
-      type: "MastraCompositeStore",
-      description: "Storage engine instance for persisting data",
-      isOptional: true,
-    },
-    {
-      name: "vectors",
-      type: "Record<string, MastraVector>",
-      description:
-        "Vector store instance, used for semantic search and vector-based tools (eg Pinecone, PgVector or Qdrant)",
-      isOptional: true,
-    },
-    {
-      name: "logger",
-      type: "Logger",
-      description: "Logger instance created with new PinoLogger()",
-      isOptional: true,
-      defaultValue: "Console logger with INFO level",
-    },
-    {
-      name: "idGenerator",
-      type: "() => string",
-      description:
-        "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
-      isOptional: true,
-    },
-    {
-      name: "workflows",
-      type: "Record<string, Workflow>",
-      description:
-        "Workflows to register. Structured as a key-value pair, with keys being the workflow name and values being the workflow instance.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "tts",
-      type: "Record<string, MastraVoice>",
-      isOptional: true,
-      description: "Text-to-speech providers for voice synthesis",
-    },
-    {
-      name: "observability",
-      type: "ObservabilityEntrypoint",
-      isOptional: true,
-      description: "Observability configuration for tracing and monitoring",
-    },
-    {
-      name: "deployer",
-      type: "MastraDeployer",
-      isOptional: true,
-      description: "An instance of a MastraDeployer for managing deployments.",
-    },
-    {
-      name: "server",
-      type: "ServerConfig",
-      description:
-        "Server configuration including port, host, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
-      isOptional: true,
-    },
-    {
-      name: "mcpServers",
-      type: "Record<string, MCPServerBase>",
-      isOptional: true,
-      description:
-        "An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().",
-    },
-    {
-      name: "bundler",
-      type: "BundlerConfig",
-      description:
-        "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
-      isOptional: true,
-    },
-    {
-      name: "scorers",
-      type: "Record<string, Scorer>",
-      description:
-        "Scorers for evaluating agent responses and workflow outputs",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "processors",
-      type: "Record<string, Processor>",
-      description:
-        "Input/output processors for transforming agent inputs and outputs",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "gateways",
-      type: "Record<string, MastraModelGateway>",
-      description:
-        "Custom model gateways to register for accessing AI models through alternative providers or private deployments. Structured as a key-value pair, with keys being the registry key (used for getGateway()) and values being gateway instances.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "memory",
-      type: "Record<string, MastraMemory>",
-      description:
-        "Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-  ]}
+{
+name: "agents",
+type: "Record<string, Agent>",
+description: "Agent instances to register, keyed by name",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "tools",
+type: "Record<string, ToolApi>",
+description:
+"Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "storage",
+type: "MastraCompositeStore",
+description: "Storage engine instance for persisting data",
+isOptional: true,
+},
+{
+name: "vectors",
+type: "Record<string, MastraVector>",
+description:
+"Vector store instance, used for semantic search and vector-based tools (eg Pinecone, PgVector or Qdrant)",
+isOptional: true,
+},
+{
+name: "logger",
+type: "Logger",
+description: "Logger instance created with new PinoLogger()",
+isOptional: true,
+defaultValue: "Console logger with INFO level",
+},
+{
+name: "idGenerator",
+type: "() => string",
+description:
+"Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
+isOptional: true,
+},
+{
+name: "workflows",
+type: "Record<string, Workflow>",
+description:
+"Workflows to register. Structured as a key-value pair, with keys being the workflow name and values being the workflow instance.",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "tts",
+type: "Record<string, MastraVoice>",
+isOptional: true,
+description: "Text-to-speech providers for voice synthesis",
+},
+{
+name: "observability",
+type: "ObservabilityEntrypoint",
+isOptional: true,
+description: "Observability configuration for tracing and monitoring",
+},
+{
+name: "deployer",
+type: "MastraDeployer",
+isOptional: true,
+description: "An instance of a MastraDeployer for managing deployments.",
+},
+{
+name: "server",
+type: "ServerConfig",
+description:
+"Server configuration including port, host, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
+isOptional: true,
+},
+{
+name: "mcpServers",
+type: "Record<string, MCPServerBase>",
+isOptional: true,
+description:
+"An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().",
+},
+{
+name: "bundler",
+type: "BundlerConfig",
+description:
+"Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
+isOptional: true,
+},
+{
+name: "scorers",
+type: "Record<string, Scorer>",
+description:
+"Scorers for evaluating agent responses and workflow outputs",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "processors",
+type: "Record<string, Processor>",
+description:
+"Input/output processors for transforming agent inputs and outputs",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "gateways",
+type: "Record<string, MastraModelGateway>",
+description:
+"Custom model gateways to register for accessing AI models through alternative providers or private deployments. Structured as a key-value pair, with keys being the registry key (used for getGateway()) and values being gateway instances.",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "memory",
+type: "Record<string, MastraMemory>",
+description:
+"Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.",
+isOptional: true,
+defaultValue: "{}",
+},
+]}
 />

@@ -68,16 +68,13 @@ export function DatasetHeader({
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" className="w-48">
               <DropdownMenu.Item onSelect={onEditClick}>
-                <Pencil />
-                <span>Edit Dataset</span>
+                <Pencil /> Edit Dataset
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={onDuplicateClick}>
-                <Copy />
-                <span>Duplicate Dataset</span>
+                <Copy /> Duplicate Dataset
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
-                <Trash2 />
-                <span>Delete Dataset</span>
+                <Trash2 /> Delete Dataset
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>

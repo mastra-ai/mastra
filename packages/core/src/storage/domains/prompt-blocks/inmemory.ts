@@ -120,7 +120,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryPromptBlocksStorage: list called`);
@@ -142,7 +142,9 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     let blocks = Array.from(this.db.promptBlocks.values());
 
     // Filter by status
-    blocks = blocks.filter(block => block.status === status);
+    if (status) {
+      blocks = blocks.filter(block => block.status === status);
+    }
 
     // Filter by authorId if provided
     if (authorId !== undefined) {

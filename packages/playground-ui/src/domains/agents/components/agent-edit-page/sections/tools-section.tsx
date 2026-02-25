@@ -40,7 +40,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
     <div className="rounded-md border border-border1 bg-surface2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-icon3" />
+          <ChevronRight className="h-4 w-4 text-neutral3" />
           <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
             Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </SectionTitle>

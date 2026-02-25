@@ -16,31 +16,31 @@ Checks whether a thread is a clone of another thread.
 ### Usage
 
 ```typescript
-const isClonedThread = memory.isClone(thread);
+const isClonedThread = memory.isClone(thread)
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "thread",
-      type: "StorageThreadType",
-      description: "The thread object to check.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "thread",
+type: "StorageThreadType",
+description: "The thread object to check.",
+isOptional: false,
+},
+]}
 />
 
 ### Example
 
 ```typescript
-const thread = await memory.getThreadById({ threadId: "some-thread-id" });
+const thread = await memory.getThreadById({ threadId: 'some-thread-id' })
 
 if (memory.isClone(thread)) {
-  console.log("This thread was cloned from another thread");
+  console.log('This thread was cloned from another thread')
 } else {
-  console.log("This is an original thread");
+  console.log('This is an original thread')
 }
 ```
 
@@ -51,31 +51,31 @@ Retrieves the clone metadata from a thread if it exists.
 ### Usage
 
 ```typescript
-const metadata = memory.getCloneMetadata(thread);
+const metadata = memory.getCloneMetadata(thread)
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "thread",
-      type: "StorageThreadType",
-      description: "The thread object to extract clone metadata from.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "thread",
+type: "StorageThreadType",
+description: "The thread object to extract clone metadata from.",
+isOptional: false,
+},
+]}
 />
 
 ### Example
 
 ```typescript
-const thread = await memory.getThreadById({ threadId: "cloned-thread-id" });
-const cloneInfo = memory.getCloneMetadata(thread);
+const thread = await memory.getThreadById({ threadId: 'cloned-thread-id' })
+const cloneInfo = memory.getCloneMetadata(thread)
 
 if (cloneInfo) {
-  console.log(`Cloned from: ${cloneInfo.sourceThreadId}`);
-  console.log(`Cloned at: ${cloneInfo.clonedAt}`);
+  console.log(`Cloned from: ${cloneInfo.sourceThreadId}`)
+  console.log(`Cloned at: ${cloneInfo.clonedAt}`)
 }
 ```
 
@@ -86,30 +86,30 @@ Retrieves the original source thread that a cloned thread was created from.
 ### Usage
 
 ```typescript
-const sourceThread = await memory.getSourceThread(threadId);
+const sourceThread = await memory.getSourceThread(threadId)
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "threadId",
-      type: "string",
-      description: "The ID of the cloned thread.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "threadId",
+type: "string",
+description: "The ID of the cloned thread.",
+isOptional: false,
+},
+]}
 />
 
 ### Example
 
 ```typescript
-const sourceThread = await memory.getSourceThread("cloned-thread-id");
+const sourceThread = await memory.getSourceThread('cloned-thread-id')
 
 if (sourceThread) {
-  console.log(`Original thread title: ${sourceThread.title}`);
-  console.log(`Original thread created: ${sourceThread.createdAt}`);
+  console.log(`Original thread title: ${sourceThread.title}`)
+  console.log(`Original thread created: ${sourceThread.createdAt}`)
 }
 ```
 
@@ -120,30 +120,30 @@ Lists all threads that were cloned from a specific source thread.
 ### Usage
 
 ```typescript
-const clones = await memory.listClones(sourceThreadId);
+const clones = await memory.listClones(sourceThreadId)
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "sourceThreadId",
-      type: "string",
-      description: "The ID of the source thread to find clones for.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "sourceThreadId",
+type: "string",
+description: "The ID of the source thread to find clones for.",
+isOptional: false,
+},
+]}
 />
 
 ### Example
 
 ```typescript
-const clones = await memory.listClones("original-thread-id");
+const clones = await memory.listClones('original-thread-id')
 
-console.log(`Found ${clones.length} clones`);
+console.log(`Found ${clones.length} clones`)
 for (const clone of clones) {
-  console.log(`- ${clone.id}: ${clone.title}`);
+  console.log(`- ${clone.id}: ${clone.title}`)
 }
 ```
 
@@ -154,98 +154,98 @@ Retrieves the full clone history chain for a thread, tracing back to the origina
 ### Usage
 
 ```typescript
-const history = await memory.getCloneHistory(threadId);
+const history = await memory.getCloneHistory(threadId)
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "threadId",
-      type: "string",
-      description: "The ID of the thread to get clone history for.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "threadId",
+type: "string",
+description: "The ID of the thread to get clone history for.",
+isOptional: false,
+},
+]}
 />
 
 ### Example
 
 ```typescript
 // If thread-c was cloned from thread-b, which was cloned from thread-a
-const history = await memory.getCloneHistory("thread-c");
+const history = await memory.getCloneHistory('thread-c')
 
 // history = [thread-a, thread-b, thread-c]
-console.log(`Clone depth: ${history.length - 1}`);
-console.log(`Original thread: ${history[0].id}`);
-console.log(`Current thread: ${history[history.length - 1].id}`);
+console.log(`Clone depth: ${history.length - 1}`)
+console.log(`Original thread: ${history[0].id}`)
+console.log(`Current thread: ${history[history.length - 1].id}`)
 
 // Display the clone chain
 for (let i = 0; i < history.length; i++) {
-  const prefix = i === 0 ? "Original" : `Clone ${i}`;
-  console.log(`${prefix}: ${history[i].title}`);
+  const prefix = i === 0 ? 'Original' : `Clone ${i}`
+  console.log(`${prefix}: ${history[i].title}`)
 }
 ```
 
 ## Complete Example
 
 ```typescript title="src/clone-management.ts"
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
 async function manageClones() {
-  const agent = mastra.getAgent("agent");
-  const memory = await agent.getMemory();
+  const agent = mastra.getAgent('agent')
+  const memory = await agent.getMemory()
 
   // Create an original conversation
   const originalThread = await memory.createThread({
-    resourceId: "user-123",
-    title: "Original Conversation",
-  });
+    resourceId: 'user-123',
+    title: 'Original Conversation',
+  })
 
   // Have a conversation...
   await agent.generate("Hello! Let's discuss project options.", {
     threadId: originalThread.id,
-    resourceId: "user-123",
-  });
+    resourceId: 'user-123',
+  })
 
   // Create multiple branches (clones) to explore different paths
   const { thread: optionA } = await memory.cloneThread({
     sourceThreadId: originalThread.id,
-    title: "Option A - Conservative Approach",
-  });
+    title: 'Option A - Conservative Approach',
+  })
 
   const { thread: optionB } = await memory.cloneThread({
     sourceThreadId: originalThread.id,
-    title: "Option B - Aggressive Approach",
-  });
+    title: 'Option B - Aggressive Approach',
+  })
 
   // Check clone status
-  console.log(memory.isClone(originalThread)); // false
-  console.log(memory.isClone(optionA)); // true
-  console.log(memory.isClone(optionB)); // true
+  console.log(memory.isClone(originalThread)) // false
+  console.log(memory.isClone(optionA)) // true
+  console.log(memory.isClone(optionB)) // true
 
   // Get clone metadata
-  const metadataA = memory.getCloneMetadata(optionA);
-  console.log(metadataA?.sourceThreadId); // originalThread.id
+  const metadataA = memory.getCloneMetadata(optionA)
+  console.log(metadataA?.sourceThreadId) // originalThread.id
 
   // List all clones of the original
-  const allClones = await memory.listClones(originalThread.id);
-  console.log(`Total alternatives: ${allClones.length}`); // 2
+  const allClones = await memory.listClones(originalThread.id)
+  console.log(`Total alternatives: ${allClones.length}`) // 2
 
   // Get source thread from a clone
-  const source = await memory.getSourceThread(optionA.id);
-  console.log(source?.id === originalThread.id); // true
+  const source = await memory.getSourceThread(optionA.id)
+  console.log(source?.id === originalThread.id) // true
 
   // Create a deeper clone chain
   const { thread: optionA2 } = await memory.cloneThread({
     sourceThreadId: optionA.id,
-    title: "Option A - Variant 2",
-  });
+    title: 'Option A - Variant 2',
+  })
 
   // Get the full history
-  const history = await memory.getCloneHistory(optionA2.id);
+  const history = await memory.getCloneHistory(optionA2.id)
   // history = [originalThread, optionA, optionA2]
-  console.log(`Clone depth: ${history.length - 1}`); // 2
+  console.log(`Clone depth: ${history.length - 1}`) // 2
 }
 ```

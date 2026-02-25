@@ -13,7 +13,7 @@ Sends Tracing data to PostHog for AI observability and analytics.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new PosthogExporter(config: PosthogExporterConfig)
 ```
 
@@ -21,78 +21,79 @@ new PosthogExporter(config: PosthogExporterConfig)
 
 ```typescript
 interface PosthogExporterConfig extends BaseExporterConfig {
-  apiKey?: string;
-  host?: string;
-  flushAt?: number;
-  flushInterval?: number;
-  serverless?: boolean;
-  defaultDistinctId?: string;
-  enablePrivacyMode?: boolean;
+  apiKey?: string
+  host?: string
+  flushAt?: number
+  flushInterval?: number
+  serverless?: boolean
+  defaultDistinctId?: string
+  enablePrivacyMode?: boolean
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "PostHog project API key. Falls back to POSTHOG_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "host",
-      type: "string",
-      description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
-      required: false,
-    },
-    {
-      name: "flushAt",
-      type: "number",
-      description: "Batch size before auto-flush (default: 20, serverless: 10)",
-      required: false,
-    },
-    {
-      name: "flushInterval",
-      type: "number",
-      description: "Flush interval in milliseconds (default: 10000, serverless: 2000)",
-      required: false,
-    },
-    {
-      name: "serverless",
-      type: "boolean",
-      description: "Auto-configure for serverless environments (default: false)",
-      required: false,
-    },
-    {
-      name: "defaultDistinctId",
-      type: "string",
-      description: "Fallback user identifier if no userId in metadata (default: 'anonymous')",
-      required: false,
-    },
-    {
-      name: "enablePrivacyMode",
-      type: "boolean",
-      description: "Exclude input/output from generation events (default: false)",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'info')",
-      required: false,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "PostHog project API key. Falls back to POSTHOG_API_KEY env var.",
+required: false,
+},
+{
+name: "host",
+type: "string",
+description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
+required: false,
+},
+{
+name: "flushAt",
+type: "number",
+description: "Batch size before auto-flush (default: 20, serverless: 10)",
+required: false,
+},
+{
+name: "flushInterval",
+type: "number",
+description: "Flush interval in milliseconds (default: 10000, serverless: 2000)",
+required: false,
+},
+{
+name: "serverless",
+type: "boolean",
+description: "Auto-configure for serverless environments (default: false)",
+required: false,
+},
+{
+name: "defaultDistinctId",
+type: "string",
+description: "Fallback user identifier if no userId in metadata (default: 'anonymous')",
+required: false,
+},
+{
+name: "enablePrivacyMode",
+type: "boolean",
+description: "Exclude input/output from generation events (default: false)",
+required: false,
+},
+{
+name: "logLevel",
+type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'info')",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -100,7 +101,7 @@ Exports a tracing event to PostHog.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -108,7 +109,7 @@ Force flushes any buffered events to PostHog without shutting down the exporter.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -119,35 +120,35 @@ Flushes pending batched events and shuts down the PostHog client.
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { PosthogExporter } from "@mastra/posthog";
+import { PosthogExporter } from '@mastra/posthog'
 
 // Reads from POSTHOG_API_KEY, POSTHOG_HOST
-const exporter = new PosthogExporter();
+const exporter = new PosthogExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { PosthogExporter } from "@mastra/posthog";
+import { PosthogExporter } from '@mastra/posthog'
 
 const exporter = new PosthogExporter({
   apiKey: process.env.POSTHOG_API_KEY!,
-  host: "https://us.i.posthog.com",
+  host: 'https://us.i.posthog.com',
   serverless: true,
-});
+})
 ```
 
 ## Span Type Mapping
 
-| Mastra Span Type    | PostHog Event Type |
-| ------------------- | ------------------ |
-| `MODEL_GENERATION`  | `$ai_generation`   |
-| `MODEL_STEP`        | `$ai_generation`   |
-| `MODEL_CHUNK`       | `$ai_span`         |
-| `TOOL_CALL`         | `$ai_span`         |
-| `MCP_TOOL_CALL`     | `$ai_span`         |
-| `PROCESSOR_RUN`     | `$ai_span`         |
-| `AGENT_RUN`         | `$ai_span`         |
-| `WORKFLOW_RUN`      | `$ai_span`         |
-| All other workflows | `$ai_span`         |
-| `GENERIC`           | `$ai_span`         |
+| Mastra Span Type | PostHog Event Type |
+| - | - |
+| `MODEL_GENERATION` | `$ai_generation` |
+| `MODEL_STEP` | `$ai_generation` |
+| `MODEL_CHUNK` | `$ai_span` |
+| `TOOL_CALL` | `$ai_span` |
+| `MCP_TOOL_CALL` | `$ai_span` |
+| `PROCESSOR_RUN` | `$ai_span` |
+| `AGENT_RUN` | `$ai_span` |
+| `WORKFLOW_RUN` | `$ai_span` |
+| All other workflows | `$ai_span` |
+| `GENERIC` | `$ai_span` |

@@ -25,6 +25,7 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
     queryKey: ['dataset-item-versions', datasetId, itemId],
     queryFn: async () => {
       const res = await client.getItemHistory(datasetId, itemId);
+
       return (res?.history ?? []).map((v, index) => ({
         id: v.id,
         datasetId: v.datasetId,
@@ -46,13 +47,19 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
 /**
  * Hook to fetch a specific version of a dataset item.
  */
-export const useDatasetItemVersion = (datasetId: string, itemId: string, datasetVersion: number) => {
+export const useDatasetItemVersion = (
+  datasetId: string,
+  itemId: string,
+  datasetVersion: number,
+  latestVersion?: number,
+) => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['dataset-item-version', datasetId, itemId, datasetVersion],
     queryFn: async (): Promise<DatasetItemVersion> => {
       const v = await client.getDatasetItemVersion(datasetId, itemId, datasetVersion);
+
       return {
         id: v.id,
         datasetId: v.datasetId,
@@ -60,11 +67,11 @@ export const useDatasetItemVersion = (datasetId: string, itemId: string, dataset
         input: v.input,
         groundTruth: v.groundTruth,
         metadata: v.metadata,
-        validTo: v.validTo,
-        isDeleted: v.isDeleted,
+        validTo: v.validTo ?? null,
+        isDeleted: v.isDeleted ?? false,
         createdAt: v.createdAt,
         updatedAt: v.updatedAt,
-        isLatest: false,
+        isLatest: latestVersion != null ? datasetVersion === latestVersion : false,
       };
     },
     enabled: Boolean(datasetId) && Boolean(itemId) && datasetVersion > 0,

@@ -119,18 +119,18 @@ export class Dataset {
 
     let { inputSchema, groundTruthSchema, ...rest } = input;
 
-    if (inputSchema !== undefined && isZodType(inputSchema)) {
+    if (inputSchema !== undefined && inputSchema !== null && isZodType(inputSchema)) {
       inputSchema = zodToJsonSchema(inputSchema);
     }
-    if (groundTruthSchema !== undefined && isZodType(groundTruthSchema)) {
+    if (groundTruthSchema !== undefined && groundTruthSchema !== null && isZodType(groundTruthSchema)) {
       groundTruthSchema = zodToJsonSchema(groundTruthSchema);
     }
 
     return store.updateDataset({
       id: this.id,
       ...rest,
-      inputSchema: inputSchema as Record<string, unknown> | undefined,
-      groundTruthSchema: groundTruthSchema as Record<string, unknown> | undefined,
+      inputSchema: inputSchema as Record<string, unknown> | null | undefined,
+      groundTruthSchema: groundTruthSchema as Record<string, unknown> | null | undefined,
     });
   }
 

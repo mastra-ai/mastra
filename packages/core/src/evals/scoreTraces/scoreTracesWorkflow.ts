@@ -148,6 +148,7 @@ export async function runScorerOnTarget({
       id: scorer.id,
       name: scorer.name || scorer.id,
       description: scorer.description,
+      hasJudge: !!scorer.judge,
     },
     traceId: target.traceId,
     spanId: target.spanId,

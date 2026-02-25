@@ -50,13 +50,13 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 
 Visit our [official documentation](https://mastra.ai/docs).
 
-## MCP Servers
+## Build with AI
 
-Learn how to make your IDE a Mastra expert by following the [`@mastra/mcp-docs-server` guide](https://mastra.ai/docs/getting-started/mcp-docs-server).
+Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
 
 ## Contributing
 
-Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
+Looking to contribute? All types of help are appreciated, from coding to testing and feature specification. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on how to get involved.
 
 If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
 
@@ -70,6 +70,4 @@ It's also super helpful if you leave the project a star here at the [top of the 
 
 ## Security
 
-We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding
-we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get
-back to you.
+We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get back to you.

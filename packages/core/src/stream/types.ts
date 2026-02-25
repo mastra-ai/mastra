@@ -13,7 +13,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
+import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
@@ -342,6 +342,28 @@ interface TripwirePayload<TMetadata = unknown> {
   processorId?: string;
 }
 
+/**
+ * Payload for is-task-complete events emitted during stream/generate scoring.
+ */
+interface IsTaskCompletePayload {
+  /** Current iteration number */
+  iteration: number;
+  /** Whether all/any scorers passed based on strategy */
+  passed: boolean;
+  /** Individual scorer results */
+  results: ScorerResult[];
+  /** Total duration of all scoring checks */
+  duration: number;
+  /** Whether scoring timed out */
+  timedOut: boolean;
+  /** Reason from the relevant scorer */
+  reason?: string;
+  /** Whether the maximum iteration was reached */
+  maxIterationReached: boolean;
+  /** Whether to suppress the completion feedback message */
+  suppressFeedback: boolean;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -533,6 +555,7 @@ interface NetworkValidationEndPayload {
   timedOut: boolean;
   reason?: string;
   maxIterationReached: boolean;
+  suppressFeedback: boolean;
 }
 
 interface RoutingAgentAbortPayload {
@@ -647,7 +670,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -885,6 +909,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
+    dbMessages?: MastraDBMessage[];
     uiMessages?: UIMessage<
       [OUTPUT] extends [undefined]
         ? undefined

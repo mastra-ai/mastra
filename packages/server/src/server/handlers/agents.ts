@@ -159,6 +159,9 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
+  activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -286,8 +289,11 @@ export async function getSerializedSkillsFromAgent(
 
 /**
  * Get the list of available workspace tools for an agent.
- * Returns tool names based on workspace configuration (filesystem, sandbox, search)
- * and respects per-tool enabled settings.
+ *
+ * Tries to use core's `createWorkspaceTools` for an accurate tool list that
+ * respects runtime availability (e.g. `@ast-grep/napi` for ast_edit).
+ * Falls back to inlined config-based logic for older core versions that don't
+ * export `createWorkspaceTools`.
  */
 export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
   try {
@@ -296,6 +302,18 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       return [];
     }
 
+    // Try core's createWorkspaceTools — it checks runtime dep availability
+    try {
+      const mod = await import('@mastra/core/workspace');
+      if (typeof mod.createWorkspaceTools === 'function') {
+        return Object.keys(mod.createWorkspaceTools(workspace));
+      }
+    } catch {
+      // Older core version without workspace module — fall through
+    }
+
+    // Fallback: inlined logic for older core versions.
+    // Does not include AST_EDIT — only available via createWorkspaceTools above.
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();
@@ -332,6 +350,11 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
         if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
         }
+      }
+
+      // Grep tool (filesystem-based, not BM25/vector)
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
       }
     }
 
@@ -506,6 +529,17 @@ async function formatAgentList({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
+    ...(agent.toRawConfig()?.activeVersionId
+      ? { activeVersionId: agent.toRawConfig()!.activeVersionId as string }
+      : {}),
+    hasDraft: !!(
+      agent.toRawConfig()?.resolvedVersionId &&
+      agent.toRawConfig()?.activeVersionId &&
+      agent.toRawConfig()!.resolvedVersionId !== agent.toRawConfig()!.activeVersionId
+    ),
   };
 }
 
@@ -707,6 +741,9 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
   };
 }
 
@@ -753,7 +790,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list({ status: 'draft' });
+          storedAgentsResult = await editor?.agent.list();
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -763,7 +800,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
-              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
 
               const serialized = await formatAgentList({

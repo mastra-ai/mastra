@@ -15,9 +15,11 @@ A filesystem provider handles all file operations for a workspace:
 
 - **Read** - Read file contents
 - **Write** - Create and update files
-- **List** - Browse directories
+- **List** - Browse directories with optional glob pattern filtering
 - **Delete** - Remove files and directories
 - **Stat** - Get file metadata
+- **Copy/Move** - Copy or move files between locations
+- **Grep** - Search file contents using regex patterns
 
 ## Supported providers
 
@@ -38,24 +40,24 @@ Available providers:
 Create a workspace with a filesystem and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
 
 ```typescript title="src/mastra/agents/file-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
-});
+})
 
 const agent = new Agent({
   id: 'file-agent',
   model: 'openai/gpt-4o',
   instructions: 'You are a helpful file management assistant.',
   workspace,
-});
+})
 
 // The agent now has filesystem tools available
-const response = await agent.generate('List all files in the workspace');
+const response = await agent.generate('List all files in the workspace')
 ```
 
 ## Containment
@@ -64,7 +66,28 @@ By default, `LocalFilesystem` runs in **contained mode** — all file operations
 
 In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
 
-If your agent needs to access paths outside `basePath` (for example, global skills directories or user home folders), disable containment:
+If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    allowedPaths: ['/home/user/.config', '/home/user/documents'],
+  }),
+})
+```
+
+Allowed paths can be updated at runtime using the `setAllowedPaths()` method:
+
+```typescript
+// Add a path dynamically
+workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/documents'])
+```
+
+This is the recommended approach for least-privilege access — the agent can only reach the specific directories you allow.
+
+If your agent needs unrestricted access to the entire filesystem, disable containment:
 
 ```typescript
 const workspace = new Workspace({
@@ -73,7 +96,7 @@ const workspace = new Workspace({
     // highlight-next-line
     contained: false,
   }),
-});
+})
 ```
 
 When `contained` is `false`, absolute paths are treated as real filesystem paths with no restriction.
@@ -89,7 +112,7 @@ const workspace = new Workspace({
     // highlight-next-line
     readOnly: true,
   }),
-});
+})
 ```
 
 When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
@@ -99,10 +122,10 @@ When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are n
 When you use the `mounts` option on a workspace, Mastra creates a `CompositeFilesystem` that routes file operations to the correct provider based on path prefix.
 
 ```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { GCSFilesystem } from '@mastra/gcs';
-import { E2BSandbox } from '@mastra/e2b';
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { GCSFilesystem } from '@mastra/gcs'
+import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
   mounts: {
@@ -117,7 +140,7 @@ const workspace = new Workspace({
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 With this configuration:

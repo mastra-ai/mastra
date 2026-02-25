@@ -20,27 +20,27 @@ When creating tools, keep descriptions simple and focused on what the tool does,
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: "weather-tool",
-  description: "Fetches weather for a location",
+  id: 'weather-tool',
+  description: 'Fetches weather for a location',
   inputSchema: z.object({
     location: z.string(),
   }),
   outputSchema: z.object({
     weather: z.string(),
   }),
-  execute: async (inputData) => {
-    const { location } = inputData;
+  execute: async inputData => {
+    const { location } = inputData
 
-    const response = await fetch(`https://wttr.in/${location}?format=3`);
-    const weather = await response.text();
+    const response = await fetch(`https://wttr.in/${location}?format=3`)
+    const weather = await response.text()
 
-    return { weather };
+    return { weather }
   },
-});
+})
 ```
 
 ## Adding tools to an agent
@@ -50,18 +50,18 @@ To make a tool available to an agent, add it to `tools`. Mentioning available to
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
 ```typescript {11} title="src/mastra/agents/weather-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
 export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
+  id: 'weather-agent',
+  name: 'Weather Agent',
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   tools: { weatherTool },
-});
+})
 ```
 
 ## Using multiple tools
@@ -69,42 +69,42 @@ export const weatherAgent = new Agent({
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
 ```typescript {7} title="src/mastra/agents/weather-agent.ts"
-import { weatherTool } from "../tools/weather-tool";
-import { activitiesTool } from "../tools/activities-tool";
+import { weatherTool } from '../tools/weather-tool'
+import { activitiesTool } from '../tools/activities-tool'
 
 export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
+  id: 'weather-agent',
+  name: 'Weather Agent',
   tools: { weatherTool, activitiesTool },
-});
+})
 ```
 
 ## Using agents as tools
 
-Agents can be added to other agents through the `agents` configuration. When you add a subagent, Mastra automatically converts it to a tool that the parent agent can call. The generated tool is named `agent-<agentName>`.
+Agents can be added to other agents through the `agents` configuration. When you add subagents, the parent agent becomes a supervisor. A supervisor can delegate tasks to subagents using the [supervisor pattern](/docs/agents/supervisor-agents), with support for delegation hooks, message filtering, iteration monitoring, and task completion scoring. Mastra automatically converts each subagent to a tool that the parent agent can call, named `agent-<agentName>`.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 export const parentAgent = new Agent({
-  id: "parent-agent",
-  name: "Parent Agent",
-  description: "Take care in writing a good description here",
+  id: 'parent-agent',
+  name: 'Parent Agent',
+  description: 'Take care in writing a good description here',
   instructions: `Instructions`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   agents: {
     // highlight-next-line
     subAgent,
   },
-});
+})
 
 // highlight-start
 const subAgent = new Agent({
-  id: "sub-agent",
-  name: "Sub Agent",
-  description: "Take care in writing a good description here",
+  id: 'sub-agent',
+  name: 'Sub Agent',
+  description: 'Take care in writing a good description here',
   instructions: `Instructions`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
 })
 // highlight-end
 ```
@@ -116,43 +116,42 @@ The subagent should include a `description` to help the parent agent understand 
 Workflows can be added to agents through the `workflows` configuration. When you add a workflow, Mastra automatically converts it to a tool that the agent can call. The generated tool is named `workflow-<workflowName>` and uses the workflow's `inputSchema` and `outputSchema`.
 
 ```typescript {14-16} title="src/mastra/agents/research-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { researchWorkflow } from "../workflows/research-workflow";
+import { Agent } from '@mastra/core/agent'
+import { researchWorkflow } from '../workflows/research-workflow'
 
 export const researchAgent = new Agent({
-  id: "research-agent",
-  name: "Research Agent",
+  id: 'research-agent',
+  name: 'Research Agent',
   instructions: `
       You are a research assistant.
       Use the research workflow to gather and compile information on topics.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   tools: {
     weatherTool,
   },
   workflows: {
     researchWorkflow,
   },
-});
+})
 ```
 
 The workflow should include a `description` to help the agent understand when to use it:
 
 ```typescript title="src/mastra/workflows/research-workflow.ts"
-import { createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 export const researchWorkflow = createWorkflow({
-  id: "research-workflow",
+  id: 'research-workflow',
   // highlight-next-line
-  description: "Gathers information on a topic and compiles a summary report.",
+  description: 'Gathers information on a topic and compiles a summary report.',
   // Rest of the workflow...
-})
-  .commit();
+}).commit()
 ```
 
 When the agent calls the workflow tool, it receives a response containing the workflow result and a `runId` that can be used to track the execution:
 
-```typescript
+```typescript prettier:false
 {
   result: { summary: "...", sources: ["..."] },
   runId: "abc-123"
@@ -165,7 +164,7 @@ See the [`toolName` docs](#subagents-and-workflows-as-tools) to learn more about
 
 The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
 
-```typescript
+```typescript prettier:false
 // Tool defined with id: "weather-tool"
 export const weatherTool = createTool({
   id: "weather-tool",
@@ -192,22 +191,23 @@ This lets you specify how tools are identified in the stream. If you want the `t
 Subagents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
 
 | Property | Prefix | Example key | `toolName` |
-|----------|--------|-------------|------------|
+| - | - | - | - |
 | `agents` | `agent-` | `weather` | `agent-weather` |
 | `workflows` | `workflow-` | `research` | `workflow-research` |
 
 ```typescript
 const orchestrator = new Agent({
   agents: {
-    weather: weatherAgent,  // toolName: "agent-weather"
+    weather: weatherAgent, // toolName: "agent-weather"
   },
   workflows: {
-    research: researchWorkflow,  // toolName: "workflow-research"
+    research: researchWorkflow, // toolName: "workflow-research"
   },
-});
+})
 ```
 
 Note that for subagents, you'll see two different identifiers in stream responses:
+
 - `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
 - `id: "weather-agent"` in `data-tool-agent` chunks — the subagent's actual `id` property
 
@@ -221,4 +221,5 @@ When using tools with [structured output](/docs/agents/structured-output), some 
 - [Dynamic Tool Search](/reference/processors/tool-search-processor) - Load tools on demand for agents with large tool libraries
 - [Structured Output](/docs/agents/structured-output)
 - [Agent Memory](/docs/agents/agent-memory)
+- [Supervisor Agents](/docs/agents/supervisor-agents)
 - [Request Context](/docs/server/request-context)

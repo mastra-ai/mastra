@@ -8,29 +8,9 @@ This guide provides instructions for developers who want to contribute to or wor
 - **pnpm** (v10.18.0 or later) - Mastra uses pnpm for package management
 - **Docker** (for local development services) - Only needed for a subset of tests, not required for general development
 
-## Repository Structure
+## Getting started
 
-Mastra is organized as a monorepo with the following key directories:
-
-- **packages/** - Core packages that make up the Mastra framework
-  - **core/** - The foundation of the Mastra framework that provides essential components including agent system, LLM abstractions, workflow orchestration, vector storage, memory management, and tools infrastructure
-  - **cli/** - Command-line interface for creating, running, and managing Mastra projects, including the interactive playground UI for testing agents and workflows
-  - **deployer/** - Server infrastructure and build tools for deploying Mastra applications to various environments, with API endpoints for agents, workflows, and memory management
-  - **rag/** - Retrieval-augmented generation tools for document processing, chunking, embedding, and semantic search with support for various reranking strategies
-  - **memory/** - Memory systems for storing and retrieving conversation history, vector data, and application state across sessions
-  - **evals/** - Evaluation frameworks for measuring LLM performance with metrics for accuracy, relevance, toxicity, and other quality dimensions
-  - **mcp/** - Model Context Protocol implementation for standardized communication with AI models, enabling tool usage and structured responses across different providers
-
-- **deployers/** - Platform-specific deployment adapters for services like Vercel, Netlify, and Cloudflare, handling environment configuration and serverless function deployment
-- **stores/** - Storage adapters for various vector and key-value databases, providing consistent APIs for data persistence across different storage backends
-
-- **voice/** - Speech-to-text and voice processing capabilities for real-time transcription and voice-based interactions
-- **client-sdks/** - Client libraries for different platforms and frameworks that provide type-safe interfaces to interact with Mastra services
-- **examples/** - Example applications demonstrating various Mastra features including agents, workflows, memory systems, and integrations with different frameworks
-
-## Getting Started
-
-### Setting Up Your Development Environment
+### Setting up your development environment
 
 1. **Clone the repository**:
 
@@ -53,7 +33,7 @@ Mastra is organized as a monorepo with the following key directories:
 
    This command installs all dependencies and builds the CLI package, which is required for other packages.
 
-### Building Packages
+### Building packages
 
 If you run into the following error during a build:
 
@@ -94,7 +74,7 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
   pnpm build:docs-mcp         # MCP documentation server
   ```
 
-## Testing Local Changes
+## Testing local changes
 
 Testing local changes to Mastra follows a simple three-step pattern:
 
@@ -102,11 +82,11 @@ Testing local changes to Mastra follows a simple three-step pattern:
 2. Build the packages
 3. Test your changes inside the `examples/agent` project
 
-### Step 1: Make Your Changes
+### Step 1: Make your changes
 
 Edit the necessary source files. Take note of the affected packages so that you can filter by them in the next step.
 
-### Step 2: Build the Packages
+### Step 2: Build the packages
 
 From the monorepo root, build the packages you modified:
 
@@ -213,8 +193,8 @@ pnpm run dev:services:up
 
 ## Documentation
 
-The documentation site is built from the `/docs` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
+The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
 
-## Need Help?
+## Need help?
 
 Join the [Mastra Discord community](https://discord.gg/BTYqqHKUrf) for support and discussions.

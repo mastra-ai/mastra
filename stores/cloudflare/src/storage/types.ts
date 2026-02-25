@@ -24,16 +24,30 @@ import type {
   TABLE_SCORER_DEFINITION_VERSIONS,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
+  TABLE_MCP_SERVERS,
+  TABLE_MCP_SERVER_VERSIONS,
+  TABLE_WORKSPACES,
+  TABLE_WORKSPACE_VERSIONS,
+  TABLE_SKILLS,
+  TABLE_SKILL_VERSIONS,
+  TABLE_SKILL_BLOBS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
   StorageScorerDefinitionType,
   StorageMCPClientType,
+  StorageMCPServerType,
+  StorageWorkspaceType,
+  StorageSkillType,
+  StorageBlobEntry,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
+import type { MCPServerVersion } from '@mastra/core/storage/domains/mcp-servers';
 import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
 import type { ScorerDefinitionVersion } from '@mastra/core/storage/domains/scorer-definitions';
+import type { SkillVersion } from '@mastra/core/storage/domains/skills';
+import type { WorkspaceVersion } from '@mastra/core/storage/domains/workspaces';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -140,6 +154,13 @@ export type RecordTypes = {
   [TABLE_SCORER_DEFINITION_VERSIONS]: ScorerDefinitionVersion;
   [TABLE_MCP_CLIENTS]: StorageMCPClientType;
   [TABLE_MCP_CLIENT_VERSIONS]: MCPClientVersion;
+  [TABLE_MCP_SERVERS]: StorageMCPServerType;
+  [TABLE_MCP_SERVER_VERSIONS]: MCPServerVersion;
+  [TABLE_WORKSPACES]: StorageWorkspaceType;
+  [TABLE_WORKSPACE_VERSIONS]: WorkspaceVersion;
+  [TABLE_SKILLS]: StorageSkillType;
+  [TABLE_SKILL_VERSIONS]: SkillVersion;
+  [TABLE_SKILL_BLOBS]: StorageBlobEntry;
 };
 
 export type ListOptions = {

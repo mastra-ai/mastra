@@ -74,6 +74,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
         },
@@ -595,6 +600,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -646,6 +667,40 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Code',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-code/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/configuration',
+          label: 'Configuration',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-code/customization',
+          label: 'Customization',
         },
       ],
     },

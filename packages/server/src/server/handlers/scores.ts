@@ -72,7 +72,7 @@ async function listScorersFromSystem({
   // Process stored agents (database-backed agents)
   try {
     const editor = mastra.getEditor();
-    const storedAgentsResult = await editor?.agent.list({ status: 'draft' });
+    const storedAgentsResult = await editor?.agent.list();
     if (storedAgentsResult?.agents) {
       for (const storedAgentConfig of storedAgentsResult.agents) {
         try {
@@ -92,7 +92,7 @@ async function listScorersFromSystem({
   // Process stored scorers (standalone CMS-created scorers)
   try {
     const editor = mastra.getEditor();
-    const storedScorersResult = await editor?.scorer.list({ status: 'draft' });
+    const storedScorersResult = await editor?.scorer.list();
     if (storedScorersResult?.scorerDefinitions) {
       for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
         try {
