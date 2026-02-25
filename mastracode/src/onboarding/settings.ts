@@ -248,6 +248,71 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   }
 }
 
+export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+
+export interface ThreadSettings {
+  activeModelPackId: string | null;
+  modeModelIds: Record<string, string>;
+}
+
+export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {
+  const modeModelIds: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    const modeMatch = key.match(/^modeModelId_(.+)$/);
+    if (modeMatch?.[1] && typeof value === 'string' && value.length > 0) {
+      modeModelIds[modeMatch[1]] = value;
+    }
+  }
+
+  const rawPackId = metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const activeModelPackId = typeof rawPackId === 'string' && rawPackId.length > 0 ? rawPackId : null;
+
+  return {
+    activeModelPackId,
+    modeModelIds,
+  };
+}
+
+/**
+ * Resolve active model pack id for the current thread.
+ *
+ * Priority:
+ * 1) explicit thread metadata activeModelPackId
+ * 2) inferred from thread modeModelId_* values
+ * 3) global settings.models.activeModelPackId
+ */
+export function resolveThreadActiveModelPackId(
+  settings: GlobalSettings,
+  builtinPacks: Array<{ id: string; models: Record<string, string> }>,
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  const threadSettings = parseThreadSettings(metadata);
+
+  const isKnownPack = (packId: string): boolean => {
+    if (packId.startsWith('custom:')) {
+      const name = packId.slice('custom:'.length);
+      return settings.customModelPacks.some(p => p.name === name);
+    }
+    return builtinPacks.some(p => p.id === packId);
+  };
+
+  if (threadSettings.activeModelPackId && isKnownPack(threadSettings.activeModelPackId)) {
+    return threadSettings.activeModelPackId;
+  }
+
+  const allPacks: Array<{ id: string; models: Record<string, string> }> = [
+    ...builtinPacks,
+    ...settings.customModelPacks.map(p => ({ id: `custom:${p.name}`, models: p.models })),
+  ];
+
+  for (const pack of allPacks) {
+    const matches = Object.entries(pack.models).every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
+    if (matches) return pack.id;
+  }
+
+  return settings.models.activeModelPackId;
+}
+
 /**
  * Resolve effective per-mode model defaults.
  *

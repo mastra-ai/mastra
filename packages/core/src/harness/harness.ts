@@ -390,6 +390,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
     }
 
+    this.config.modelUseCountTracker?.(modelId);
+
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
   }
 
