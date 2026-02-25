@@ -24,11 +24,10 @@
     "lint:vale": "./node_modules/@vvago/vale/bin/vale src/content/en/docs src/content/en/guides src/content/en/reference",
     "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/guides src/content/en/reference",
     "lint:prose": "npm-run-all --parallel lint:vale lint:remark",
-    "test:pw": "pnpm exec playwright test",
+    "test:e2e": "pnpm exec playwright test",
     "test:smoke": "pnpm exec playwright test tests/smoke.spec.ts --project=desktop",
     "test:og": "pnpm exec playwright test tests/og-image.spec.ts --project=desktop",
-    "test:navigation": "pnpm exec playwright test tests/navigation.spec.ts",
-    "test:e2e": "pnpm exec playwright test"
+    "test:navigation": "pnpm exec playwright test tests/navigation.spec.ts"
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",
