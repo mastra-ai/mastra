@@ -30,11 +30,11 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
       codeRun: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
       createSession: vi.fn().mockResolvedValue(undefined),
       executeSessionCommand: vi.fn().mockResolvedValue({ cmdId: 'cmd-123' }),
-      getSessionCommandLogs: vi.fn().mockImplementation(
-        async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
+      getSessionCommandLogs: vi
+        .fn()
+        .mockImplementation(async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
           onStdout('');
-        },
-      ),
+        }),
       getSessionCommand: vi.fn().mockResolvedValue({ id: 'cmd-123', command: '', exitCode: 0 }),
       deleteSession: vi.fn().mockResolvedValue(undefined),
     },
@@ -610,11 +610,13 @@ describe('DaytonaSandbox', () => {
       expect(info.status).toBe('running');
       expect(info.createdAt).toBeInstanceOf(Date);
       expect(info.resources).toEqual({ cpuCores: 4, memoryMB: 8 * 1024, diskMB: 50 * 1024 });
-      expect(info.metadata).toEqual(expect.objectContaining({
-        language: 'python',
-        ephemeral: false,
-        target: 'us',
-      }));
+      expect(info.metadata).toEqual(
+        expect.objectContaining({
+          language: 'python',
+          ephemeral: false,
+          target: 'us',
+        }),
+      );
     });
 
     it('resources reflect actual sandbox values not constructor options', async () => {
@@ -887,8 +889,8 @@ describe('DaytonaSandbox', () => {
       const stdoutChunks: string[] = [];
       const stderrChunks: string[] = [];
       const result = await sandbox.executeCommand('echo', ['test'], {
-        onStdout: (c) => stdoutChunks.push(c),
-        onStderr: (c) => stderrChunks.push(c),
+        onStdout: c => stdoutChunks.push(c),
+        onStderr: c => stderrChunks.push(c),
       });
 
       expect(stdoutChunks).toEqual(['chunk1', 'chunk2']);

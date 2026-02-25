@@ -518,9 +518,7 @@ export class DaytonaSandbox extends MastraSandbox {
     // Bake cwd and env into the command — session API has no native cwd/envVars params
     const sessionCommand = buildSessionCommand(fullCommand, options.cwd, envs);
 
-    // Convert timeout from ms to seconds for Daytona SDK
     const effectiveTimeout = options.timeout ?? this.timeout;
-    const timeoutSecs = Math.ceil(effectiveTimeout / 1000);
 
     const sessionId = `mastra-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
