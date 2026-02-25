@@ -1259,7 +1259,7 @@ describe('Workspace Handlers', () => {
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'api.md');
+      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'references/api.md');
     });
 
     it('WORKSPACE_SEARCH_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
