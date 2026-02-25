@@ -45,6 +45,7 @@ const IGNORED_REQUEST_PATTERNS = [
   /hs-scripts\.com/i,
   /hubspot/i,
   /google.*tag|googletagmanager|gtag/i,
+  /csp\.withgoogle\.com/i,
   /algolia/i,
   /kapa/i,
   /reo\.dev/i,
@@ -106,6 +107,17 @@ test.describe('Smoke tests', () => {
         }
       })
 
+      // Track requests that never got a response (DNS, TLS, net::ERR_*)
+      page.on('requestfailed', req => {
+        const failure = req.failure()?.errorText ?? 'unknown error'
+        // net::ERR_ABORTED is a browser-initiated cancel (e.g. video preload,
+        // navigation away) — not a real failure.
+        if (failure === 'net::ERR_ABORTED') return
+        if (!isIgnoredRequest(req.url())) {
+          failedRequests.push(`${failure} ${req.url()}`)
+        }
+      })
+
       const response = await page.goto(pageConfig.path, {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
@@ -153,22 +165,16 @@ test.describe('Smoke tests', () => {
       expect(brokenVideos, `Broken videos found on ${pageConfig.path}`).toHaveLength(0)
 
       // ── Broken iframes (YouTube, etc.) ──
+      // Iframe src loads are already tracked by the response/requestfailed
+      // handlers above. Check that no iframe src ended up in failedRequests.
       const iframeSrcs = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('iframe'))
           .map(iframe => iframe.src)
           .filter(src => src && src !== 'about:blank')
       })
 
-      for (const src of iframeSrcs) {
-        try {
-          const resp = await page.request.head(src, { timeout: 10_000 })
-          expect(resp.status(), `Iframe src ${src} on ${pageConfig.path} returned HTTP ${resp.status()}`).toBeLessThan(
-            400,
-          )
-        } catch {
-          // Cross-origin requests may be blocked by CORS; that's expected
-        }
-      }
+      const failedIframes = failedRequests.filter(entry => iframeSrcs.some(src => entry.includes(src)))
+      expect(failedIframes, `Broken iframes on ${pageConfig.path}`).toHaveLength(0)
 
       // ── JS errors ──
       if (pageConfig.criticalErrorsOnly) {
