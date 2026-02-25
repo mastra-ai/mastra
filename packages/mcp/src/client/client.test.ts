@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -108,9 +109,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => { });
-      await testServer?.mcpServer.close().catch(() => { });
-      await testServer?.serverTransport.close().catch(() => { });
+      await client?.disconnect().catch(() => {});
+      await testServer?.mcpServer.close().catch(() => {});
+      await testServer?.serverTransport.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -179,9 +180,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => { });
-      await testServer?.mcpServer.close().catch(() => { });
-      await testServer?.serverTransport.close().catch(() => { });
+      await client?.disconnect().catch(() => {});
+      await testServer?.mcpServer.close().catch(() => {});
+      await testServer?.serverTransport.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -203,6 +204,83 @@ describe('MastraMCPClient with Streamable HTTP', () => {
       const result = await tools.greet?.execute?.({ name: 'Stateful' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
     });
+  });
+});
+
+describe('MastraMCPClient - outputSchema without structuredContent', () => {
+  // Reproduces the bug where MCP servers (e.g. FastMCP) define outputSchema on
+  // a tool but don't return structuredContent in the response. The raw
+  // CallToolResult envelope gets validated against the outputSchema and Zod
+  // strips all unrecognised keys, producing {}.
+  //
+  // We use a real server connection but spy on the SDK Client's methods to
+  // simulate a non-SDK MCP server (like FastMCP) that advertises outputSchema
+  // on tool listings but only populates the content array in tool call responses.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'output-schema-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return the parsed result, not {} when structuredContent is absent', async () => {
+    // Spy on the SDK Client to simulate a FastMCP-style server:
+    // - listTools returns a tool with outputSchema
+    // - callTool returns content[] without structuredContent
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { expression: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              result: { type: 'number' },
+              expression: { type: 'string' },
+            },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+    expect(calculateTool).toBeDefined();
+
+    const result = await calculateTool.execute?.({ expression: '1 + 1' });
+
+    // Before the fix this would be {} because the raw CallToolResult envelope
+    // ({ content: [...], isError: false }) was validated against the outputSchema
+    // and Zod stripped all unrecognised keys.
+    expect(result).toEqual({ result: 2, expression: '1 + 1' });
   });
 });
 
@@ -295,9 +373,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => { });
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -550,9 +628,9 @@ describe('MastraMCPClient - Progress Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => { });
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -625,9 +703,9 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => { });
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -690,9 +768,9 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => { });
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -734,7 +812,10 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
 describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
   // Helper to create StreamableHTTPError-like error (@modelcontextprotocol/sdk 1.24.0+)
   class MockStreamableHTTPError extends Error {
-    constructor(public readonly code: number, message: string) {
+    constructor(
+      public readonly code: number,
+      message: string,
+    ) {
       super(`Streamable HTTP error: ${message}`);
     }
   }
@@ -832,8 +913,8 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
   });
 
   afterEach(async () => {
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -908,16 +989,39 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     const afterDisconnectCount = process.listenerCount('SIGTERM');
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
+
+  it('should not create duplicate connections when connect is called concurrently', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'concurrent-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    const connectSpy = vi.spyOn(Client.prototype, 'connect');
+
+    const [result1, result2, result3] = await Promise.all([client.connect(), client.connect(), client.connect()]);
+
+    expect(result1).toBe(true);
+    expect(result2).toBe(true);
+    expect(result3).toBe(true);
+
+    // Only one underlying SDK connection should be created
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+
+    connectSpy.mockRestore();
+    await client.disconnect();
+  });
 });
 
 describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
   /**
    * Issue #8660: Client does not support MCP Roots
-   * 
+   *
    * The filesystem MCP server logs "Client does not support MCP Roots" because:
    * 1. The Mastra MCP client doesn't provide a way to configure roots
    * 2. Even if roots capability is advertised, the client doesn't handle roots/list requests
-   * 
+   *
    * According to MCP spec, when a client advertises `roots` capability:
    * - The server can call `roots/list` to get the list of allowed directories
    * - The client should respond with the configured roots
@@ -941,14 +1045,9 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       },
     );
 
-    mcpServer.tool(
-      'echo',
-      'Echo tool',
-      { message: z.string() },
-      async ({ message }): Promise<CallToolResult> => {
-        return { content: [{ type: 'text', text: message }] };
-      },
-    );
+    mcpServer.tool('echo', 'Echo tool', { message: z.string() }, async ({ message }): Promise<CallToolResult> => {
+      return { content: [{ type: 'text', text: message }] };
+    });
 
     const serverTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -971,8 +1070,8 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
   });
 
   afterEach(async () => {
-    await testServer?.mcpServer.close().catch(() => { });
-    await testServer?.serverTransport.close().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -998,13 +1097,13 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       elicitation: {},
     });
 
-    await client.disconnect().catch(() => { });
+    await client.disconnect().catch(() => {});
   });
 
   it('should handle roots/list requests from server per MCP spec', async () => {
     /**
      * Per MCP Roots spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
-     * 
+     *
      * 1. Client declares roots capability: { roots: { listChanged: true } }
      * 2. Server sends: { method: "roots/list" }
      * 3. Client responds: { roots: [{ uri: "file:///...", name: "..." }] }
@@ -1039,7 +1138,7 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
 
   it('should send notifications/roots/list_changed when roots are updated', async () => {
     /**
-     * Per MCP spec: "When roots change, clients that support listChanged 
+     * Per MCP spec: "When roots change, clients that support listChanged
      * MUST send a notification: { method: 'notifications/roots/list_changed' }"
      */
 
@@ -1057,9 +1156,7 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     expect(typeof client.sendRootsListChanged).toBe('function');
 
     // Update roots - this should also send the notification
-    await client.setRoots([
-      { uri: 'file:///new-root', name: 'New Root' },
-    ]);
+    await client.setRoots([{ uri: 'file:///new-root', name: 'New Root' }]);
 
     // Verify roots were updated
     expect(client.roots).toHaveLength(1);
@@ -1084,17 +1181,17 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     expect(capabilities.roots).toBeDefined();
     expect(capabilities.roots.listChanged).toBe(true);
 
-    await client.disconnect().catch(() => { });
+    await client.disconnect().catch(() => {});
   });
 });
 
 describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
   /**
    * Issue #7675: MCPClient fails to reconnect after MCP server restart
-   * 
+   *
    * When an MCP server goes offline and comes back online, the session ID
    * becomes invalid, causing "Bad Request: No valid session ID provided" errors.
-   * 
+   *
    * The MCPClient should automatically detect session invalidation and reconnect.
    */
 
@@ -1197,7 +1294,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
   it('should verify counter resets after server restart with reconnection', async () => {
     // This test verifies that after server restart, the client reconnects
     // and the server state (counter) is reset as expected
-    
+
     // Step 1: Create a stateful MCP server
     const httpServer: HttpServer = createServer();
     let mcpServer = new McpServer(
@@ -1206,15 +1303,10 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     let callCount = 0;
-    mcpServer.tool(
-      'counter',
-      'Counts calls',
-      {},
-      async (): Promise<CallToolResult> => {
-        callCount++;
-        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
-      },
-    );
+    mcpServer.tool('counter', 'Counts calls', {}, async (): Promise<CallToolResult> => {
+      callCount++;
+      return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+    });
 
     let serverTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -1261,15 +1353,10 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     callCount = 0; // Reset counter (simulating server restart losing state)
-    mcpServer.tool(
-      'counter',
-      'Counts calls',
-      {},
-      async (): Promise<CallToolResult> => {
-        callCount++;
-        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
-      },
-    );
+    mcpServer.tool('counter', 'Counts calls', {}, async (): Promise<CallToolResult> => {
+      callCount++;
+      return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+    });
 
     serverTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -1295,7 +1382,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
    * Integration test using the actual @modelcontextprotocol/server-filesystem
    * This reproduces the exact scenario from issue #8660:
    * https://github.com/mastra-ai/mastra/issues/8660
-   * 
+   *
    * We spawn the server directly to capture its stderr and prove:
    * 1. WITHOUT roots capability: "Client does not support MCP Roots"
    * 2. WITH roots capability: "Updated allowed directories from MCP roots"
@@ -1306,7 +1393,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
    */
   async function testFilesystemServerWithCapabilities(
     clientCapabilities: Record<string, any>,
-    rootsListResponse?: { roots: Array<{ uri: string; name?: string }> }
+    rootsListResponse?: { roots: Array<{ uri: string; name?: string }> },
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const stderrChunks: string[] = [];
@@ -1315,7 +1402,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      proc.stderr.on('data', (data) => {
+      proc.stderr.on('data', data => {
         stderrChunks.push(data.toString());
       });
 
@@ -1324,7 +1411,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       let initializedSent = false;
       let rootsHandled = false;
 
-      proc.stdout.on('data', (data) => {
+      proc.stdout.on('data', data => {
         responseBuffer += data.toString();
 
         // After getting initialize response, send initialized notification
@@ -1420,7 +1507,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
      * This test proves the fix works by using InternalMastraMCPClient.
      * The console output from vitest will show:
      * "Updated allowed directories from MCP roots: 1 valid directories"
-     * 
+     *
      * Compare this to the test above which shows:
      * "Client does not support MCP Roots, using allowed directories set from server args"
      */

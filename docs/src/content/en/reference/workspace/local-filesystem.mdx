@@ -72,6 +72,12 @@ isOptional: true,
 defaultValue: "[]",
 },
 {
+name: "instructions",
+type: "string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)",
+description: "Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.",
+isOptional: true,
+},
+{
 name: "readOnly",
 type: "boolean",
 description: "When true, all write operations are blocked. Read operations are still allowed.",
@@ -456,14 +462,37 @@ const info = filesystem.getInfo()
 // { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
-Returns a description of how paths work in this filesystem. Used in tool descriptions.
+Returns a description of how paths work in this filesystem. When assigned to an agent, this is injected into the agent's system message.
 
 ```typescript
 const instructions = filesystem.getInstructions()
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
+
+Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
+
+```typescript
+const instructions = filesystem.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function if one was provided in the constructor.",
+isOptional: true,
+},
+]}
+/>
+
+**Returns:** `string`
+
+To override the default output, pass an `instructions` option to the constructor. See [constructor parameters](#constructor-parameters).
 
 ## Path resolution
 

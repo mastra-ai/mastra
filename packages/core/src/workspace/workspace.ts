@@ -40,6 +40,8 @@ import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
 import { callLifecycle } from './lifecycle';
+import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
+import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
@@ -244,6 +246,29 @@ export interface WorkspaceConfig<
   skillSource?: SkillSource;
 
   // ---------------------------------------------------------------------------
+  // LSP Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enable LSP diagnostics for edit tools.
+   *
+   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * type errors, warnings, and other diagnostics from language servers after edits.
+   *
+   * LSP requires a sandbox with a process manager (`sandbox.processes`) to spawn
+   * language server processes. It works with any sandbox backend (local, E2B, etc.).
+   *
+   * Requires optional peer dependencies: `vscode-jsonrpc`, `vscode-languageserver-protocol`,
+   * and the relevant language server (e.g. `typescript-language-server` for TypeScript).
+   *
+   * - `true` — Enable with defaults
+   * - `LSPConfig` object — Enable with custom timeouts/settings
+   *
+   * @default undefined (disabled)
+   */
+  lsp?: boolean | LSPConfig;
+
+  // ---------------------------------------------------------------------------
   // Tool Configuration
   // ---------------------------------------------------------------------------
 
@@ -294,6 +319,14 @@ export type { WorkspaceStatus } from './types';
  * Use this when you need to accept any Workspace regardless of its generic parameters.
  */
 export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
+
+/** A workspace entry in the Mastra registry, enriched with source metadata. */
+export interface RegisteredWorkspace {
+  workspace: Workspace;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+}
 
 // =============================================================================
 // Path Context Types
@@ -379,6 +412,7 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  private _lsp?: LSPManager;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -456,6 +490,28 @@ export class Workspace<
       });
     }
 
+    // Initialize LSP if configured and a process manager is available
+    if (config.lsp) {
+      const processes = this._sandbox?.processes;
+      if (!this._sandbox) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
+        );
+      } else if (!processes) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. Sandbox "${this._sandbox.name ?? 'unknown'}" does not provide one — LSP disabled.`,
+        );
+      } else if (!isLSPAvailable()) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages. Install them to enable LSP diagnostics.`,
+        );
+      } else {
+        const lspConfig = config.lsp === true ? {} : config.lsp;
+        const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
+      }
+    }
+
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
     if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
@@ -505,6 +561,14 @@ export class Workspace<
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * The LSP manager (if configured, initialized, and a process manager is available).
+   * Returns undefined if LSP is not configured, deps are missing, or sandbox has no process manager.
+   */
+  get lsp(): LSPManager | undefined {
+    return this._lsp;
   }
 
   /**
@@ -759,6 +823,16 @@ export class Workspace<
     this._status = 'destroying';
 
     try {
+      // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
+      if (this._lsp) {
+        try {
+          await this._lsp.shutdownAll();
+        } catch {
+          // LSP shutdown errors are non-blocking
+        }
+        this._lsp = undefined;
+      }
+
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'destroy');
       }

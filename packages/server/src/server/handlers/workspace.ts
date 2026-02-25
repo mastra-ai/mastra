@@ -252,12 +252,21 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
-        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
+
+        for (const [, entry] of Object.entries(registeredWorkspaces)) {
+          // Newer @mastra/core returns { workspace, source, agentId?, agentName? }.
+          // Older versions return a bare Workspace object — detect via duck-typing.
+          const ws: Workspace = (entry as any).workspace ?? entry;
+          const source: 'mastra' | 'agent' = (entry as any).source ?? 'mastra';
+          const agentId: string | undefined = (entry as any).agentId;
+          const agentName: string | undefined = (entry as any).agentName;
+
           workspaces.push({
             id: ws.id,
             name: ws.name,
             status: ws.status,
-            source: 'mastra',
+            source,
+            ...(source === 'agent' && agentId ? { agentId, ...(agentName != null ? { agentName } : {}) } : {}),
             capabilities: {
               hasFilesystem: !!ws.filesystem,
               hasSandbox: !!ws.sandbox,

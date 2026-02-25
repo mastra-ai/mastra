@@ -7569,3 +7569,37 @@ describe('Full Async Buffering Flow', () => {
     expect(newChunks.length).toBeGreaterThan(0);
   });
 });
+
+// =============================================================================
+// Regression: threadId required in thread scope (prevents deadlock via shared OM row)
+// =============================================================================
+
+describe('threadId validation in thread scope', () => {
+  it('should throw when getOrCreateRecord is called without threadId in thread scope', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+      // scope defaults to 'thread'
+    });
+
+    await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { messageTokens: 500, model: 'test-model', bufferTokens: false },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    // In resource scope, threadId is null — this should succeed
+    const record = await om.getOrCreateRecord('ignored-thread', 'resource-1');
+    expect(record).toBeDefined();
+    expect(record.threadId).toBeNull();
+    expect(record.resourceId).toBe('resource-1');
+  });
+});

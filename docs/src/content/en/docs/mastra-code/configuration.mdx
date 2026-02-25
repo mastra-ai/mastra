@@ -1,6 +1,6 @@
 ---
 title: "Configuration | Mastra Code"
-description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, database settings, and environment variables."
+description: "Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, storage backends (LibSQL and PostgreSQL), and environment variables."
 packages:
   - "mastracode"
 ---
@@ -205,39 +205,13 @@ For global instructions (first match wins):
 
 `AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
 
-## Database
+## Storage
 
-Mastra Code uses LibSQL (SQLite) for persistence. Threads, messages, state, token usage, and observational memory are all stored in the database.
+Mastra Code stores threads, messages, state, and observational memory in a database. It uses LibSQL by default with a local file — no setup needed.
 
-### Database location
+To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
 
-By default, the database is stored in the platform-specific app data directory:
-
-| Platform | Path |
-| - | - |
-| macOS | `~/Library/Application Support/mastracode/mastra.db` |
-| Linux | `~/.local/share/mastracode/mastra.db` |
-| Windows | `%APPDATA%/mastracode/mastra.db` |
-
-### Remote database
-
-Connect to a remote Turso database for cross-device thread sharing:
-
-```json title=".mastracode/database.json"
-{
-  "url": "libsql://your-db.turso.io",
-  "authToken": "your-auth-token"
-}
-```
-
-### Database config resolution
-
-| Priority | Source |
-| - | - |
-| 1 | `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` environment variables |
-| 2 | `.mastracode/database.json` (project) |
-| 3 | `~/.mastracode/database.json` (global) |
-| 4 | Local file database (default) |
+If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
 
 ## Observational memory
 

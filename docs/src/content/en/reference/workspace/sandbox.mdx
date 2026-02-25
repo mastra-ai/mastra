@@ -105,14 +105,29 @@ const info = await sandbox.getInfo()
 // { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
-Get a description of how this sandbox works. Used in tool descriptions to help agents understand the execution context.
+Returns a description of how this sandbox works. Injected into the agent's system message when the workspace is assigned to an agent.
 
 ```typescript
 const instructions = sandbox.getInstructions?.()
 // 'Local command execution. Working directory: "/workspace".'
 ```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function if one was provided in the constructor.",
+isOptional: true,
+},
+]}
+/>
+
+**Returns:** `string`
 
 ## Related
 
