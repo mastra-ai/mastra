@@ -10,7 +10,8 @@ import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
-import { fg, bg, bold, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { getThinkingLevelsForModel } from './thinking-settings.js';
 
 // =============================================================================
 // Types
@@ -114,15 +115,15 @@ class StorageBackendSubmenu extends Container {
     this.clear();
 
     if (this.pendingBackend === 'pg') {
-      this.addChild(new Text(bold(fg('accent', 'PostgreSQL Connection')), 0, 0));
+      this.addChild(new Text(theme.bold(theme.fg('accent', 'PostgreSQL Connection')), 0, 0));
       this.addChild(new Spacer(1));
-      this.addChild(new Text(fg('muted', 'Enter a connection string:'), 0, 0));
-      this.addChild(new Text(fg('dim', 'e.g. postgresql://user:pass@localhost:5432/mydb'), 0, 0));
+      this.addChild(new Text(theme.fg('muted', 'Enter a connection string:'), 0, 0));
+      this.addChild(new Text(theme.fg('dim', 'e.g. postgresql://user:pass@localhost:5432/mydb'), 0, 0));
     } else {
-      this.addChild(new Text(bold(fg('accent', 'LibSQL Connection')), 0, 0));
+      this.addChild(new Text(theme.bold(theme.fg('accent', 'LibSQL Connection')), 0, 0));
       this.addChild(new Spacer(1));
-      this.addChild(new Text(fg('muted', 'Enter a URL or leave empty for default local file:'), 0, 0));
-      this.addChild(new Text(fg('dim', 'e.g. libsql://your-db.turso.io'), 0, 0));
+      this.addChild(new Text(theme.fg('muted', 'Enter a URL or leave empty for default local file:'), 0, 0));
+      this.addChild(new Text(theme.fg('dim', 'e.g. libsql://your-db.turso.io'), 0, 0));
     }
     this.addChild(new Spacer(1));
 
@@ -134,7 +135,7 @@ class StorageBackendSubmenu extends Container {
     this.addChild(this.input);
 
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('dim', 'Enter to save · Esc to go back'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', 'Enter to save · Esc to go back'), 0, 0));
   }
 
   handleInput(data: string): void {
@@ -193,10 +194,10 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(2, 1, (text: string) => bg('overlayBg', text));
+    super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
-    this.addChild(new Text(bold(fg('accent', 'Settings')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));
     this.addChild(new Spacer(1));
 
     // Build settings items
@@ -211,18 +212,11 @@ export class SettingsComponent extends Box implements Focusable {
       { value: 'both', label: 'Both', desc: 'Bell + system notification' },
     ];
 
-    const showProviderValues = config.currentModelId.startsWith('openai/');
-    const thinkingLevels: { value: string; label: string; desc: string }[] = [
-      { value: 'off', label: showProviderValues ? 'Off (none)' : 'Off', desc: 'Reasoning disabled' },
-      { value: 'low', label: showProviderValues ? 'Low (low)' : 'Low', desc: 'Light reasoning' },
-      { value: 'medium', label: showProviderValues ? 'Medium (medium)' : 'Medium', desc: 'Balanced reasoning' },
-      { value: 'high', label: showProviderValues ? 'High (high)' : 'High', desc: 'Deep reasoning' },
-      {
-        value: 'xhigh',
-        label: showProviderValues ? 'Very High (xhigh)' : 'Very High',
-        desc: 'Maximum reasoning depth',
-      },
-    ];
+    const thinkingLevels = getThinkingLevelsForModel(config.currentModelId).map(level => ({
+      value: level.id,
+      label: level.label,
+      desc: level.description,
+    }));
 
     const getNotifLabel = (mode: NotificationMode) => notificationModes.find(m => m.value === mode)?.label ?? mode;
 

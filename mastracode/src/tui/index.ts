@@ -17,15 +17,5 @@ export { UserMessageComponent } from './components/user-message.js';
 export { ModelSelectorComponent, type ModelItem, type ModelSelectorOptions } from './components/model-selector.js';
 export { LoginSelectorComponent } from './components/login-selector.js';
 export { LoginDialogComponent } from './components/login-dialog.js';
-export {
-  theme,
-  getTheme,
-  setTheme,
-  applyThemeMode,
-  getThemeMode,
-  getMarkdownTheme,
-  getEditorTheme,
-  mastra,
-  mastraBrand,
-} from './theme.js';
+export { theme, applyThemeMode, getThemeMode, getMarkdownTheme, getEditorTheme, mastra, mastraBrand } from './theme.js';
 export type { ThemeColor, ThemeBg, ThemeColors, ThemeMode } from './theme.js';

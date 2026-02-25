@@ -4,10 +4,10 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { fg, bold, mastra, getTheme } from '../theme.js';
+import { theme, mastra } from '../theme.js';
 
 function colorizeDiffLine(line: string): string {
-  const t = getTheme();
+  const t = theme.getTheme();
   const addedColor = chalk.hex(t.success);
   const hunkHeaderColor = chalk.hex(t.toolBorderPending);
   const fileHeaderColor = chalk.bold.hex(t.accent);
@@ -58,7 +58,9 @@ export class DiffOutputComponent extends Container {
     this.addChild(new Spacer(1));
 
     // Command header
-    this.addChild(new Text(`${fg('success', '✓')} ${bold(fg('muted', '$'))} ${fg('text', command)}`, 1, 0));
+    this.addChild(
+      new Text(`${theme.fg('success', '✓')} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`, 1, 0),
+    );
 
     const output = diffOutput.trimEnd();
     if (output) {
