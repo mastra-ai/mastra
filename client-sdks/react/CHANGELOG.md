@@ -1,5 +1,14 @@
 # @mastra/react
 
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- Added completionResult to MastraUIMessageMetadata ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+- Updated dependencies:
+  - @mastra/client-js@1.7.1-alpha.0
+
 ## 0.2.6
 
 ### Patch Changes

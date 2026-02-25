@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vectorize",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "description": "Cloudflare Vectorize store provider for Mastra",
   "type": "module",
   "files": [
