@@ -112,7 +112,7 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 const workspace = new Workspace({
   // highlight-start
   filesystem: ({ requestContext }) => {
-    const role = requestContext.get('agent-role')
+    const role = requestContext.get('agent-role') || 'guest'
     return new LocalFilesystem({
       basePath: `/workspaces/${role}`,
       readOnly: role !== 'admin',

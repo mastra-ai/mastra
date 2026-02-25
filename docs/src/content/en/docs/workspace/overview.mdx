@@ -166,7 +166,7 @@ Pass a resolver function to `filesystem` to return a different filesystem per re
 ```typescript
 const workspace = new Workspace({
   filesystem: ({ requestContext }) => {
-    const role = requestContext.get('agent-role')
+    const role = requestContext.get('agent-role') || 'guest'
     return new LocalFilesystem({
       basePath: `/workspaces/${role}`,
       readOnly: role !== 'admin',
