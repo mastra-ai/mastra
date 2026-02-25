@@ -46,6 +46,8 @@ export interface OnboardingOptions {
   modePacks: ModePack[];
   /** Available OM packs (pre-filtered by provider access). */
   omPacks: OMPack[];
+  /** Whether the user has any provider access (API key or OAuth) — even for providers without a built-in pack. */
+  hasProviderAccess: boolean;
   /** Previously saved choices — used to highlight current selections when re-running. */
   previous?: PreviousSetupChoices;
   /** Called when the wizard completes. */
@@ -146,6 +148,11 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     }
   }
 
+  /** Update whether the user has any provider access (e.g. after a login). */
+  updateHasProviderAccess(hasAccess: boolean): void {
+    this.options.hasProviderAccess = hasAccess;
+  }
+
   // ---------------------------------------------------------------------------
   // Rendering helpers
   // ---------------------------------------------------------------------------
@@ -242,14 +249,15 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       return;
     }
 
-    box.addChild(new Text(fg('text', 'Log in with an AI provider to use your subscription:'), 0, 0));
+    box.addChild(new Text(fg('text', 'Log in with an AI provider to use your subscription,'), 0, 0));
+    box.addChild(new Text(fg('text', 'or skip if you have API keys configured as environment variables.'), 0, 0));
     box.addChild(new Spacer(1));
 
     const items: SelectItem[] = providers.map(p => ({
       value: p.value,
       label: p.loggedIn ? `  ${p.label}  ${fg('success', '✓ logged in')}` : `  ${p.label}`,
     }));
-    items.push({ value: '__skip', label: `  ${fg('dim', 'Skip (configure later with /login)')}` });
+    items.push({ value: '__skip', label: `  ${fg('dim', 'Skip (use API keys or configure later with /login)')}` });
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
     this.selectList.onSelect = (item: SelectItem) => {
@@ -282,10 +290,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private renderModePack(): void {
     const packs = this.options.modePacks;
-    const hasProviderPack = packs.some(p => !p.id.startsWith('custom'));
 
     // No API keys and no OAuth logins — can't proceed
-    if (!hasProviderPack) {
+    if (!this.options.hasProviderAccess) {
       const box = this.makeBox();
       box.addChild(new Text(bold(fg('error', 'No model providers configured')), 0, 0));
       box.addChild(new Spacer(1));

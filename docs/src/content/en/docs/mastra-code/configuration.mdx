@@ -11,26 +11,32 @@ Mastra Code is configured through project-level files, global settings, and envi
 
 ## Authentication
 
-Mastra Code authenticates with AI providers through OAuth. Run `/login` in the TUI to start the flow.
+Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
 
-### Supported providers
+### API keys
+
+The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GOOGLE_GENERATIVE_AI_API_KEY=...
+export DEEPSEEK_API_KEY=...
+export CEREBRAS_API_KEY=...
+```
+
+Mastra Code uses Mastra's [model router](/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
+
+### OAuth login (optional)
+
+If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
-OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location).
-
-### Model routing
-
-For providers not covered by OAuth, Mastra Code uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
-
-```sh
-export OPENAI_API_KEY=sk-...
-export ANTHROPIC_API_KEY=sk-ant-...
-export GOOGLE_GENERATIVE_AI_API_KEY=...
-```
+OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location). During onboarding, you can skip the OAuth step if you already have API keys configured.
 
 ## MCP servers
 
