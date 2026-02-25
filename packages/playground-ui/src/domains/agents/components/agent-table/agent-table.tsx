@@ -149,7 +149,7 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
             size="lg"
             variant="outline"
             as="a"
-            href="https://mastra.ai/docs/agents"
+            href="https://mastra.ai/docs/agents/overview"
             target="_blank"
             rel="noopener noreferrer"
           >
