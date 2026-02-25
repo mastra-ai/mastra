@@ -19,7 +19,7 @@ function getModelNote(ctx: SlashCommandContext): string | null {
   const modelId = ctx.state.harness.getCurrentModelId() ?? '';
   if (!modelId) return 'No model selected.';
   if (!supportsThinking(modelId)) {
-    return `Current model (${modelId}) does not support thinking. Supported: OpenAI models.`;
+    return `Warning: current model (${modelId}) may not support reasoning effort. Setting will be saved but may not take effect.`;
   }
   return null;
 }
@@ -49,9 +49,11 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   }
 
   // No argument: show inline selector
+  const modelId = ctx.state.harness.getCurrentModelId() ?? '';
+  const showProvider = supportsThinking(modelId);
   const items: SelectItem[] = THINKING_LEVELS.map(l => ({
     value: l.id,
-    label: `  ${l.label}${l.id === currentLevel ? fg('dim', ' (current)') : ''}`,
+    label: `  ${l.label}${showProvider ? ` ${fg('dim', `(${l.providerValue})`)}` : ''}  ${fg('dim', l.description)}${l.id === currentLevel ? fg('dim', ' (current)') : ''}`,
   }));
 
   const modelNote = getModelNote(ctx);

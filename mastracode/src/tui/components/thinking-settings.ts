@@ -23,11 +23,11 @@ export interface ThinkingSettingsCallbacks {
 // =============================================================================
 
 export const THINKING_LEVELS = [
-  { id: 'off', label: 'Off', description: 'No extra reasoning' },
-  { id: 'minimal', label: 'Minimal', description: 'Very light reasoning' },
-  { id: 'low', label: 'Low', description: 'Light reasoning' },
-  { id: 'medium', label: 'Medium', description: 'Balanced reasoning' },
-  { id: 'high', label: 'High', description: 'Deep reasoning' },
+  { id: 'off', label: 'Off', providerValue: 'none', description: 'Reasoning disabled' },
+  { id: 'low', label: 'Low', providerValue: 'low', description: 'Light reasoning' },
+  { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
+  { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
+  { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
 ] as const;
 
 // =============================================================================
@@ -46,7 +46,7 @@ export class ThinkingSettingsComponent extends Box implements Focusable {
     this._focused = value;
   }
 
-  constructor(currentLevel: string, callbacks: ThinkingSettingsCallbacks) {
+  constructor(currentLevel: string, callbacks: ThinkingSettingsCallbacks, showProviderValues = false) {
     super(2, 1, (text: string) => bg('overlayBg', text));
 
     // Title
@@ -58,7 +58,7 @@ export class ThinkingSettingsComponent extends Box implements Focusable {
     // Build items
     const items: SelectItem[] = THINKING_LEVELS.map(level => ({
       value: level.id,
-      label: `  ${level.label}  ${fg('dim', level.description)}`,
+      label: `  ${level.label}${showProviderValues ? ` ${fg('dim', `(${level.providerValue})`)}` : ''}  ${fg('dim', level.description)}`,
     }));
 
     this.selectList = new SelectList(items, items.length, getSelectListTheme());

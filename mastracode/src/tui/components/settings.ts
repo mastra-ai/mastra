@@ -19,6 +19,7 @@ export interface SettingsConfig {
   notifications: NotificationMode;
   yolo: boolean;
   thinkingLevel: string;
+  currentModelId: string;
   escapeAsCancel: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
@@ -210,12 +211,13 @@ export class SettingsComponent extends Box implements Focusable {
       { value: 'both', label: 'Both', desc: 'Bell + system notification' },
     ];
 
+    const showProviderValues = config.currentModelId.startsWith('openai/');
     const thinkingLevels: { value: string; label: string; desc: string }[] = [
-      { value: 'off', label: 'Off', desc: 'No extra reasoning' },
-      { value: 'minimal', label: 'Minimal', desc: 'Very light reasoning' },
-      { value: 'low', label: 'Low', desc: 'Light reasoning' },
-      { value: 'medium', label: 'Medium', desc: 'Balanced reasoning' },
-      { value: 'high', label: 'High', desc: 'Deep reasoning' },
+      { value: 'off', label: showProviderValues ? 'Off (none)' : 'Off', desc: 'Reasoning disabled' },
+      { value: 'low', label: showProviderValues ? 'Low (low)' : 'Low', desc: 'Light reasoning' },
+      { value: 'medium', label: showProviderValues ? 'Medium (medium)' : 'Medium', desc: 'Balanced reasoning' },
+      { value: 'high', label: showProviderValues ? 'High (high)' : 'High', desc: 'Deep reasoning' },
+      { value: 'xhigh', label: showProviderValues ? 'Very High (xhigh)' : 'Very High', desc: 'Maximum reasoning depth' },
     ];
 
     const getNotifLabel = (mode: NotificationMode) => notificationModes.find(m => m.value === mode)?.label ?? mode;

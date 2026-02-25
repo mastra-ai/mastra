@@ -43,16 +43,16 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
 /** Valid thinking level values. */
-export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
 const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
-  minimal: 'low',
   low: 'low',
   medium: 'medium',
   high: 'high',
+  xhigh: 'xhigh',
 };
 
 /**
