@@ -25,7 +25,11 @@ import { validateBody } from './utils';
  */
 function resolveSchema(schema: unknown): unknown {
   if (typeof schema === 'function') {
-    return schema();
+    try {
+      return schema();
+    } catch {
+      return undefined;
+    }
   }
   return schema;
 }
