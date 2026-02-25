@@ -68,11 +68,18 @@ async function main() {
   };
 
   // Detect and apply terminal theme
-  const settings = loadSettings();
-  const themePref = settings.preferences.theme;
-  const themeMode = themePref === 'dark' || themePref === 'light'
-    ? themePref
-    : await detectTerminalTheme();
+  // MASTRA_THEME env var is the highest-priority override
+  const envTheme = process.env.MASTRA_THEME?.toLowerCase();
+  let themeMode: 'dark' | 'light';
+  if (envTheme === 'dark' || envTheme === 'light') {
+    themeMode = envTheme;
+  } else {
+    const settings = loadSettings();
+    const themePref = settings.preferences.theme;
+    themeMode = themePref === 'dark' || themePref === 'light'
+      ? themePref
+      : await detectTerminalTheme();
+  }
   applyThemeMode(themeMode);
 
   const tui = new MastraTUI({
