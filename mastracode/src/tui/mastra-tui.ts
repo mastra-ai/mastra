@@ -355,10 +355,7 @@ export class MastraTUI {
 
       return true;
     } catch (error) {
-      showError(
-        this.state,
-        `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      showError(this.state, `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
