@@ -69,7 +69,7 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
         // Normalize to 0–1 range. If 4 digits: max is 0xFFFF. If 2 digits: max is 0xFF.
         const normalize = (hex: string) => {
           const val = parseInt(hex, 16);
-          return hex.length <= 2 ? val / 0xFF : val / 0xFFFF;
+          return hex.length <= 2 ? val / 0xff : val / 0xffff;
         };
 
         const r = normalize(rHex);
@@ -77,7 +77,7 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
         const b = normalize(bHex);
 
         // WCAG relative luminance
-        const linearize = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        const linearize = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
         const luma = 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 
         resolve(luma >= 0.5 ? 'light' : 'dark');

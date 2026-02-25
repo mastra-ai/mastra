@@ -76,9 +76,7 @@ async function main() {
   } else {
     const settings = loadSettings();
     const themePref = settings.preferences.theme;
-    themeMode = themePref === 'dark' || themePref === 'light'
-      ? themePref
-      : await detectTerminalTheme();
+    themeMode = themePref === 'dark' || themePref === 'light' ? themePref : await detectTerminalTheme();
   }
   applyThemeMode(themeMode);
 
