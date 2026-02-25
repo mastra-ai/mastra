@@ -1968,6 +1968,38 @@ describe('validateToolInput - Original Schema Fallback (GitHub #13480)', () => {
     expect(result.data).toEqual({ config: { host: 'localhost' } });
   });
 
+  it('should fallback to original schema with null-stripped input (Step 6b)', () => {
+    // Edge case: LLM sends null for optional fields AND compat layer removed .optional()
+    // Step 5 strips nulls but processed schema still requires the key (.nullable(), not .optional())
+    // Step 6 tries original schema with raw input but null ≠ undefined, so .optional() rejects
+    // Step 6b strips nulls then tries original schema → .optional() accepts missing keys
+    const originalSchema = z.object({
+      query: z.string(),
+      format: z.string().optional(),
+      verbose: z.boolean().optional(),
+    });
+
+    const processedSchema = z.object({
+      query: z.string(),
+      format: z
+        .string()
+        .nullable()
+        .transform((val: string | null) => (val === null ? undefined : val)),
+      verbose: z
+        .boolean()
+        .nullable()
+        .transform((val: boolean | null) => (val === null ? undefined : val)),
+    });
+
+    // LLM sends explicit null for optional fields
+    const input = { query: 'test', format: null, verbose: null };
+
+    const result = validateToolInput(processedSchema, input, 'test-tool', originalSchema);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ query: 'test' });
+  });
+
   it('should not use originalSchema when not provided (backward compat)', () => {
     const processedSchema = z.object({
       query: z.string(),

@@ -397,6 +397,18 @@ export function validateToolInput<T = any>(
     if (originalValidation.success) {
       return { data: originalValidation.data };
     }
+
+    // Step 6b: Retry original schema with null values stripped (CodeRabbit review)
+    // Handles: LLM sends null for optional fields AND compat layer removed .optional().
+    // Step 5 strips nulls but processed schema still requires the key (.nullable(), not .optional()).
+    // Step 6 tries original schema with raw input but null ≠ undefined, so .optional() rejects it.
+    // Stripping nulls makes keys absent → original schema's .optional() accepts missing keys.
+    const originalStrippedInput = stripNullishValues(input);
+    const originalNormalizedStripped = normalizeNullishInput(originalSchema, originalStrippedInput);
+    const originalStrippedValidation = originalSchema.safeParse(originalNormalizedStripped);
+    if (originalStrippedValidation.success) {
+      return { data: originalStrippedValidation.data };
+    }
   }
 
   // All attempts failed - return the original (non-stripped) error since it's
