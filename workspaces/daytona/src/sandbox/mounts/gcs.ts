@@ -93,13 +93,14 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
   const [uid, gid] = idResult.output.trim().split('\n');
-  if (!uid || !gid || !/^\d+$/.test(uid) || !/^\d+$/.test(gid)) {
-    throw new Error(`Unexpected uid/gid format: "${idResult.output.trim()}"`);
+  const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
+  if (!validUidGid) {
+    logger.warn(`${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`);
   }
 
   // Build gcsfuse flags
   // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
-  const uidGidFlags = `--uid=${uid} --gid=${gid}`;
+  const uidGidFlags = validUidGid ? `--uid=${uid} --gid=${gid}` : '';
 
   const hasCredentials = !!config.serviceAccountKey;
   let mountCmd: string;
