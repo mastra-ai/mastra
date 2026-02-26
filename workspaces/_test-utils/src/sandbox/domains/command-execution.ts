@@ -219,7 +219,10 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       it(
         'executes a shell pipeline',
         async () => {
-          const result = await executeCommand('sh', ['-c', 'echo "cherry banana apple" | tr " " "\\n" | sort | head -1']);
+          const result = await executeCommand('sh', [
+            '-c',
+            'echo "cherry banana apple" | tr " " "\\n" | sort | head -1',
+          ]);
 
           expect(result.exitCode).toBe(0);
           expect(result.stdout.trim()).toBe('apple');
@@ -308,11 +311,9 @@ cat /tmp/heredoc-test.txt`,
           if (!capabilities.supportsStreaming) return;
 
           const chunks: string[] = [];
-          const result = await executeCommand(
-            'sh',
-            ['-c', 'for i in 1 2 3; do echo "chunk $i"; sleep 0.3; done'],
-            { onStdout: c => chunks.push(c) },
-          );
+          const result = await executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "chunk $i"; sleep 0.3; done'], {
+            onStdout: c => chunks.push(c),
+          });
 
           expect(result.exitCode).toBe(0);
           expect(result.stdout).toContain('chunk 3');

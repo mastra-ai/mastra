@@ -466,7 +466,9 @@ export class DaytonaSandbox extends MastraSandbox {
       const state = sandbox.state;
 
       if (state && DEAD_STATES.includes(state)) {
-        this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`);
+        this.logger.debug(
+          `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
+        );
         try {
           await this._daytona!.delete(sandbox);
         } catch {

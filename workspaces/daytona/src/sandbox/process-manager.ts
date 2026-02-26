@@ -140,7 +140,7 @@ class DaytonaProcessHandle extends ProcessHandle {
 
     return {
       success: this._exitCode === 0,
-      exitCode: this._exitCode,
+      exitCode: this._exitCode ?? 1,
       stdout: this.stdout,
       stderr: this.stderr,
       executionTimeMs: Date.now() - this._startTime,
