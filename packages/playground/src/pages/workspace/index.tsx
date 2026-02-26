@@ -99,6 +99,7 @@ export default function Workspace() {
   // Navigate to a different workspace (changes path, resets query params)
   const setSelectedWorkspaceId = (id: string) => {
     setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
+    setShowSearch(false);
     navigate(`/workspaces/${id}`);
   };
 
@@ -130,7 +131,6 @@ export default function Workspace() {
   });
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
-  const searchWorkspace = useSearchWorkspace();
 
   // Selected file content - pass workspaceId
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
@@ -144,7 +144,6 @@ export default function Workspace() {
     isLoading: isLoadingSkills,
     refetch: refetchSkills,
   } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
-  const searchSkills = useSearchWorkspaceSkills();
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
@@ -291,6 +290,11 @@ export default function Workspace() {
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
   const files = filesData?.entries ?? [];
 
+  // Whether any search functionality is actually available
+  const canSearchFiles = hasFilesystem && (canBM25 || canVector);
+  const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
+  const hasSearchCapability = canSearchFiles || canSearchSkills;
+
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
@@ -389,7 +393,7 @@ export default function Workspace() {
         </HeaderTitle>
 
         <HeaderAction>
-          {(hasFilesystem || hasSkills) && (
+          {hasSearchCapability && (
             <Button variant="light" onClick={() => setShowSearch(!showSearch)}>
               <Icon>
                 <Search className="h-4 w-4" />
@@ -502,40 +506,25 @@ export default function Workspace() {
             </div>
           )}
 
-          {/* Search Panel */}
-          {showSearch && (
-            <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
-              {hasFilesystem && (canBM25 || canVector) && (
-                <div>
-                  <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Search Files
-                  </h3>
-                  <SearchWorkspacePanel
-                    onSearch={params => searchWorkspace.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
-                    isSearching={searchWorkspace.isPending}
-                    searchResults={searchWorkspace.data}
-                    canBM25={canBM25}
-                    canVector={canVector}
-                    onViewResult={id => setSelectedFile(id)}
-                  />
-                </div>
-              )}
-
-              {hasSkills && isSkillsConfigured && skills.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-                    <Wand2 className="h-4 w-4" />
-                    Search Skills
-                  </h3>
-                  <SearchSkillsPanel
-                    onSearch={params => searchSkills.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
-                    results={searchSkills.data?.results ?? []}
-                    isSearching={searchSkills.isPending}
-                  />
-                </div>
-              )}
-            </div>
+          {/* Search Panel - keyed on workspace so hooks reset on switch */}
+          {showSearch && hasSearchCapability && effectiveWorkspaceId && (
+            <WorkspaceSearchPanel
+              key={effectiveWorkspaceId}
+              workspaceId={effectiveWorkspaceId}
+              canSearchFiles={canSearchFiles}
+              canSearchSkills={canSearchSkills}
+              canBM25={canBM25}
+              canVector={canVector}
+              showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
+              onViewFileResult={id => {
+                updateSearchParams({ file: id, tab: 'files' });
+              }}
+              onViewSkillResult={skillName => {
+                if (effectiveWorkspaceId) {
+                  navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
+                }
+              }}
+            />
           )}
 
           {/* Tab Navigation */}
@@ -654,5 +643,77 @@ export default function Workspace() {
         />
       )}
     </MainContentLayout>
+  );
+}
+
+function WorkspaceSearchPanel({
+  workspaceId,
+  canSearchFiles,
+  canSearchSkills,
+  canBM25,
+  canVector,
+  showInitWarning,
+  onViewFileResult,
+  onViewSkillResult,
+}: {
+  workspaceId: string;
+  canSearchFiles: boolean;
+  canSearchSkills: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  showInitWarning: boolean;
+  onViewFileResult: (id: string) => void;
+  onViewSkillResult: (skillName: string) => void;
+}) {
+  const searchWorkspace = useSearchWorkspace();
+  const searchSkills = useSearchWorkspaceSkills();
+
+  return (
+    <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
+      {canSearchFiles && (
+        <div>
+          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Search Indexed Files
+          </h3>
+          {showInitWarning && (
+            <p className="text-xs text-amber-400 mb-3">
+              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
+              configured <code className="text-amber-300">autoIndexPaths</code>.
+            </p>
+          )}
+          <SearchWorkspacePanel
+            onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
+            isSearching={searchWorkspace.isPending}
+            searchResults={
+              searchWorkspace.data
+                ? {
+                    ...searchWorkspace.data,
+                    results: searchWorkspace.data.results.filter(r => !r.id.startsWith('skill:')),
+                  }
+                : undefined
+            }
+            canBM25={canBM25}
+            canVector={canVector}
+            onViewResult={onViewFileResult}
+          />
+        </div>
+      )}
+
+      {canSearchSkills && (
+        <div>
+          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+            <Wand2 className="h-4 w-4" />
+            Search Skills
+          </h3>
+          <SearchSkillsPanel
+            onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
+            results={searchSkills.data?.results ?? []}
+            isSearching={searchSkills.isPending}
+            onResultClick={result => onViewSkillResult(result.skillName)}
+          />
+        </div>
+      )}
+    </div>
   );
 }

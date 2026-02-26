@@ -1,8 +1,6 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
-import { noopLogger } from '@mastra/core/logger';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -18,7 +16,7 @@ import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
-import { loadSettings, resolveModelDefaults, resolveOmModel } from './onboarding/settings.js';
+import { loadSettings, resolveModelDefaults, resolveOmModel, saveSettings } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -97,21 +95,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
 
   // Agent
-  const codeAgentInstance = new Agent({
+  const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager),
   });
-
-  const mastraInstance = new Mastra({
-    agents: { codeAgentInstance },
-    logger: noopLogger,
-    storage,
-  });
-
-  const codeAgent = mastraInstance.getAgent('codeAgentInstance');
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
@@ -276,6 +266,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       return undefined;
     },
     modelUseCountProvider: () => loadSettings().modelUseCounts,
+    modelUseCountTracker: modelId => {
+      try {
+        const settings = loadSettings();
+        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        saveSettings(settings);
+      } catch (error) {
+        console.error('Failed to persist model usage count', error);
+      }
+    },
     threadLock: {
       acquire: acquireThreadLock,
       release: releaseThreadLock,

@@ -6,7 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -18,6 +18,19 @@ import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+
+/**
+ * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
+ */
+export type WorkflowRunStartOptions = {
+  outputWriter?: OutputWriter;
+  tracingOptions?: TracingOptions;
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
+  perStep?: boolean;
+} & Partial<ObservabilityContext>;
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -888,7 +901,6 @@ export type RegularStepExecutionParams = {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  tracingContext?: TracingContext;
   writableStream?: WritableStream<ChunkType>;
   startedAt: number;
   resumeDataToUse?: any;
@@ -898,7 +910,7 @@ export type RegularStepExecutionParams = {
   serializedStepGraph: SerializedStepFlowEntry[];
   resourceId?: string;
   disableScorers?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 /**
  * Result from step execution core logic

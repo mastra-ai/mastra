@@ -1,0 +1,51 @@
+name: E2E Tests — Docs
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/e2e-docs.yml'
+
+jobs:
+  e2e-docs:
+    name: Docs E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install Playwright browsers
+        working-directory: ./docs
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build docs site
+        working-directory: ./docs
+        run: pnpm build
+
+      - name: Run smoke tests
+        working-directory: ./docs
+        run: pnpm test:smoke
+
+      - name: Run OG image tests
+        working-directory: ./docs
+        run: pnpm test:og
+
+      - name: Run navigation tests
+        working-directory: ./docs
+        run: pnpm test:navigation
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-docs
+          path: docs/playwright-report/
+          retention-days: 14

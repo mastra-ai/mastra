@@ -776,6 +776,23 @@ export class InternalMastraMCPClient extends MastraBase {
                 return res.structuredContent;
               }
 
+              // When the tool has an outputSchema but the server didn't return
+              // structuredContent (e.g. older MCP protocol versions that predate the
+              // structuredContent spec), extract the result from the content array.
+              // Without this, the raw CallToolResult envelope ({ content, isError,
+              // _meta }) gets validated against the outputSchema and Zod strips all
+              // unrecognised keys, producing {}.
+              if (tool.outputSchema && !res.isError) {
+                const content = res.content as Array<{ type: string; text?: string }> | undefined;
+                if (content && content.length === 1 && content[0]!.type === 'text' && content[0]!.text !== undefined) {
+                  try {
+                    return JSON.parse(content[0]!.text);
+                  } catch {
+                    return content[0]!.text;
+                  }
+                }
+              }
+
               return res;
             };
 

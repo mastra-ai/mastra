@@ -15,6 +15,8 @@ interface TestContext {
   fastOnly: boolean;
   /** Factory to create additional sandbox instances for uniqueness/lifecycle tests */
   createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
+  /** Optional factory to create a sandbox with intentionally invalid config */
+  createInvalidSandbox?: () => Promise<MastraSandbox> | MastraSandbox;
 }
 
 export function createSandboxLifecycleTests(getContext: () => TestContext): void {
@@ -187,6 +189,64 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
           expect(info.status).toBe(sandbox.status);
         },
         getContext().testTimeout,
+      );
+    });
+
+    describe('Error Recovery', () => {
+      it(
+        'start() with invalid config rejects cleanly',
+        async () => {
+          const { createInvalidSandbox } = getContext();
+          if (!createInvalidSandbox) return;
+
+          const badSandbox = await createInvalidSandbox();
+          try {
+            await expect(badSandbox._start()).rejects.toThrow();
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail for invalid sandboxes — that's OK
+            }
+          }
+        },
+        getContext().testTimeout * 2,
+      );
+
+      it(
+        'valid sandbox works after invalid config failure',
+        async () => {
+          const { createInvalidSandbox, createSandbox } = getContext();
+          if (!createInvalidSandbox) return;
+
+          // First: attempt to start with invalid config (should fail)
+          const badSandbox = await createInvalidSandbox();
+          try {
+            await badSandbox._start();
+          } catch {
+            // Expected to fail
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail — that's OK
+            }
+          }
+
+          // Then: verify a fresh sandbox with valid config still works
+          const goodSandbox = await createSandbox();
+          try {
+            await goodSandbox._start();
+            expect(goodSandbox.status).toBe('running');
+
+            const result = await goodSandbox.executeCommand!('echo', ['recovery']);
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('recovery');
+          } finally {
+            await goodSandbox._destroy();
+          }
+        },
+        getContext().testTimeout * 3,
       );
     });
   });

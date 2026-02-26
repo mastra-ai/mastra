@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { Workspace } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, FileEntry, FileStat } from '@mastra/core/workspace';
@@ -257,6 +258,15 @@ function createMastra(workspace?: Workspace): Mastra {
   return mastra;
 }
 
+/** Polls until a workspace with the given ID appears in the registry. */
+async function waitForWorkspace(mastra: Mastra, id: string, timeout = 2000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!mastra.listWorkspaces()[id]) {
+    if (Date.now() > deadline) throw new Error(`Workspace ${id} not registered within ${timeout}ms`);
+    await new Promise(r => setTimeout(r, 10));
+  }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -326,6 +336,80 @@ describe('Workspace Handlers', () => {
 
       expect(result.workspaces).toHaveLength(1);
       expect(result.workspaces[0].capabilities.hasSkills).toBe(true);
+    });
+
+    it('should mark agent workspaces with source agent and populate agentId/agentName', async () => {
+      const globalWorkspace = createWorkspace('global-ws', { name: 'Global Workspace' });
+      const agentWorkspace = createWorkspace('agent-ws', { name: 'Agent Workspace' });
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'openai', name: 'gpt-4o' } as any,
+        workspace: agentWorkspace,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        workspace: globalWorkspace,
+        agents: { testAgent: agent },
+      });
+
+      await waitForWorkspace(mastra, 'agent-ws');
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(2);
+
+      const global = result.workspaces.find((w: any) => w.id === 'global-ws');
+      const agentWs = result.workspaces.find((w: any) => w.id === 'agent-ws');
+
+      expect(global).toMatchObject({
+        id: 'global-ws',
+        name: 'Global Workspace',
+        source: 'mastra',
+      });
+
+      expect(agentWs).toMatchObject({
+        id: 'agent-ws',
+        name: 'Agent Workspace',
+        source: 'agent',
+        agentId: 'test-agent',
+        agentName: 'test-agent',
+      });
+    });
+
+    it('should mark workspace as source agent when only agents have workspaces', async () => {
+      const agentWorkspace = createWorkspace('only-agent-ws', { name: 'Only Agent Workspace' });
+
+      const agent = new Agent({
+        name: 'solo-agent',
+        instructions: 'test',
+        model: { provider: 'openai', name: 'gpt-4o' } as any,
+        workspace: agentWorkspace,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { soloAgent: agent },
+      });
+
+      await waitForWorkspace(mastra, 'only-agent-ws');
+
+      const result = await LIST_WORKSPACES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+      });
+
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0]).toMatchObject({
+        id: 'only-agent-ws',
+        name: 'Only Agent Workspace',
+        source: 'agent',
+        agentId: 'solo-agent',
+        agentName: 'solo-agent',
+      });
     });
   });
 
@@ -1175,7 +1259,7 @@ describe('Workspace Handlers', () => {
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'api.md');
+      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'references/api.md');
     });
 
     it('WORKSPACE_SEARCH_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {

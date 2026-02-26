@@ -18,7 +18,7 @@ import {
   Text,
 } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@mariozechner/pi-tui';
-import { fg, bg, bold, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -102,17 +102,17 @@ class ThresholdSubmenu extends Container {
     this.onDone = onDone;
     this.onBack = onBack;
 
-    this.addChild(new Text(bold(fg('accent', title)), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', title)), 0, 0));
     this.addChild(new Spacer(1));
 
     // Input for custom value — type a number like 30 for 30k
-    this.addChild(new Text(fg('muted', '  _k tokens (type a number, e.g. 30 for 30k):'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', '  _k tokens (type a number, e.g. 30 for 30k):'), 0, 0));
     this.input = new Input();
     this.addChild(this.input);
     this.addChild(new Spacer(1));
 
     // Preset list
-    this.addChild(new Text(fg('muted', '  Or pick a preset:'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', '  Or pick a preset:'), 0, 0));
 
     const items: SelectItem[] = presets.map(p => ({
       value: String(p),
@@ -134,7 +134,7 @@ class ThresholdSubmenu extends Container {
 
     this.addChild(this.selectList);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('dim', '  Enter to confirm · ↓ for presets · Esc to go back'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', '  Enter to confirm · ↓ for presets · Esc to go back'), 0, 0));
   }
 
   handleInput(data: string): void {
@@ -201,9 +201,9 @@ class ModelSelectSubmenu extends Container {
     this.onCancel = onCancel;
     this.tui = tui;
 
-    this.addChild(new Text(bold(fg('accent', title)), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', title)), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Type to search · ↑↓ navigate · Enter select · Esc back'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Type to search · ↑↓ navigate · Enter select · Esc back'), 0, 0));
     this.addChild(new Spacer(1));
 
     this.searchInput = new Input();
@@ -241,19 +241,19 @@ class ModelSelectSubmenu extends Container {
       const item = this.filteredModels[i]!;
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
-      const checkmark = isCurrent ? fg('success', ' ✓') : '';
+      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
 
-      const line = isSelected ? fg('accent', `→ ${item.label}`) + checkmark : `  ${item.label}` + checkmark;
+      const line = isSelected ? theme.fg('accent', `→ ${item.label}`) + checkmark : `  ${item.label}` + checkmark;
 
       this.listContainer.addChild(new Text(line, 0, 0));
     }
 
     if (startIndex > 0 || endIndex < total) {
-      this.listContainer.addChild(new Text(fg('muted', `(${this.selectedIndex + 1}/${total})`), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', `(${this.selectedIndex + 1}/${total})`), 0, 0));
     }
 
     if (total === 0) {
-      this.listContainer.addChild(new Text(fg('muted', 'No matching models'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
     }
   }
 
@@ -301,10 +301,10 @@ export class OMSettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelOption[], tui: TUI) {
-    super(2, 1, (text: string) => bg('overlayBg', text));
+    super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
-    this.addChild(new Text(bold(fg('accent', 'Observational Memory Settings')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Observational Memory Settings')), 0, 0));
     this.addChild(new Spacer(1));
 
     // Build settings items

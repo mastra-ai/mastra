@@ -242,6 +242,7 @@ export function withMastra(model: LanguageModelV2, options: WithMastraOptions = 
 interface ProcessorMiddlewareState {
   tripwire?: boolean;
   reason?: string;
+  originalInputCount?: number;
 }
 
 interface TextPart {
@@ -307,6 +308,8 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         }
       }
 
+      const originalInputCount = params.prompt.filter(msg => msg.role !== 'system').length;
+
       // Run each input processor
       for (const processor of inputProcessors) {
         if (processor.processInput) {
@@ -348,6 +351,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       return {
         ...params,
         prompt: newPrompt,
+        providerOptions: {
+          ...params.providerOptions,
+          mastraProcessors: {
+            ...(params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined),
+            originalInputCount,
+          } satisfies ProcessorMiddlewareState,
+        },
       };
     },
 
@@ -378,12 +388,20 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         resourceId: memory?.resourceId,
       });
 
-      // Add the transformed prompt messages to the list
+      // Processors may prepend historical messages to the prompt. Tag those as 'memory'
+      // so output processors don't re-persist them.
+      const originalInputCount =
+        processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
+      const nonSystemTotal = params.prompt.filter(m => m.role !== 'system').length;
+      const memoryCount = nonSystemTotal - originalInputCount;
+
+      let nonSystemIndex = 0;
       for (const msg of params.prompt) {
         if (msg.role === 'system') {
           messageList.addSystem(msg.content);
         } else {
-          messageList.add(msg, 'input');
+          messageList.add(msg, nonSystemIndex < memoryCount ? 'memory' : 'input');
+          nonSystemIndex++;
         }
       }
 

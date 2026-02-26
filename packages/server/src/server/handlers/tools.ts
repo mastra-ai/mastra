@@ -1,4 +1,4 @@
-import { isVercelTool } from '@mastra/core/tools';
+import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 import { HTTPException } from '../http-exception';
@@ -17,6 +17,54 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { validateBody } from './utils';
+
+/**
+ * Resolves a schema value that may be a lazy function (as used by AI SDK provider tools).
+ * Provider tools use lazy schemas: `inputSchema` is a function that returns an AI SDK Schema
+ * object with `{ jsonSchema, validate, _type }`.
+ */
+function resolveSchema(schema: unknown): unknown {
+  if (typeof schema === 'function') {
+    try {
+      return schema();
+    } catch {
+      return undefined;
+    }
+  }
+  return schema;
+}
+
+/**
+ * Serializes a tool for API responses, handling both regular tools (with Zod schemas)
+ * and provider-defined tools (with AI SDK lazy schemas).
+ */
+function serializeTool(tool: any): any {
+  // Provider-defined tools (e.g. google.tools.googleSearch(), openai.tools.webSearch())
+  // have lazy inputSchema functions that return AI SDK Schema objects, not Zod schemas.
+  // We resolve them and use the jsonSchema property directly.
+  if (isProviderDefinedTool(tool)) {
+    const resolvedInput = resolveSchema(tool.inputSchema);
+    const resolvedOutput = resolveSchema(tool.outputSchema);
+    return {
+      ...tool,
+      inputSchema:
+        resolvedInput && typeof resolvedInput === 'object' && 'jsonSchema' in resolvedInput
+          ? stringify(resolvedInput.jsonSchema)
+          : undefined,
+      outputSchema:
+        resolvedOutput && typeof resolvedOutput === 'object' && 'jsonSchema' in resolvedOutput
+          ? stringify(resolvedOutput.jsonSchema)
+          : undefined,
+    };
+  }
+
+  return {
+    ...tool,
+    inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+    outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    requestContextSchema: tool.requestContextSchema ? stringify(zodToJsonSchema(tool.requestContextSchema)) : undefined,
+  };
+}
 
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
@@ -38,17 +86,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
-          // Cast to any since we're serializing to a generic Record<string, any>
-          // and the tool types have varying property availability
-          const tool = _tool as any;
-          acc[id] = {
-            ...tool,
-            inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-            outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-            requestContextSchema: tool.requestContextSchema
-              ? stringify(zodToJsonSchema(tool.requestContextSchema))
-              : undefined,
-          };
+          acc[id] = serializeTool(_tool);
           return acc;
         },
         {} as Record<string, any>,
@@ -86,16 +124,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Tool not found' });
       }
 
-      const serializedTool = {
-        ...tool,
-        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-        requestContextSchema: tool.requestContextSchema
-          ? stringify(zodToJsonSchema(tool.requestContextSchema))
-          : undefined,
-      };
-
-      return serializedTool;
+      return serializeTool(tool);
     } catch (error) {
       return handleError(error, 'Error getting tool');
     }
@@ -196,16 +225,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Tool not found' });
       }
 
-      const serializedTool = {
-        ...tool,
-        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-        requestContextSchema: tool.requestContextSchema
-          ? stringify(zodToJsonSchema(tool.requestContextSchema))
-          : undefined,
-      };
-
-      return serializedTool;
+      return serializeTool(tool);
     } catch (error) {
       return handleError(error, 'Error getting agent tool');
     }
