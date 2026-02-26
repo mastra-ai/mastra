@@ -11,7 +11,7 @@ export function isStreamDestroyedError(err: unknown, depth = 0): boolean {
   const e = err as any;
   if (e.code === 'ERR_STREAM_DESTROYED') return true;
   if (typeof e.message === 'string' && e.message.includes('stream was destroyed')) return true;
-  if (e.cause) return isStreamDestroyedError(e.cause, depth + 1);
-  if (Array.isArray(e.errors)) return e.errors.some((inner: unknown) => isStreamDestroyedError(inner, depth + 1));
+  if (e.cause && isStreamDestroyedError(e.cause, depth + 1)) return true;
+  if (Array.isArray(e.errors) && e.errors.some((inner: unknown) => isStreamDestroyedError(inner, depth + 1))) return true;
   return false;
 }

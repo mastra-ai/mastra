@@ -59,6 +59,28 @@ describe('isStreamDestroyedError', () => {
     expect(isStreamDestroyedError(42)).toBe(false);
   });
 
+  it('should detect ERR_STREAM_DESTROYED in AggregateError.errors', () => {
+    const streamError = new Error('stream was destroyed');
+    (streamError as any).code = 'ERR_STREAM_DESTROYED';
+    const otherError = new Error('unrelated error');
+    const aggregate = new AggregateError([otherError, streamError], 'Multiple errors');
+    expect(isStreamDestroyedError(aggregate)).toBe(true);
+  });
+
+  it('should return false for AggregateError without stream destroyed errors', () => {
+    const aggregate = new AggregateError([new Error('error 1'), new Error('error 2')], 'Multiple errors');
+    expect(isStreamDestroyedError(aggregate)).toBe(false);
+  });
+
+  it('should check .errors even when .cause exists and does not match', () => {
+    const streamError = new Error('stream was destroyed');
+    (streamError as any).code = 'ERR_STREAM_DESTROYED';
+    const error: any = new Error('wrapper');
+    error.cause = new Error('unrelated cause');
+    error.errors = [streamError];
+    expect(isStreamDestroyedError(error)).toBe(true);
+  });
+
   it('should handle deeply nested causes with depth limit', () => {
     // Build a chain deeper than the depth limit
     let error: any = new Error('stream was destroyed');
@@ -88,8 +110,8 @@ describe('uncaughtException handler integration', () => {
           if (!err || depth > 5) return false;
           if (err.code === 'ERR_STREAM_DESTROYED') return true;
           if (typeof err.message === 'string' && err.message.includes('stream was destroyed')) return true;
-          if (err.cause) return isStreamDestroyedError(err.cause, depth + 1);
-          if (Array.isArray(err.errors)) return err.errors.some(inner => isStreamDestroyedError(inner, depth + 1));
+          if (err.cause && isStreamDestroyedError(err.cause, depth + 1)) return true;
+          if (Array.isArray(err.errors) && err.errors.some(inner => isStreamDestroyedError(inner, depth + 1))) return true;
           return false;
         }
 

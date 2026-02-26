@@ -27,7 +27,7 @@ process.on('uncaughtException', error => {
   handleFatalError(error);
 });
 process.on('unhandledRejection', reason => {
-  if (reason instanceof Error && isStreamDestroyedError(reason)) return;
+  if (isStreamDestroyedError(reason)) return;
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
