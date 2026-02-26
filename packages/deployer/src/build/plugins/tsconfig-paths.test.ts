@@ -147,7 +147,7 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).toContain('hello');
     });
 
-    it('should not mark transitive dependencies of tsconfig-resolved cross-package imports as external (issue #12550)', async () => {
+    it('should resolve cross-package npm dependencies via tsconfig path aliases in dev mode', async () => {
       const mastraDir = join(tempDir, 'apps', 'mastra');
       const mastraSrcDir = join(mastraDir, 'src', 'mastra');
       const libDir = join(tempDir, 'packages', 'lib');
@@ -156,7 +156,6 @@ describe('tsconfig-paths plugin', () => {
       fs.mkdirSync(mastraSrcDir, { recursive: true });
       fs.mkdirSync(betterAuthDir, { recursive: true });
 
-      // Create tsconfig.json in the mastra app with path alias to lib package
       const tsConfigPath = join(mastraDir, 'tsconfig.json');
       fs.writeFileSync(
         tsConfigPath,
@@ -170,7 +169,6 @@ describe('tsconfig-paths plugin', () => {
         }),
       );
 
-      // Create the lib package's auth module that imports an external dependency
       fs.writeFileSync(
         join(libDir, 'package.json'),
         JSON.stringify({
@@ -186,7 +184,6 @@ describe('tsconfig-paths plugin', () => {
         `import { betterAuth } from 'better-auth';\nexport const auth = betterAuth({ database: 'test' });`,
       );
 
-      // Create the fake better-auth package (only in packages/lib/node_modules)
       fs.writeFileSync(
         join(betterAuthDir, 'package.json'),
         JSON.stringify({
@@ -198,14 +195,11 @@ describe('tsconfig-paths plugin', () => {
       );
       fs.writeFileSync(join(betterAuthDir, 'index.js'), `export function betterAuth(config) { return { config }; }`);
 
-      // Create the mastra entry file
       const indexFile = join(mastraSrcDir, 'index.ts');
       fs.writeFileSync(indexFile, `import { auth } from '@lib/auth';\nexport const mastra = { auth };`);
 
-      // Use tsConfigPaths with localResolve: true (same as dev mode)
       const plugin = tsConfigPaths({ tsConfigPath, localResolve: true });
 
-      // Build using rollup - this simulates the dev mode bundling
       const bundle = await rollup({
         logLevel: 'silent',
         input: indexFile,
