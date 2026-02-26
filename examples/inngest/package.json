@@ -23,7 +23,7 @@
     "@mastra/libsql": "1.0.0-beta.11",
     "@mastra/loggers": "1.0.0-beta.4",
     "@mastra/observability": "1.0.0-beta.10",
-    "inngest": "^3.49.0",
+    "inngest": "^3.50.0",
     "mastra": "1.0.0-beta.13",
     "zod": "^3.25.76"
   },

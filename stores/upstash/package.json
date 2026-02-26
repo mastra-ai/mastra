@@ -29,6 +29,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/redis": "workspace:*",
     "@upstash/redis": "^1.36.2",
     "@upstash/vector": "^1.2.2"
   },
@@ -47,7 +48,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.5-0 <2.0.0-0"
   },
   "files": [
     "dist",

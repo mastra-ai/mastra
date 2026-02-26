@@ -1,5 +1,6 @@
-import { Agent } from '@mastra/core/agent';
-import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
+import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
+import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
@@ -40,6 +41,8 @@ import {
   enhanceInstructionsResponseSchema,
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
+  observeAgentBodySchema,
+  observeAgentResponseSchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
@@ -1246,6 +1249,120 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
+});
+
+export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/observe',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: observeAgentBodySchema,
+  responseSchema: observeAgentResponseSchema,
+  summary: 'Observe agent stream',
+  description:
+    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
+    try {
+      // Verify agent exists and get its pubsub for stream subscription.
+      // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
+      // so we must subscribe to the agent's pubsub to receive the correct stream events.
+      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agentPubsub = isDurableAgentLike(agent) ? (agent as DurableAgentLike).pubsub : undefined;
+      const pubsub = agentPubsub ?? mastra.pubsub;
+
+      // Create a ReadableStream that subscribes to the agent stream topic
+      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const topic = AGENT_STREAM_TOPIC(runId);
+      let handleEvent: ((event: any) => void) | null = null;
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      // Idle timeout: close the stream if no events are received within 5 minutes.
+      // This prevents subscription leaks when an agent crashes without emitting a terminal event.
+      const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+      function cleanup(controller: ReadableStreamDefaultController) {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+        if (handleEvent) {
+          void pubsub.unsubscribe(topic, handleEvent);
+          handleEvent = null;
+        }
+        try {
+          controller.close();
+        } catch {
+          // Stream may already be closed
+        }
+      }
+
+      function resetIdleTimer(controller: ReadableStreamDefaultController) {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
+      }
+
+      const stream = new ReadableStream({
+        start(controller) {
+          // Wire up abortSignal for cleanup on client disconnect
+          if (abortSignal) {
+            if (abortSignal.aborted) {
+              cleanup(controller);
+              return;
+            }
+            abortSignal.addEventListener('abort', () => cleanup(controller), { once: true });
+          }
+
+          resetIdleTimer(controller);
+
+          handleEvent = (event: any) => {
+            const isTerminal = event.type === 'finish' || event.type === 'error';
+            try {
+              controller.enqueue(event);
+            } catch {
+              // Stream may be closed
+            }
+            if (isTerminal) {
+              cleanup(controller);
+            } else {
+              resetIdleTimer(controller);
+            }
+          };
+
+          // Subscribe with replay support
+          const subscribePromise =
+            offset !== undefined
+              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
+              : pubsub.subscribeWithReplay(topic, handleEvent);
+
+          subscribePromise.catch((error: any) => {
+            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+            if (idleTimer) {
+              clearTimeout(idleTimer);
+              idleTimer = null;
+            }
+            controller.error(error);
+          });
+        },
+        cancel() {
+          if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          }
+          if (handleEvent) {
+            void pubsub.unsubscribe(topic, handleEvent);
+            handleEvent = null;
+          }
+        },
+      });
+
+      return stream;
+    } catch (error) {
+      return handleError(error, 'error observing agent stream');
+    }
+  },
 });
 
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({

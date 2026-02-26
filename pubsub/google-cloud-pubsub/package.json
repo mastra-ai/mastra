@@ -32,7 +32,7 @@
     "@google-cloud/pubsub": "^5.2.3",
     "@inngest/realtime": "^0.4.6",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.44.2",
+    "inngest": "^3.50.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

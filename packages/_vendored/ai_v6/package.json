@@ -38,8 +38,8 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ai-sdk/gateway": "^3.0.0",
-    "@ai-sdk/provider": "^3.0.0",
-    "@ai-sdk/provider-utils": "^4.0.0",
+    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider-utils": "^4.0.15",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",
