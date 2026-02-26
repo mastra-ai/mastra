@@ -11,6 +11,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
+    currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',

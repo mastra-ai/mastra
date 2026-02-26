@@ -7,11 +7,30 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { fg, mastra, tintHex } from './theme.js';
+import { theme, mastra, tintHex, getThemeMode } from './theme.js';
 
 // Colors for OM modes
 const OBSERVER_COLOR = mastra.orange;
 const REFLECTOR_COLOR = mastra.pink;
+
+/**
+ * Lighten a color by blending toward white. factor 0 = original, 1 = white.
+ */
+function lighten(r: number, g: number, b: number, factor: number): [number, number, number] {
+  return [Math.floor(r + (255 - r) * factor), Math.floor(g + (255 - g) * factor), Math.floor(b + (255 - b) * factor)];
+}
+
+/**
+ * For light mode, purple and blue badge backgrounds are too dark.
+ * Lighten them slightly so they look better on light terminals.
+ */
+function adjustBadgeColor(r: number, g: number, b: number, modeColor: string): [number, number, number] {
+  if (getThemeMode() !== 'light') return [r, g, b];
+  if (modeColor === mastra.purple || modeColor === mastra.blue) {
+    return lighten(r, g, b, 0.25);
+  }
+  return [r, g, b];
+}
 
 /**
  * Update the status line at the bottom of the TUI.
@@ -62,15 +81,16 @@ export function updateStatusLine(state: TUIState): void {
         badgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
       }
     }
-    const [mr, mg, mb] = [
+    const [mr, mg, mb] = adjustBadgeColor(
       Math.floor(mcr * badgeBrightness),
       Math.floor(mcg * badgeBrightness),
       Math.floor(mcb * badgeBrightness),
-    ];
-    modeBadge = chalk.bgRgb(mr, mg, mb).hex(mastra.bg).bold(` ${badgeName.toLowerCase()} `);
+      modeColor,
+    );
+    modeBadge = chalk.bgRgb(mr, mg, mb).hex('#000000').bold(` ${badgeName.toLowerCase()} `);
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
-    modeBadge = fg('dim', badgeName) + ' ';
+    modeBadge = theme.fg('dim', badgeName) + ' ';
     modeBadgeWidth = badgeName.length + 1;
   }
 
@@ -115,7 +135,7 @@ export function updateStatusLine(state: TUIState): void {
   const styleModelId = (id: string): string => {
     if (!state.modelAuthStatus.hasAuth) {
       const envVar = state.modelAuthStatus.apiKeyEnvVar;
-      return fg('dim', id) + fg('error', ' ✗') + fg('muted', envVar ? ` (${envVar})` : ' (no key)');
+      return theme.fg('dim', id) + theme.fg('error', ' ✗') + theme.fg('muted', envVar ? ` (${envVar})` : ' (no key)');
     }
     // Tinted near-black background from mode color
     const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
@@ -136,11 +156,12 @@ export function updateStatusLine(state: TUIState): void {
     }
     if (modeColor) {
       // Idle state
-      const [r, g, b] = [
+      const [r, g, b] = adjustBadgeColor(
         parseInt(modeColor.slice(1, 3), 16),
         parseInt(modeColor.slice(3, 5), 16),
         parseInt(modeColor.slice(5, 7), 16),
-      ];
+        modeColor,
+      );
       const dim = 0.8;
       const fgStyled = chalk.rgb(Math.floor(r * dim), Math.floor(g * dim), Math.floor(b * dim)).bold(padded);
       return tintBg ? chalk.bgHex(tintBg)(fgStyled) : fgStyled;
@@ -171,16 +192,17 @@ export function updateStatusLine(state: TUIState): void {
         sBadgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
       }
     }
-    const [sr, sg, sb] = [
+    const [sr, sg, sb] = adjustBadgeColor(
       Math.floor(mcr * sBadgeBrightness),
       Math.floor(mcg * sBadgeBrightness),
       Math.floor(mcb * sBadgeBrightness),
-    ];
-    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex(mastra.bg).bold(` ${shortName} `);
+      modeColor,
+    );
+    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex('#000000').bold(` ${shortName} `);
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);
-    shortModeBadge = fg('dim', shortName) + ' ';
+    shortModeBadge = theme.fg('dim', shortName) + ' ';
     shortModeBadgeWidth = shortName.length + 1;
   }
 
@@ -244,7 +266,7 @@ export function updateStatusLine(state: TUIState): void {
     if (dirText) {
       parts.push({
         plain: dirText,
-        styled: fg('dim', dirText),
+        styled: theme.fg('dim', dirText),
       });
     }
     const totalPlain =

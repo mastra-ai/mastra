@@ -374,6 +374,191 @@ For automatic tool resumption to work:
 
 Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
+## Tool approval: Supervisor pattern
+
+The [supervisor pattern](/docs/agents/networks) lets a supervisor agent coordinate multiple subagents using `.stream()` or `.generate()`. The supervisor delegates tasks to subagents, which may use tools that require approval. When this happens, tool approvals properly propagate through the delegation chain -- the approval request surfaces at the supervisor level where you can handle it, regardless of which subagent triggered it.
+
+### How it works
+
+1. The supervisor agent delegates a task to a subagent.
+1. The subagent calls a tool that has `requireApproval: true` or uses `suspend()`.
+1. The approval request bubbles up through the delegation chain to the supervisor.
+1. You handle the approval or decline at the supervisor level.
+1. The decision propagates back down to the subagent, which continues or terminates accordingly.
+
+### Example
+
+The following example creates a subagent with a database lookup tool that requires approval. The supervisor delegates to this subagent, and when the tool triggers an approval request, it surfaces in the supervisor's stream as a `tool-call-approval` chunk. You then approve the tool call using `approveToolCall` with the stream's `runId`.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createTool } from '@mastra/core/tools'
+import { Memory } from '@mastra/memory'
+import { z } from 'zod'
+
+// subagent with approval-required tool
+const findUserTool = createTool({
+  id: 'find-user',
+  description: 'Finds user by ID in the database',
+  inputSchema: z.object({
+    userId: z.string(),
+  }),
+  outputSchema: z.object({
+    user: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    }),
+  }),
+  // highlight-next-line
+  requireApproval: true, // Requires approval before execution
+  execute: async input => {
+    const user = await database.findUser(input.userId)
+    return { user }
+  },
+})
+
+const dataAgent = new Agent({
+  id: 'data-agent',
+  name: 'Data Agent',
+  description: 'Handles database queries and user data retrieval',
+  model: 'openai/gpt-4o-mini',
+  tools: { findUserTool },
+})
+
+const supervisorAgent = new Agent({
+  id: 'supervisor',
+  name: 'Supervisor Agent',
+  instructions: `You coordinate data retrieval tasks.
+    Delegate to data-agent for user lookups.`,
+  model: 'openai/gpt-5.1',
+  agents: { dataAgent },
+  memory: new Memory(),
+})
+
+// When supervisor delegates to dataAgent and tool requires approval
+const stream = await supervisorAgent.stream('Find user with ID 12345')
+
+for await (const chunk of stream.fullStream) {
+  // highlight-next-line
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Tool requires approval:', chunk.payload.toolName)
+    console.log('Arguments:', chunk.payload.args)
+
+    // Approve the tool call
+    // highlight-start
+    const resumeStream = await supervisorAgent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: chunk.payload.toolCallId,
+    })
+    //highlight-end
+
+    // Process resumed stream
+    for await (const resumeChunk of resumeStream.textStream) {
+      process.stdout.write(resumeChunk)
+    }
+  }
+}
+```
+
+### Declining tool calls in supervisor pattern
+
+You can also decline tool calls at the supervisor level by calling `declineToolCall`. The supervisor will respond acknowledging the declined tool without executing it:
+
+```typescript
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Declining tool call:', chunk.payload.toolName)
+
+    // Decline the tool call
+    const declineStream = await supervisorAgent.declineToolCall({
+      runId: stream.runId,
+      toolCallId: chunk.payload.toolCallId,
+    })
+
+    // The supervisor will respond acknowledging the declined tool
+    for await (const declineChunk of declineStream.textStream) {
+      process.stdout.write(declineChunk)
+    }
+  }
+}
+```
+
+### Using suspend() in supervisor pattern
+
+Tools can also use [`suspend()`](#tool-approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does -- the suspension surfaces at the supervisor level:
+
+```typescript
+const conditionalTool = createTool({
+  id: 'conditional-operation',
+  description: 'Performs an operation that may require confirmation',
+  inputSchema: z.object({
+    operation: z.string(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    confirmed: z.boolean(),
+  }),
+  execute: async (input, context) => {
+    const { resumeData } = context?.agent ?? {}
+
+    if (!resumeData?.confirmed) {
+      return context?.agent?.suspend({
+        message: `Confirm: ${input.operation}?`,
+      })
+    }
+
+    // Proceed with operation
+    return await performOperation(input.operation)
+  },
+})
+
+// When using this tool through a subagent in supervisor pattern
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-suspended') {
+    console.log('Tool suspended:', chunk.payload.suspendPayload.message)
+
+    // Resume with confirmation
+    const resumeStream = await supervisorAgent.resumeStream(
+      { confirmed: true },
+      { runId: stream.runId },
+    )
+
+    for await (const resumeChunk of resumeStream.textStream) {
+      process.stdout.write(resumeChunk)
+    }
+  }
+}
+```
+
+### Tool approval with generate()
+
+Tool approval propagation also works with `generate()` in supervisor pattern:
+
+```typescript
+const output = await supervisorAgent.generate('Find user with ID 12345', {
+  maxSteps: 10,
+})
+
+if (output.finishReason === 'suspended') {
+  console.log('Tool requires approval:', output.suspendPayload.toolName)
+
+  // Approve
+  const result = await supervisorAgent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  })
+
+  console.log('Final result:', result.text)
+}
+```
+
+### Multi-level delegation
+
+Tool approvals propagate through multiple levels of delegation. For example, if a supervisor delegates to subagent A, which in turn delegates to subagent B that has a tool with `requireApproval: true`, the approval request still surfaces at the top-level supervisor. You handle the approval or decline there, and the result flows back down through the entire delegation chain to the tool that requested it.
+
 ## Related
 
 - [Using Tools](./using-tools)

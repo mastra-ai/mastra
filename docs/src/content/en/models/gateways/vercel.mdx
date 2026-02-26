@@ -9,7 +9,7 @@ description: "Use AI models through Vercel."
 
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
 
-Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 189 models through Mastra's model router.
+Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 199 models through Mastra's model router.
 
 Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers).
 
@@ -36,7 +36,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```bash
 # Use gateway API key
-VERCEL_API_KEY=your-gateway-key
+AI_GATEWAY_API_KEY=your-gateway-key
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
@@ -55,6 +55,7 @@ ANTHROPIC_API_KEY=ant-...
 | `alibaba/qwen3-235b-a22b-thinking` |
 | `alibaba/qwen3-coder` |
 | `alibaba/qwen3-coder-30b-a3b` |
+| `alibaba/qwen3-coder-next` |
 | `alibaba/qwen3-coder-plus` |
 | `alibaba/qwen3-embedding-0.6b` |
 | `alibaba/qwen3-embedding-4b` |
@@ -66,6 +67,8 @@ ANTHROPIC_API_KEY=ant-...
 | `alibaba/qwen3-next-80b-a3b-thinking` |
 | `alibaba/qwen3-vl-instruct` |
 | `alibaba/qwen3-vl-thinking` |
+| `alibaba/qwen3.5-flash` |
+| `alibaba/qwen3.5-plus` |
 | `amazon/nova-2-lite` |
 | `amazon/nova-lite` |
 | `amazon/nova-micro` |
@@ -84,6 +87,7 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-opus-4.6` |
 | `anthropic/claude-sonnet-4` |
 | `anthropic/claude-sonnet-4.5` |
+| `anthropic/claude-sonnet-4.6` |
 | `arcee-ai/trinity-large-preview` |
 | `arcee-ai/trinity-mini` |
 | `bfl/flux-kontext-max` |
@@ -114,6 +118,7 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemini-3-flash` |
 | `google/gemini-3-pro-image` |
 | `google/gemini-3-pro-preview` |
+| `google/gemini-3.1-pro-preview` |
 | `google/gemini-embedding-001` |
 | `google/imagen-4.0-fast-generate-001` |
 | `google/imagen-4.0-generate-001` |
@@ -136,6 +141,7 @@ ANTHROPIC_API_KEY=ant-...
 | `minimax/minimax-m2` |
 | `minimax/minimax-m2.1` |
 | `minimax/minimax-m2.1-lightning` |
+| `minimax/minimax-m2.5` |
 | `mistral/codestral` |
 | `mistral/codestral-embed` |
 | `mistral/devstral-2` |
@@ -189,6 +195,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.2-chat` |
 | `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
+| `openai/gpt-5.3-codex` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-20b` |
 | `openai/gpt-oss-safeguard-20b` |
@@ -228,6 +235,8 @@ ANTHROPIC_API_KEY=ant-...
 | `xai/grok-4.1-fast-non-reasoning` |
 | `xai/grok-4.1-fast-reasoning` |
 | `xai/grok-code-fast-1` |
+| `xai/grok-imagine-image` |
+| `xai/grok-imagine-image-pro` |
 | `xiaomi/mimo-v2-flash` |
 | `zai/glm-4.5` |
 | `zai/glm-4.5-air` |
@@ -237,4 +246,5 @@ ANTHROPIC_API_KEY=ant-...
 | `zai/glm-4.6v-flash` |
 | `zai/glm-4.7` |
 | `zai/glm-4.7-flashx` |
+| `zai/glm-5` |
 
