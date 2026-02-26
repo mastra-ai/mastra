@@ -355,11 +355,8 @@ describe('prepareToolsAndToolChoice', () => {
         description: 'A sub-agent tool',
         inputSchema: z.object({
           prompt: z.string().describe('The prompt for the agent'),
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
-          resumeData: z
-            .any()
-            .describe('The resumeData object created from the resumeSchema of suspended tool')
-            .optional(),
+          suspendedToolRunId: z.string().optional().default(''),
+          resumeData: z.any().optional(),
         }),
         execute: async () => 'result',
       });
