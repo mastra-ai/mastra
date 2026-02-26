@@ -41,6 +41,12 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
+export interface GrafanaCloudConfig {
+  instanceId?: string; // Required at runtime (GRAFANA_CLOUD_INSTANCE_ID)
+  apiToken?: string; // Required at runtime (GRAFANA_CLOUD_API_TOKEN)
+  endpoint?: string; // Required at runtime (GRAFANA_CLOUD_OTLP_ENDPOINT), e.g. 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp'
+}
+
 export interface CustomConfig {
   endpoint?: string; // Required at runtime
   headers?: Record<string, string>;
@@ -54,6 +60,7 @@ export type ProviderConfig =
   | { newrelic: NewRelicConfig }
   | { traceloop: TraceloopConfig }
   | { laminar: LaminarConfig }
+  | { grafanaCloud: GrafanaCloudConfig }
   | { custom: CustomConfig };
 
 export interface OtelExporterConfig extends BaseExporterConfig {
@@ -72,6 +79,19 @@ export interface OtelExporterConfig extends BaseExporterConfig {
 
   // Override or provide a custom span exporter
   exporter?: SpanExporter;
+
+  /**
+   * Signal enablement. All signals are enabled by default when their
+   * required OTEL packages are installed. Set to false to disable.
+   */
+  signals?: {
+    /** Enable trace export (default: true) */
+    traces?: boolean;
+    /** Enable log export (default: true) */
+    logs?: boolean;
+    /** Enable metric export (default: true) */
+    metrics?: boolean;
+  };
 }
 
 export interface SpanData {

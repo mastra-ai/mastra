@@ -105,6 +105,95 @@ describe('Provider Configurations', () => {
     });
   });
 
+  describe('Grafana Cloud', () => {
+    it('should configure Grafana Cloud with basic auth', () => {
+      const config = resolveProviderConfig({
+        grafanaCloud: {
+          instanceId: '1235678',
+          apiToken: 'glc_eyJvIjoiM',
+          endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+        },
+      });
+
+      const expectedAuth = Buffer.from('1235678:glc_eyJvIjoiM').toString('base64');
+      expect(config?.endpoint).toBe('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces');
+      expect(config?.headers['Authorization']).toBe(`Basic ${expectedAuth}`);
+      expect(config?.protocol).toBe('http/json');
+    });
+
+    it('should strip trailing slash from endpoint before appending path', () => {
+      const config = resolveProviderConfig({
+        grafanaCloud: {
+          instanceId: '1235678',
+          apiToken: 'glc_eyJvIjoiM',
+          endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp/',
+        },
+      });
+
+      expect(config?.endpoint).toBe('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces');
+    });
+
+    it('should not append /v1/traces if already present', () => {
+      const config = resolveProviderConfig({
+        grafanaCloud: {
+          instanceId: '1235678',
+          apiToken: 'glc_eyJvIjoiM',
+          endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces',
+        },
+      });
+
+      expect(config?.endpoint).toBe('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces');
+    });
+
+    it('should require instanceId', () => {
+      const original = process.env.GRAFANA_CLOUD_INSTANCE_ID;
+      delete process.env.GRAFANA_CLOUD_INSTANCE_ID;
+      try {
+        const config = resolveProviderConfig({
+          grafanaCloud: {
+            apiToken: 'glc_eyJvIjoiM',
+            endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+          },
+        });
+        expect(config).toBeNull();
+      } finally {
+        if (original !== undefined) process.env.GRAFANA_CLOUD_INSTANCE_ID = original;
+      }
+    });
+
+    it('should require apiToken', () => {
+      const original = process.env.GRAFANA_CLOUD_API_TOKEN;
+      delete process.env.GRAFANA_CLOUD_API_TOKEN;
+      try {
+        const config = resolveProviderConfig({
+          grafanaCloud: {
+            instanceId: '1235678',
+            endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+          },
+        });
+        expect(config).toBeNull();
+      } finally {
+        if (original !== undefined) process.env.GRAFANA_CLOUD_API_TOKEN = original;
+      }
+    });
+
+    it('should require endpoint', () => {
+      const original = process.env.GRAFANA_CLOUD_OTLP_ENDPOINT;
+      delete process.env.GRAFANA_CLOUD_OTLP_ENDPOINT;
+      try {
+        const config = resolveProviderConfig({
+          grafanaCloud: {
+            instanceId: '1235678',
+            apiToken: 'glc_eyJvIjoiM',
+          },
+        });
+        expect(config).toBeNull();
+      } finally {
+        if (original !== undefined) process.env.GRAFANA_CLOUD_OTLP_ENDPOINT = original;
+      }
+    });
+  });
+
   describe('Custom', () => {
     it('should configure custom provider', () => {
       const config = resolveProviderConfig({
