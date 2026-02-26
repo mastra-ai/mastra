@@ -2,6 +2,8 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import type { ProcessorState } from '../../processors';
+import { ProcessorRunner } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
@@ -26,15 +28,73 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
+  // Create a ProcessorRunner for data-* chunks from tool execution so they pass through
+  // output processors, just like tool-result chunks do in llm-mapping-step.ts.
+  const processorRunner =
+    rest.outputProcessors?.length && rest.logger
+      ? new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors: rest.outputProcessors,
+          logger: rest.logger,
+          agentName: agentId,
+          processorStates: rest.processorStates,
+        })
+      : undefined;
+
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
+      const requestContext = rest.requestContext ?? new RequestContext();
+
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+        // Process data-* chunks through output processors before enqueueing.
+        // Without this, custom chunks written via writer.custom() in tool execute functions
+        // bypass the output processor pipeline entirely.
+        let processedChunk = chunk;
+        if (chunk.type.startsWith('data-') && processorRunner && rest.processorStates) {
+          const {
+            part: processed,
+            blocked,
+            reason,
+            tripwireOptions,
+            processorId,
+          } = await processorRunner.processPart(
+            chunk,
+            rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
+            rest.modelSpanTracker?.getTracingContext(),
+            requestContext,
+            messageList,
+            0,
+          );
+
+          if (blocked) {
+            safeEnqueue(controller, {
+              type: 'tripwire',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                reason: reason || 'Output processor blocked content',
+                retry: tripwireOptions?.retry,
+                metadata: tripwireOptions?.metadata,
+                processorId,
+              },
+            } as ChunkType<OUTPUT>);
+            return;
+          }
+
+          if (processed) {
+            processedChunk = processed;
+          } else {
+            // Processor returned null/undefined — skip this chunk
+            return;
+          }
+        }
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
-        if (chunk.type.startsWith('data-') && messageId) {
+        if (processedChunk.type.startsWith('data-') && messageId) {
           const dataPart = {
-            type: chunk.type as `data-${string}`,
-            data: 'data' in chunk ? chunk.data : undefined,
+            type: processedChunk.type as `data-${string}`,
+            data: 'data' in processedChunk ? processedChunk.data : undefined,
           };
           const message: MastraDBMessage = {
             id: messageId,
@@ -49,7 +109,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
           messageList.add(message, 'response');
         }
-        safeEnqueue(controller, chunk);
+        safeEnqueue(controller, processedChunk);
       };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
@@ -110,8 +170,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       const run = await agenticLoopWorkflow.createRun({
         runId,
       });
-
-      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);

@@ -1126,4 +1126,122 @@ describe('PIIDetector', () => {
       expect(result).toEqual(messages); // Should return original messages on failure
     });
   });
+
+  describe('onDetection callback', () => {
+    it('should call onDetection with correct event shape when PII is detected', async () => {
+      const detectionResult = createMockPIIResult(['email'], [], null);
+      const model = setupMockModel(detectionResult);
+      const onDetection = vi.fn();
+
+      const detector = new PIIDetector({
+        model,
+        strategy: 'warn',
+        onDetection,
+      });
+
+      const messages = [createTestMessage('My email is test@example.com', 'user')];
+      await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect(onDetection).toHaveBeenCalledOnce();
+      expect(onDetection).toHaveBeenCalledWith({
+        detectionResult,
+        input: 'My email is test@example.com',
+        strategyApplied: 'warn',
+      });
+    });
+
+    it('should call onDetection even when no PII is detected', async () => {
+      const detectionResult = createMockPIIResult();
+      const model = setupMockModel(detectionResult);
+      const onDetection = vi.fn();
+
+      const detector = new PIIDetector({
+        model,
+        onDetection,
+      });
+
+      const messages = [createTestMessage('Hello world', 'user')];
+      await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect(onDetection).toHaveBeenCalledOnce();
+      expect(onDetection).toHaveBeenCalledWith(
+        expect.objectContaining({ strategyApplied: 'redact' }),
+      );
+    });
+
+    it('should await async onDetection callbacks', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const callOrder: string[] = [];
+
+      const onDetection = vi.fn(async () => {
+        callOrder.push('onDetection start');
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callOrder.push('onDetection end');
+      });
+
+      const detector = new PIIDetector({
+        model,
+        onDetection,
+      });
+
+      const messages = [createTestMessage('Hello world', 'user')];
+      await detector.processInput({ messages, abort: vi.fn() as any });
+
+      callOrder.push('processInput done');
+
+      expect(callOrder).toEqual(['onDetection start', 'onDetection end', 'processInput done']);
+    });
+
+    it('should call onDetection for each message separately', async () => {
+      const model = setupMockModel([createMockPIIResult(), createMockPIIResult(['email'], [], null)]);
+      const onDetection = vi.fn();
+
+      const detector = new PIIDetector({
+        model,
+        strategy: 'warn',
+        onDetection,
+      });
+
+      const messages = [
+        createTestMessage('Safe message', 'user', 'msg1'),
+        createTestMessage('Email: test@example.com', 'user', 'msg2'),
+      ];
+      await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect(onDetection).toHaveBeenCalledTimes(2);
+    });
+
+    it('should work correctly without onDetection provided', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model });
+
+      const messages = [createTestMessage('Hello world', 'user')];
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
+
+      expect(result).toEqual(messages);
+    });
+
+    it('should call onDetection in processOutputResult', async () => {
+      const detectionResult = createMockPIIResult(['email'], [], null);
+      const model = setupMockModel(detectionResult);
+      const onDetection = vi.fn();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const detector = new PIIDetector({
+        model,
+        strategy: 'warn',
+        onDetection,
+      });
+
+      const messages = [createTestMessage('My email is test@example.com', 'assistant')];
+      await detector.processOutputResult({ messages, abort: vi.fn() as any });
+
+      expect(onDetection).toHaveBeenCalledOnce();
+      expect(onDetection).toHaveBeenCalledWith(
+        expect.objectContaining({ strategyApplied: 'warn' }),
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
 });

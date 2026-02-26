@@ -88,6 +88,17 @@ export interface PromptInjectionOptions {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Optional callback invoked after each detection, whether or not injection was found.
+   * Receives the detection result, the original input text, and the strategy that was applied.
+   * May return a Promise, which will be awaited before continuing.
+   */
+  onDetection?: (event: {
+    detectionResult: PromptInjectionResult;
+    input: string;
+    strategyApplied: 'block' | 'warn' | 'filter' | 'rewrite';
+  }) => void | Promise<void>;
 }
 
 /**
@@ -108,6 +119,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private includeScores: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private onDetection?: PromptInjectionOptions['onDetection'];
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -126,6 +138,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.includeScores = options.includeScores ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.onDetection = options.onDetection;
 
     this.detectionAgent = new Agent({
       id: 'prompt-injection-detector',
@@ -161,6 +174,8 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
         const detectionResult = await this.detectPromptInjection(textContent, tracingContext);
         results.push(detectionResult);
+
+        await this.onDetection?.({ detectionResult, input: textContent, strategyApplied: this.strategy });
 
         if (this.isInjectionFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedInjection(message, detectionResult, this.strategy, abort);
