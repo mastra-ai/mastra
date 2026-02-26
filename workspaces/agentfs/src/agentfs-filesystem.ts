@@ -26,12 +26,14 @@ import {
   FileNotFoundError,
   FileExistsError,
   IsDirectoryError,
+  NotDirectoryError,
+  DirectoryNotFoundError,
   DirectoryNotEmptyError,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 
 import { mapError, hasCode } from './error-mapping';
-import { normalizePath, getParentPath, getBaseName, getExtension, joinPath } from './path-utils';
+import { normalizePath, getParentPath, getBaseName, joinPath } from './path-utils';
 
 /**
  * AgentFS filesystem provider configuration.
@@ -396,7 +398,6 @@ export class AgentFSFilesystem extends MastraFilesystem {
       // Verify it's a directory
       const st = await agent.fs.stat(normalized);
       if (!st.isDirectory()) {
-        const { NotDirectoryError } = await import('@mastra/core/workspace');
         throw new NotDirectoryError(normalized);
       }
 
@@ -438,10 +439,7 @@ export class AgentFSFilesystem extends MastraFilesystem {
 
       return entries;
     } catch (error: unknown) {
-      if (
-        error instanceof Error &&
-        (error.name === 'NotDirectoryError' || error.name === 'DirectoryNotFoundError')
-      ) {
+      if (error instanceof NotDirectoryError || error instanceof DirectoryNotFoundError) {
         throw error;
       }
       throw mapError(error, normalized, 'directory');

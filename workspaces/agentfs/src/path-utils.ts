@@ -46,16 +46,6 @@ export function getParentPath(path: string): string {
 }
 
 /**
- * Get the file extension (including the dot).
- * Returns empty string if no extension.
- */
-export function getExtension(filename: string): string {
-  const dotIndex = filename.lastIndexOf('.');
-  if (dotIndex <= 0) return '';
-  return filename.slice(dotIndex);
-}
-
-/**
  * Join path segments into a normalized path.
  */
 export function joinPath(base: string, name: string): string {
