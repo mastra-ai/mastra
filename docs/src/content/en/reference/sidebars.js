@@ -180,13 +180,10 @@ const sidebars = {
       type: 'category',
       label: 'Harness',
       collapsed: true,
+      customProps: {
+        tags: ['alpha'],
+      },
       items: [{ type: 'doc', id: 'harness/harness-class', label: 'Harness Class' }],
-    },
-    {
-      type: 'category',
-      label: 'Mastra Code',
-      collapsed: true,
-      items: [{ type: 'doc', id: 'mastra-code/createMastraCode', label: 'createMastraCode()' }],
     },
     {
       type: 'category',
