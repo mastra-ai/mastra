@@ -38,7 +38,8 @@ import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
-import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
+import { resolvePathPattern } from './glob';
+import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
 import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
@@ -713,9 +714,9 @@ export class Workspace<
    * Rebuild the search index from filesystem paths.
    * Used internally for auto-indexing on init.
    *
-   * Paths can be plain directories (e.g., '/docs') or glob patterns
-   * (e.g., '/docs/**\/*.md'). Glob patterns are resolved to a walk root
-   * via extractGlobBase, then files are filtered by the pattern.
+   * Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are
+   * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
     if (!this._searchEngine || !this._fs || paths.length === 0) {
@@ -725,27 +726,52 @@ export class Workspace<
     // Clear existing BM25 index
     this._searchEngine.clear();
 
-    // Index all files from specified paths
+    // Adapt filesystem readdir to the ReaddirEntry interface
+    const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+      const entries = await this._fs!.readdir(dir);
+      return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+    };
+
+    // Index all files from specified paths (track across patterns to avoid re-indexing overlaps)
+    const indexedPaths = new Set<string>();
     for (const pathOrGlob of paths) {
       try {
-        if (isGlobPattern(pathOrGlob)) {
-          // Glob pattern: walk from the base directory, filter with matcher
-          const walkRoot = extractGlobBase(pathOrGlob);
-          const matcher = createGlobMatcher(pathOrGlob);
-          const files = await this.getAllFiles(walkRoot);
-          for (const filePath of files) {
-            if (!matcher(filePath)) continue;
-            await this.indexFileForSearch(filePath);
+        const resolved = await resolvePathPattern(pathOrGlob, readdir);
+        const filesToIndex = new Set<string>();
+        const directoryRoots: string[] = [];
+        for (const entry of resolved) {
+          if (entry.type === 'file') {
+            filesToIndex.add(entry.path);
+            continue;
           }
-        } else {
-          // Plain path: recurse everything (existing behavior)
-          const files = await this.getAllFiles(pathOrGlob);
-          for (const filePath of files) {
-            await this.indexFileForSearch(filePath);
+          // Skip directories already covered by a parent directory
+          const alreadyCovered = directoryRoots.some(
+            root =>
+              entry.path === root || (root === '/' ? entry.path.startsWith('/') : entry.path.startsWith(`${root}/`)),
+          );
+          if (!alreadyCovered) directoryRoots.push(entry.path);
+        }
+        // Index direct file matches first so they aren't lost if a directory scan fails
+        for (const filePath of filesToIndex) {
+          if (indexedPaths.has(filePath)) continue;
+          await this.indexFileForSearch(filePath);
+          indexedPaths.add(filePath);
+        }
+        for (const dir of directoryRoots) {
+          try {
+            const files = await this.getAllFiles(dir);
+            for (const filePath of files) {
+              if (!indexedPaths.has(filePath)) {
+                await this.indexFileForSearch(filePath);
+                indexedPaths.add(filePath);
+              }
+            }
+          } catch {
+            // Skip directories that can't be read
           }
         }
       } catch {
-        // Skip paths that don't exist
+        // Skip paths that don't exist or can't be read
       }
     }
   }

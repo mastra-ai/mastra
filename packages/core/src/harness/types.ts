@@ -171,6 +171,12 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   modelUseCountProvider?: ModelUseCountProvider;
 
   /**
+   * Callback invoked when a model is selected via switchModel().
+   * Lets the app layer track and persist model usage for ranking.
+   */
+  modelUseCountTracker?: ModelUseCountTracker;
+
+  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
@@ -294,6 +300,12 @@ export type ModelAuthChecker = (provider: string) => boolean | undefined;
  * Return a map of model ID → use count.
  */
 export type ModelUseCountProvider = () => Record<string, number>;
+
+/**
+ * Callback invoked when a model is selected via switchModel().
+ * Lets the app layer track and persist model usage for ranking.
+ */
+export type ModelUseCountTracker = (modelId: string) => void;
 
 // =============================================================================
 // Harness State

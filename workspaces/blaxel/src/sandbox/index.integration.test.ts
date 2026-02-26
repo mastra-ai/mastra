@@ -474,6 +474,12 @@ if (hasBlaxelCredentials) {
         ...(options?.env && { env: options.env }),
       });
     },
+    createInvalidSandbox: () => {
+      return new BlaxelSandbox({
+        id: `bad-config-${Date.now()}`,
+        image: 'nonexistent/fake-image:latest',
+      });
+    },
     cleanupSandbox: async sandbox => {
       try {
         await sandbox._destroy();
