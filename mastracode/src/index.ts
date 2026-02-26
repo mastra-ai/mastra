@@ -100,7 +100,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager),
+    tools: createDynamicTools(mcpManager, config?.extraTools),
   });
 
   // Hooks
