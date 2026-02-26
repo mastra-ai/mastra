@@ -4071,4 +4071,239 @@ describe('MessageList', () => {
       expect(uiMessages[0].content).toBe('Content with empty parts');
     });
   });
+
+  describe('multi-step reasoning merge prevention', () => {
+    function makeAssistantMsg(id: string, parts: MastraDBMessage['content']['parts'], ts?: Date): MastraDBMessage {
+      return {
+        id,
+        role: 'assistant',
+        createdAt: ts ?? new Date(),
+        threadId,
+        resourceId,
+        content: { format: 2, parts },
+      };
+    }
+
+    function reasoningPart(text = 'thinking...') {
+      return {
+        type: 'reasoning' as const,
+        reasoning: '',
+        details: [{ type: 'text' as const, text }],
+      };
+    }
+
+    function toolCallPart(toolCallId: string, toolName: string) {
+      return {
+        type: 'tool-invocation' as const,
+        toolInvocation: {
+          state: 'call' as const,
+          toolCallId,
+          toolName,
+          args: {},
+        },
+      };
+    }
+
+    function toolResultPart(toolCallId: string, toolName: string, result: unknown) {
+      return {
+        type: 'tool-invocation' as const,
+        toolInvocation: {
+          state: 'result' as const,
+          toolCallId,
+          toolName,
+          args: {},
+          result,
+        },
+      };
+    }
+
+    it('should keep separate messages for each reasoning+tool-call step', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'Add 3+5 then multiply by 4' }, 'input');
+
+      const step1 = makeAssistantMsg('step-1', [reasoningPart('I should add first'), toolCallPart('call-1', 'add')]);
+      list.add(step1, 'response');
+
+      const step2 = makeAssistantMsg('step-2', [
+        reasoningPart('Now multiply the result'),
+        toolCallPart('call-2', 'multiply'),
+      ]);
+      list.add(step2, 'response');
+
+      const messages = list.get.all.db();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(2);
+
+      expect(assistantMessages[0].content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'reasoning' }),
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ toolName: 'add' }),
+          }),
+        ]),
+      );
+
+      expect(assistantMessages[1].content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'reasoning' }),
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ toolName: 'multiply' }),
+          }),
+        ]),
+      );
+    });
+
+    it('should still merge tool results into the same reasoning step', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'Add 3+5' }, 'input');
+
+      const step1Call = makeAssistantMsg('step-1', [reasoningPart(), toolCallPart('call-1', 'add')]);
+      list.add(step1Call, 'response');
+
+      const step1Result = makeAssistantMsg('step-1-result', [toolResultPart('call-1', 'add', { result: 8 })]);
+      list.add(step1Result, 'response');
+
+      const messages = list.get.all.db();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+
+      const parts = assistantMessages[0].content.parts;
+      expect(parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'reasoning' }),
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ state: 'result', toolCallId: 'call-1', result: { result: 8 } }),
+          }),
+        ]),
+      );
+    });
+
+    it('should still merge consecutive tool calls without reasoning', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'Add 3+5 then multiply by 4' }, 'input');
+
+      const step1 = makeAssistantMsg('no-reason-1', [toolCallPart('call-1', 'add')]);
+      list.add(step1, 'response');
+
+      const step2 = makeAssistantMsg('no-reason-2', [toolCallPart('call-2', 'multiply')]);
+      list.add(step2, 'response');
+
+      const messages = list.get.all.db();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].content.parts).toHaveLength(2);
+    });
+
+    it('should merge reasoning-only message into existing step', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'test' }, 'input');
+
+      const step1 = makeAssistantMsg('with-tool', [reasoningPart('step 1'), toolCallPart('call-1', 'add')]);
+      list.add(step1, 'response');
+
+      const reasoningOnly = makeAssistantMsg('just-reasoning', [reasoningPart('still thinking')]);
+      list.add(reasoningOnly, 'response');
+
+      const messages = list.get.all.db();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+    });
+
+    it('should handle full multi-step flow with results between steps', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'Add 3+5 then multiply by 4' }, 'input');
+
+      list.add(makeAssistantMsg('s1-call', [reasoningPart('add first'), toolCallPart('call-1', 'add')]), 'response');
+      list.add(makeAssistantMsg('s1-result', [toolResultPart('call-1', 'add', 8)]), 'response');
+
+      list.add(
+        makeAssistantMsg('s2-call', [reasoningPart('now multiply'), toolCallPart('call-2', 'multiply')]),
+        'response',
+      );
+      list.add(makeAssistantMsg('s2-result', [toolResultPart('call-2', 'multiply', 32)]), 'response');
+
+      const messages = list.get.all.db();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(2);
+
+      const step1 = assistantMessages[0];
+      expect(step1.content.parts.filter(p => p.type === 'reasoning')).toHaveLength(1);
+      expect(step1.content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ state: 'result', toolName: 'add', result: 8 }),
+          }),
+        ]),
+      );
+
+      const step2 = assistantMessages[1];
+      expect(step2.content.parts.filter(p => p.type === 'reasoning')).toHaveLength(1);
+      expect(step2.content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ state: 'result', toolName: 'multiply', result: 32 }),
+          }),
+        ]),
+      );
+    });
+
+    it('should keep three separate steps in a three-step reasoning chain', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add({ role: 'user', content: 'compute (3+5)*4-2' }, 'input');
+
+      list.add(makeAssistantMsg('s1', [reasoningPart('add'), toolCallPart('c1', 'add')]), 'response');
+      list.add(makeAssistantMsg('s1r', [toolResultPart('c1', 'add', 8)]), 'response');
+
+      list.add(makeAssistantMsg('s2', [reasoningPart('multiply'), toolCallPart('c2', 'multiply')]), 'response');
+      list.add(makeAssistantMsg('s2r', [toolResultPart('c2', 'multiply', 32)]), 'response');
+
+      list.add(makeAssistantMsg('s3', [reasoningPart('subtract'), toolCallPart('c3', 'subtract')]), 'response');
+      list.add(makeAssistantMsg('s3r', [toolResultPart('c3', 'subtract', 30)]), 'response');
+
+      const assistantMessages = list.get.all.db().filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(3);
+
+      expect(assistantMessages[0].content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ toolName: 'add', state: 'result' }),
+          }),
+        ]),
+      );
+      expect(assistantMessages[1].content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ toolName: 'multiply', state: 'result' }),
+          }),
+        ]),
+      );
+      expect(assistantMessages[2].content.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-invocation',
+            toolInvocation: expect.objectContaining({ toolName: 'subtract', state: 'result' }),
+          }),
+        ]),
+      );
+    });
+  });
 });

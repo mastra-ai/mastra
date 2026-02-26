@@ -72,8 +72,6 @@ export class MessageMerger {
       const incomingHasToolCalls = incomingMessage.content.parts?.some(p => p.type === 'tool-invocation');
       const latestHasToolCalls = latestMessage.content.parts?.some(p => p.type === 'tool-invocation');
 
-      // If the incoming message has BOTH reasoning AND tool calls, AND the latest has tool calls,
-      // this is a new step in multi-step reasoning - don't merge
       if (incomingHasReasoning && incomingHasToolCalls && latestHasToolCalls) {
         return false;
       }
