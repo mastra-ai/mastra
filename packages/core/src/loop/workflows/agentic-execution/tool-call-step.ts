@@ -365,7 +365,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !(isAgentTool || isWorkflowTool) && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
             : resumeData;
 
