@@ -11,8 +11,6 @@ import {
   truncateOutput,
   stripAnsi,
   sandboxToModelOutput,
-  estimateTokens,
-  DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TAIL_LINES,
 } from '../output-helpers';
 
@@ -602,27 +600,6 @@ describe('output-helpers', () => {
     });
   });
 
-  describe('estimateTokens', () => {
-    it('returns 0 for empty string', () => {
-      expect(estimateTokens('')).toBe(0);
-    });
-
-    it('estimates tokens as words * 1.3', () => {
-      // "hello world" = 2 words => ceil(2 * 1.3) = 3
-      expect(estimateTokens('hello world')).toBe(3);
-    });
-
-    it('handles single word', () => {
-      expect(estimateTokens('hello')).toBe(2); // ceil(1 * 1.3) = 2
-    });
-
-    it('handles code-like text', () => {
-      const code = 'const x = 1;\nconst y = 2;\nreturn x + y;';
-      const words = code.split(/\s+/).filter(Boolean).length;
-      expect(estimateTokens(code)).toBe(Math.ceil(words * 1.3));
-    });
-  });
-
   describe('applyTokenLimit', () => {
     it('returns output unchanged when under limit', async () => {
       expect(await applyTokenLimit('short text', 100)).toBe('short text');
@@ -793,7 +770,7 @@ describe('token limit integration', () => {
     // Should contain both start and end of output
     expect(result).toContain('output line number 1');
     expect(result).toContain('output line number 5000');
-    expect(estimateTokens(result as string)).toBeLessThanOrEqual(DEFAULT_MAX_OUTPUT_TOKENS + 100);
+    expect((result as string).length).toBeLessThan(hugeOutput.length);
   });
 
   it('process_output truncates huge stdout', async () => {

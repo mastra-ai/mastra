@@ -6,15 +6,6 @@ export const DEFAULT_TAIL_LINES = 200;
 /** Default estimated token limit for tool output. Safety net on top of line-based tail. */
 export const DEFAULT_MAX_OUTPUT_TOKENS = 3_000;
 
-/**
- * Estimate the number of tokens in a string using a word-count heuristic.
- * Sync fallback — use when async tiktoken init isn't practical.
- */
-export function estimateTokens(text: string): number {
-  const words = text.split(/\s+/).filter(Boolean).length;
-  return Math.ceil(words * 1.3);
-}
-
 // ---------------------------------------------------------------------------
 // ANSI stripping
 // ---------------------------------------------------------------------------
