@@ -5,6 +5,18 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
+interface SgNode {
+  text(): string;
+  range(): {
+    start: { index: number };
+    end: { index: number };
+  };
+  kind(): string;
+  children(): SgNode[];
+  findAll(query: unknown): SgNode[];
+  getMatch(name: string): SgNode | null;
+}
+
 const astSmartEditSchema = z.object({
   path: z.string().describe('File path relative to project root'),
   pattern: z.string().optional().describe('AST pattern to search for (supports $VARIABLE placeholders)'),
@@ -120,7 +132,7 @@ Examples:
         } else if (selector) {
           // Selector-based query (just return matches for now)
           const matches = astRoot.findAll(selector);
-          const matchInfo = matches.map((match: any) => ({
+          const matchInfo = matches.map((match: SgNode) => ({
             text: match.text(),
             range: match.range(),
             kind: match.kind(),
@@ -144,10 +156,16 @@ Examples:
           changes,
           modified: modifiedContent !== content,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (process.env.DEBUG === 'true' && error instanceof Error && error.stack) {
+          return {
+            error: message,
+            stack: error.stack,
+          };
+        }
         return {
-          error: error.message,
-          stack: error.stack,
+          error: message,
         };
       }
     },
@@ -194,7 +212,7 @@ function getLanguageFromPath(path: string): Lang {
 
 function addImport(
   content: string,
-  root: any,
+  root: SgNode,
   importSpec: { module: string; names: string[]; isDefault?: boolean },
 ): string {
   const { module, names, isDefault } = importSpec;
@@ -203,7 +221,7 @@ function addImport(
   const imports = root.findAll('ImportDeclaration');
 
   // Check if import already exists
-  const existingImport = imports.find((imp: any) => {
+  const existingImport = imports.find((imp: SgNode) => {
     const source = imp.getMatch('source')?.text();
     return source?.includes(module);
   });
@@ -235,7 +253,7 @@ function addImport(
   }
 }
 
-function removeImport(content: string, root: any, targetName: string): string {
+function removeImport(content: string, root: SgNode, targetName: string): string {
   const imports = root.findAll('ImportDeclaration');
 
   for (const imp of imports) {
@@ -256,7 +274,7 @@ function removeImport(content: string, root: any, targetName: string): string {
 
 function renameFunction(
   content: string,
-  root: any,
+  root: SgNode,
   oldName: string,
   newName: string,
 ): { content: string; count: number } {
@@ -346,7 +364,7 @@ function renameFunction(
 
 function renameVariable(
   content: string,
-  root: any,
+  root: SgNode,
   oldName: string,
   newName: string,
 ): { content: string; count: number } {
@@ -385,7 +403,7 @@ function renameVariable(
 
 function patternReplace(
   content: string,
-  root: any,
+  root: SgNode,
   pattern: string,
   replacement: string,
 ): { content: string; count: number } {

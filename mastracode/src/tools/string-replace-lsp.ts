@@ -102,8 +102,11 @@ Usage notes:
               diagnosticOutput = `\n\nLSP Diagnostics:\nNo errors or warnings`;
             }
           }
-        } catch {
-          // LSP errors are non-fatal — diagnostics just won't be available
+        } catch (lspError) {
+          // LSP errors are non-fatal — diagnostics just won't be available.
+          if (process.env.DEBUG === 'true') {
+            console.info('string_replace_lsp: failed to retrieve LSP diagnostics', lspError);
+          }
         }
 
         return {
