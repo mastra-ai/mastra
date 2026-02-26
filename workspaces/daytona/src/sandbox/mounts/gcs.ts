@@ -32,7 +32,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   const quotedMountPath = shellQuote(mountPath);
 
   // Install gcsfuse if not present
-  const checkResult = await runCommand(sandbox, 'which gcsfuse || echo "not found"');
+  const checkResult = await runCommand(sandbox, 'which gcsfuse || echo "not found"', { timeout: 30_000 });
   if (checkResult.output.includes('not found')) {
     logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
@@ -43,6 +43,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       'cat /etc/os-release 2>/dev/null | grep VERSION_CODENAME | cut -d= -f2 || echo bookworm',
     );
     const codename = codenameResult.output.trim() || 'bookworm';
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(codename)) {
+      throw new Error(`Invalid distro codename for gcsfuse repo: "${codename}"`);
+    }
     logger.debug(`${LOG_PREFIX} Detected distro codename: ${codename}`);
 
     // Ensure required tools and keyring directory exist
@@ -74,7 +77,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     }
 
     // Verify installation
-    const verifyResult = await runCommand(sandbox, 'which gcsfuse');
+    const verifyResult = await runCommand(sandbox, 'which gcsfuse', { timeout: 30_000 });
     if (verifyResult.exitCode !== 0) {
       throw new Error(
         `gcsfuse installation appeared to succeed but binary not found on PATH.\n` +
@@ -84,7 +87,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   }
 
   // Get user's uid/gid for proper file ownership
-  const idResult = await runCommand(sandbox, 'id -u && id -g');
+  const idResult = await runCommand(sandbox, 'id -u && id -g', { timeout: 30_000 });
   if (idResult.exitCode !== 0) {
     throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
@@ -101,10 +104,10 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     // Use a mount-specific key path to avoid races with concurrent mounts
     const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
     const keyPath = `/tmp/gcs-key-${mountHash}.json`;
-    await runCommand(sandbox, `sudo rm -f ${keyPath}`);
+    await runCommand(sandbox, `sudo rm -f ${keyPath}`, { timeout: 30_000 });
     await writeFile(sandbox, keyPath, config.serviceAccountKey!);
     // Make readable by root (sudo gcsfuse runs as root)
-    await runCommand(sandbox, `sudo chown root:root ${keyPath} && sudo chmod 600 ${keyPath}`);
+    await runCommand(sandbox, `sudo chown root:root ${keyPath} && sudo chmod 600 ${keyPath}`, { timeout: 30_000 });
 
     // Mount with credentials using --key-file flag
     // Use sudo for /dev/fuse access

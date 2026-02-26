@@ -87,7 +87,7 @@ export async function runCommand(
     command,
     undefined, // cwd
     undefined, // env
-    options?.timeout ? Math.ceil(options.timeout / 1000) : undefined,
+    options?.timeout !== undefined ? Math.ceil(options.timeout / 1000) : undefined,
   );
 
   return {

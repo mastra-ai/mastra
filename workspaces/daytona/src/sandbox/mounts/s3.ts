@@ -43,7 +43,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   }
 
   // Check if s3fs is installed
-  const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"');
+  const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"', { timeout: 30_000 });
   if (checkResult.output.includes('not found')) {
     logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
@@ -72,7 +72,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   }
 
   // Get user's uid/gid for proper file ownership
-  const idResult = await runCommand(sandbox, 'id -u && id -g');
+  const idResult = await runCommand(sandbox, 'id -u && id -g', { timeout: 30_000 });
   if (idResult.exitCode !== 0) {
     throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
@@ -104,9 +104,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     // Write credentials file (remove old one first to avoid permission issues)
     // s3fs requires the file to have 600 permissions (no "others" access)
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
-    await runCommand(sandbox, `sudo rm -f ${credentialsPath}`);
+    await runCommand(sandbox, `sudo rm -f ${credentialsPath}`, { timeout: 30_000 });
     await writeFile(sandbox, credentialsPath, credentialsContent);
-    await runCommand(sandbox, `chmod 600 ${credentialsPath}`);
+    await runCommand(sandbox, `chmod 600 ${credentialsPath}`, { timeout: 30_000 });
   }
 
   // Build mount options
