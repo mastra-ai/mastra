@@ -47,6 +47,7 @@ The OtelBridge provides two-way integration:
 - Creates native OTEL spans for Mastra operations (agents, LLM calls, tools, workflows)
 - Maintains proper parent-child relationships in distributed traces
 - Allows OTEL-instrumented code (HTTP clients, database calls) within Mastra operations to nest correctly
+- Forwards Mastra log events to the globally-registered OTEL `LoggerProvider`. Logs that originate inside a Mastra span are emitted under that span's OTEL context so backends correlate them with the trace. If no `LoggerProvider` is registered, log emission is a silent no-op.
 
 ## Installation
 
@@ -63,6 +64,7 @@ The bridge works with your existing OpenTelemetry setup. Depending on your confi
 - `@opentelemetry/exporter-trace-otlp-grpc` - OTLP exporter (gRPC)
 - `@opentelemetry/sdk-trace-base` - Base tracing SDK (for BatchSpanProcessor, etc.)
 - `@opentelemetry/core` - Core utilities (for W3CTraceContextPropagator, etc.)
+- `@opentelemetry/sdk-logs` and an OTLP log exporter (e.g. `@opentelemetry/exporter-logs-otlp-http`) - Required if you want the bridge to forward Mastra log events too
 
 ## Configuration
 
@@ -125,6 +127,29 @@ export const mastra = new Mastra({
 ```
 
 No Mastra exporters are required when using the bridge — traces are sent via your OTEL SDK configuration. You can optionally add Mastra exporters if you want to send traces to additional destinations.
+
+### Forwarding logs (optional)
+
+The bridge also forwards Mastra log events to the globally-registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a `logRecordProcessor` on `NodeSDK`:
+
+```typescript title="instrumentation.ts"
+import { NodeSDK } from '@opentelemetry/sdk-node'
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
+
+const sdk = new NodeSDK({
+  // ...trace config as usual
+  logRecordProcessor: new BatchLogRecordProcessor(
+    new OTLPLogExporter({
+      url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+    }),
+  ),
+})
+```
+
+Logs that originate inside a Mastra span are emitted under that span's OTEL context, so backends like Datadog, Grafana, and Honeycomb correlate them with the surrounding trace automatically. Logs without trace context fall through to the currently active OTEL context.
+
+If you do not register a `LoggerProvider`, log emission is a silent no-op — traces continue to work as configured.
 
 ### Running Your Application
 
