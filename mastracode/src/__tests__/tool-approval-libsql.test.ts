@@ -119,10 +119,10 @@ describe('tool approval with LibSQLStore via Harness', () => {
       harness.subscribe(event => {
         if (event.type === 'tool_approval_required') {
           // Must be async — pendingApprovalResolve is set after emit returns
-          setTimeout(() => {
+          queueMicrotask(() => {
             harness.respondToToolApproval({ decision: 'approve' });
             resolve();
-          }, 10);
+          });
         }
       });
     });
