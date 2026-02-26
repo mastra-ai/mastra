@@ -4,6 +4,7 @@ import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingOptions } from '../observability/types';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
@@ -93,6 +94,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  private currentTracingOptions: TracingOptions | undefined = undefined;
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -1059,9 +1061,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   async sendMessage({
     content,
     images,
+    tracingOptions,
   }: {
     content: string;
     images?: Array<{ data: string; mimeType: string }>;
+    tracingOptions?: TracingOptions;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1070,6 +1074,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
+    this.currentTracingOptions = tracingOptions;
     const agent = this.getCurrentAgent();
 
     this.emit({ type: 'agent_start' });
@@ -1086,6 +1091,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         maxSteps: 1000,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
+        ...(tracingOptions ? { tracingOptions } : {}),
       };
 
       streamOptions.toolsets = await this.buildToolsets(requestContext);
@@ -1141,7 +1147,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next });
+        await this.sendMessage({ content: next, tracingOptions });
+      }
+
+      if (this.currentOperationId === operationId) {
+        this.currentTracingOptions = undefined;
       }
     }
   }
@@ -1856,6 +1866,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       abortSignal: this.abortController.signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
+      ...(this.currentTracingOptions ? { tracingOptions: this.currentTracingOptions } : {}),
     });
 
     return await this.processStream(response);
@@ -1880,6 +1891,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       abortSignal: this.abortController.signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
+      ...(this.currentTracingOptions ? { tracingOptions: this.currentTracingOptions } : {}),
     });
 
     return await this.processStream(response);
