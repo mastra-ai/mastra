@@ -15,14 +15,13 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 ## Prerequisites
 
 - Node.js >= 22.13.0
-- pnpm
 - A [GitHub Personal Access Token](https://github.com/settings/tokens) (read-only scope)
 - An [Anthropic API Key](https://console.anthropic.com/)
 
 ## Getting started
 
 ```shell
-pnpm install
+npm install
 cp .env.example .env
 ```
 
@@ -38,7 +37,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 Start the dev server:
 
 ```shell
-pnpm run dev
+npm run dev
 ```
 
 Open [http://localhost:4111](http://localhost:4111) to access Mastra Studio.
