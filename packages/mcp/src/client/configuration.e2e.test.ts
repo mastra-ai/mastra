@@ -928,8 +928,8 @@ describe('MCPClient', () => {
         },
       });
 
-      // Try loading tools (will currently fail, but in any case test disconnect resilience)
-      await mixedMcp.listTools().catch(() => {});
+      // Load tools to establish connections before testing disconnect
+      await mixedMcp.listTools();
 
       // disconnect should not throw even if some servers had issues
       await expect(mixedMcp.disconnect()).resolves.toBeUndefined();
