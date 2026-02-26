@@ -552,7 +552,15 @@ export class ProcessorRunner {
               reason,
               tripwireOptions,
               processorId,
-            } = await this.processPart(value, processorStates, observabilityContext, undefined, undefined, 0, streamWriter);
+            } = await this.processPart(
+              value,
+              processorStates,
+              observabilityContext,
+              undefined,
+              undefined,
+              0,
+              streamWriter,
+            );
 
             if (blocked) {
               // Log that part was blocked

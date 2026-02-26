@@ -2036,19 +2036,14 @@ export class Agent<
    * that would otherwise only run in the v5 agentic loop.
    * @internal
    */
-  private async __runProcessInputStep({
-    requestContext,
-    tracingContext,
-    messageList,
-    stepNumber = 0,
-    processorStates,
-  }: {
-    requestContext: RequestContext;
-    tracingContext: TracingContext;
-    messageList: MessageList;
-    stepNumber?: number;
-    processorStates?: Map<string, ProcessorState>;
-  }): Promise<{
+  private async __runProcessInputStep(
+    args: Partial<ObservabilityContext> & {
+      requestContext: RequestContext;
+      messageList: MessageList;
+      stepNumber?: number;
+      processorStates?: Map<string, ProcessorState>;
+    },
+  ): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -2057,6 +2052,9 @@ export class Agent<
       processorId?: string;
     };
   }> {
+    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
     if (this.#inputProcessors || this.#memory) {
@@ -2071,7 +2069,7 @@ export class Agent<
           messageList,
           stepNumber,
           steps: [],
-          tracingContext,
+          ...observabilityContext,
           requestContext,
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.

@@ -2959,8 +2959,7 @@ export class Run<
             initialState: TState;
           }) & {
         requestContext?: RequestContext<TRequestContext>;
-      } & WorkflowRunStartOptions &
-        Partial<ObservabilityContext>,
+      } & WorkflowRunStartOptions,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start(args);
   }
@@ -2988,8 +2987,7 @@ export class Run<
             initialState: TState;
           }) & {
         requestContext?: RequestContext<TRequestContext>;
-      } & WorkflowRunStartOptions &
-        Partial<ObservabilityContext>,
+      } & WorkflowRunStartOptions,
   ): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {

@@ -6,14 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type {
-  AnySpan,
-  ObservabilityContext,
-  TracingContext,
-  TracingOptions,
-  TracingPolicy,
-  TracingProperties,
-} from '../observability';
+import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -31,14 +24,13 @@ export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
  */
 export type WorkflowRunStartOptions = {
   outputWriter?: OutputWriter;
-  tracingContext?: TracingContext;
   tracingOptions?: TracingOptions;
   outputOptions?: {
     includeState?: boolean;
     includeResumeLabels?: boolean;
   };
   perStep?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';

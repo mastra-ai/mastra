@@ -122,12 +122,13 @@ export interface AgentLegacyCapabilities {
     };
   }>;
   /** Run processInputStep phase on input processors (for legacy path compatibility) */
-  __runProcessInputStep(args: {
-    requestContext: RequestContext;
-    tracingContext: TracingContext;
-    messageList: MessageList;
-    stepNumber?: number;
-  }): Promise<{
+  __runProcessInputStep(
+    args: Partial<ObservabilityContext> & {
+      requestContext: RequestContext;
+      messageList: MessageList;
+      stepNumber?: number;
+    },
+  ): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -335,7 +336,7 @@ export class AgentLegacyHandler {
           if (!tripwire) {
             const inputStepResult = await this.capabilities.__runProcessInputStep({
               requestContext,
-              tracingContext: innerTracingContext,
+              ...innerObservabilityContext,
               messageList,
               stepNumber: 0,
             });
@@ -443,7 +444,7 @@ export class AgentLegacyHandler {
         if (!tripwire) {
           const inputStepResult = await this.capabilities.__runProcessInputStep({
             requestContext,
-            tracingContext: innerTracingContext,
+            ...innerObservabilityContext,
             messageList,
             stepNumber: 0,
           });
