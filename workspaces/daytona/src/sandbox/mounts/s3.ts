@@ -41,23 +41,17 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     // The fuse package's post-install script may fail in containers (e.g. can't run modprobe,
     // can't set SUID). Use || true so the overall command succeeds even if dpkg exits non-zero,
     // then verify the binary is actually present below.
-    await run(
-      'sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1 || true',
-      120_000,
-    );
-
-    // The fuse post-install script may fail to set the SUID bit on fusermount.
-    // Set it explicitly so non-root processes can call fusermount.
-    await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
+    await run('sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1 || true', 120_000);
 
     const s3fsCheck = await run('which s3fs 2>/dev/null || echo "not found"');
     if (s3fsCheck.stdout.includes('not found')) {
       throw new Error('Failed to install s3fs: binary not found after install attempt');
     }
-  } else {
-    // Ensure fusermount SUID is set even if the fuse package was previously installed in a broken state
-    await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
   }
+
+  // The fuse post-install script may fail to set the SUID bit on fusermount.
+  // Set it explicitly so non-root processes can call fusermount.
+  await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
 
   // Get uid/gid for proper file ownership
   const idResult = await run('id -u && id -g');
@@ -76,9 +70,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
   // These are no-ops if already configured.
-  await run(`sudo chmod a+rw /dev/fuse 2>/dev/null || true`);
   await run(
-    `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
+    `sudo chmod a+rw /dev/fuse 2>/dev/null || true; ` +
+      `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
   );
 
   if (hasCredentials) {
@@ -100,10 +94,6 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   // Requires user_allow_other in /etc/fuse.conf for non-root mounts.
   mountOptions.push('allow_other');
 
-  // nonempty: allow mounting on a non-empty directory. We do our own emptiness check
-  // in mount() before calling here, so s3fs's built-in check is redundant.
-  mountOptions.push('nonempty');
-
   if (uid && gid) {
     mountOptions.push(`uid=${uid}`, `gid=${gid}`);
   }
@@ -123,21 +113,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3: ${hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd}`);
 
-  try {
-    const result = await run(mountCmd, 60_000);
-    logger.debug(`${LOG_PREFIX} s3fs result:`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
-    }
-  } catch (error: unknown) {
-    const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
-    const stderr = errorObj.result?.stderr || '';
-    const stdout = errorObj.result?.stdout || '';
-    logger.error(`${LOG_PREFIX} s3fs error:`, { stderr, stdout, error: String(error) });
-    throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
+  const result = await run(mountCmd, 60_000);
+  logger.debug(`${LOG_PREFIX} s3fs result:`, { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr });
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
   }
 }

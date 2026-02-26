@@ -59,11 +59,6 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     if (installResult.exitCode !== 0) {
       throw new Error(`Failed to install gcsfuse: ${installResult.stderr || installResult.stdout}`);
     }
-
-    const gcsfuseCheck = await run('which gcsfuse 2>/dev/null || echo "not found"');
-    if (gcsfuseCheck.stdout.includes('not found')) {
-      throw new Error('Failed to install gcsfuse: binary not found after install attempt');
-    }
   }
 
   // Get uid/gid for proper file ownership
@@ -73,9 +68,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
   // These are no-ops if already configured.
-  await run(`sudo chmod a+rw /dev/fuse 2>/dev/null || true`);
   await run(
-    `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
+    `sudo chmod a+rw /dev/fuse 2>/dev/null || true; ` +
+      `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
   );
 
   const hasCredentials = !!config.serviceAccountKey;
@@ -97,21 +92,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
 
   logger.debug(`${LOG_PREFIX} Mounting GCS: ${mountCmd}`);
 
-  try {
-    const result = await run(mountCmd, 60_000);
-    logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
-    }
-  } catch (error: unknown) {
-    const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
-    const stderr = errorObj.result?.stderr || '';
-    const stdout = errorObj.result?.stdout || '';
-    logger.error(`${LOG_PREFIX} gcsfuse error:`, { stderr, stdout, error: String(error) });
-    throw new Error(`Failed to mount GCS bucket: ${stderr || stdout || error}`);
+  const result = await run(mountCmd, 60_000);
+  logger.debug(`${LOG_PREFIX} gcsfuse result:`, { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr });
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
   }
 }
