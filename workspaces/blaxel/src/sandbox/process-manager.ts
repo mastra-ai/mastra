@@ -145,8 +145,6 @@ export interface BlaxelProcessManagerOptions {
  * Uses the Blaxel SDK's process API for background process management.
  */
 export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
-  private _nextPid = 1;
-
   constructor(opts: BlaxelProcessManagerOptions = {}) {
     super({ env: opts.env });
   }
@@ -170,16 +168,19 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
         ...(options.timeout && { timeout: Math.ceil(options.timeout / 1000) }),
       });
 
+      // Blaxel PIDs are numeric strings (e.g. "412") — parse to number for ProcessHandle.
+      // Keep the original string as _identifier for SDK calls (streamLogs, get, kill).
       const identifier = result.pid;
-      const pid = this._nextPid++;
+      const pid = parseInt(identifier, 10);
       const handle = new BlaxelProcessHandle(pid, identifier, blaxel, Date.now(), options);
 
       // Start streaming logs — route to handle's emitters
       const streamControl = blaxel.process.streamLogs(identifier, {
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
-        onError: () => {
-          // Stream ends when process is killed or errors out — swallow
+        onError: (err: Error | string) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          handle.emitStderr(msg);
         },
       });
 
