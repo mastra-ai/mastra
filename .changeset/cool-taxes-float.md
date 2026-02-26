@@ -2,11 +2,18 @@
 '@mastra/core': patch
 ---
 
----
-'@mastra/core': patch
----
+Added optional `tracingOptions` parameter to `Harness.sendMessage()` so that traces from Harness interactions are properly linked in observability tools like Datadog instead of appearing as disconnected entries.
 
-Added optional `tracingOptions` parameter to `Harness.sendMessage()`. Agent operations initiated through the Harness now properly link to parent traces in your observability tools, ensuring complete trace visibility.
+```ts
+await harness.sendMessage({
+  content: 'Hello!',
+  tracingOptions: {
+    traceId: 'abc123',
+    parentSpanId: 'def456',
+    metadata: { userId: 'u-1' },
+    tags: ['production'],
+  },
+});
+```
 
-**Example:**
-
+See [#13540](https://github.com/mastra-ai/mastra/issues/13540).
