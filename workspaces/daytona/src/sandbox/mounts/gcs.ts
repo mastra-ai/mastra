@@ -104,10 +104,12 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     // Use a mount-specific key path to avoid races with concurrent mounts
     const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
     const keyPath = `/tmp/gcs-key-${mountHash}.json`;
-    await runCommand(sandbox, `sudo rm -f ${keyPath}`, { timeout: 30_000 });
+    await runCommand(sandbox, `sudo rm -f ${shellQuote(keyPath)}`, { timeout: 30_000 });
     await writeFile(sandbox, keyPath, config.serviceAccountKey!);
     // Make readable by root (sudo gcsfuse runs as root)
-    await runCommand(sandbox, `sudo chown root:root ${keyPath} && sudo chmod 600 ${keyPath}`, { timeout: 30_000 });
+    await runCommand(sandbox, `sudo chown root:root ${shellQuote(keyPath)} && sudo chmod 600 ${shellQuote(keyPath)}`, {
+      timeout: 30_000,
+    });
 
     // Mount with credentials using --key-file flag
     // Use sudo for /dev/fuse access

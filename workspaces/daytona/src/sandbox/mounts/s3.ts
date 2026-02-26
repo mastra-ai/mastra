@@ -104,9 +104,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     // Write credentials file (remove old one first to avoid permission issues)
     // s3fs requires the file to have 600 permissions (no "others" access)
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
-    await runCommand(sandbox, `sudo rm -f ${credentialsPath}`, { timeout: 30_000 });
+    await runCommand(sandbox, `sudo rm -f ${shellQuote(credentialsPath)}`, { timeout: 30_000 });
     await writeFile(sandbox, credentialsPath, credentialsContent);
-    await runCommand(sandbox, `chmod 600 ${credentialsPath}`, { timeout: 30_000 });
+    await runCommand(sandbox, `chmod 600 ${shellQuote(credentialsPath)}`, { timeout: 30_000 });
   }
 
   // Build mount options
