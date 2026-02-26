@@ -882,7 +882,7 @@ describe('WorkspaceSkillsImpl with VersionedSkillSource', () => {
 
   it('should read references through versioned source', async () => {
     const { workspaceSkills, skillARef } = createIntegrationSetup();
-    const refContent = await workspaceSkills.getReference('brand-guidelines', 'colors.md');
+    const refContent = await workspaceSkills.getReference('brand-guidelines', 'references/colors.md');
 
     expect(refContent).not.toBeNull();
     expect(refContent).toBe(skillARef);

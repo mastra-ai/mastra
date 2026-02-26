@@ -151,6 +151,7 @@ export const llmIterationOutputSchema = z.object({
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
+  isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
 });
 
 export const toolCallInputSchema = z.object({

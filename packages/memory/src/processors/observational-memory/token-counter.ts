@@ -98,6 +98,8 @@ export class TokenCounter {
           } else if (typeof part.type === 'string' && part.type.startsWith('data-')) {
             // Skip data-* parts (e.g. data-om-activation, data-om-buffering-start, etc.)
             // These are OM metadata parts that are never sent to the LLM.
+          } else if (part.type === 'reasoning') {
+            // Skip reasoning parts (not sent to the model context).
           } else {
             tokenString += JSON.stringify(part);
           }
