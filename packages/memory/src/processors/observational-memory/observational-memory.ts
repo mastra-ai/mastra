@@ -1086,6 +1086,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
+    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
+      model === undefined || model === 'default';
+
+    const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
+    const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
+
+    const observationDefaultMaxOutputTokens =
+      config.observation?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(observationSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
+        : undefined);
+
+    const reflectionDefaultMaxOutputTokens =
+      config.reflection?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(reflectionSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
+        : undefined);
+
     // Total context budget when shared budget is enabled
     const totalBudget = messageTokens + observationTokens;
 
@@ -1132,9 +1150,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.observation?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
-        maxOutputTokens:
-          config.observation?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens,
+        ...(observationDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: observationDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
       maxTokensPerBatch:
@@ -1169,9 +1187,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.reflection?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
-        maxOutputTokens:
-          config.reflection?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
+        ...(reflectionDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
       bufferActivation: asyncBufferingDisabled

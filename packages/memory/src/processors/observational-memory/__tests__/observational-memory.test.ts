@@ -4153,6 +4153,34 @@ describe('Model Requirement', () => {
   });
 });
 
+describe('Model Settings Defaults', () => {
+  it('should default maxOutputTokens when using model: "default"', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'default',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+  });
+
+  it('should not default maxOutputTokens for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
+  });
+});
+
 describe('Async Buffering Config Validation', () => {
   it('should throw if async buffering is explicitly enabled with shareTokenBudget', () => {
     expect(
