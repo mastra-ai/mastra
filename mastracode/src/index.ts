@@ -1,8 +1,6 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
-import { noopLogger } from '@mastra/core/logger';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -97,21 +95,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
 
   // Agent
-  const codeAgentInstance = new Agent({
+  const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager),
   });
-
-  const mastraInstance = new Mastra({
-    agents: { codeAgentInstance },
-    logger: noopLogger,
-    storage,
-  });
-
-  const codeAgent = mastraInstance.getAgent('codeAgentInstance');
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');

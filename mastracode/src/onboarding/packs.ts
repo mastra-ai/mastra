@@ -56,7 +56,7 @@ export function getAvailableModePacks(
 ): ModePack[] {
   const packs: ModePack[] = [];
 
-  const openaiCodex = 'openai/gpt-5.2-codex';
+  const openaiCodex = 'openai/gpt-5.3-codex';
   const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-6' : 'anthropic/claude-sonnet-4-5';
 
   // Varied — needs both Anthropic + OpenAI.  Cerebras is nice-to-have; fall

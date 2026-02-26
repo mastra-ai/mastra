@@ -11,26 +11,36 @@ Mastra Code is configured through project-level files, global settings, and envi
 
 ## Authentication
 
-Mastra Code authenticates with AI providers through OAuth. Run `/login` in the TUI to start the flow.
+Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
 
-### Supported providers
+### API keys
+
+The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GOOGLE_GENERATIVE_AI_API_KEY=...
+export DEEPSEEK_API_KEY=...
+export CEREBRAS_API_KEY=...
+```
+
+Mastra Code uses Mastra's [model router](/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
+
+### OAuth login (optional)
+
+If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
-OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location).
+OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location). During onboarding, you can skip the OAuth step if you already have API keys configured.
 
-### Model routing
+### Anthropic OAuth warning
 
-For providers not covered by OAuth, Mastra Code uses Mastra's [model router](/models), which auto-detects API keys from environment variables:
-
-```sh
-export OPENAI_API_KEY=sk-...
-export ANTHROPIC_API_KEY=sk-ant-...
-export GOOGLE_GENERATIVE_AI_API_KEY=...
-```
+Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.
 
 ## MCP servers
 
@@ -252,10 +262,10 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 ### Detection order
 
 1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
-2. Persisted setting from `/theme` command (stored in `settings.json`)
-3. OSC 11 query — asks your terminal for its actual background color
-4. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
-5. Falls back to dark theme
+1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. OSC 11 query — asks your terminal for its actual background color
+1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
+1. Falls back to dark theme
 
 ### Switching themes
 

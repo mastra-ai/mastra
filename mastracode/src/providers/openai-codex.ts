@@ -42,33 +42,51 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
-/**
- * Middleware for OpenAI Codex - handles any special transformations needed
- */
-const openaiCodexMiddleware: LanguageModelMiddleware = {
-  specificationVersion: 'v3',
-  transformParams: async ({ params }) => {
-    // Remove topP if temperature is set (OpenAI doesn't like both)
-    if (params.temperature) {
-      delete params.topP;
-    }
+/** Valid thinking level values. */
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
-    // Codex API requires specific settings via providerOptions
-    // Use type assertion to satisfy JSONValue constraints
-    params.providerOptions = {
-      ...params.providerOptions,
-      openai: {
-        ...(params.providerOptions?.openai ?? {}),
-        // Codex API requires instructions
-        instructions: CODEX_INSTRUCTIONS,
-        // Codex API requires store to be false
-        store: false,
-      },
-    } as typeof params.providerOptions;
-
-    return params;
-  },
+// Map thinkingLevel state values to OpenAI reasoningEffort values.
+// undefined means omit the parameter (no reasoning).
+const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
+  off: undefined,
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
 };
+
+/**
+ * Create Codex middleware with the given reasoning effort level.
+ */
+function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      // Remove topP if temperature is set (OpenAI doesn't like both)
+      if (params.temperature !== undefined && params.temperature !== null) {
+        delete params.topP;
+      }
+
+      // Codex API requires specific settings via providerOptions
+      // Use type assertion to satisfy JSONValue constraints
+      params.providerOptions = {
+        ...params.providerOptions,
+        openai: {
+          ...(params.providerOptions?.openai ?? {}),
+          instructions: CODEX_INSTRUCTIONS,
+          // Codex API requires store to be false
+          store: false,
+          // Enable reasoning for Codex models — without this, the model
+          // skips the reasoning/action phase and goes straight to final_answer,
+          // resulting in narration instead of tool calls.
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
 
 /**
  * Creates an OpenAI model using ChatGPT OAuth authentication
@@ -77,7 +95,16 @@ const openaiCodexMiddleware: LanguageModelMiddleware = {
  * IMPORTANT: This uses the Codex API endpoint, not the standard OpenAI API.
  * URLs are rewritten from /v1/responses or /chat/completions to the Codex endpoint.
  */
-export function openaiCodexProvider(modelId: string = 'codex-mini-latest'): MastraModelConfig {
+export function openaiCodexProvider(
+  modelId: string = 'codex-mini-latest',
+  options?: { thinkingLevel?: ThinkingLevel },
+): MastraModelConfig {
+  // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
+  // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
+  const level: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[level];
+  const middleware = createCodexMiddleware(reasoningEffort);
+
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
@@ -85,7 +112,7 @@ export function openaiCodexProvider(modelId: string = 'codex-mini-latest'): Mast
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
-      middleware: [openaiCodexMiddleware],
+      middleware: [middleware],
     });
   }
 
@@ -173,6 +200,6 @@ export function openaiCodexProvider(modelId: string = 'codex-mini-latest'): Mast
   // Wrap with middleware
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: [openaiCodexMiddleware],
+    middleware: [middleware],
   });
 }

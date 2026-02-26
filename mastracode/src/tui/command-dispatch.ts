@@ -93,7 +93,7 @@ export async function dispatchSlashCommand(
       await handleOMCommand(buildCtx());
       return true;
     case 'think':
-      await handleThinkCommand(buildCtx());
+      await handleThinkCommand(buildCtx(), args);
       return true;
     case 'permissions':
       await handlePermissionsCommand(buildCtx(), args);
