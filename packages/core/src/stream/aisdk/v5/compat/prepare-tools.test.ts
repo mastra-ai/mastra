@@ -344,6 +344,69 @@ describe('prepareToolsAndToolChoice', () => {
     });
   });
 
+  describe('agent-as-tools schema serialization', () => {
+    it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', () => {
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt for the agent'),
+          suspendedToolRunId: z.string().optional().default(''),
+          resumeData: z.any().optional(),
+        }),
+        execute: async () => 'result',
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { 'agent-subAgent': agentTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools).toBeDefined();
+      expect(result.tools).toHaveLength(1);
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      const properties = toolDef.inputSchema.properties;
+      expect(properties).toBeDefined();
+
+      for (const [propName, propSchema] of Object.entries(properties)) {
+        const schema = propSchema as Record<string, any>;
+        const hasTypeKey = 'type' in schema;
+        const hasRef = '$ref' in schema;
+        const hasAnyOf = 'anyOf' in schema;
+        const hasOneOf = 'oneOf' in schema;
+        const hasAllOf = 'allOf' in schema;
+
+        expect(
+          hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
+          `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
+        ).toBe(true);
+
+        if (Array.isArray(schema.type) && schema.type.includes('array')) {
+          expect(
+            schema.items,
+            `Property '${propName}' includes 'array' in type but is missing 'items'. OpenAI requires 'items' for array types. Got: ${JSON.stringify(schema)}`,
+          ).toBeDefined();
+        }
+      }
+
+      // Verify suspension fields don't produce anyOf or description (Vertex AI compat)
+      const suspendedSchema = properties.suspendedToolRunId as Record<string, any>;
+      expect(suspendedSchema.type).toBeDefined();
+      expect(suspendedSchema.default).toBe('');
+      expect(suspendedSchema.anyOf).toBeUndefined();
+      expect(suspendedSchema.description).toBeUndefined();
+
+      const resumeSchema = properties.resumeData as Record<string, any>;
+      expect(resumeSchema.anyOf).toBeUndefined();
+      expect(resumeSchema.description).toBeUndefined();
+    });
+  });
+
   describe('default targetVersion', () => {
     it('should default to v2 when targetVersion is not specified', () => {
       const providerTool = {
