@@ -31,10 +31,10 @@ Mastra Code uses Mastra's [model router](/models), which routes requests to the 
 
 If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
 
-| Provider      | OAuth flow              | What you get                                  |
-| ------------- | ----------------------- | --------------------------------------------- |
+| Provider | OAuth flow | What you get |
+| - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
-| **OpenAI**    | ChatGPT Plus / Codex    | Access to OpenAI models via your subscription |
+| **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location). During onboarding, you can skip the OAuth step if you already have API keys configured.
 
@@ -46,11 +46,11 @@ Authenticating with a Claude Max subscription through OAuth is a grey area. Anth
 
 Mastra Code can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
 
-| Priority | Path                          | Scope                            |
-| -------- | ----------------------------- | -------------------------------- |
-| Highest  | `.mastracode/mcp.json`        | Project                          |
-|          | `~/.mastracode/mcp.json`      | Global                           |
-| Lowest   | `.claude/settings.local.json` | Project (Claude Code compatible) |
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/mcp.json` | Project |
+| | `~/.mastracode/mcp.json` | Global |
+| Lowest | `.claude/settings.local.json` | Project (Claude Code compatible) |
 
 Project config overrides global config by server name. Claude Code settings are the lowest priority fallback.
 
@@ -111,15 +111,15 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 
 ### Hook events
 
-| Event              | When it fires                                                   | Can block? |
-| ------------------ | --------------------------------------------------------------- | ---------- |
-| `PreToolUse`       | Before a tool call executes                                     | Yes        |
-| `PostToolUse`      | After a tool call completes                                     | No         |
-| `Stop`             | When an agent response ends (`complete`, `aborted`, or `error`) | Yes        |
-| `UserPromptSubmit` | When the user sends a message                                   | Yes        |
-| `SessionStart`     | When a session begins                                           | No         |
-| `SessionEnd`       | When a session ends                                             | No         |
-| `Notification`     | When the TUI fires a notification                               | No         |
+| Event | When it fires | Can block? |
+| - | - | - |
+| `PreToolUse` | Before a tool call executes | Yes |
+| `PostToolUse` | After a tool call completes | No |
+| `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
+| `UserPromptSubmit` | When the user sends a message | Yes |
+| `SessionStart` | When a session begins | No |
+| `SessionEnd` | When a session ends | No |
+| `Notification` | When the TUI fires a notification | No |
 
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
@@ -148,10 +148,10 @@ For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can res
 
 ### Hook config locations
 
-| Priority | Path                       | Scope                           |
-| -------- | -------------------------- | ------------------------------- |
-| Higher   | `.mastracode/hooks.json`   | Project (appended after global) |
-| Lower    | `~/.mastracode/hooks.json` | Global (runs first)             |
+| Priority | Path | Scope |
+| - | - | - |
+| Higher | `.mastracode/hooks.json` | Project (appended after global) |
+| Lower | `~/.mastracode/hooks.json` | Global (runs first) |
 
 Global hooks run before project hooks. For the same event, all hooks execute in order.
 
@@ -159,12 +159,12 @@ Global hooks run before project hooks. For the same event, all hooks execute in 
 
 Define reusable prompt templates as markdown files. Mastra Code scans these directories for `.md` files:
 
-| Priority | Path                      | Scope                            |
-| -------- | ------------------------- | -------------------------------- |
-| Highest  | `.mastracode/commands/`   | Project                          |
-|          | `.claude/commands/`       | Project (Claude Code compatible) |
-|          | `~/.mastracode/commands/` | Global                           |
-| Lowest   | `~/.claude/commands/`     | Global (Claude Code compatible)  |
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/commands/` | Project |
+| | `.claude/commands/` | Project (Claude Code compatible) |
+| | `~/.mastracode/commands/` | Global |
+| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
 
 Each command file can include YAML frontmatter with `name` and `description` fields:
 
@@ -187,12 +187,12 @@ Skills are structured instruction files that the agent loads automatically based
 
 Mastra Code scans these directories for skills:
 
-| Priority | Path                    | Scope                            |
-| -------- | ----------------------- | -------------------------------- |
-| Highest  | `.mastracode/skills/`   | Project                          |
-|          | `.claude/skills/`       | Project (Claude Code compatible) |
-|          | `~/.mastracode/skills/` | Global                           |
-| Lowest   | `~/.claude/skills/`     | Global (Claude Code compatible)  |
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/skills/` | Project |
+| | `.claude/skills/` | Project (Claude Code compatible) |
+| | `~/.mastracode/skills/` | Global |
+| Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
 
 Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
 
@@ -233,10 +233,10 @@ If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL an
 
 Control whether observations are scoped to individual threads or shared across all threads for a project:
 
-| Scope              | Behavior                                                        |
-| ------------------ | --------------------------------------------------------------- |
-| `thread` (default) | Observations are private to each conversation thread            |
-| `resource`         | Observations are shared across all threads for the same project |
+| Scope | Behavior |
+| - | - |
+| `thread` (default) | Observations are private to each conversation thread |
+| `resource` | Observations are shared across all threads for the same project |
 
 Configure the scope through:
 
@@ -250,10 +250,10 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Override
 
 ### OM thresholds
 
-| Threshold             | Default       | Description                                   |
-| --------------------- | ------------- | --------------------------------------------- |
+| Threshold | Default | Description |
+| - | - | - |
 | Observation threshold | 30,000 tokens | Token count that triggers an observation pass |
-| Reflection threshold  | 40,000 tokens | Token count that triggers a reflection pass   |
+| Reflection threshold | 40,000 tokens | Token count that triggers a reflection pass |
 
 ## Color theme
 
@@ -281,17 +281,17 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 
 ## Environment variables
 
-| Variable               | Description                                                    |
-| ---------------------- | -------------------------------------------------------------- |
-| `MASTRA_DB_URL`        | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
-| `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database                          |
-| `MASTRA_DB_PATH`       | Override the local database file path                          |
-| `MASTRA_USER_ID`       | Override the auto-detected user identity                       |
-| `MASTRA_RESOURCE_ID`   | Override the auto-detected project resource ID                 |
-| `MASTRA_OM_SCOPE`      | Observational memory scope (`thread` or `resource`)            |
-| `DEFAULT_OM_MODEL_ID`  | Default model for OM observer and reflector                    |
-| `MASTRA_THEME`         | Color theme override (`dark` or `light`)                       |
-| `TAVILY_API_KEY`       | Enable Tavily-powered web search and extract tools             |
+| Variable | Description |
+| - | - |
+| `MASTRA_DB_URL` | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
+| `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database |
+| `MASTRA_DB_PATH` | Override the local database file path |
+| `MASTRA_USER_ID` | Override the auto-detected user identity |
+| `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
+| `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
+| `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
+| `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override
 

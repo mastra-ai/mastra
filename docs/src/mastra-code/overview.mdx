@@ -45,7 +45,6 @@ Mastra Code requires Node.js 22.13.0 or later.
     ```sh npm2yarn
     npx mastracode
     ```
-
   </StepItem>
 
   <StepItem>
@@ -55,14 +54,13 @@ Mastra Code requires Node.js 22.13.0 or later.
     cd your-project
     mastracode
     ```
-
   </StepItem>
 
-<StepItem>
-  Set an API key for your preferred provider (e.g. `export ANTHROPIC_API_KEY=sk-ant-...`), or run `/login` to
-  authenticate with an Anthropic or OpenAI subscription. See
-  [Configuration](/docs/mastra-code/configuration#authentication) for all supported providers.
-</StepItem>
+  <StepItem>
+    Set an API key for your preferred provider (e.g. `export ANTHROPIC_API_KEY=sk-ant-...`), or run `/login` to
+    authenticate with an Anthropic or OpenAI subscription. See
+    [Configuration](/docs/mastra-code/configuration#authentication) for all supported providers.
+  </StepItem>
 
   <StepItem>
     Type a message and press Enter. The agent responds with streaming text and can read, edit, and run code in your project.
@@ -73,32 +71,32 @@ Mastra Code requires Node.js 22.13.0 or later.
 
 Mastra Code provides built-in slash commands for managing sessions and settings:
 
-| Command     | Description                                       |
-| ----------- | ------------------------------------------------- |
-| `/new`      | Start a new conversation thread                   |
-| `/threads`  | List all threads for this project                 |
-| `/models`   | Select a different AI model                       |
-| `/mode`     | Switch between Build, Plan, and Fast modes        |
-| `/cost`     | Show token usage for the current conversation     |
-| `/login`    | Authenticate with OAuth providers                 |
-| `/logout`   | Log out from a provider                           |
-| `/settings` | Open the settings panel                           |
-| `/theme`    | Switch color theme (auto, dark, or light)         |
-| `/sandbox`  | Add external directories to the allowed path list |
-| `/diff`     | Show files modified in the current session        |
-| `/help`     | Show available commands                           |
-| `/exit`     | Exit the TUI                                      |
+| Command | Description |
+| - | - |
+| `/new` | Start a new conversation thread |
+| `/threads` | List all threads for this project |
+| `/models` | Select a different AI model |
+| `/mode` | Switch between Build, Plan, and Fast modes |
+| `/cost` | Show token usage for the current conversation |
+| `/login` | Authenticate with OAuth providers |
+| `/logout` | Log out from a provider |
+| `/settings` | Open the settings panel |
+| `/theme` | Switch color theme (auto, dark, or light) |
+| `/sandbox` | Add external directories to the allowed path list |
+| `/diff` | Show files modified in the current session |
+| `/help` | Show available commands |
+| `/exit` | Exit the TUI |
 
 You can also define custom slash commands as markdown files. See [Configuration](/docs/mastra-code/configuration) for details.
 
 ## Keyboard shortcuts
 
-| Shortcut | Action                                              |
-| -------- | --------------------------------------------------- |
-| `Ctrl+C` | Interrupt current operation                         |
-| `Ctrl+D` | Exit (when editor is empty)                         |
-| `Ctrl+T` | Toggle thinking blocks visibility                   |
-| `Ctrl+E` | Expand/collapse all tool outputs                    |
+| Shortcut | Action |
+| - | - |
+| `Ctrl+C` | Interrupt current operation |
+| `Ctrl+D` | Exit (when editor is empty) |
+| `Ctrl+T` | Toggle thinking blocks visibility |
+| `Ctrl+E` | Expand/collapse all tool outputs |
 | `Ctrl+F` | Send a follow-up message while the agent is running |
 
 ## Architecture
