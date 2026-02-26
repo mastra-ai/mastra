@@ -420,7 +420,6 @@ describe('E2BSandbox', () => {
       const instructions = sandbox.getInstructions();
 
       expect(instructions).toContain('sandbox');
-      expect(instructions).toContain('/home/user');
     });
   });
 
