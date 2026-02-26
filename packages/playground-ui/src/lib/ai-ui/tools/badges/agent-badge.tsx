@@ -74,7 +74,7 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
-      initialCollapsed={false}
+      initialCollapsed={toolCalled}
       extraInfo={
         metadata?.mode === 'network' && (
           <NetworkChoiceMetadataDialogTrigger
