@@ -271,7 +271,6 @@ export class DaytonaSandbox extends MastraSandbox {
     // Base params shared by both creation modes
     const baseParams = compact({
       language: this.language,
-      envVars: this.env,
       labels: { ...this.labels, 'mastra-sandbox-id': this.id },
       ephemeral: this.ephemeral,
       autoStopInterval: this.autoStopInterval,
