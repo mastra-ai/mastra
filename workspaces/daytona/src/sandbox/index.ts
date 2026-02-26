@@ -157,7 +157,6 @@ export class DaytonaSandbox extends MastraSandbox {
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
-  private _workingDir: string | null = null;
 
   private readonly timeout: number;
   private readonly language: 'typescript' | 'javascript' | 'python';
@@ -264,7 +263,6 @@ export class DaytonaSandbox extends MastraSandbox {
       this._sandbox = existing;
       this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
-      await this.detectWorkingDir();
       return;
     }
 
@@ -273,7 +271,6 @@ export class DaytonaSandbox extends MastraSandbox {
     // Base params shared by both creation modes
     const baseParams = compact({
       language: this.language,
-      envVars: this.env,
       labels: { ...this.labels, 'mastra-sandbox-id': this.id },
       ephemeral: this.ephemeral,
       autoStopInterval: this.autoStopInterval,
@@ -309,9 +306,6 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
-
-    // Detect the actual working directory (don't hardcode — custom images may differ)
-    await this.detectWorkingDir();
   }
 
   /**
@@ -408,9 +402,6 @@ export class DaytonaSandbox extends MastraSandbox {
 
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).`);
 
-    if (this._workingDir) {
-      parts.push(`Default working directory: ${this._workingDir}.`);
-    }
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
 
     parts.push(`Running as user: ${this.sandboxUser ?? 'daytona'}.`);
@@ -429,24 +420,6 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Detect the actual working directory inside the sandbox via `pwd`.
-   * Stores the result for use in `getInstructions()`.
-   */
-  private async detectWorkingDir(): Promise<void> {
-    if (!this._sandbox) return;
-    try {
-      const result = await this._sandbox.process.executeCommand('pwd');
-      const dir = result.result?.trim();
-      if (dir) {
-        this._workingDir = dir;
-        this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
-      }
-    } catch {
-      this.logger.debug(`${LOG_PREFIX} Could not detect working directory, will omit from instructions`);
-    }
-  }
 
   /**
    * Try to find and reconnect to an existing Daytona sandbox with the same

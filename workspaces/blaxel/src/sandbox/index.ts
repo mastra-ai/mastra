@@ -71,7 +71,10 @@ export interface BlaxelSandboxOptions extends MastraSandboxOptions {
   /**
    * Docker image to use for the sandbox.
    *
-   * @default 'blaxel/py-app:latest'
+   * Debian-based images (`ts-app`, `py-app`, `jupyter-*`) support both S3 and GCS mounts.
+   * Alpine-based images (`node`, `nextjs`, `vite`) support S3 mounts only (gcsfuse is unavailable on Alpine).
+   *
+   * @default 'blaxel/ts-app:latest'
    */
   image?: string;
   /**
@@ -166,7 +169,7 @@ export class BlaxelSandbox extends MastraSandbox {
     super({ ...options, name: 'BlaxelSandbox' });
 
     this.id = options.id ?? this.generateId();
-    this.image = options.image ?? 'blaxel/py-app:latest';
+    this.image = options.image ?? 'blaxel/ts-app:latest';
     this.memory = options.memory ?? 4096;
     this.timeout = options.timeout;
     this.env = options.env ?? {};
@@ -623,7 +626,6 @@ export class BlaxelSandbox extends MastraSandbox {
         image: this.image,
         memory: this.memory,
         ...(this.timeout && { ttl: this.timeout }),
-        envs: Object.entries(this.env).map(([name, value]) => ({ name, value })),
         labels: {
           ...this.labels,
           'mastra-sandbox-id': this.id,
@@ -645,6 +647,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
     this._createdAt = new Date();
     this.logger.debug(`${LOG_PREFIX} Sandbox ready: ${sandboxName} (status: ${this._sandbox.status})`);
+
     // Note: processPending is called by base class after start completes
   }
 
@@ -775,7 +778,7 @@ export class BlaxelSandbox extends MastraSandbox {
   getInstructions(): string {
     const mountCount = this.mounts.entries.size;
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
-    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+    return `Cloud sandbox.${mountInfo}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -798,11 +801,11 @@ export class BlaxelSandbox extends MastraSandbox {
    */
   private isSandboxDeadError(error: unknown): boolean {
     if (!error) return false;
-    const errorStr = errorToString(error);
+    const errorStr = errorToString(error).toLowerCase();
     return (
-      errorStr.includes('TERMINATED') ||
+      errorStr.includes('terminated') ||
       errorStr.includes('sandbox was not found') ||
-      errorStr.includes('Sandbox not found')
+      errorStr.includes('sandbox not found')
     );
   }
 
@@ -856,12 +859,18 @@ export class BlaxelSandbox extends MastraSandbox {
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );
 
-      const result = await sandbox.process.exec({
+      // Pass timeout to Blaxel API (in seconds) AND enforce client-side via Promise.race.
+      // The API enforces timeout for non-streaming requests, but when onStdout/onStderr
+      // callbacks are present the SDK uses a streaming path that ignores the timeout param.
+      // Promise.race ensures timeout is always enforced regardless of code path.
+      const apiTimeout = options.timeout ? Math.ceil(options.timeout / 1000) : undefined;
+
+      const execPromise = sandbox.process.exec({
         command: fullCommand,
         workingDir: options.cwd,
         env: envRecord,
         waitForCompletion: true,
-        ...(options.timeout && { timeout: Math.ceil(options.timeout / 1000) }),
+        ...(apiTimeout && { timeout: apiTimeout }),
         ...(options.onStdout || options.onStderr
           ? {
               onStdout: options.onStdout,
@@ -869,6 +878,27 @@ export class BlaxelSandbox extends MastraSandbox {
             }
           : {}),
       });
+
+      let result;
+      if (options.timeout) {
+        let timer: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            // Best-effort cleanup: kill the process on the sandbox.
+            // The streaming exec path doesn't expose the process ID until it completes,
+            // so we attempt to kill by command string.
+            runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+            reject(new Error(`Command timed out after ${options.timeout}ms`));
+          }, options.timeout!);
+        });
+        try {
+          result = await Promise.race([execPromise, timeoutPromise]);
+        } finally {
+          clearTimeout(timer!);
+        }
+      } else {
+        result = await execPromise;
+      }
 
       const executionTimeMs = Date.now() - startTime;
       const exitCode = result.exitCode ?? 0;

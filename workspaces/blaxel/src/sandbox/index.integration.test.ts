@@ -47,119 +47,6 @@ function getS3TestConfig() {
 }
 
 /**
- * Basic Blaxel integration tests.
- */
-describe.skipIf(!hasBlaxelCredentials)('BlaxelSandbox Integration', () => {
-  let sandbox: BlaxelSandbox;
-
-  beforeEach(() => {
-    sandbox = new BlaxelSandbox({
-      id: `test-${Date.now()}`,
-      timeout: '5m',
-    });
-  });
-
-  afterEach(async () => {
-    if (sandbox) {
-      try {
-        await sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  });
-
-  it('can start and execute commands', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('echo', ['Hello Blaxel']);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('Hello Blaxel');
-  }, 120000);
-
-  it('can reconnect to existing sandbox', async () => {
-    await sandbox._start();
-    const originalId = sandbox.id;
-
-    // Create new sandbox instance with same ID
-    const sandbox2 = new BlaxelSandbox({ id: originalId });
-    await sandbox2._start();
-
-    // Should reconnect to existing
-    expect(sandbox2.status).toBe('running');
-
-    await sandbox2._destroy();
-  }, 120000);
-
-  it('can execute multiple commands sequentially', async () => {
-    await sandbox._start();
-
-    const result1 = await sandbox.executeCommand('echo', ['first']);
-    expect(result1.exitCode).toBe(0);
-    expect(result1.stdout.trim()).toBe('first');
-
-    const result2 = await sandbox.executeCommand('echo', ['second']);
-    expect(result2.exitCode).toBe(0);
-    expect(result2.stdout.trim()).toBe('second');
-  }, 120000);
-
-  it('captures exit codes correctly', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('sh', ['-c', 'exit 42']);
-    expect(result.exitCode).toBe(42);
-    expect(result.success).toBe(false);
-  }, 120000);
-
-  it('handles environment variables', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR'], {
-      env: { MY_VAR: 'hello-world' },
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('hello-world');
-  }, 120000);
-
-  it('respects working directory option', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('/tmp');
-  }, 120000);
-
-  it('reports sandbox info', async () => {
-    await sandbox._start();
-
-    const info = await sandbox.getInfo();
-
-    expect(info.id).toBe(sandbox.id);
-    expect(info.provider).toBe('blaxel');
-    expect(info.status).toBe('running');
-    expect(info.createdAt).toBeInstanceOf(Date);
-  }, 120000);
-
-  it('can stop and restart', async () => {
-    await sandbox._start();
-    expect(sandbox.status).toBe('running');
-
-    await sandbox._stop();
-    expect(sandbox.status).toBe('stopped');
-
-    // Restart
-    await sandbox._start();
-    expect(sandbox.status).toBe('running');
-
-    const result = await sandbox.executeCommand('echo', ['after restart']);
-    expect(result.exitCode).toBe(0);
-  }, 180000);
-});
-
-/**
  * S3 Mount integration tests.
  */
 describe.skipIf(!hasBlaxelCredentials || !hasS3Credentials)('BlaxelSandbox S3 Mount Integration', () => {
@@ -459,6 +346,121 @@ describe.skipIf(!hasBlaxelCredentials || !hasS3Credentials)('BlaxelSandbox Mount
 });
 
 /**
+ * Alpine Image S3 Mount Tests
+ *
+ * Verifies that the S3 mount script correctly detects Alpine's apk package manager
+ * and installs s3fs-fuse instead of using apt-get.
+ */
+describe.skipIf(!hasBlaxelCredentials || !hasS3Credentials)('BlaxelSandbox Alpine S3 Mount', () => {
+  let sandbox: BlaxelSandbox;
+
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox._destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('S3 mounts successfully on Alpine image via apk', async () => {
+    sandbox = new BlaxelSandbox({
+      id: `test-alpine-s3-${Date.now()}`,
+      image: 'blaxel/node:latest', // Alpine-based
+      timeout: '10m',
+    });
+    await sandbox._start();
+
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-alpine-s3',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/alpine-s3');
+    expect(result.success).toBe(true);
+
+    // Verify mount works by listing directory
+    const lsResult = await sandbox.executeCommand('ls', ['-la', '/data/alpine-s3']);
+    expect(lsResult.exitCode).toBe(0);
+  }, 180000);
+
+  it('S3 public bucket mounts on Alpine image', async () => {
+    sandbox = new BlaxelSandbox({
+      id: `test-alpine-s3pub-${Date.now()}`,
+      image: 'blaxel/node:latest', // Alpine-based
+      timeout: '10m',
+    });
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-alpine-s3-public',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'noaa-goes16',
+        region: 'us-east-1',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/alpine-s3-public');
+    expect(result.success).toBe(true);
+  }, 180000);
+});
+
+/**
+ * Alpine Image GCS Mount Error Tests
+ *
+ * Verifies that the GCS mount script gives a clear error on Alpine since
+ * gcsfuse is not available in Alpine repos.
+ */
+describe.skipIf(!hasBlaxelCredentials || !hasGCSCredentials)('BlaxelSandbox Alpine GCS Mount Error', () => {
+  let sandbox: BlaxelSandbox;
+
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox._destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('GCS mount on Alpine fails with clear error message', async () => {
+    sandbox = new BlaxelSandbox({
+      id: `test-alpine-gcs-${Date.now()}`,
+      image: 'blaxel/node:latest', // Alpine-based
+      timeout: '10m',
+    });
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-alpine-gcs',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: process.env.TEST_GCS_BUCKET!,
+        serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/alpine-gcs');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Alpine');
+    expect(result.error).toContain('blaxel/ts-app:latest');
+  }, 180000);
+});
+
+/**
  * Shared Sandbox Conformance Tests
  *
  * These tests verify BlaxelSandbox conforms to the WorkspaceSandbox interface.
@@ -500,6 +502,16 @@ if (hasBlaxelCredentials) {
       processManagement: false, // BlaxelSandbox does not implement processes
     },
     testTimeout: 60000,
+    createMountableFilesystem: hasS3Credentials
+      ? () =>
+          ({
+            id: 'test-s3-conformance',
+            name: 'S3Filesystem',
+            provider: 's3',
+            status: 'ready',
+            getMountConfig: () => getS3TestConfig(),
+          }) as any
+      : undefined,
   });
 }
 

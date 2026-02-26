@@ -264,7 +264,6 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledWith(
         expect.objectContaining({
           language: 'python',
-          envVars: { FOO: 'bar' },
           labels: expect.objectContaining({
             team: 'ai',
             'mastra-sandbox-id': sandbox.id,
@@ -273,6 +272,10 @@ describe('DaytonaSandbox', () => {
           autoStopInterval: 30,
         }),
       );
+
+      // Env should NOT be passed at creation time — it's merged per-command
+      // so that reconnecting to an existing sandbox picks up current env
+      expect(mockDaytona.create).toHaveBeenCalledWith(expect.not.objectContaining({ envVars: expect.anything() }));
     });
 
     it('passes snapshot when provided', async () => {
@@ -690,22 +693,6 @@ describe('DaytonaSandbox', () => {
 
       expect(typeof instructions).toBe('string');
       expect(instructions).toContain('Cloud sandbox');
-    });
-
-    it('includes dynamically detected working directory', async () => {
-      mockSandbox.process.executeCommand = vi.fn().mockResolvedValue({ result: '/home/daytona\n' });
-      const sandbox = new DaytonaSandbox();
-      await sandbox._start();
-
-      expect(sandbox.getInstructions()).toContain('/home/daytona');
-    });
-
-    it('omits working directory when detection fails', async () => {
-      mockSandbox.process.executeCommand = vi.fn().mockRejectedValue(new Error('failed'));
-      const sandbox = new DaytonaSandbox();
-      await sandbox._start();
-
-      expect(sandbox.getInstructions()).not.toContain('working directory');
     });
 
     it('includes command timeout in seconds', () => {
