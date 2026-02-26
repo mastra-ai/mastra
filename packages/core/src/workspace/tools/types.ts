@@ -31,9 +31,8 @@ export interface WorkspaceToolConfig {
   requireReadBeforeWrite?: boolean;
 
   /**
-   * Maximum estimated tokens for tool output (default: 3000).
-   * Output exceeding this limit is truncated from the start (keeping the end).
-   * Uses a word-count heuristic (words * 1.3) for token estimation.
+   * Maximum tokens for tool output (default: 3000).
+   * Output exceeding this limit is truncated. Uses tiktoken for accurate counting.
    */
   maxOutputTokens?: number;
 }
