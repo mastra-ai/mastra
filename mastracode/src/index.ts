@@ -31,7 +31,7 @@ import {
   createGlobTool,
   createExecuteCommandTool,
   createWriteFileTool,
-  stringReplaceLspTool,
+  createStringReplaceLspTool,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -126,6 +126,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
   const globTool = createGlobTool(project.rootPath);
   const executeCommandTool = createExecuteCommandTool(project.rootPath);
   const writeFileTool = createWriteFileTool(project.rootPath);
+  const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
 
   const readOnlyTools = {
     view: viewTool,

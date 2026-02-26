@@ -34,10 +34,11 @@ Edit a file by replacing an exact text match with new content. Returns Language 
 - Include enough surrounding context to uniquely identify the replacement location.
 - When `new_str` is omitted or empty, the matched text is deleted.
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+- Relative `path` values are resolved against the project root.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
-| `path` | `string` | Yes | Path to the file |
+| `path` | `string` | Yes | Path to the file (relative to project root) |
 | `old_str` | `string` | Yes | Exact text to find and replace |
 | `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
 | `start_line` | `number` | No | Line number to narrow the search region |
