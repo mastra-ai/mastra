@@ -95,7 +95,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   const [uid, gid] = idResult.output.trim().split('\n');
   const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
   if (!validUidGid) {
-    logger.warn(`${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`);
+    logger.warn(
+      `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`,
+    );
   }
 
   // Build gcsfuse flags

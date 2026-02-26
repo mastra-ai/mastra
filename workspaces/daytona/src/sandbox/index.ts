@@ -529,7 +529,7 @@ export class DaytonaSandbox extends MastraSandbox {
     try {
       const checkResult = await runCommand(
         this._sandbox,
-        `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
+        `[ -d ${shellQuote(mountPath)} ] && [ "$(ls -A ${shellQuote(mountPath)} 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       if (checkResult.output.trim() === 'non-empty') {
@@ -602,7 +602,7 @@ export class DaytonaSandbox extends MastraSandbox {
 
       // Clean up the directory we created since mount failed
       try {
-        await runCommand(this._sandbox!, `sudo rmdir "${mountPath}" 2>/dev/null || true`, {
+        await runCommand(this._sandbox!, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
           timeout: MOUNT_COMMAND_TIMEOUT_MS,
         });
         this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
@@ -639,7 +639,7 @@ export class DaytonaSandbox extends MastraSandbox {
       // Use fusermount for FUSE mounts, fall back to umount
       const result = await runCommand(
         this._sandbox,
-        `sudo fusermount -u "${mountPath}" 2>/dev/null || sudo umount "${mountPath}"`,
+        `sudo fusermount -u ${shellQuote(mountPath)} 2>/dev/null || sudo umount ${shellQuote(mountPath)}`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       if (result.exitCode !== 0) {
@@ -648,7 +648,7 @@ export class DaytonaSandbox extends MastraSandbox {
     } catch (error) {
       this.logger.debug(`${LOG_PREFIX} Unmount error:`, error);
       // Try lazy unmount as last resort
-      await runCommand(this._sandbox, `sudo umount -l "${mountPath}" 2>/dev/null || true`, {
+      await runCommand(this._sandbox, `sudo umount -l ${shellQuote(mountPath)} 2>/dev/null || true`, {
         timeout: MOUNT_COMMAND_TIMEOUT_MS,
       });
     }
@@ -658,13 +658,13 @@ export class DaytonaSandbox extends MastraSandbox {
     // Clean up marker file
     const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    await runCommand(this._sandbox, `rm -f "${markerPath}" 2>/dev/null || true`, {
+    await runCommand(this._sandbox, `rm -f ${shellQuote(markerPath)} 2>/dev/null || true`, {
       timeout: MOUNT_COMMAND_TIMEOUT_MS,
     });
 
     // Remove empty mount directory (only if empty, rmdir fails on non-empty)
     // Use sudo since mount directories outside home (like /data) were created with sudo
-    const rmdirResult = await runCommand(this._sandbox, `sudo rmdir "${mountPath}" 2>&1`, {
+    const rmdirResult = await runCommand(this._sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>&1`, {
       timeout: MOUNT_COMMAND_TIMEOUT_MS,
     });
     if (rmdirResult.exitCode === 0) {
@@ -763,7 +763,7 @@ export class DaytonaSandbox extends MastraSandbox {
               });
 
               // Try to remove the directory (will fail if not empty or doesn't exist, which is fine)
-              await runCommand(this._sandbox!, `sudo rmdir "${mountPath}" 2>/dev/null || true`, {
+              await runCommand(this._sandbox!, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
                 timeout: MOUNT_COMMAND_TIMEOUT_MS,
               });
             }
@@ -819,7 +819,7 @@ export class DaytonaSandbox extends MastraSandbox {
     // Check if path is a mount point
     const mountCheck = await runCommand(
       this._sandbox,
-      `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
+      `mountpoint -q ${shellQuote(mountPath)} && echo "mounted" || echo "not mounted"`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
@@ -832,7 +832,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
 
     try {
-      const markerResult = await runCommand(this._sandbox, `cat "${markerPath}" 2>/dev/null || echo ""`, {
+      const markerResult = await runCommand(this._sandbox, `cat ${shellQuote(markerPath)} 2>/dev/null || echo ""`, {
         timeout: MOUNT_COMMAND_TIMEOUT_MS,
       });
       const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());

@@ -79,7 +79,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   const [uid, gid] = idResult.output.trim().split('\n');
   const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
   if (!validUidGid) {
-    logger.warn(`${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`);
+    logger.warn(
+      `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`,
+    );
   }
 
   // Determine if we have credentials or using public bucket mode
