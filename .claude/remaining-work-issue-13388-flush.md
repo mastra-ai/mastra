@@ -14,6 +14,7 @@ Promise tracking and two-phase flush are fully implemented:
 2. **`BaseObservabilityEventBus`** tracks async subscriber promises in a self-cleaning `pendingSubscribers` set; `flush()` awaits them; `shutdown()` flushes before clearing
 3. **`ObservabilityBus`** tracks handler promises from `routeToHandler()` in a `pendingHandlers` set; `flush()` awaits handlers then delegates to `super.flush()` for subscribers
 4. **`BaseObservabilityInstance.flush()`** is now two-phase: Phase 1 awaits `bus.flush()` (drains delivery promises), then Phase 2 calls `exporter.flush()` + `bridge.flush()` (drains SDK-internal buffers) — sequential, not parallel
+5. **Removed `RecordedSpanImpl`, `RecordedTraceImpl`, `buildRecordedTrace()`** — these belong in `@mastra/core` (see item 4 below)
 
 ---
 
@@ -58,7 +59,39 @@ This is a **separate bug** that affects all environments (not just Inngest), but
 
 **Fix:** Add a `_flush()` override that drains the LangSmith SDK's internal queue. Check the `langsmith` npm package for `Client.prototype.flush()` or `Client.prototype.awaitPendingTraceBatches()`.
 
-### 3. Sentry Exporter Stateful Span Limitation (Separate Issue)
+### 3. Move `RecordedSpanImpl`, `RecordedTraceImpl`, `buildRecordedTrace()` to `@mastra/core`
+
+**Package:** `@mastra/core` (`packages/core/src/observability/`)
+
+These were removed from `@mastra/observability` because:
+- Storage packages need to return `RecordedTrace` objects without depending on `@mastra/observability`
+- Scorers/evals consume these types and shouldn't need the full observability package
+- The current implementations had a direct dependency on `ObservabilityBus`, creating a circular dependency risk
+
+**Approach:** Move the implementations to `@mastra/core` and replace the `ObservabilityBus` dependency with a simple callback:
+
+```typescript
+// In @mastra/core/observability
+export class RecordedSpanImpl<TType extends SpanType> implements RecordedSpan<TType> {
+  constructor(
+    private record: AnyExportedSpan,
+    private emitEvent: (event: ScoreEvent | FeedbackEvent) => void,
+  ) {}
+  // addScore/addFeedback call this.emitEvent() instead of this.bus.emit()
+}
+
+export function buildRecordedTrace(
+  traceId: string,
+  exportedSpans: AnyExportedSpan[],
+  emitEvent: (event: ScoreEvent | FeedbackEvent) => void,
+): RecordedTrace { ... }
+```
+
+The wiring happens at the call site — `mastra.getTrace()` passes `(event) => this.observability.emit(event)`.
+
+The interfaces (`RecordedSpan`, `RecordedTrace`) are already defined in `@mastra/core`. The test file (`recorded-trace.test.ts`) from this branch can be adapted for core.
+
+### 4. Sentry Exporter Stateful Span Limitation (Separate Issue)
 
 **Package:** `@mastra/sentry` (`observability/sentry/`)
 
