@@ -1,0 +1,409 @@
+---
+title: "Guide: Building a Research Coordinator with Supervisor Pattern"
+description: Build a research coordinator that orchestrates multiple specialized agents to research topics and produce comprehensive reports.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Research Coordinator with Supervisor Pattern
+
+In this guide, you'll build a research coordinator that orchestrates multiple specialized agents using the supervisor pattern. The coordinator will delegate research tasks to a research agent and writing tasks to a writing agent, then synthesize the results into a comprehensive report.
+
+You'll learn how to set up subagents with clear roles, configure a supervisor agent to coordinate them, use delegation hooks to control execution, and validate task completion with scorers.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+
+## Create the research agent
+
+The research agent specializes in gathering factual information on any topic. It returns concise bullet-point summaries with key facts and sources.
+
+Create a new file `src/mastra/agents/research-agent.ts`:
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Specialist',
+  description:
+    'Specializes in gathering factual information and data on any topic. ' +
+    'Returns concise bullet-point summaries with key facts and sources. ' +
+    'Does not write full articles or narrative content.',
+  instructions:
+    'You are a research specialist. When given a topic, gather key facts, ' +
+    'statistics, and information. Present findings as clear bullet points. ' +
+    'Include sources when possible. Focus on accuracy and completeness.',
+  model: 'openai/gpt-5-mini',
+})
+```
+
+The `description` field is critical - it helps the supervisor understand when to delegate to this agent. Clear descriptions improve delegation accuracy.
+
+## Create the writing agent
+
+The writing agent transforms research into well-structured articles with complete paragraphs and proper flow.
+
+Create a new file `src/mastra/agents/writing-agent.ts`:
+
+```typescript title="src/mastra/agents/writing-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const writingAgent = new Agent({
+  id: 'writing-agent',
+  name: 'Writing Specialist',
+  description:
+    'Transforms research material into well-structured written content. ' +
+    'Produces full paragraphs and complete articles with proper flow. ' +
+    'Best used after research has been gathered.',
+  instructions:
+    'You are a writing specialist. Transform research and information into ' +
+    'well-written articles. Use complete paragraphs, clear structure, and ' +
+    'engaging language. Maintain a professional yet accessible tone. ' +
+    'Ensure the content flows naturally from introduction to conclusion.',
+  model: 'openai/gpt-5-mini',
+})
+```
+
+## Create the supervisor agent
+
+The supervisor coordinates research and writing tasks. Its instructions define the delegation strategy - when to use each subagent and how to synthesize results. Memory is configured directly on the agent.
+
+Create a new file `src/mastra/agents/supervisor-agent.ts`:
+
+```typescript title="src/mastra/agents/supervisor-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+import { researchAgent } from './research-agent'
+import { writingAgent } from './writing-agent'
+
+export const supervisorAgent = new Agent({
+  id: 'supervisor-agent',
+  name: 'Research Coordinator',
+  instructions: `You coordinate research and writing tasks using specialized agents.
+
+Available resources:
+- research-agent: Gathers factual data and sources (returns bullet points)
+- writing-agent: Transforms research into well-structured articles (returns full paragraphs)
+
+Delegation strategy:
+1. For research requests: Delegate to research-agent first to gather facts
+2. For writing requests: Delegate to writing-agent with any available research context
+3. For comprehensive reports: Delegate to research-agent first, then writing-agent
+4. Always ensure you have gathered sufficient information before producing final output
+
+Success criteria:
+- All aspects of the user's request are addressed
+- Information is accurate and well-sourced
+- Final output is well-formatted and complete
+- If anything is missing or uncertain, continue gathering information`,
+  model: 'openai/gpt-5.1',
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:mastra.db',
+    }),
+  }),
+  defaultOptions: {
+    maxSteps: 10,
+
+    // Monitor progress after each iteration
+    onIterationComplete: async context => {
+      console.log(`\n✓ Iteration ${context.iteration} complete`)
+      console.log(`  Finish reason: ${context.finishReason}`)
+      console.log(`  Response length: ${context.text.length} chars\n`)
+
+      // Continue until task is complete
+      return { continue: true }
+    },
+
+    // Control delegations
+    delegation: {
+      onDelegationStart: async context => {
+        console.log(`→ Delegating to: ${context.primitiveId}`)
+
+        // Add context for specific agents
+        if (context.primitiveId === 'research-agent') {
+          return {
+            proceed: true,
+            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+          }
+        }
+
+        return { proceed: true }
+      },
+
+      onDelegationComplete: async context => {
+        console.log(`✓ Completed: ${context.primitiveId}\n`)
+
+        // Handle errors: bail to stop execution and provide feedback
+        if (context.error) {
+          console.error('Delegation failed:', context.error)
+          context.bail() // Stop further delegations
+          return {
+            feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+          }
+        }
+      },
+
+      // Only pass last 10 messages to subagents
+      messageFilter: ({ messages }) => {
+        return messages.slice(-10)
+      },
+    },
+  },
+})
+```
+
+Register the supervisor with Mastra in `src/mastra/index.ts`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+// highlight-next-line
+import { supervisorAgent } from './agents/supervisor-agent'
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  agents: { supervisorAgent },
+})
+```
+
+The `defaultOptions` on the supervisor agent configure delegation hooks and iteration monitoring:
+
+- `onDelegationStart` modifies the research agent's prompt to request recent data
+- `onDelegationComplete` logs completion, bails on errors, and provides feedback
+- `messageFilter` limits context to the last 10 messages for efficiency
+- `onIterationComplete` monitors progress after each iteration
+
+## Test the basic supervisor
+
+Create a file to interact with the supervisor in `src/index.ts`:
+
+```typescript title="src/index.ts"
+import { supervisorAgent } from './mastra/agents/supervisor-agent'
+
+async function main() {
+  const topic = 'artificial intelligence in education'
+  console.log(`\nTopic: ${topic}\n`)
+
+  const stream = await supervisorAgent.stream(
+    `Research ${topic} and write a comprehensive article about it`,
+  )
+
+  // Stream the response
+  console.log('📝 Final Report:\n')
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk)
+  }
+  console.log('\n')
+}
+
+main()
+```
+
+The supervisor uses the delegation hooks and iteration monitoring configured in `defaultOptions`.
+
+## Add task completion scoring
+
+Task completion scorers automatically validate whether the task is complete. They prevent the supervisor from finishing prematurely.
+
+Create a scorer in `src/mastra/scorers/task-complete-scorer.ts`:
+
+```typescript title="src/mastra/scorers/task-complete-scorer.ts"
+import { createScorer } from '@mastra/core/evals'
+
+export const taskCompleteScorer = createScorer({
+  id: 'task-complete',
+  name: 'Task Completeness',
+  description: 'Checks if the research and writing task has been fully completed',
+}).generateScore(async context => {
+  const text = (context.run.output || '').toString()
+
+  // Check if response contains required elements
+  const hasSubstantialContent = text.length > 500
+  const hasStructure = text.includes('\n\n') // Multiple paragraphs
+  const hasContext = /\d{4}/.test(text) // Contains years/dates
+
+  // Return 1 if complete, 0 if not
+  if (hasSubstantialContent && hasStructure && hasContext) {
+    return 1
+  }
+
+  return 0
+})
+```
+
+Install the evals package:
+
+```bash npm2yarn
+npm install @mastra/evals
+```
+
+Update the supervisor agent to include task completion scoring in `defaultOptions` in `src/mastra/agents/supervisor-agent.ts`:
+
+```typescript title="src/mastra/agents/supervisor-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+import { researchAgent } from './research-agent'
+import { writingAgent } from './writing-agent'
+// highlight-next-line
+import { taskCompleteScorer } from '../scorers/task-complete-scorer'
+
+export const supervisorAgent = new Agent({
+  id: 'supervisor-agent',
+  name: 'Research Coordinator',
+  instructions: `You coordinate research and writing tasks using specialized agents.
+
+Available resources:
+- research-agent: Gathers factual data and sources (returns bullet points)
+- writing-agent: Transforms research into well-structured articles (returns full paragraphs)
+
+Delegation strategy:
+1. For research requests: Delegate to research-agent first to gather facts
+2. For writing requests: Delegate to writing-agent with any available research context
+3. For comprehensive reports: Delegate to research-agent first, then writing-agent
+4. Always ensure you have gathered sufficient information before producing final output
+
+Success criteria:
+- All aspects of the user's request are addressed
+- Information is accurate and well-sourced
+- Final output is well-formatted and complete
+- If anything is missing or uncertain, continue gathering information`,
+  model: 'openai/gpt-5.1',
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:mastra.db',
+    }),
+  }),
+  defaultOptions: {
+    maxSteps: 10,
+
+    onIterationComplete: async context => {
+      console.log(`\n✓ Iteration ${context.iteration} complete`)
+      console.log(`  Finish reason: ${context.finishReason}`)
+      console.log(`  Response length: ${context.text.length} chars\n`)
+      return { continue: true }
+    },
+
+    delegation: {
+      onDelegationStart: async context => {
+        console.log(`→ Delegating to: ${context.primitiveId}`)
+
+        if (context.primitiveId === 'research-agent') {
+          return {
+            proceed: true,
+            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+          }
+        }
+
+        return { proceed: true }
+      },
+
+      onDelegationComplete: async context => {
+        console.log(`✓ Completed: ${context.primitiveId}\n`)
+
+        if (context.error) {
+          console.error('Delegation failed:', context.error)
+          context.bail() // Stop further delegations
+          return {
+            feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+          }
+        }
+      },
+
+      messageFilter: ({ messages }) => {
+        return messages.slice(-10)
+      },
+    },
+
+    // highlight-start
+    // Validate task completion
+    isTaskComplete: {
+      scorers: [taskCompleteScorer],
+      strategy: 'all',
+      onComplete: async result => {
+        console.log('\n🎯 Completion Check:')
+        console.log(`  Complete: ${result.complete}`)
+        console.log(`  Score: ${result.scorers[0]?.score}\n`)
+      },
+    },
+    // highlight-end
+  },
+})
+```
+
+The scorer checks for substantial content, proper structure, and contextual information. If the task isn't complete, the supervisor will continue iterating. Now all hooks and task completion scoring are configured in the agent's `defaultOptions`, making them apply to every call automatically.
+
+## Test the research coordinator
+
+Run the coordinator to see it in action:
+
+```bash
+npx tsx src/index.ts
+```
+
+You'll see the supervisor delegate to the research agent first, then to the writing agent, with logs showing the delegation flow:
+
+```text
+Topic: artificial intelligence in education
+
+→ Delegating to: research-agent
+✓ Iteration 1 complete
+  Finish reason: tool-calls
+  Response length: 0 chars
+
+✓ Completed: research-agent
+
+→ Delegating to: writing-agent
+✓ Iteration 2 complete
+  Finish reason: tool-calls
+  Response length: 0 chars
+
+✓ Completed: writing-agent
+
+🎯 Completion Check:
+  Complete: true
+  Score: 1
+
+✓ Iteration 3 complete
+  Finish reason: stop
+  Response length: 1247 chars
+
+📝 Final Report:
+
+Artificial Intelligence in Education: Transforming Learning in 2024-2025
+
+[The coordinator will produce a comprehensive article combining research findings with well-structured writing...]
+```
+
+Since agent responses are non-deterministic, your output may vary, but the delegation pattern will be the same.
+
+## Next steps
+
+You can extend this research coordinator to:
+
+- Add more specialized agents (fact-checker, editor, citation-formatter)
+- Implement custom scorers for quality metrics (readability, source quality)
+- Add tools for web search or database access
+- Create workflows for complex multi-step research processes
+- Use structured output to generate reports in specific formats
+
+Learn more:
+
+- [Supervisor Agents](/docs/agents/supervisor-agents)
+- [Agent.stream() Reference](/reference/streaming/agents/stream#supervisor-pattern-with-delegation-and-completion)

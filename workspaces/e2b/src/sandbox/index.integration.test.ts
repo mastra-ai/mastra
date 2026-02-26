@@ -1062,6 +1062,12 @@ if (process.env.E2B_API_KEY) {
         ...(options?.env && { env: options.env }),
       });
     },
+    createInvalidSandbox: () => {
+      return new E2BSandbox({
+        id: `bad-config-${Date.now()}`,
+        template: 'nonexistent-template-id-12345',
+      });
+    },
     cleanupSandbox: async sandbox => {
       try {
         await sandbox._destroy();

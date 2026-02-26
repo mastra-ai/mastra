@@ -9,8 +9,8 @@ import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { mastra } from '../theme.js';
 
-const OBSERVER_COLOR = '#f59e0b';
-const REFLECTOR_COLOR = '#ef4444';
+const OBSERVER_COLOR = mastra.orange;
+const REFLECTOR_COLOR = mastra.red;
 const COLLAPSED_LINES = 10;
 
 function formatTokens(tokens: number): string {
