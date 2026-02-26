@@ -102,7 +102,7 @@ describe('BaseObservabilityEventBus', () => {
   });
 
   describe('flush', () => {
-    it('should be a no-op (events are dispatched immediately)', async () => {
+    it('should resolve immediately when no async handlers are pending', async () => {
       const handler = vi.fn();
       bus.subscribe(handler);
 
@@ -113,9 +113,99 @@ describe('BaseObservabilityEventBus', () => {
       await bus.flush();
       expect(handler).toHaveBeenCalledTimes(1);
     });
+
+    it('should await pending async subscriber promises', async () => {
+      let handlerDone = false;
+
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        handlerDone = true;
+      });
+
+      bus.emit('event-1');
+      expect(handlerDone).toBe(false);
+
+      await bus.flush();
+      expect(handlerDone).toBe(true);
+    });
+
+    it('should await multiple concurrent async subscriber promises', async () => {
+      const order: string[] = [];
+
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        order.push('handler-1');
+      });
+
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        order.push('handler-2');
+      });
+
+      bus.emit('event-1');
+      expect(order).toHaveLength(0);
+
+      await bus.flush();
+      expect(order).toContain('handler-1');
+      expect(order).toContain('handler-2');
+    });
+
+    it('should handle rejected async subscriber promises gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let goodHandlerDone = false;
+
+      bus.subscribe(async () => {
+        throw new Error('subscriber error');
+      });
+
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        goodHandlerDone = true;
+      });
+
+      bus.emit('event-1');
+
+      await bus.flush();
+      expect(goodHandlerDone).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should self-clean resolved promises from the pending set', async () => {
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      });
+
+      bus.emit('event-1');
+      await bus.flush();
+
+      // Second flush should resolve immediately (no pending promises)
+      const start = Date.now();
+      await bus.flush();
+      expect(Date.now() - start).toBeLessThan(10);
+    });
   });
 
   describe('shutdown', () => {
+    it('should flush then clear subscribers on shutdown', async () => {
+      let handlerDone = false;
+      bus.subscribe(async () => {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        handlerDone = true;
+      });
+
+      bus.emit('event-1');
+      await bus.shutdown();
+
+      // Handler should have completed during shutdown flush
+      expect(handlerDone).toBe(true);
+
+      // Subscribers should be cleared
+      const handler = vi.fn();
+      bus.subscribe(handler);
+      // The old handler is gone, only new one should work
+    });
+
     it('should clear subscribers on shutdown', async () => {
       const handler = vi.fn();
       bus.subscribe(handler);

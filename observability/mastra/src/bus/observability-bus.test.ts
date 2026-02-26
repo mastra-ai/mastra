@@ -697,4 +697,153 @@ describe('ObservabilityBus', () => {
       bus.emit(createFeedbackEvent());
     });
   });
+
+  // ==========================================================================
+  // Promise tracking and flush
+  // ==========================================================================
+
+  describe('flush()', () => {
+    it('should await pending async exporter handler promises', async () => {
+      const order: string[] = [];
+
+      const slowExporter = createMockExporter({
+        name: 'slow',
+        exportTracingEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          order.push('exporter-done');
+        }),
+        onTracingEvent: undefined,
+      });
+
+      bus.registerExporter(slowExporter);
+
+      bus.emit(createTracingEvent());
+
+      // Before flush, handler hasn't completed
+      expect(order).not.toContain('exporter-done');
+
+      await bus.flush();
+
+      // After flush, handler must have completed
+      expect(order).toContain('exporter-done');
+    });
+
+    it('should await pending async bridge handler promises', async () => {
+      let bridgeDone = false;
+
+      const bridge = createMockBridge({
+        name: 'slow-bridge',
+        exportTracingEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          bridgeDone = true;
+        }),
+        onTracingEvent: undefined,
+      });
+
+      bus.registerBridge(bridge);
+
+      bus.emit(createTracingEvent());
+
+      await bus.flush();
+      expect(bridgeDone).toBe(true);
+    });
+
+    it('should await both exporter and bridge promises', async () => {
+      const order: string[] = [];
+
+      const exporter = createMockExporter({
+        name: 'exp',
+        onLogEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 30));
+          order.push('exporter');
+        }),
+      });
+
+      const bridge = createMockBridge({
+        name: 'brg',
+        onLogEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          order.push('bridge');
+        }),
+      });
+
+      bus.registerExporter(exporter);
+      bus.registerBridge(bridge);
+
+      bus.emit(createLogEvent());
+      expect(order).toHaveLength(0);
+
+      await bus.flush();
+      expect(order).toContain('exporter');
+      expect(order).toContain('bridge');
+    });
+
+    it('should resolve immediately when no async handlers are pending', async () => {
+      // Sync handler — no promises to track
+      const exporter = createMockExporter({
+        name: 'sync-exp',
+        onTracingEvent: vi.fn(() => {}),
+      });
+
+      bus.registerExporter(exporter);
+      bus.emit(createTracingEvent());
+
+      const start = Date.now();
+      await bus.flush();
+      expect(Date.now() - start).toBeLessThan(10);
+    });
+
+    it('should handle rejected handler promises gracefully during flush', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let goodExporterDone = false;
+
+      const errorExporter = createMockExporter({
+        name: 'error-exp',
+        onTracingEvent: undefined,
+        exportTracingEvent: vi.fn(async () => {
+          throw new Error('export failed');
+        }),
+      });
+
+      const goodExporter = createMockExporter({
+        name: 'good-exp',
+        onTracingEvent: undefined,
+        exportTracingEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          goodExporterDone = true;
+        }),
+      });
+
+      bus.registerExporter(errorExporter);
+      bus.registerExporter(goodExporter);
+
+      bus.emit(createTracingEvent());
+      await bus.flush();
+
+      // Good exporter should still complete
+      expect(goodExporterDone).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should self-clean resolved promises from the pending set', async () => {
+      const exporter = createMockExporter({
+        name: 'exp',
+        onTracingEvent: undefined,
+        exportTracingEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }),
+      });
+
+      bus.registerExporter(exporter);
+
+      bus.emit(createTracingEvent());
+      await bus.flush();
+
+      // Second flush should resolve immediately
+      const start = Date.now();
+      await bus.flush();
+      expect(Date.now() - start).toBeLessThan(10);
+    });
+  });
 });

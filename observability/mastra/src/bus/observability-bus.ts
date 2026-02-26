@@ -37,6 +37,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   private bridge?: ObservabilityBridge;
   private autoExtractor?: AutoExtractedMetrics;
 
+  /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
+  private pendingHandlers: Set<Promise<void>> = new Set();
+
   constructor() {
     super({ name: 'ObservabilityBus' });
   }
@@ -105,18 +108,21 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Emit an event: route to exporter handlers, run auto-extraction,
+   * Emit an event: route to exporter/bridge handlers, run auto-extraction,
    * then forward to base class for subscriber delivery.
+   *
+   * emit() is synchronous — async handler promises are tracked internally
+   * and can be drained via flush().
    */
   emit(event: ObservabilityEvent): void {
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      routeToHandler(exporter, event, this.logger);
+      this.trackPromise(routeToHandler(exporter, event, this.logger));
     }
 
     // Route to bridge (same routing logic as exporters)
     if (this.bridge) {
-      routeToHandler(this.bridge, event, this.logger);
+      this.trackPromise(routeToHandler(this.bridge, event, this.logger));
     }
 
     // Auto-extract metrics from tracing, score, and feedback events
@@ -130,7 +136,39 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       }
     }
 
-    // Deliver to subscribers
+    // Deliver to subscribers (base class tracks its own pending promises)
     super.emit(event);
+  }
+
+  /**
+   * Track an async handler promise so flush() can await it.
+   * No-ops for sync (void) results.
+   */
+  private trackPromise(result: void | Promise<void>): void {
+    if (result && typeof (result as Promise<void>).then === 'function') {
+      const promise = result as Promise<void>;
+      this.pendingHandlers.add(promise);
+      void promise.finally(() => this.pendingHandlers.delete(promise));
+    }
+  }
+
+  /**
+   * Await all in-flight handler delivery promises (exporters + bridge),
+   * then flush base class subscriber promises.
+   *
+   * After flush() resolves, all event data has been delivered to handler
+   * methods. Callers should then call exporter.flush() / bridge.flush()
+   * to drain SDK-internal buffers.
+   */
+  async flush(): Promise<void> {
+    if (this.pendingHandlers.size > 0) {
+      await Promise.allSettled([...this.pendingHandlers]);
+    }
+    await super.flush();
+  }
+
+  async shutdown(): Promise<void> {
+    await this.flush();
+    await super.shutdown();
   }
 }

@@ -33,10 +33,15 @@ export type ObservabilityHandler = ObservabilityEvents & { name: string };
  * to exportTracingEvent. For all other signals, calls the corresponding
  * optional handler method if the handler implements it.
  *
- * Async results are caught to prevent unhandled rejections.
+ * Returns the handler promise (if async) so callers can track it for flush().
+ * Async rejections are caught to prevent unhandled rejections.
  * Sync throws are caught so one failing handler doesn't break others.
  */
-export function routeToHandler(handler: ObservabilityHandler, event: ObservabilityEvent, logger: IMastraLogger): void {
+export function routeToHandler(
+  handler: ObservabilityHandler,
+  event: ObservabilityEvent,
+  logger: IMastraLogger,
+): void | Promise<void> {
   try {
     switch (event.type) {
       case TracingEventType.SPAN_STARTED:
@@ -45,31 +50,30 @@ export function routeToHandler(handler: ObservabilityHandler, event: Observabili
         const fn = handler.onTracingEvent
           ? handler.onTracingEvent.bind(handler)
           : handler.exportTracingEvent.bind(handler);
-        catchAsyncResult(fn(event as TracingEvent), handler.name, 'tracing', logger);
-        break;
+        return catchAsyncResult(fn(event as TracingEvent), handler.name, 'tracing', logger);
       }
 
       case 'log':
         if (handler.onLogEvent) {
-          catchAsyncResult(handler.onLogEvent(event as LogEvent), handler.name, 'log', logger);
+          return catchAsyncResult(handler.onLogEvent(event as LogEvent), handler.name, 'log', logger);
         }
         break;
 
       case 'metric':
         if (handler.onMetricEvent) {
-          catchAsyncResult(handler.onMetricEvent(event as MetricEvent), handler.name, 'metric', logger);
+          return catchAsyncResult(handler.onMetricEvent(event as MetricEvent), handler.name, 'metric', logger);
         }
         break;
 
       case 'score':
         if (handler.onScoreEvent) {
-          catchAsyncResult(handler.onScoreEvent(event as ScoreEvent), handler.name, 'score', logger);
+          return catchAsyncResult(handler.onScoreEvent(event as ScoreEvent), handler.name, 'score', logger);
         }
         break;
 
       case 'feedback':
         if (handler.onFeedbackEvent) {
-          catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);
+          return catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);
         }
         break;
     }
@@ -78,15 +82,18 @@ export function routeToHandler(handler: ObservabilityHandler, event: Observabili
   }
 }
 
-/** Catch rejected promises from async handlers without blocking. */
+/**
+ * Catch rejected promises from async handlers and return the tracked promise.
+ * The returned promise always resolves (never rejects) — errors are logged.
+ */
 function catchAsyncResult(
   result: void | Promise<void>,
   handlerName: string,
   signal: string,
   logger: IMastraLogger,
-): void {
+): void | Promise<void> {
   if (result && typeof (result as Promise<void>).catch === 'function') {
-    (result as Promise<void>).catch(err => {
+    return (result as Promise<void>).catch(err => {
       logger.error(`[Observability] ${signal} handler error [handler=${handlerName}]:`, err);
     });
   }

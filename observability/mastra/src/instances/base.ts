@@ -720,38 +720,42 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Force flush any buffered/queued spans from all exporters and the bridge
-   * without shutting down the observability instance.
+   * Two-phase flush to ensure all observability data is fully exported.
    *
-   * This is useful in serverless environments (like Vercel's fluid compute) where
-   * you need to ensure all spans are exported before the runtime instance is
-   * terminated, while keeping the observability system active for future requests.
+   * **Phase 1 — Delivery:** Await all in-flight handler promises on the bus.
+   * This ensures event data has been delivered to exporter/bridge handler
+   * methods (e.g., `exportTracingEvent`, `onLogEvent`).
+   *
+   * **Phase 2 — Buffer drain:** Call `flush()` on each exporter and bridge
+   * to drain their SDK-internal buffers (e.g., OTEL BatchSpanProcessor,
+   * Langfuse client queue).
+   *
+   * The phases are sequential, not parallel — Phase 2 must not start until
+   * Phase 1 completes, otherwise exporters would flush empty buffers.
+   *
+   * This is critical for durable execution engines (e.g., Inngest) where
+   * the process may be interrupted after a step completes. Calling flush()
+   * outside the durable step ensures all span data reaches external systems.
    */
   async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
 
-    // Flush the ObservabilityBus (no-op today, but keeps the interface contract)
-    const flushPromises: Promise<void>[] = [this.observabilityBus.flush()];
+    // Phase 1: Await in-flight handler delivery promises.
+    // After this, all event data has been delivered to exporter/bridge methods.
+    await this.observabilityBus.flush();
 
-    // Flush all exporters and bridge
-    flushPromises.push(...this.exporters.map(e => e.flush()));
-
-    // Add bridge flush if present
+    // Phase 2: Drain exporter and bridge SDK-internal buffers.
+    const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
     if (this.config.bridge) {
-      flushPromises.push(this.config.bridge.flush());
+      bufferFlushPromises.push(this.config.bridge.flush());
     }
 
-    const results = await Promise.allSettled(flushPromises);
+    const results = await Promise.allSettled(bufferFlushPromises);
 
     // Log any errors but don't throw
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        const targetName =
-          index === 0
-            ? 'observability-bus'
-            : index <= this.exporters.length
-              ? this.exporters[index - 1]?.name
-              : 'bridge';
+        const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
         this.logger.error(`[Observability] Flush error [target=${targetName}]`, result.reason);
       }
     });
