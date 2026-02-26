@@ -2195,19 +2195,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
 
     const doGenerate = async () => {
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-          }),
-        abortSignal,
-      );
-      return result;
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2286,18 +2285,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-          }),
-        abortSignal,
-      );
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2407,45 +2406,45 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       let chunkCount = 0;
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.reflectionConfig.modelSettings,
-            },
-            providerOptions: this.reflectionConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-            ...(attemptNumber === 1
-              ? {
-                  onChunk(chunk: any) {
-                    chunkCount++;
-                    if (chunkCount === 1 || chunkCount % 50 === 0) {
-                      const preview =
-                        chunk.type === 'text-delta'
-                          ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                          : chunk.type === 'tool-call'
-                            ? ` tool=${chunk.toolName}`
-                            : '';
-                      omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                    }
-                  },
-                  onFinish(event: any) {
-                    omDebug(
-                      `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                    );
-                  },
-                  onAbort(event: any) {
-                    omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                  },
-                  onError({ error }: { error: unknown }) {
-                    omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                  },
-                }
-              : {}),
-          }),
-        abortSignal,
-      );
+      const result = await this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.reflectionConfig.modelSettings,
+          },
+          providerOptions: this.reflectionConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+          ...(attemptNumber === 1
+            ? {
+                onChunk(chunk: any) {
+                  chunkCount++;
+                  if (chunkCount === 1 || chunkCount % 50 === 0) {
+                    const preview =
+                      chunk.type === 'text-delta'
+                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                        : chunk.type === 'tool-call'
+                          ? ` tool=${chunk.toolName}`
+                          : '';
+                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                  }
+                },
+                onFinish(event: any) {
+                  omDebug(
+                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                  );
+                },
+                onAbort(event: any) {
+                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                },
+                onError({ error }: { error: unknown }) {
+                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                },
+              }
+            : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
