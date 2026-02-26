@@ -491,6 +491,7 @@ export class DaytonaSandbox extends MastraSandbox {
     }
 
     // Check if already mounted with matching config (e.g., when reconnecting)
+    let isRemount = false;
     const existingMount = await this.checkExistingMount(mountPath, config);
     if (existingMount === 'matching') {
       this.logger.debug(`${LOG_PREFIX} Existing mount at "${mountPath}" matches config, skipping`);
@@ -499,30 +500,42 @@ export class DaytonaSandbox extends MastraSandbox {
     } else if (existingMount === 'mismatched') {
       this.logger.debug(`${LOG_PREFIX} Config mismatch at "${mountPath}", re-mounting...`);
       await this.unmount(mountPath);
+      isRemount = true;
     }
 
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
-    // Check if directory is non-empty (mounting would shadow existing files)
-    try {
-      const response = await sandbox.process.executeCommand(
-        `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
-      );
-      if (response.result.trim() === 'non-empty') {
-        const error = `Cannot mount at ${mountPath}: directory exists and is not empty`;
-        this.logger.error(`${LOG_PREFIX} ${error}`);
-        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
-        return { success: false, mountPath, error };
+    // Check if directory is non-empty (mounting would shadow existing files).
+    // Skip for remounts — if unmount didn't fully clean up (FUSE still active),
+    // the old FUSE content will appear here but we can still stack a new mount on top.
+    if (!isRemount) {
+      try {
+        const response = await sandbox.process.executeCommand(
+          `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
+        );
+        if (response.result.trim() === 'non-empty') {
+          const error = `Cannot mount at ${mountPath}: directory exists and is not empty`;
+          this.logger.error(`${LOG_PREFIX} ${error}`);
+          this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+          return { success: false, mountPath, error };
+        }
+      } catch {
+        // Check failed, proceed anyway
       }
-    } catch {
-      // Check failed, proceed anyway
     }
 
-    // Create mount directory
+    // Create/prepare the mount directory.
+    // For remounts: if the FUSE couldn't be unmounted (common in container environments),
+    // overlay the existing FUSE mount with a tmpfs. This avoids FUSE-on-FUSE stacking,
+    // which fails in some kernels because the existing FUSE daemon is asked to resolve
+    // the mount point and returns ENOENT (it's a VFS path, not an S3/GCS object).
+    // A tmpfs overlay is a pure kernel operation that doesn't go through the FUSE driver.
     try {
-      const mkdirResponse = await sandbox.process.executeCommand(
-        `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`,
-      );
+      const mkdirCmd = isRemount
+        ? `sudo mount -t tmpfs tmpfs "${mountPath}" 2>/dev/null || sudo mkdir -p "${mountPath}" 2>/dev/null || true; ` +
+          `sudo chown $(id -u):$(id -g) "${mountPath}" 2>/dev/null || true`
+        : `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`;
+      const mkdirResponse = await sandbox.process.executeCommand(mkdirCmd);
       if (mkdirResponse.exitCode !== 0) {
         const error = mkdirResponse.result || 'Failed to create mount directory';
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
@@ -630,18 +643,34 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Unmounting "${mountPath}"...`);
 
-    // Use fusermount for FUSE mounts; on any failure, try lazy umount as last resort
-    try {
-      const response = await sandbox.process.executeCommand(
-        `sudo fusermount -u "${mountPath}" 2>/dev/null || sudo umount "${mountPath}"`,
-      );
-      if (response.exitCode !== 0) {
-        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${response.result}`);
-      }
-    } catch (err) {
-      this.logger.debug(`${LOG_PREFIX} Unmount failed, trying lazy umount: ${err}`);
-      await sandbox.process.executeCommand(`sudo umount -l "${mountPath}" 2>/dev/null || true`);
-    }
+    // Use session-based execution — it provides the correct user context and sudo
+    // access for FUSE mounts. sandbox.process.executeCommand() (the SDK's direct
+    // method) runs in a different execution context where fusermount/sudo may not
+    // have access to the FUSE user namespace created by session-based commands.
+    // Use semicolons (not ||) so every variant is attempted regardless of exit codes:
+    // fusermount3 may exit 0 without actually unmounting on some container configs,
+    // which would silently short-circuit the chain if || were used.
+    // Do NOT kill the FUSE daemon with pkill: a killed daemon leaves a stale FUSE
+    // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
+    await this.executeCommand('sh', [
+      '-c',
+      `sudo fusermount -u "${mountPath}" 2>/dev/null; ` +
+        `sudo fusermount3 -u "${mountPath}" 2>/dev/null; ` +
+        `sudo umount "${mountPath}" 2>/dev/null; ` +
+        `sudo umount -f "${mountPath}" 2>/dev/null; ` +
+        `sudo umount -l "${mountPath}" 2>/dev/null; ` +
+        // Last resort: if the FUSE is truly stuck (can't be unmounted by standard means),
+        // move it to a temporary path so the original mount point can be cleaned up.
+        // This preserves the FUSE in /tmp until the sandbox is destroyed.
+        `if mountpoint -q "${mountPath}" 2>/dev/null; then ` +
+        `_defunctPath="/tmp/.mastra-defunct-$$"; ` +
+        `sudo mkdir -p "$_defunctPath" 2>/dev/null; ` +
+        `sudo mount --move "${mountPath}" "$_defunctPath" 2>/dev/null; ` +
+        `sudo umount -l "$_defunctPath" 2>/dev/null; ` +
+        `sudo rmdir "$_defunctPath" 2>/dev/null; ` +
+        `fi; ` +
+        `true`,
+    ]);
 
     this.mounts.delete(mountPath);
 
@@ -650,11 +679,11 @@ export class DaytonaSandbox extends MastraSandbox {
     await sandbox.process.executeCommand(`rm -f "${markerPath}" 2>/dev/null || true`);
 
     // Remove mount directory if empty
-    const rmdirResponse = await sandbox.process.executeCommand(`sudo rmdir "${mountPath}" 2>&1`);
-    if (rmdirResponse.exitCode === 0) {
+    const rmdirResult = await this.executeCommand('sh', ['-c', `sudo rmdir "${mountPath}" 2>&1`]);
+    if (rmdirResult.exitCode === 0) {
       this.logger.debug(`${LOG_PREFIX} Removed mount directory ${mountPath}`);
     } else {
-      this.logger.debug(`${LOG_PREFIX} Could not remove ${mountPath}: ${rmdirResponse.result.trim() || 'not empty'}`);
+      this.logger.debug(`${LOG_PREFIX} Could not remove ${mountPath}: ${rmdirResult.stderr.trim() || 'not empty'}`);
     }
 
     this.logger.debug(`${LOG_PREFIX} Unmounted "${mountPath}"`);

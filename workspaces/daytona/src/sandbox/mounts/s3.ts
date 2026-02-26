@@ -32,20 +32,31 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   }
 
   // Install s3fs if not present
-  const checkResult = await run('which s3fs || echo "not found"');
+  const checkResult = await run('which s3fs 2>/dev/null || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
     logger.warn(`${LOG_PREFIX} s3fs not found, installing...`);
 
-    await run('sudo apt-get update 2>&1', 60_000);
+    await run('sudo apt-get update -qq 2>&1', 60_000);
 
-    const installResult = await run(
-      'sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1',
+    // The fuse package's post-install script may fail in containers (e.g. can't run modprobe,
+    // can't set SUID). Use || true so the overall command succeeds even if dpkg exits non-zero,
+    // then verify the binary is actually present below.
+    await run(
+      'sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1 || true',
       120_000,
     );
 
-    if (installResult.exitCode !== 0) {
-      throw new Error(`Failed to install s3fs: ${installResult.stderr || installResult.stdout}`);
+    // The fuse post-install script may fail to set the SUID bit on fusermount.
+    // Set it explicitly so non-root processes can call fusermount.
+    await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
+
+    const s3fsCheck = await run('which s3fs 2>/dev/null || echo "not found"');
+    if (s3fsCheck.stdout.includes('not found')) {
+      throw new Error('Failed to install s3fs: binary not found after install attempt');
     }
+  } else {
+    // Ensure fusermount SUID is set even if the fuse package was previously installed in a broken state
+    await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
   }
 
   // Get uid/gid for proper file ownership
@@ -63,6 +74,13 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     );
   }
 
+  // Allow non-root processes to use FUSE and the allow_other mount option.
+  // These are no-ops if already configured.
+  await run(`sudo chmod a+rw /dev/fuse 2>/dev/null || true`);
+  await run(
+    `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
+  );
+
   if (hasCredentials) {
     await run(`sudo rm -f ${credentialsPath}`);
     await writeFile(credentialsPath, `${config.accessKeyId}:${config.secretAccessKey}`);
@@ -78,7 +96,13 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting as public bucket (read-only)`);
   }
 
+  // allow_other: let other users (e.g. root for rmdir) access the mount.
+  // Requires user_allow_other in /etc/fuse.conf for non-root mounts.
   mountOptions.push('allow_other');
+
+  // nonempty: allow mounting on a non-empty directory. We do our own emptiness check
+  // in mount() before calling here, so s3fs's built-in check is redundant.
+  mountOptions.push('nonempty');
 
   if (uid && gid) {
     mountOptions.push(`uid=${uid}`, `gid=${gid}`);
@@ -94,7 +118,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
-  const mountCmd = `sudo s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+  // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
+  // in the container's user namespace — allowing fusermount -u to unmount it later.
+  const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3: ${hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd}`);
 
   try {
