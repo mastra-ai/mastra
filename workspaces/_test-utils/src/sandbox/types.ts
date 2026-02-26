@@ -14,6 +14,13 @@ export interface SandboxTestConfig {
   /** Factory to create sandbox instance for testing. Accepts optional overrides (e.g. env). */
   createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
 
+  /**
+   * Optional factory to create a sandbox with intentionally invalid config (e.g. bad image/template).
+   * Used to test error recovery: _start() should reject cleanly, not hang.
+   * If not provided, error recovery tests are skipped.
+   */
+  createInvalidSandbox?: () => Promise<MastraSandbox> | MastraSandbox;
+
   /** Cleanup after tests */
   cleanupSandbox?: (sandbox: MastraSandbox) => Promise<void>;
 

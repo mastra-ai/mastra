@@ -10,7 +10,6 @@ export async function handleReviewCommand(ctx: SlashCommandContext, args: string
   if (ctx.state.pendingNewThread) {
     await ctx.state.harness.createThread();
     ctx.state.pendingNewThread = false;
-    ctx.updateStatusLine();
   }
 
   const prNumber = args[0];

@@ -38,8 +38,11 @@ import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
-import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
+import { resolvePathPattern } from './glob';
+import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
+import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
+import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
@@ -244,6 +247,29 @@ export interface WorkspaceConfig<
   skillSource?: SkillSource;
 
   // ---------------------------------------------------------------------------
+  // LSP Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enable LSP diagnostics for edit tools.
+   *
+   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * type errors, warnings, and other diagnostics from language servers after edits.
+   *
+   * LSP requires a sandbox with a process manager (`sandbox.processes`) to spawn
+   * language server processes. It works with any sandbox backend (local, E2B, etc.).
+   *
+   * Requires optional peer dependencies: `vscode-jsonrpc`, `vscode-languageserver-protocol`,
+   * and the relevant language server (e.g. `typescript-language-server` for TypeScript).
+   *
+   * - `true` — Enable with defaults
+   * - `LSPConfig` object — Enable with custom timeouts/settings
+   *
+   * @default undefined (disabled)
+   */
+  lsp?: boolean | LSPConfig;
+
+  // ---------------------------------------------------------------------------
   // Tool Configuration
   // ---------------------------------------------------------------------------
 
@@ -294,6 +320,14 @@ export type { WorkspaceStatus } from './types';
  * Use this when you need to accept any Workspace regardless of its generic parameters.
  */
 export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
+
+/** A workspace entry in the Mastra registry, enriched with source metadata. */
+export interface RegisteredWorkspace {
+  workspace: Workspace;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+}
 
 // =============================================================================
 // Path Context Types
@@ -379,6 +413,7 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  private _lsp?: LSPManager;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -456,6 +491,28 @@ export class Workspace<
       });
     }
 
+    // Initialize LSP if configured and a process manager is available
+    if (config.lsp) {
+      const processes = this._sandbox?.processes;
+      if (!this._sandbox) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
+        );
+      } else if (!processes) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. Sandbox "${this._sandbox.name ?? 'unknown'}" does not provide one — LSP disabled.`,
+        );
+      } else if (!isLSPAvailable()) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages. Install them to enable LSP diagnostics.`,
+        );
+      } else {
+        const lspConfig = config.lsp === true ? {} : config.lsp;
+        const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
+      }
+    }
+
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
     if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
@@ -505,6 +562,14 @@ export class Workspace<
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * The LSP manager (if configured, initialized, and a process manager is available).
+   * Returns undefined if LSP is not configured, deps are missing, or sandbox has no process manager.
+   */
+  get lsp(): LSPManager | undefined {
+    return this._lsp;
   }
 
   /**
@@ -649,9 +714,9 @@ export class Workspace<
    * Rebuild the search index from filesystem paths.
    * Used internally for auto-indexing on init.
    *
-   * Paths can be plain directories (e.g., '/docs') or glob patterns
-   * (e.g., '/docs/**\/*.md'). Glob patterns are resolved to a walk root
-   * via extractGlobBase, then files are filtered by the pattern.
+   * Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are
+   * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
     if (!this._searchEngine || !this._fs || paths.length === 0) {
@@ -661,27 +726,52 @@ export class Workspace<
     // Clear existing BM25 index
     this._searchEngine.clear();
 
-    // Index all files from specified paths
+    // Adapt filesystem readdir to the ReaddirEntry interface
+    const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+      const entries = await this._fs!.readdir(dir);
+      return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+    };
+
+    // Index all files from specified paths (track across patterns to avoid re-indexing overlaps)
+    const indexedPaths = new Set<string>();
     for (const pathOrGlob of paths) {
       try {
-        if (isGlobPattern(pathOrGlob)) {
-          // Glob pattern: walk from the base directory, filter with matcher
-          const walkRoot = extractGlobBase(pathOrGlob);
-          const matcher = createGlobMatcher(pathOrGlob);
-          const files = await this.getAllFiles(walkRoot);
-          for (const filePath of files) {
-            if (!matcher(filePath)) continue;
-            await this.indexFileForSearch(filePath);
+        const resolved = await resolvePathPattern(pathOrGlob, readdir);
+        const filesToIndex = new Set<string>();
+        const directoryRoots: string[] = [];
+        for (const entry of resolved) {
+          if (entry.type === 'file') {
+            filesToIndex.add(entry.path);
+            continue;
           }
-        } else {
-          // Plain path: recurse everything (existing behavior)
-          const files = await this.getAllFiles(pathOrGlob);
-          for (const filePath of files) {
-            await this.indexFileForSearch(filePath);
+          // Skip directories already covered by a parent directory
+          const alreadyCovered = directoryRoots.some(
+            root =>
+              entry.path === root || (root === '/' ? entry.path.startsWith('/') : entry.path.startsWith(`${root}/`)),
+          );
+          if (!alreadyCovered) directoryRoots.push(entry.path);
+        }
+        // Index direct file matches first so they aren't lost if a directory scan fails
+        for (const filePath of filesToIndex) {
+          if (indexedPaths.has(filePath)) continue;
+          await this.indexFileForSearch(filePath);
+          indexedPaths.add(filePath);
+        }
+        for (const dir of directoryRoots) {
+          try {
+            const files = await this.getAllFiles(dir);
+            for (const filePath of files) {
+              if (!indexedPaths.has(filePath)) {
+                await this.indexFileForSearch(filePath);
+                indexedPaths.add(filePath);
+              }
+            }
+          } catch {
+            // Skip directories that can't be read
           }
         }
       } catch {
-        // Skip paths that don't exist
+        // Skip paths that don't exist or can't be read
       }
     }
   }
@@ -759,6 +849,16 @@ export class Workspace<
     this._status = 'destroying';
 
     try {
+      // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
+      if (this._lsp) {
+        try {
+          await this._lsp.shutdownAll();
+        } catch {
+          // LSP shutdown errors are non-blocking
+        }
+        this._lsp = undefined;
+      }
+
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'destroy');
       }

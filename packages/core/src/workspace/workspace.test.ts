@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -12,6 +13,7 @@ import {
   SearchNotAvailableError,
 } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
+import { LSPManager } from './lsp';
 import { LocalSandbox } from './sandbox';
 import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
@@ -1208,6 +1210,106 @@ Line 3 conclusion`;
 
       await workspace.destroy();
     });
+
+    it('should auto-index a single file path (not a directory)', async () => {
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Billing FAQ content');
+      await fs.writeFile(path.join(tempDir, 'content', 'guide.md'), 'Setup guide content');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/content/faq.md'],
+      });
+
+      await workspace.init();
+
+      // The single file should be indexed
+      const results = await workspace.search('Billing FAQ');
+      expect(results.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // The other file should NOT be indexed
+      const otherResults = await workspace.search('Setup guide');
+      expect(otherResults.some(r => r.id === '/content/guide.md')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with trailing slash path /docs/', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs/'],
+      });
+
+      await workspace.init();
+
+      const results = await workspace.search('project');
+      expect(results.some(r => r.id === '/docs/readme.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with unscoped file glob **/*.md', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.md'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Frequently asked questions');
+      await fs.writeFile(path.join(tempDir, 'notes.txt'), 'Internal notes text file');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['**/*.md'],
+      });
+
+      await workspace.init();
+
+      // .md files anywhere should be indexed
+      const apiResults = await workspace.search('API reference');
+      expect(apiResults.some(r => r.id === '/docs/api.md')).toBe(true);
+
+      const faqResults = await workspace.search('Frequently asked');
+      expect(faqResults.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // .txt files should NOT be indexed
+      const txtResults = await workspace.search('Internal notes');
+      expect(txtResults.some(r => r.id === '/notes.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with directory-matching glob **/content', async () => {
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'src', 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Root FAQ content');
+      await fs.writeFile(path.join(tempDir, 'src', 'content', 'api.md'), 'API documentation');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['**/content'],
+      });
+
+      await workspace.init();
+
+      // Files inside /content should be indexed
+      const rootResults = await workspace.search('Root FAQ');
+      expect(rootResults.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // Files inside /src/content should also be indexed
+      const nestedResults = await workspace.search('API documentation');
+      expect(nestedResults.some(r => r.id === '/src/content/api.md')).toBe(true);
+
+      await workspace.destroy();
+    });
   });
 
   // ===========================================================================
@@ -1615,6 +1717,116 @@ Line 3 conclusion`;
       await workspace.init();
       await expect(workspace.destroy()).rejects.toThrow('Sandbox destroy failed');
       expect(workspace.status).toBe('error');
+    });
+  });
+
+  // ===========================================================================
+  // LSP Initialization
+  // ===========================================================================
+  describe('LSP initialization', () => {
+    it('creates LSPManager when lsp:true and sandbox has processes', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+    });
+
+    it('does not create LSPManager when lsp is not configured', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not create LSPManager when sandbox has no process manager', () => {
+      const sandbox = {
+        provider: 'mock',
+        status: 'running' as const,
+        start: vi.fn(),
+        destroy: vi.fn(),
+        getInfo: vi.fn(),
+      } as any;
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not create LSPManager when no sandbox is provided', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem, lsp: true });
+
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('uses explicit root from LSPConfig', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: { root: '/explicit/root' } });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      expect(workspace.lsp!.root).toBe('/explicit/root');
+    });
+
+    it('resolves root via findProjectRoot when no explicit root', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+
+      // findProjectRoot(process.cwd()) finds the repo root (has package.json, tsconfig.json)
+      // The resolved root should be an absolute path that contains a project marker
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      const root = workspace.lsp!.root;
+      expect(path.isAbsolute(root)).toBe(true);
+      // Verify it found a real project root (not just cwd fallback) by checking for markers
+      const hasMarker =
+        existsSync(path.join(root, 'package.json')) ||
+        existsSync(path.join(root, 'tsconfig.json')) ||
+        existsSync(path.join(root, 'go.mod'));
+      expect(hasMarker).toBe(true);
+    });
+
+    it('passes LSPConfig root through to LSPManager', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({
+        sandbox,
+        lsp: { root: tempDir, disableServers: ['eslint'], diagnosticTimeout: 5000, initTimeout: 3000 },
+      });
+
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      // root is the only publicly exposed LSPConfig property on LSPManager;
+      // disableServers, diagnosticTimeout, and initTimeout are verified in manager.test.ts
+      expect(workspace.lsp!.root).toBe(tempDir);
+    });
+
+    it('treats lsp:true as empty LSPConfig', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const ws1 = new Workspace({ sandbox, lsp: true });
+      const ws2 = new Workspace({ sandbox, lsp: {} });
+
+      expect(ws1.lsp).toBeInstanceOf(LSPManager);
+      expect(ws2.lsp).toBeInstanceOf(LSPManager);
+      expect(ws1.lsp!.root).toBe(ws2.lsp!.root);
+    });
+
+    it('shuts down LSP on destroy', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      const lsp = workspace.lsp!;
+      const shutdownSpy = vi.spyOn(lsp, 'shutdownAll').mockResolvedValue(undefined);
+
+      await workspace.init();
+      await workspace.destroy();
+
+      expect(shutdownSpy).toHaveBeenCalled();
+      expect(workspace.lsp).toBeUndefined();
+    });
+
+    it('does not fail destroy when LSP shutdown throws', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      vi.spyOn(workspace.lsp!, 'shutdownAll').mockRejectedValue(new Error('LSP shutdown failed'));
+
+      await workspace.init();
+      await workspace.destroy();
+      expect(workspace.lsp).toBeUndefined();
     });
   });
 });

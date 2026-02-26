@@ -1,5 +1,5 @@
 import { DiffOutputComponent } from '../components/diff-output.js';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: string): Promise<void> {
@@ -38,7 +38,9 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
   }
 
   // No path specified — show summary of all tracked modified files
-  if (state.modifiedFiles.size === 0) {
+  // Read from Harness display state (canonical source for file modifications)
+  const modifiedFiles = state.harness.getDisplayState().modifiedFiles;
+  if (modifiedFiles.size === 0) {
     try {
       const { execa } = await import('execa');
       const result = await execa('git', ['diff', '--stat'], {
@@ -64,8 +66,8 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
     return;
   }
 
-  const lines: string[] = [`Modified files (${state.modifiedFiles.size}):`];
-  for (const [fp, info] of state.modifiedFiles) {
+  const lines: string[] = [`Modified files (${modifiedFiles.size}):`];
+  for (const [fp, info] of modifiedFiles) {
     const opCounts = new Map<string, number>();
     for (const op of info.operations) {
       opCounts.set(op, (opCounts.get(op) || 0) + 1);
@@ -73,10 +75,10 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
     const ops = Array.from(opCounts.entries())
       .map(([op, count]) => (count > 1 ? `${op}×${count}` : op))
       .join(', ');
-    lines.push(`  ${fg('path', fp)} ${fg('muted', `(${ops})`)}`);
+    lines.push(`  ${theme.fg('path', fp)} ${theme.fg('muted', `(${ops})`)}`);
   }
   lines.push('');
-  lines.push(fg('muted', 'Use /diff <path> to see the git diff for a specific file.'));
+  lines.push(theme.fg('muted', 'Use /diff <path> to see the git diff for a specific file.'));
 
   ctx.showInfo(lines.join('\n'));
 }

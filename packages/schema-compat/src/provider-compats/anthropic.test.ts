@@ -772,4 +772,30 @@ describe('AnthropicSchemaCompatLayer', () => {
       expect(jsonSchema).toMatchSnapshot();
     });
   });
+
+  describe('processZodType - ZodNull', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle standalone z.null() without throwing', () => {
+      const schema = z.object({
+        value: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle z.null() inside a union', () => {
+      const schema = z.object({
+        name: z.union([z.string(), z.null()]),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+  });
 });

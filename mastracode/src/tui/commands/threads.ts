@@ -100,9 +100,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.chatContainer.clear();
         state.allToolComponents = [];
         state.pendingTools.clear();
-        state.toolInputBuffers.clear();
         await ctx.renderExistingMessages();
-        ctx.updateStatusLine();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
         resolve();

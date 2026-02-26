@@ -9,6 +9,12 @@ packages:
 
 **Added in:** `@mastra/core@1.5.0`
 
+:::warning
+
+The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
+
+:::
+
 The `Harness` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
 
 ## Usage example
@@ -632,6 +638,52 @@ const category = harness.getToolCategory({ toolName: 'mastra_workspace_write_fil
 // 'edit'
 ```
 
+### Workspace
+
+#### `getWorkspace()`
+
+Return the current workspace instance, or `undefined` if no workspace is configured or it hasn't been resolved yet.
+
+```typescript
+const workspace = harness.getWorkspace()
+```
+
+#### `resolveWorkspace()`
+
+Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
+
+```typescript
+const workspace = await harness.resolveWorkspace()
+```
+
+#### `hasWorkspace()`
+
+Return whether a workspace is configured (static, config-based, or dynamic).
+
+```typescript
+if (harness.hasWorkspace()) {
+  const workspace = await harness.resolveWorkspace()
+}
+```
+
+#### `isWorkspaceReady()`
+
+Return whether the workspace is ready to use. For dynamic workspaces (factory function), always returns `true`. For static workspaces, returns `true` after `init()` succeeds.
+
+```typescript
+if (harness.isWorkspaceReady()) {
+  const workspace = harness.getWorkspace()
+}
+```
+
+#### `destroyWorkspace()`
+
+Destroy the workspace and release resources. Only applies to static workspaces — dynamic workspaces are not destroyed.
+
+```typescript
+await harness.destroyWorkspace()
+```
+
 ### Observational memory
 
 #### `loadOMProgress()`
@@ -647,12 +699,12 @@ await harness.loadOMProgress()
 Return the full `ObservationalMemoryRecord` for the current thread and resource, or `null` if no thread is selected or no record exists.
 
 ```typescript
-const record = await harness.getObservationalMemoryRecord();
+const record = await harness.getObservationalMemoryRecord()
 
 if (record) {
-  console.log(record.activeObservations);
-  console.log(record.generationCount);
-  console.log(record.observationTokenCount);
+  console.log(record.activeObservations)
+  console.log(record.generationCount)
+  console.log(record.observationTokenCount)
 }
 ```
 

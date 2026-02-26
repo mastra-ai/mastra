@@ -25,6 +25,10 @@ export class WorkflowsConvex extends WorkflowsStorage {
     this.#db = new ConvexDB(client);
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return false;
+  }
+
   async init(): Promise<void> {
     // No-op for Convex; schema is managed server-side.
   }
@@ -33,60 +37,26 @@ export class WorkflowsConvex extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
+  async updateWorkflowResults(_args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    const run = await this.getRun(workflowName, runId);
-    if (!run) return {};
-
-    const snapshot = this.ensureSnapshot(run);
-    snapshot.context = snapshot.context || {};
-    snapshot.context[stepId] = result;
-    snapshot.requestContext = { ...(snapshot.requestContext || {}), ...requestContext };
-
-    await this.persistWorkflowSnapshot({
-      workflowName,
-      runId,
-      resourceId: run.resourceId,
-      snapshot,
-    });
-
-    return JSON.parse(JSON.stringify(snapshot.context));
+    throw new Error(
+      'updateWorkflowResults is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
+  async updateWorkflowState(_args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    const run = await this.getRun(workflowName, runId);
-    if (!run) return undefined;
-
-    const snapshot = this.ensureSnapshot(run);
-    const updated = { ...snapshot, ...opts };
-
-    await this.persistWorkflowSnapshot({
-      workflowName,
-      runId,
-      resourceId: run.resourceId,
-      snapshot: updated,
-    });
-
-    return updated;
+    throw new Error(
+      'updateWorkflowState is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({

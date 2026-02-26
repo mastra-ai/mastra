@@ -122,6 +122,22 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         },
         getContext().testTimeout,
       );
+
+      it(
+        'handles env values with special characters',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsEnvVars) return;
+
+          const result = await executeCommand('printenv', ['SPECIAL'], {
+            env: { SPECIAL: 'has spaces & "quotes"' },
+          });
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('has spaces');
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('working directory', () => {
@@ -155,6 +171,171 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
 
           // Should either timeout (exit non-zero) or be killed
           expect(result.exitCode).not.toBe(0);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'times out long-running commands with streaming callbacks',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsTimeout) return;
+          if (!capabilities.supportsStreaming) return;
+
+          const chunks: string[] = [];
+          const result = await executeCommand(
+            'sh',
+            ['-c', 'for i in $(seq 1 100); do echo "line $i"; sleep 0.5; done'],
+            {
+              timeout: 2000,
+              onStdout: c => chunks.push(c),
+            },
+          );
+
+          // Should timeout and return failure
+          expect(result.success).toBe(false);
+          // Should have captured some partial output before timeout
+          expect(chunks.length).toBeGreaterThan(0);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'fast command completes within timeout',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsTimeout) return;
+
+          const result = await executeCommand('echo', ['fast'], { timeout: 10000 });
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('fast');
+        },
+        getContext().testTimeout,
+      );
+    });
+
+    describe('shell patterns', () => {
+      it(
+        'executes a shell pipeline',
+        async () => {
+          const result = await executeCommand('sh', [
+            '-c',
+            'echo "cherry banana apple" | tr " " "\\n" | sort | head -1',
+          ]);
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout.trim()).toBe('apple');
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'executes a heredoc',
+        async () => {
+          const result = await executeCommand('sh', [
+            '-c',
+            `cat > /tmp/heredoc-test.txt << 'EOF'
+line one
+line two
+EOF
+cat /tmp/heredoc-test.txt`,
+          ]);
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('line one');
+          expect(result.stdout).toContain('line two');
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'preserves custom exit codes',
+        async () => {
+          const result = await executeCommand('sh', ['-c', 'exit 42']);
+
+          expect(result.exitCode).toBe(42);
+          expect(result.success).toBe(false);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'captures both stdout and stderr from same command',
+        async () => {
+          const result = await executeCommand('sh', ['-c', 'echo "out" && echo "err" >&2']);
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('out');
+          expect(result.stderr).toContain('err');
+        },
+        getContext().testTimeout,
+      );
+    });
+
+    describe('filesystem', () => {
+      it(
+        'can write and read back a file',
+        async () => {
+          const token = `roundtrip-${Date.now()}`;
+          const write = await executeCommand('sh', ['-c', `echo "${token}" > /tmp/roundtrip-test.txt`]);
+          const read = await executeCommand('cat', ['/tmp/roundtrip-test.txt']);
+
+          expect(write.exitCode).toBe(0);
+          expect(read.exitCode).toBe(0);
+          expect(read.stdout).toContain(token);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'handles large output (5000 lines)',
+        async () => {
+          const result = await executeCommand('sh', ['-c', 'seq 1 5000']);
+          const lines = result.stdout.trim().split('\n');
+
+          expect(result.exitCode).toBe(0);
+          expect(lines.length).toBe(5000);
+          expect(lines[0]).toBe('1');
+          expect(lines[lines.length - 1]).toBe('5000');
+        },
+        getContext().testTimeout,
+      );
+    });
+
+    describe('streaming', () => {
+      it(
+        'streams stdout chunks via callback',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStreaming) return;
+
+          const chunks: string[] = [];
+          const result = await executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "chunk $i"; sleep 0.3; done'], {
+            onStdout: c => chunks.push(c),
+          });
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('chunk 3');
+          expect(chunks.length).toBeGreaterThan(0);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'streams stderr chunks via callback',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStreaming) return;
+
+          const stderrChunks: string[] = [];
+          const result = await executeCommand('sh', ['-c', 'echo "err1" >&2; sleep 0.2; echo "err2" >&2'], {
+            onStderr: c => stderrChunks.push(c),
+          });
+
+          expect(result.exitCode).toBe(0);
+          expect(stderrChunks.length).toBeGreaterThan(0);
+          expect(result.stderr).toContain('err');
         },
         getContext().testTimeout,
       );

@@ -1235,7 +1235,7 @@ describe('Agent - network - completion validation', () => {
     expect(iterationCallbacks[2].iteration).toBe(2);
   });
 
-  it('should suppress feedback message when suppressFeedback is true', async () => {
+  it('should add suppressFeedback: true to the feedback message metadata when suppressFeedback is true', async () => {
     const memory = new MockMemory();
     const savedMessages: any[] = [];
 
@@ -1307,7 +1307,14 @@ describe('Agent - network - completion validation', () => {
     const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
 
     // Verify no feedback messages were saved
-    expect(feedbackMessages.length).toBe(0);
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    const allHaveSuppressFeedback = feedbackMessages.every(
+      msg => msg.content.metadata.completionResult.suppressFeedback,
+    );
+
+    // Verify the suppressFeedback flag is set to true
+    expect(allHaveSuppressFeedback).toBe(true);
   });
 
   it('should save feedback message when suppressFeedback is false (default)', async () => {

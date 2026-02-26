@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "",
   "type": "module",
   "files": [
@@ -77,7 +77,8 @@
     "strip-ansi": "^7.1.2",
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
-    "vscode-languageserver-protocol": "latest"
+    "vscode-languageserver-protocol": "latest",
+    "@mastra/pg": "workspace:*"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
