@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
-import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
+import { getZodTypeName, getZodInnerType, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
 
 /**
  * Keys that should be redacted from error messages to prevent sensitive data leakage.
@@ -141,24 +141,47 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Recursively strips null and undefined values from object properties.
+ * Checks whether a Zod schema accepts null values by walking its wrapper chain.
+ * A field is nullable if ZodNullable appears anywhere in the wrapper chain
+ * (e.g. z.string().nullable(), z.string().nullable().optional()).
+ *
+ * @param schema The Zod field schema to check
+ * @returns true if the schema accepts null
+ */
+function isFieldNullable(schema: z.ZodTypeAny): boolean {
+  let current = schema;
+  while (true) {
+    const typeName = getZodTypeName(current);
+    if (!typeName) break;
+    if (typeName === 'ZodNullable') return true;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
+  }
+  return false;
+}
+
+/**
+ * Schema-aware stripping of null/undefined values from object properties.
  * This handles LLMs (e.g. Gemini) that send null for optional fields,
  * since Zod's .optional() only accepts undefined, not null. (GitHub #12362)
  *
- * When a property value is null or undefined, it is omitted from the result
- * object entirely, which is equivalent to "not provided" for Zod validation.
+ * When a schema is provided, only strips null from fields that are NOT
+ * .nullable() — preserving null for fields where it's a valid value.
+ * This fixes the issue where mixing .optional() and .nullable() fields
+ * caused required nullable fields to lose their null values. (GitHub #13419)
+ *
+ * When no schema is provided, falls back to stripping all null/undefined
+ * values (original behavior).
  *
  * Only recurses into plain objects to preserve class instances and built-in objects
  * like Date, Map, URL, etc.
  *
- * NOTE: This function should NOT be called unconditionally because it breaks
- * schemas that use .nullable() (where null is a valid value). It is used as
- * a fallback when initial validation fails. See validateToolInput for usage.
- *
  * @param input The input to process
- * @returns The processed input with null/undefined values stripped
+ * @param schema Optional Zod schema to check which fields accept null
+ * @returns The processed input with null/undefined values stripped where appropriate
  */
-function stripNullishValues(input: unknown): unknown {
+function stripNullishValues(input: unknown, schema?: z.ZodTypeAny): unknown {
   // Top-level null/undefined becomes undefined
   if (input === null || input === undefined) {
     return undefined;
@@ -171,7 +194,17 @@ function stripNullishValues(input: unknown): unknown {
   if (Array.isArray(input)) {
     // For arrays, recursively process elements but keep nulls in arrays
     // (array elements with null may be intentional)
-    return input.map(item => (item === null ? null : stripNullishValues(item)));
+    // Pass the array's element schema so nested objects preserve nullable fields
+    let itemSchema: z.ZodTypeAny | undefined;
+    if (schema) {
+      const unwrappedArray = unwrapZodType(schema);
+      if (isZodArray(unwrappedArray)) {
+        // Zod 4: def.element, Zod 3: _def.type
+        const arrAny = unwrappedArray as any;
+        itemSchema = arrAny.element ?? arrAny._zod?.def?.element ?? arrAny._def?.type;
+      }
+    }
+    return input.map(item => (item === null ? null : stripNullishValues(item, itemSchema)));
   }
 
   // Only recurse into plain objects - preserve class instances, built-in objects
@@ -179,14 +212,26 @@ function stripNullishValues(input: unknown): unknown {
     return input;
   }
 
-  // It's a plain object - recursively process all properties, omitting null/undefined values
+  // Try to get the object schema's shape for field-level nullable checks
+  const unwrapped = schema ? unwrapZodType(schema) : undefined;
+  const shape = unwrapped && isZodObject(unwrapped) ? (unwrapped as any).shape : undefined;
+
+  // It's a plain object - recursively process all properties
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (value === null || value === undefined) {
-      // Omit null/undefined values - equivalent to "not provided" for optional fields
+      // If we have schema info and this field is .nullable(), preserve null
+      if (value === null && shape && shape[key] && isFieldNullable(shape[key])) {
+        result[key] = null;
+        continue;
+      }
+      // Otherwise omit - equivalent to "not provided" for optional fields
       continue;
     }
-    result[key] = stripNullishValues(value);
+    // Recurse into nested objects with their sub-schema if available
+    const fieldSchema = shape?.[key];
+    const innerSchema = fieldSchema ? unwrapZodType(fieldSchema) : undefined;
+    result[key] = stripNullishValues(value, innerSchema);
   }
   return result;
 }
@@ -371,11 +416,12 @@ export function validateToolInput<T = any>(
     }
   }
 
-  // Step 5: Retry with null values stripped (GitHub #12362)
+  // Step 5: Retry with null values stripped (GitHub #12362, #13419)
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
   // accepts undefined, not null. By stripping nullish values and retrying, we
-  // handle this case without breaking .nullable() schemas that passed in step 3.
-  const strippedInput = stripNullishValues(input);
+  // handle this case. The schema is passed so that .nullable() fields preserve
+  // their null values instead of being stripped. (GitHub #13419)
+  const strippedInput = stripNullishValues(input, schema as z.ZodTypeAny);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
   const retryValidation = schema.safeParse(normalizedStripped);
 

@@ -3160,7 +3160,10 @@ export class Agent<
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              const runIdToUse = suspendedToolRunId || runId;
+              // Use a unique runId for each workflow tool call to prevent parallel calls
+              // from sharing the same cached Run instance (see #13473).
+              // For resume cases, suspendedToolRunId correctly identifies the existing run.
+              const runIdToUse = suspendedToolRunId || randomUUID();
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
