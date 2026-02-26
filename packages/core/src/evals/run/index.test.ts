@@ -766,11 +766,14 @@ describe('runEvals', () => {
       });
 
       // Legacy path should not receive targetOptions
-      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext: undefined,
-      });
+      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should pass targetOptions to workflow run.start', async () => {

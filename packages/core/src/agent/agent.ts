@@ -1682,13 +1682,14 @@ export class Agent<
     requestContext = new RequestContext(),
     model,
     instructions,
-    ...observabilityContext
+    ...rest
   }: {
     message: string | MessageInput;
     requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
-  } & ObservabilityContext) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
@@ -2356,7 +2357,7 @@ export class Agent<
         runId,
       });
       for (const [toolName, tool] of clientToolsForInput) {
-        const { execute, ...rest } = tool;
+        const { execute, ...toolRest } = tool;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2372,7 +2373,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -3938,6 +3939,8 @@ export class Agent<
     structuredOutput = false,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
     const resToLog = {
       text: result.text,
       object: result.object,
@@ -4017,7 +4020,6 @@ export class Agent<
         if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
-            const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
             const title = await this.genTitle(
               userMessage,
               requestContext,
@@ -4085,7 +4087,7 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
-      ...createObservabilityContext({ currentSpan: agentSpan }),
+      ...observabilityContext,
     });
 
     agentSpan?.end({
