@@ -400,6 +400,16 @@ describe('prepareToolsAndToolChoice', () => {
           ).toBeDefined();
         }
       }
+
+      // Verify suspendedToolRunId serializes as a plain string with default
+      const suspendedSchema = properties.suspendedToolRunId as Record<string, any>;
+      expect(suspendedSchema).toBeDefined();
+      expect(suspendedSchema.type).toBe('string');
+      expect(suspendedSchema.default).toBe('');
+
+      // Verify resumeData is present and accepts any value
+      const resumeSchema = properties.resumeData as Record<string, any>;
+      expect(resumeSchema).toBeDefined();
     });
   });
 
