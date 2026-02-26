@@ -322,8 +322,8 @@ Then use the snapshot name in your sandbox config:
 ```typescript
 const workspace = new Workspace({
   mounts: {
-    '/s3-data': new S3Filesystem({ ... }),
-    '/gcs-data': new GCSFilesystem({ ... }),
+    '/s3-data': new S3Filesystem({ /* ... */ }),
+    '/gcs-data': new GCSFilesystem({ /* ... */ }),
   },
   sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
 });
