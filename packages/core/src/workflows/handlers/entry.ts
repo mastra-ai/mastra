@@ -116,10 +116,7 @@ export async function persistStepUpdate(
       return;
     }
 
-    const requestContextObj: Record<string, any> = {};
-    requestContext.forEach((value, key) => {
-      requestContextObj[key] = value;
-    });
+    const requestContextObj: Record<string, any> = requestContext.toJSON();
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
