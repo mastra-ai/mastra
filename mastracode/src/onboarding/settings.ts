@@ -352,7 +352,11 @@ export function resolveThreadActiveModelPackId(
   ];
 
   for (const pack of allPacks) {
-    const matches = Object.entries(pack.models).every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
+    const packEntries = Object.entries(pack.models);
+    const threadEntries = Object.keys(threadSettings.modeModelIds);
+    const matches =
+      packEntries.length === threadEntries.length &&
+      packEntries.every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
     if (matches) return pack.id;
   }
 

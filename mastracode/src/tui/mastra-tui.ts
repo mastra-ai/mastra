@@ -348,12 +348,18 @@ export class MastraTUI {
     };
   }
 
-  private async syncThreadActivePackMetadata(thread?: { id: string; metadata?: Record<string, unknown> }): Promise<void> {
+  private async syncThreadActivePackMetadata(thread?: {
+    id: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
     const settings = loadSettings();
     const currentThreadId = this.state.harness.getCurrentThreadId();
     if (!currentThreadId) return;
 
-    const resolvedThread = thread ?? (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+    const resolvedThread =
+      thread?.id === currentThreadId
+        ? thread
+        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
@@ -809,9 +815,7 @@ export class MastraTUI {
     let activeModePackId = modePack.id;
     if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
       const customName =
-        modePack.id === 'custom'
-          ? (modePack.name?.trim() || 'Custom')
-          : (modePack.id.slice('custom:'.length) || 'Custom');
+        modePack.id === 'custom' ? modePack.name?.trim() || 'Custom' : modePack.id.slice('custom:'.length) || 'Custom';
       activeModePackId = `custom:${customName}`;
       const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
       const idx = settings.customModelPacks.findIndex(p => p.name === customName);

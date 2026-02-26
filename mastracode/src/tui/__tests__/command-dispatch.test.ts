@@ -64,7 +64,7 @@ describe('dispatchSlashCommand models routing', () => {
   it('treats /models:pack as unknown command', async () => {
     const state = { customSlashCommands: [] } as any;
 
-    const handled = await dispatchSlashCommand('/models:pack', state, () => ({} as any));
+    const handled = await dispatchSlashCommand('/models:pack', state, () => ({}) as any);
 
     expect(handled).toBe(true);
     expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();

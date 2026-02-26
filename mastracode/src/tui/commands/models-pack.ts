@@ -220,7 +220,11 @@ async function runCustomFlow(
   if (!name) return null;
 
   const existing = options?.models ?? { build: '', plan: '', fast: '' };
-  const models: Record<string, string> = { build: existing.build ?? '', plan: existing.plan ?? '', fast: existing.fast ?? '' };
+  const models: Record<string, string> = {
+    build: existing.build ?? '',
+    plan: existing.plan ?? '',
+    fast: existing.fast ?? '',
+  };
 
   for (const mode of modes) {
     const modelId = await selectModel(
@@ -397,7 +401,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
 function getPackDetail(pack: ModePack): string {
   if (pack.id === 'custom') {
-    return theme.fg('dim', "  Create a named custom pack and pick a model for each mode.");
+    return theme.fg('dim', '  Create a named custom pack and pick a model for each mode.');
   }
   return [
     `  ${chalk.hex(mastra.blue)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
@@ -408,8 +412,12 @@ function getPackDetail(pack: ModePack): string {
 
 async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
   const settings = loadSettings();
-  const wasActive = previousPackId ? settings.models.activeModelPackId === previousPackId : settings.models.activeModelPackId === pack.id;
-  const wasOnboarding = previousPackId ? settings.onboarding.modePackId === previousPackId : settings.onboarding.modePackId === pack.id;
+  const wasActive = previousPackId
+    ? settings.models.activeModelPackId === previousPackId
+    : settings.models.activeModelPackId === pack.id;
+  const wasOnboarding = previousPackId
+    ? settings.onboarding.modePackId === previousPackId
+    : settings.onboarding.modePackId === pack.id;
 
   const modeDefaults: Record<string, string> = {
     plan: pack.models.plan,
@@ -483,7 +491,11 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
   const threadId = harness.getCurrentThreadId();
   const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
-  const currentPackId = resolveThreadActiveModelPackId(settings, packs, thread?.metadata as Record<string, unknown> | undefined);
+  const currentPackId = resolveThreadActiveModelPackId(
+    settings,
+    packs,
+    thread?.metadata as Record<string, unknown> | undefined,
+  );
 
   const items: SelectItem[] = packs.map(p => ({
     value: p.id,
