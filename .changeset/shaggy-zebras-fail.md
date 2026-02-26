@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory to run observer and reflector models through streaming output. This keeps observation and reflection compatible with providers that require stream-based requests, including Codex-backed models.
+Fixed observational memory compatibility with Codex and other stream-only providers. Observer and reflector calls now use the streaming API internally, so providers that require `stream: true` in requests work correctly out of the box.

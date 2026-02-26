@@ -1653,7 +1653,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         }
         case 'data-om-buffering-failed': {
           const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
+          if (payload) {
             const operationType = payload.operationType ?? 'observation';
             const error = payload.error ?? 'Unknown error';
 

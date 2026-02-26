@@ -55,10 +55,15 @@ function createInMemoryStorage(): InMemoryMemory {
 
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
+    const originalDoGenerate = config.doGenerate;
     return new MockLanguageModelV2({
       ...config,
+      // Replace doGenerate so any accidental generate-path call fails fast
+      doGenerate: async () => {
+        throw new Error('Unexpected doGenerate call — OM should use the stream path');
+      },
       doStream: async (options: any) => {
-        const generated = await config.doGenerate(options);
+        const generated = await originalDoGenerate(options);
         const text = generated.content?.find((part: any) => part?.type === 'text')?.text ?? generated.text ?? '';
         const usage = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
