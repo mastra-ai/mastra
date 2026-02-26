@@ -24,7 +24,7 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('/test.txt');
@@ -37,10 +37,13 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
-      path: '/test.txt',
-      showLineNumbers: false,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: '/test.txt',
+        showLineNumbers: false,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Hello World');
@@ -53,12 +56,15 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
-      path: '/test.txt',
-      offset: 2,
-      limit: 2,
-      showLineNumbers: false,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: '/test.txt',
+        offset: 2,
+        limit: 2,
+        showLineNumbers: false,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('lines 2-3 of 5');
@@ -71,7 +77,7 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('/binary.bin');
@@ -86,7 +92,10 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/huge.txt' })) as string;
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: '/huge.txt' },
+      { workspace },
+    )) as string;
 
     expect(result).toContain('[output truncated');
   });

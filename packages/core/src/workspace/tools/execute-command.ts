@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, getMaxOutputTokens, requireSandbox } from './helpers';
+import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 /**
@@ -60,7 +60,7 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command, timeout, cwd, tail } = input;
   const background = input.background as boolean | undefined;
-  const { sandbox } = requireSandbox(context);
+  const { workspace, sandbox } = requireSandbox(context);
 
   // Extract tail pipe from command so output can stream in real time
   if (!background) {
@@ -74,7 +74,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
-  const tokenLimit = getMaxOutputTokens(context);
+  const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.maxOutputTokens;
   const tokenFrom = 'sandwich' as const;
 
   // Background mode: spawn via process manager and return immediately

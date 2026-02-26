@@ -79,28 +79,6 @@ export function resolveToolConfig(
 // ---------------------------------------------------------------------------
 
 /**
- * Clone a standalone tool with config overrides and inject workspace into context.
- */
-function wrapTool(
-  tool: any,
-  workspace: Workspace,
-  config: { requireApproval: boolean; maxOutputTokens?: number },
-): any {
-  return {
-    ...tool,
-    requireApproval: config.requireApproval,
-    execute: async (input: any, context: any = {}) => {
-      const enrichedContext = {
-        ...context,
-        workspace: context?.workspace ?? workspace,
-        ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
-      };
-      return tool.execute(input, enrichedContext);
-    },
-  };
-}
-
-/**
  * Wrap a tool with read-before-write tracking (readTracker).
  *
  * - mode 'read': records the read after execution
@@ -110,19 +88,12 @@ function wrapWithReadTracker(
   tool: any,
   workspace: Workspace,
   readTracker: FileReadTracker,
-  config: { requireApproval: boolean; requireReadBeforeWrite?: boolean; maxOutputTokens?: number },
+  config: { requireReadBeforeWrite?: boolean },
   mode: 'read' | 'write',
 ): any {
   return {
     ...tool,
-    requireApproval: config.requireApproval,
     execute: async (input: any, context: any = {}) => {
-      const enrichedContext = {
-        ...context,
-        workspace: context?.workspace ?? workspace,
-        ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
-      };
-
       // Pre-execution: check read-before-write for write tools
       if (mode === 'write' && config.requireReadBeforeWrite) {
         try {
@@ -139,7 +110,7 @@ function wrapWithReadTracker(
         }
       }
 
-      const result = await tool.execute(input, enrichedContext);
+      const result = await tool.execute(input, context);
 
       // Post-execution: track reads / clear write records
       if (mode === 'read') {
@@ -218,11 +189,9 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
-    let wrapped: any;
+    let wrapped: any = { ...tool, requireApproval: config.requireApproval };
     if (readTracker && opts?.readTrackerMode) {
-      wrapped = wrapWithReadTracker(tool, workspace, readTracker, config, opts.readTrackerMode);
-    } else {
-      wrapped = wrapTool(tool, workspace, config);
+      wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     }
 
     // Write lock is outermost — serializes the entire enriched execute pipeline
@@ -270,11 +239,10 @@ export function createWorkspaceTools(workspace: Workspace) {
 
   // Sandbox tools
   if (workspace.sandbox) {
-    const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-    if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
+    if (workspace.sandbox.executeCommand) {
       // Pick the right tool variant based on whether processes are available
       const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
-      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = wrapTool(baseTool, workspace, executeCommandConfig);
+      addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool);
     }
 
     // Background process tools (only when process manager is available)

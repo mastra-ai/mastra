@@ -55,14 +55,6 @@ export function requireSandbox(context: ToolExecutionContext): {
 }
 
 /**
- * Extract `maxOutputTokens` from the enriched context injected by workspace tool wrappers.
- * This property is workspace-specific and not part of the base ToolExecutionContext type.
- */
-export function getMaxOutputTokens(context: ToolExecutionContext | undefined): number | undefined {
-  return (context as Record<string, any> | undefined)?.maxOutputTokens;
-}
-
-/**
  * Emit workspace metadata as a data chunk so the UI can render workspace info immediately.
  * Should be called at the start of every workspace tool's execute function.
  */

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
-import { emitWorkspaceMetadata, getMaxOutputTokens, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
 
 export const readFileTool = createTool({
@@ -27,7 +27,7 @@ export const readFileTool = createTool({
       .describe('Whether to prefix each line with its line number (default: true)'),
   }),
   execute: async ({ path, encoding, offset, limit, showLineNumbers }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
 
     const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
@@ -36,7 +36,7 @@ export const readFileTool = createTool({
 
     const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
 
-    const tokenLimit = getMaxOutputTokens(context);
+    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.maxOutputTokens;
 
     if (!isTextEncoding) {
       return await applyTokenLimit(

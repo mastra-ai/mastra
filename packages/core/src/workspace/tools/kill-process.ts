@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, getMaxOutputTokens, requireSandbox } from './helpers';
+import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 const KILL_TAIL_LINES = 50;
@@ -17,7 +17,7 @@ Use this to stop a long-running background process that was started with execute
     pid: z.number().describe('The process ID of the background process to kill'),
   }),
   execute: async ({ pid }, context) => {
-    const { sandbox } = requireSandbox(context);
+    const { workspace, sandbox } = requireSandbox(context);
 
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
@@ -55,7 +55,7 @@ Use this to stop a long-running background process that was started with execute
     const parts: string[] = [`Process ${pid} has been killed.`];
 
     if (handle) {
-      const tokenLimit = getMaxOutputTokens(context);
+      const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]?.maxOutputTokens;
       const stdout = handle.stdout ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
       const stderr = handle.stderr ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
 

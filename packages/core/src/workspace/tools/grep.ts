@@ -4,7 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
-import { emitWorkspaceMetadata, getMaxOutputTokens, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
 
 export const grepTool = createTool({
@@ -59,7 +59,7 @@ Usage:
     { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
     // Guard against excessively long patterns as a cheap ReDoS heuristic
@@ -212,6 +212,10 @@ Usage:
     const summary = summaryParts.join(' ');
     outputLines.unshift(summary, '---');
 
-    return await applyTokenLimit(outputLines.join('\n'), getMaxOutputTokens(context), 'end');
+    return await applyTokenLimit(
+      outputLines.join('\n'),
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
+      'end',
+    );
   },
 });

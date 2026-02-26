@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, getMaxOutputTokens, requireSandbox } from './helpers';
+import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 export const getProcessOutputTool = createTool({
@@ -27,7 +27,7 @@ Use this after starting a background command with execute_command (background: t
       ),
   }),
   execute: async ({ pid, tail, wait: shouldWait }, context) => {
-    const { sandbox } = requireSandbox(context);
+    const { workspace, sandbox } = requireSandbox(context);
 
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
@@ -84,7 +84,7 @@ Use this after starting a background command with execute_command (background: t
 
     const running = handle.exitCode === undefined;
 
-    const tokenLimit = getMaxOutputTokens(context);
+    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
     const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
     const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
