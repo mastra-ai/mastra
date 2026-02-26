@@ -135,7 +135,7 @@ describe('uncaughtException handler integration', () => {
       `;
 
       execFile('node', ['-e', script], { timeout: 5000 }, (err, _stdout, stderr) => {
-        resolve({ code: err ? (err as any).code ?? 1 : 0, stderr });
+        resolve({ code: err ? ((err as any).code ?? 1) : 0, stderr });
       });
     });
   }
