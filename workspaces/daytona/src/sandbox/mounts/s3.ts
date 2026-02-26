@@ -3,23 +3,23 @@ import crypto from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, runCommand, detectPackageManager } from './types';
+import { LOG_PREFIX, validateBucketName, validateEndpoint, runCommand, writeFile } from './types';
 import type { MountContext } from './types';
 
 /**
- * S3 mount config for Blaxel (mounted via s3fs-fuse).
+ * S3 mount config for Daytona (mounted via s3fs-fuse).
  *
  * If credentials are not provided, the bucket will be mounted as read-only
  * using the `public_bucket=1` option (for public AWS S3 buckets only).
  *
  * Note: S3-compatible services (R2, MinIO, etc.) always require credentials.
  */
-export interface BlaxelS3MountConfig extends FilesystemMountConfig {
+export interface DaytonaS3MountConfig extends FilesystemMountConfig {
   type: 's3';
   /** S3 bucket name */
   bucket: string;
-  /** AWS region */
-  region: string;
+  /** AWS region (informational — s3fs auto-detects region from the bucket) */
+  region?: string;
   /** S3 endpoint for S3-compatible storage (MinIO, etc.) */
   endpoint?: string;
   /** AWS access key ID (optional - omit for public buckets) */
@@ -33,7 +33,7 @@ export interface BlaxelS3MountConfig extends FilesystemMountConfig {
 /**
  * Mount an S3 bucket using s3fs-fuse.
  */
-export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ctx: MountContext): Promise<void> {
+export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, ctx: MountContext): Promise<void> {
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
@@ -43,67 +43,54 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   }
 
   // Check if s3fs is installed
-  const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"');
-  if (checkResult.stdout.includes('not found')) {
+  const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"', { timeout: 30_000 });
+  if (checkResult.output.includes('not found')) {
     logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
 
-    const pm = await detectPackageManager(sandbox);
-    logger.debug(`${LOG_PREFIX} Detected package manager: ${pm}`);
-
-    if (pm === 'apt') {
-      const updateResult = await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
-      if (updateResult.exitCode !== 0) {
-        throw new Error(
-          `Failed to update package lists for s3fs installation.\n` +
-            `Error details: ${updateResult.stderr || updateResult.stdout}`,
-        );
-      }
-
-      const installResult = await runCommand(
-        sandbox,
-        'apt-get install -y s3fs fuse 2>&1 || apt-get install -y s3fs-fuse fuse 2>&1',
-        { timeout: 120000 },
-      );
-
-      if (installResult.exitCode !== 0) {
-        throw new Error(
-          `Failed to install s3fs. ` +
-            `For S3 mounting, your sandbox image needs s3fs and fuse packages.\n\n` +
-            `Pre-install in your image: apt-get install -y s3fs fuse\n\n` +
-            `Error details: ${installResult.stderr || installResult.stdout}`,
-        );
-      }
-    } else if (pm === 'apk') {
-      // Alpine Linux — s3fs-fuse is in the community repo
-      const installResult = await runCommand(sandbox, 'apk add --no-cache s3fs-fuse fuse 2>&1', { timeout: 120000 });
-
-      if (installResult.exitCode !== 0) {
-        throw new Error(
-          `Failed to install s3fs on Alpine Linux. ` +
-            `Ensure the Alpine community repository is enabled.\n\n` +
-            `Pre-install in your image: apk add --no-cache s3fs-fuse fuse\n\n` +
-            `Error details: ${installResult.stderr || installResult.stdout}`,
-        );
-      }
-    } else {
+    const updateResult = await runCommand(sandbox, 'sudo apt-get update 2>&1', { timeout: 60000 });
+    if (updateResult.exitCode !== 0) {
       throw new Error(
-        `Cannot install s3fs: no supported package manager found (need apt-get or apk).\n` +
-          `Use a Debian-based image (e.g. blaxel/ts-app:latest) or Alpine-based image (e.g. blaxel/node:latest), ` +
-          `or pre-install s3fs in your custom image.`,
+        `Failed to update package lists for s3fs installation.\n` + `Error details: ${updateResult.output}`,
+      );
+    }
+
+    const installResult = await runCommand(
+      sandbox,
+      'sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1',
+      { timeout: 120000 },
+    );
+
+    if (installResult.exitCode !== 0) {
+      throw new Error(
+        `Failed to install s3fs. ` +
+          `For S3 mounting, your sandbox image needs s3fs and fuse packages.\n\n` +
+          `Pre-install in your image: apt-get install -y s3fs fuse\n\n` +
+          `Error details: ${installResult.output}`,
       );
     }
   }
 
   // Get user's uid/gid for proper file ownership
-  const idResult = await runCommand(sandbox, 'id -u && id -g');
+  const idResult = await runCommand(sandbox, 'id -u && id -g', { timeout: 30_000 });
   if (idResult.exitCode !== 0) {
-    throw new Error(`Failed to get uid/gid: ${idResult.stderr || idResult.stdout}`);
+    throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
-  const [uid, gid] = idResult.stdout.trim().split('\n');
+  const [uid, gid] = idResult.output.trim().split('\n');
+  const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
+  if (!validUidGid) {
+    logger.warn(
+      `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.output.trim()}" — mounted files will be owned by root`,
+    );
+  }
 
   // Determine if we have credentials or using public bucket mode
-  const hasCredentials = config.accessKeyId && config.secretAccessKey;
+  const hasAccessKey = !!config.accessKeyId;
+  const hasSecretKey = !!config.secretAccessKey;
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
+  }
+  const hasCredentials = hasAccessKey && hasSecretKey;
 
   // Use a mount-specific credentials path to avoid races with concurrent mounts
   const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
@@ -123,9 +110,13 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
     // Write credentials file (remove old one first to avoid permission issues)
     // s3fs requires the file to have 600 permissions (no "others" access)
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
-    await runCommand(sandbox, `rm -f ${credentialsPath}`);
-    await sandbox.fs.write(credentialsPath, credentialsContent);
-    await runCommand(sandbox, `chmod 600 ${credentialsPath}`);
+    await runCommand(sandbox, `sudo rm -f ${shellQuote(credentialsPath)}`, { timeout: 30_000 });
+    await writeFile(sandbox, credentialsPath, credentialsContent);
+    await runCommand(
+      sandbox,
+      `sudo chown root:root ${shellQuote(credentialsPath)} && sudo chmod 600 ${shellQuote(credentialsPath)}`,
+      { timeout: 30_000 },
+    );
   }
 
   // Build mount options
@@ -142,7 +133,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   mountOptions.push('allow_other'); // Allow non-root users to access the mount
 
   // Set uid/gid so mounted files are owned by user, not root
-  if (uid && gid) {
+  if (validUidGid) {
     mountOptions.push(`uid=${uid}`, `gid=${gid}`);
   }
 
@@ -157,17 +148,16 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
+  // Mount with sudo (required for /dev/fuse access)
+  // Quote bucket, mount path, and each option to prevent shell injection
   const quotedMountPath = shellQuote(mountPath);
-  const mountCmd = `s3fs ${config.bucket} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
+  const optionFlags = mountOptions.map(opt => `-o ${shellQuote(opt)}`).join(' ');
+  const mountCmd = `sudo s3fs ${shellQuote(config.bucket)} ${quotedMountPath} ${optionFlags}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
-  logger.debug(`${LOG_PREFIX} s3fs result:`, {
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
+  logger.debug(`${LOG_PREFIX} s3fs result:`, { exitCode: result.exitCode, output: result.output });
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
+    throw new Error(`Failed to mount S3 bucket: ${result.output}`);
   }
 }
