@@ -932,7 +932,7 @@ describe('MCPClient', () => {
       await mixedMcp.listTools().catch(() => {});
 
       // disconnect should not throw even if some servers had issues
-      await expect(mixedMcp.disconnect()).resolves.not.toThrow();
+      await expect(mixedMcp.disconnect()).resolves.toBeUndefined();
     });
   });
 });
