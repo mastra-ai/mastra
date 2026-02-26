@@ -7,11 +7,30 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { fg, mastra, tintHex } from './theme.js';
+import { theme, mastra, tintHex, getThemeMode } from './theme.js';
 
 // Colors for OM modes
 const OBSERVER_COLOR = mastra.orange;
 const REFLECTOR_COLOR = mastra.pink;
+
+/**
+ * Lighten a color by blending toward white. factor 0 = original, 1 = white.
+ */
+function lighten(r: number, g: number, b: number, factor: number): [number, number, number] {
+  return [Math.floor(r + (255 - r) * factor), Math.floor(g + (255 - g) * factor), Math.floor(b + (255 - b) * factor)];
+}
+
+/**
+ * For light mode, purple and blue badge backgrounds are too dark.
+ * Lighten them slightly so they look better on light terminals.
+ */
+function adjustBadgeColor(r: number, g: number, b: number, modeColor: string): [number, number, number] {
+  if (getThemeMode() !== 'light') return [r, g, b];
+  if (modeColor === mastra.purple || modeColor === mastra.blue) {
+    return lighten(r, g, b, 0.25);
+  }
+  return [r, g, b];
+}
 
 /**
  * Update the status line at the bottom of the TUI.
@@ -23,7 +42,7 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.omProgress.status;
+  const omStatus = state.harness.getDisplayState().omProgress.status;
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
   const showOMMode = isObserving || isReflecting;
@@ -62,15 +81,16 @@ export function updateStatusLine(state: TUIState): void {
         badgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
       }
     }
-    const [mr, mg, mb] = [
+    const [mr, mg, mb] = adjustBadgeColor(
       Math.floor(mcr * badgeBrightness),
       Math.floor(mcg * badgeBrightness),
       Math.floor(mcb * badgeBrightness),
-    ];
-    modeBadge = chalk.bgRgb(mr, mg, mb).hex(mastra.bg).bold(` ${badgeName.toLowerCase()} `);
+      modeColor,
+    );
+    modeBadge = chalk.bgRgb(mr, mg, mb).hex('#000000').bold(` ${badgeName.toLowerCase()} `);
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
-    modeBadge = fg('dim', badgeName) + ' ';
+    modeBadge = theme.fg('dim', badgeName) + ' ';
     modeBadgeWidth = badgeName.length + 1;
   }
 
@@ -103,16 +123,19 @@ export function updateStatusLine(state: TUIState): void {
   if (homedir && displayPath.startsWith(homedir)) {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
-  if (state.projectInfo.gitBranch) {
-    displayPath = `${displayPath} (${state.projectInfo.gitBranch})`;
-  }
+  const branch = state.projectInfo.gitBranch;
+  // Build progressively shorter directory strings for layout fallback
+  const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
+  const dirBranchOnly = branch || null;
+  // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
+  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const isYolo = (state.harness.getState() as any).yolo === true;
   const styleModelId = (id: string): string => {
     if (!state.modelAuthStatus.hasAuth) {
       const envVar = state.modelAuthStatus.apiKeyEnvVar;
-      return fg('dim', id) + fg('error', ' ✗') + fg('muted', envVar ? ` (${envVar})` : ' (no key)');
+      return theme.fg('dim', id) + theme.fg('error', ' ✗') + theme.fg('muted', envVar ? ` (${envVar})` : ' (no key)');
     }
     // Tinted near-black background from mode color
     const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
@@ -133,11 +156,12 @@ export function updateStatusLine(state: TUIState): void {
     }
     if (modeColor) {
       // Idle state
-      const [r, g, b] = [
+      const [r, g, b] = adjustBadgeColor(
         parseInt(modeColor.slice(1, 3), 16),
         parseInt(modeColor.slice(3, 5), 16),
         parseInt(modeColor.slice(5, 7), 16),
-      ];
+        modeColor,
+      );
       const dim = 0.8;
       const fgStyled = chalk.rgb(Math.floor(r * dim), Math.floor(g * dim), Math.floor(b * dim)).bold(padded);
       return tintBg ? chalk.bgHex(tintBg)(fgStyled) : fgStyled;
@@ -168,16 +192,17 @@ export function updateStatusLine(state: TUIState): void {
         sBadgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
       }
     }
-    const [sr, sg, sb] = [
+    const [sr, sg, sb] = adjustBadgeColor(
       Math.floor(mcr * sBadgeBrightness),
       Math.floor(mcg * sBadgeBrightness),
       Math.floor(mcb * sBadgeBrightness),
-    ];
-    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex(mastra.bg).bold(` ${shortName} `);
+      modeColor,
+    );
+    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex('#000000').bold(` ${shortName} `);
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);
-    shortModeBadge = fg('dim', shortName) + ' ';
+    shortModeBadge = theme.fg('dim', shortName) + ' ';
     shortModeBadgeWidth = shortName.length + 1;
   }
 
@@ -185,6 +210,7 @@ export function updateStatusLine(state: TUIState): void {
     modelId: string;
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
     showDir: boolean;
+    dir?: string | null;
     badge?: 'full' | 'short';
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
@@ -205,8 +231,9 @@ export function updateStatusLine(state: TUIState): void {
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
+    const ds = state.harness.getDisplayState();
     const msgLabelStyler =
-      state.bufferingMessages && state.gradientAnimator?.isRunning()
+      ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (label: string) =>
             applyGradientSweep(
               label,
@@ -216,7 +243,7 @@ export function updateStatusLine(state: TUIState): void {
             )
         : undefined;
     const obsLabelStyler =
-      state.bufferingObservations && state.gradientAnimator?.isRunning()
+      ds.bufferingObservations && state.gradientAnimator?.isRunning()
         ? (label: string) =>
             applyGradientSweep(
               label,
@@ -225,19 +252,21 @@ export function updateStatusLine(state: TUIState): void {
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const obs = formatObservationStatus(state.omProgress, opts.memCompact, msgLabelStyler);
-    const ref = formatReflectionStatus(state.omProgress, opts.memCompact, obsLabelStyler);
+    const omProg = state.harness.getDisplayState().omProgress;
+    const obs = formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
+    const ref = formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
       parts.push({ plain: obs, styled: obs });
     }
     if (ref) {
       parts.push({ plain: ref, styled: ref });
     }
-    // Directory (lowest priority on line 1)
-    if (opts.showDir) {
+    // Directory / branch (lowest priority on line 1)
+    const dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+    if (dirText) {
       parts.push({
-        plain: displayPath,
-        styled: fg('dim', displayPath),
+        plain: dirText,
+        styled: theme.fg('dim', dirText),
       });
     }
     const totalPlain =
@@ -246,7 +275,8 @@ export function updateStatusLine(state: TUIState): void {
     if (totalPlain > termWidth) return null;
 
     let styledLine: string;
-    if (opts.showDir && parts.length >= 3) {
+    const hasDir = !!dirText;
+    if (hasDir && parts.length >= 3) {
       // Three groups: left (model), center (mem/tokens/thinking), right (dir)
       const leftPart = parts[0]!; // model
       const centerParts = parts.slice(1, -1); // mem, tokens, thinking
@@ -267,7 +297,7 @@ export function updateStatusLine(state: TUIState): void {
         centerParts.map(p => p.styled).join(SEP) +
         ' '.repeat(Math.max(gapRight, 1)) +
         dirPart.styled;
-    } else if (opts.showDir && parts.length === 2) {
+    } else if (hasDir && parts.length === 2) {
       // Just model + dir, right-align dir
       const mainStr = useBadge + parts[0]!.styled;
       const dirPart = parts[parts.length - 1]!;
@@ -281,30 +311,34 @@ export function updateStatusLine(state: TUIState): void {
   // Try progressively more compact layouts.
   // Priority: token fractions + buffer > labels > provider > badge > buffer > fractions
   const result =
-    // 1. Full badge + full model + long labels + fractions + buffer + dir
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: true }) ??
-    // 2. Drop directory
+    // 1. Full badge + full model + long labels + fractions + buffer + full dir
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirFull }) ??
+    // 2. Full badge + full model + branch only (drop path)
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchOnly }) ??
+    // 3. Full badge + full model + abbreviated branch
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort }) ??
+    // 4. Drop directory entirely
     buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false }) ??
-    // 3. Drop provider + "claude-" prefix, keep full labels + fractions + buffer
+    // 5. Drop provider + "claude-" prefix, keep full labels + fractions + buffer
     buildLine({ modelId: tinyModelId, memCompact: 'full', showDir: false }) ??
-    // 4. Short labels (msg/mem) + fractions + buffer
+    // 6. Short labels (msg/mem) + fractions + buffer
     buildLine({ modelId: tinyModelId, showDir: false }) ??
-    // 5. Short badge + short labels + fractions + buffer
+    // 7. Short badge + short labels + fractions + buffer
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short' }) ??
-    // 6. Short badge + fractions (drop buffer indicator)
+    // 8. Short badge + fractions (drop buffer indicator)
     buildLine({
       modelId: tinyModelId,
       memCompact: 'noBuffer',
       showDir: false,
       badge: 'short',
     }) ??
-    // 7. Full badge + percent only
+    // 9. Full badge + percent only
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',
       showDir: false,
     }) ??
-    // 8. Short badge + percent only
+    // 10. Short badge + percent only
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',

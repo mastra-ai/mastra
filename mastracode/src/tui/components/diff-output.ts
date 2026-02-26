@@ -4,19 +4,16 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { fg, bold, mastra } from '../theme.js';
-
-// const removedColor = chalk.hex("#dc6868") // soft red
-const addedColor = chalk.hex('#5cb85c'); // soft green
-const hunkHeaderColor = chalk.hex('#61afef'); // cyan-blue
-const fileHeaderColor = chalk.bold.hex('#c678dd'); // bold purple
-const removedColor = chalk.hex(mastra.red);
-// const addedColor = chalk.hex(mastra.green)
-// const hunkHeaderColor = chalk.hex(mastra.blue)
-// const fileHeaderColor = chalk.bold.hex(mastra.purple)
-const metaColor = chalk.hex(mastra.mainGray);
+import { theme, mastra } from '../theme.js';
 
 function colorizeDiffLine(line: string): string {
+  const t = theme.getTheme();
+  const addedColor = chalk.hex(t.success);
+  const hunkHeaderColor = chalk.hex(t.toolBorderPending);
+  const fileHeaderColor = chalk.bold.hex(t.accent);
+  const removedColor = chalk.hex(mastra.red);
+  const metaColor = chalk.hex(mastra.mainGray);
+
   // Unified diff headers
   if (line.startsWith('+++') || line.startsWith('---')) {
     return fileHeaderColor(line);
@@ -43,7 +40,7 @@ function colorizeDiffLine(line: string): string {
     return metaColor(line);
   }
   // --stat lines: " file | 5 +++--" or summary "2 files changed, ..."
-  const statMatch = line.match(/^(.+\|.+?)(\++)([-]*)$/);
+  const statMatch = line.match(/^(.+\|.+?)(\++)([- ]*)$/);
   if (statMatch) {
     return statMatch[1] + addedColor(statMatch[2]) + removedColor(statMatch[3]);
   }
@@ -61,7 +58,9 @@ export class DiffOutputComponent extends Container {
     this.addChild(new Spacer(1));
 
     // Command header
-    this.addChild(new Text(`${fg('success', '✓')} ${bold(fg('muted', '$'))} ${fg('text', command)}`, 1, 0));
+    this.addChild(
+      new Text(`${theme.fg('success', '✓')} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`, 1, 0),
+    );
 
     const output = diffOutput.trimEnd();
     if (output) {

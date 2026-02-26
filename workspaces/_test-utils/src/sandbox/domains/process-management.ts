@@ -209,6 +209,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'sends data to stdin',
         async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStdin) return;
+
           // Use head -1 to read one line then exit cleanly
           const handle = await processes.spawn('head -1');
           await handle.sendStdin('hello from stdin\n');
@@ -601,6 +604,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         async () => {
           const { capabilities } = getContext();
           if (!capabilities.supportsStreaming) return;
+          if (!capabilities.supportsStdin) return;
 
           const handle = await processes.spawn('head -1');
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -63,11 +64,12 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         resourceId,
         runId,
         requestContext,
-        tracingContext: { currentSpan: agentSpan },
+        ...createObservabilityContext({ currentSpan: agentSpan }),
         outputWriter: options.outputWriter,
         methodType,
         memoryConfig: options.memory?.options,
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+        delegation: options.delegation,
       });
 
       return {

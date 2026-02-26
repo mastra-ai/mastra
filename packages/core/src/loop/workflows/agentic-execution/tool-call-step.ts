@@ -363,6 +363,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
         const isAgentTool = inputData.toolName?.startsWith('agent-');
+        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
           !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
@@ -371,7 +372,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          messages: messageList.get.input.aiV5.model(),
+          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
+          // the full conversation context and can make better decisions. Each sub-agent invocation
+          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
+          messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
@@ -459,7 +463,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: inputData.toolName,
                 args,
                 suspendPayload,
-                suspendedToolRunId: options?.isAgentSuspend ? options.runId : undefined,
+                suspendedToolRunId: options?.runId,
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
               });
@@ -483,8 +487,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeData: resumeDataToPassToToolOptions,
         };
 
-        //if resuming a subAgent tool, we want to find the runId from when the subAgent got suspended.
-        if (resumeDataToPassToToolOptions && isAgentTool && !isResumeToolCall) {
+        //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
+        if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
@@ -523,6 +527,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ),
             ...inputData,
           };
+        }
+
+        if (isAgentTool) {
+          if (typeof args === 'object' && args !== null && 'prompt' in args) {
+            args.threadId = args.threadId || _internal?.threadId;
+            args.resourceId = args.resourceId || _internal?.resourceId;
+          }
         }
 
         const result = await tool.execute(args, toolOptions);

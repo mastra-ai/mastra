@@ -6,6 +6,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
+import { ANTHROPIC_OAUTH_PROVIDER_ID } from '../auth/claude-max-warning.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
   OnboardingInlineComponent,
@@ -16,13 +17,14 @@ import {
   saveSettings,
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
+import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
-import { defaultOMProgressState } from './components/om-progress.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -153,12 +155,16 @@ export class MastraTUI {
         if (this.state.pendingNewThread) {
           await this.state.harness.createThread();
           this.state.pendingNewThread = false;
-          updateStatusLine(this.state);
         }
 
         // Check if a model is selected
         if (!this.state.harness.hasModelSelected()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+          continue;
+        }
+
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
           continue;
         }
 
@@ -239,9 +245,6 @@ export class MastraTUI {
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
 
-    // Load initial token usage from harness (persisted from previous session)
-    this.state.tokenUsage = this.state.harness.getTokenUsage();
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -266,11 +269,9 @@ export class MastraTUI {
     }
 
     // Load OM progress now that we're subscribed (the event during
-    // thread selection fired before we were listening)
+    // thread selection fired before we were listening).
+    // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
-
-    // Sync OM thresholds from thread metadata (may differ from OM defaults)
-    this.syncOMThresholdsFromHarness();
 
     // Start the UI
     this.state.ui.start();
@@ -282,6 +283,9 @@ export class MastraTUI {
     await renderExistingMessages(this.state);
     // Render existing tasks if any
     await renderExistingTasks(this.state);
+
+    // One-time Claude Max OAuth warning at startup
+    await this.checkClaudeMaxOAuthWarning();
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.state.pendingLockConflict) {
@@ -314,41 +318,108 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     await dispatchEvent(event, this.getEventContext(), this.state);
+
+    if (event.type === 'thread_created') {
+      await this.syncThreadActivePackMetadata(event.thread);
+    } else if (event.type === 'thread_changed') {
+      await this.syncThreadActivePackMetadata();
+    }
+
+    if (event.type === 'agent_end') {
+      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+      await this.runStopHook(stopReason);
+    }
   }
 
-  // ===========================================================================
-  // Status Line Reset
-  // ===========================================================================
-
-  /**
-   * Sync omProgress thresholds from harness state (thread metadata).
-   * Called after thread load to pick up per-thread threshold overrides.
-   */
-  private syncOMThresholdsFromHarness(): void {
-    const obsThreshold = this.state.harness.getObservationThreshold();
-    const refThreshold = this.state.harness.getReflectionThreshold();
-    this.state.omProgress.threshold = obsThreshold;
-    this.state.omProgress.thresholdPercent =
-      obsThreshold > 0 ? (this.state.omProgress.pendingTokens / obsThreshold) * 100 : 0;
-    this.state.omProgress.reflectionThreshold = refThreshold;
-    this.state.omProgress.reflectionThresholdPercent =
-      refThreshold > 0 ? (this.state.omProgress.observationTokens / refThreshold) * 100 : 0;
-    updateStatusLine(this.state);
-  }
-  private resetStatusLineState(): void {
-    const prev = this.state.omProgress;
-    this.state.omProgress = {
-      ...defaultOMProgressState(),
-      // Preserve thresholds across resets
-      threshold: prev.threshold,
-      reflectionThreshold: prev.reflectionThreshold,
+  private async buildProviderAccess(): Promise<ProviderAccess> {
+    const models = await this.state.harness.listAvailableModels();
+    const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+    const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
+      if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
+      if (hasEnv(provider)) return 'apikey';
+      return false;
     };
-    this.state.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-    this.state.bufferingMessages = false;
-    this.state.bufferingObservations = false;
-    updateStatusLine(this.state);
+    return {
+      anthropic: accessLevel('anthropic', 'anthropic'),
+      openai: accessLevel('openai', 'openai-codex'),
+      cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
+      google: hasEnv('google') ? ('apikey' as const) : false,
+      deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+    };
   }
 
+  private async syncThreadActivePackMetadata(thread?: {
+    id: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const settings = loadSettings();
+    const currentThreadId = this.state.harness.getCurrentThreadId();
+    if (!currentThreadId) return;
+
+    const resolvedThread =
+      thread?.id === currentThreadId
+        ? thread
+        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+    const access = await this.buildProviderAccess();
+    const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
+    const resolvedPackId = resolveThreadActiveModelPackId(
+      settings,
+      packs,
+      resolvedThread?.metadata as Record<string, unknown> | undefined,
+    );
+
+    if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
+      // Re-read settings to avoid overwriting concurrent changes
+      const fresh = loadSettings();
+      if (fresh.models.activeModelPackId !== resolvedPackId) {
+        fresh.models.activeModelPackId = resolvedPackId;
+        saveSettings(fresh);
+      }
+    }
+  }
+
+  private showHookWarnings(event: string, warnings: string[]): void {
+    for (const warning of warnings) {
+      showInfo(this.state, `[${event}] ${warning}`);
+    }
+  }
+
+  private async runStopHook(stopReason: 'complete' | 'aborted' | 'error'): Promise<void> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+
+    try {
+      const result = await hookMgr.runStop(undefined, stopReason);
+      this.showHookWarnings('Stop', result.warnings);
+      if (!result.allowed && result.blockReason) {
+        showError(this.state, `Stop hook blocked: ${result.blockReason}`);
+      }
+    } catch (error) {
+      showError(this.state, `Stop hook failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async runUserPromptHook(userInput: string): Promise<boolean> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return true;
+
+    try {
+      const result = await hookMgr.runUserPromptSubmit(userInput);
+      this.showHookWarnings('UserPromptSubmit', result.warnings);
+
+      if (!result.allowed) {
+        showError(this.state, result.blockReason || 'Blocked by UserPromptSubmit hook');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      showError(this.state, `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  // ===========================================================================
   /**
    * Insert a child into the chat container before any follow-up user messages.
    * If no follow-ups are pending, appends to end.
@@ -424,6 +495,31 @@ export class MastraTUI {
   }
 
   /**
+   * One-time startup check: if the user has Anthropic OAuth credentials and
+   * hasn't yet acknowledged the Claude Max ToS warning, show it now.
+   */
+  private async checkClaudeMaxOAuthWarning(): Promise<void> {
+    const authStorage = this.state.authStorage;
+    if (!authStorage || !authStorage.isLoggedIn(ANTHROPIC_OAUTH_PROVIDER_ID)) return;
+
+    const settings = loadSettings();
+    if (settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt) return;
+
+    const result = await showClaudeMaxOAuthWarning(this.state, 'startup');
+
+    if (result === 'continue') {
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+    } else if (result === 'remove') {
+      authStorage.logout(ANTHROPIC_OAUTH_PROVIDER_ID);
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+      await this.refreshModelAuthStatus();
+    }
+    // 'cancel' (Esc) — leave settings unchanged, will show again next startup
+  }
+
+  /**
    * Get the workspace, preferring harness-owned workspace over the direct option.
    */
   private getResolvedWorkspace(): Workspace | undefined {
@@ -453,7 +549,6 @@ export class MastraTUI {
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       stop: () => this.stop(),
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
@@ -469,14 +564,12 @@ export class MastraTUI {
       showError: msg => showError(this.state, msg),
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
-      resetStatusLineState: () => this.resetStatusLineState(),
       notify: (reason, message) => notify(this.state, reason, message),
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
       renderExistingMessages: () => renderExistingMessages(this.state),
-      syncOMThresholdsFromHarness: () => this.syncOMThresholdsFromHarness(),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
         renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
@@ -540,7 +633,6 @@ export class MastraTUI {
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.harness.switchModel({ modelId: defaultModel });
-            updateStatusLine(this.state);
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
@@ -570,24 +662,8 @@ export class MastraTUI {
       loggedIn: this.state.authStorage?.isLoggedIn(p.id) ?? false,
     }));
 
-    const buildAccess = async (): Promise<ProviderAccess> => {
-      const models = await this.state.harness.listAvailableModels();
-      const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-      const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
-        if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
-        if (hasEnv(provider)) return 'apikey';
-        return false;
-      };
-      return {
-        anthropic: accessLevel('anthropic', 'anthropic'),
-        openai: accessLevel('openai', 'openai-codex'),
-        cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
-        google: hasEnv('google') ? ('apikey' as const) : false,
-        deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
-      };
-    };
-
-    const access = await buildAccess();
+    const access = await this.buildProviderAccess();
+    const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
@@ -611,6 +687,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
@@ -628,11 +705,25 @@ export class MastraTUI {
           resolve();
         },
         onLogin: (providerId: string, done: () => void) => {
+          // Persist Claude Max OAuth warning acknowledgement when proceeding
+          // through onboarding (the warning step already showed in the wizard).
+          if (providerId === ANTHROPIC_OAUTH_PROVIDER_ID) {
+            const s = loadSettings();
+            s.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+            saveSettings(s);
+          }
           this.performLogin(providerId).then(async () => {
-            const updatedAccess = await buildAccess();
-            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
-            done();
+            try {
+              const updatedAccess = await this.buildProviderAccess();
+              const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
+              component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              component.updateHasProviderAccess(updatedHasAccess);
+            } catch (err) {
+              console.error('Failed to refresh provider access after login:', err);
+            } finally {
+              done();
+            }
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
@@ -713,7 +804,6 @@ export class MastraTUI {
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.modePackId = modePack.id;
     settings.onboarding.omPackId = omPack.id;
 
     const modeDefaults: Record<string, string> = {};
@@ -722,22 +812,27 @@ export class MastraTUI {
       if (modelId) modeDefaults[mode.id] = modelId;
     }
 
-    if (modePack.id === 'custom') {
-      const idx = settings.customModelPacks.findIndex(p => p.name === 'Setup');
-      const entry = { name: 'Setup', models: modeDefaults, createdAt: new Date().toISOString() };
+    let activeModePackId = modePack.id;
+    if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
+      const customName =
+        modePack.id === 'custom' ? modePack.name?.trim() || 'Custom' : modePack.id.slice('custom:'.length) || 'Custom';
+      activeModePackId = `custom:${customName}`;
+      const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
+      const idx = settings.customModelPacks.findIndex(p => p.name === customName);
       if (idx >= 0) {
         settings.customModelPacks[idx] = entry;
       } else {
         settings.customModelPacks.push(entry);
       }
-      settings.models.activeModelPackId = 'custom:Setup';
-      settings.models.modeDefaults = modeDefaults;
-    } else if (modePack.id.startsWith('custom:')) {
-      settings.models.activeModelPackId = modePack.id;
       settings.models.modeDefaults = modeDefaults;
     } else {
-      settings.models.activeModelPackId = modePack.id;
       settings.models.modeDefaults = {};
+    }
+
+    settings.onboarding.modePackId = activeModePackId;
+    settings.models.activeModelPackId = activeModePackId;
+    if (harness.getCurrentThreadId()) {
+      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;

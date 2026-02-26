@@ -15,6 +15,38 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** Storage backend type. */
+export type StorageBackend = 'libsql' | 'pg';
+
+/** LibSQL-specific storage settings. */
+export interface LibSQLStorageSettings {
+  url?: string;
+  authToken?: string;
+}
+
+/** PostgreSQL-specific storage settings. */
+export interface PgStorageSettings {
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  schemaName?: string;
+  disableInit?: boolean;
+  skipDefaultIndexes?: boolean;
+}
+
+/** Storage configuration persisted in global settings. */
+export interface StorageSettings {
+  /** Which backend to use. Default: 'libsql'. */
+  backend: StorageBackend;
+  /** LibSQL-specific config (used when backend is 'libsql'). */
+  libsql: LibSQLStorageSettings;
+  /** PostgreSQL-specific config (used when backend is 'pg'). */
+  pg: PgStorageSettings;
+}
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -23,12 +55,14 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
+    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
     /**
-     * Active model pack ID. Built-in packs use their id directly ("varied",
-     * "anthropic", "openai"). Custom packs use "custom:<name>".
+     * Active model pack ID. Built-in packs use their id directly ("anthropic",
+     * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
      * (e.g. new model versions) apply automatically.
      * Cleared when the user manually overrides via /models (falls back to modeDefaults).
@@ -51,12 +85,21 @@ export interface GlobalSettings {
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
+    theme: 'auto' | 'dark' | 'light';
   };
+  // Storage backend configuration
+  storage: StorageSettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
 }
+
+export const STORAGE_DEFAULTS: StorageSettings = {
+  backend: 'libsql',
+  libsql: {},
+  pg: {},
+};
 
 const DEFAULTS: GlobalSettings = {
   onboarding: {
@@ -65,6 +108,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,
@@ -75,7 +119,9 @@ const DEFAULTS: GlobalSettings = {
   },
   preferences: {
     yolo: null,
+    theme: 'auto',
   },
+  storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   modelUseCounts: {},
 };
@@ -113,6 +159,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: { ...DEFAULTS.models, ...raw.models },
         preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+        storage: {
+          ...STORAGE_DEFAULTS,
+          ...raw.storage,
+          libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
+          pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
+        },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       };
@@ -163,6 +215,49 @@ function migrateFromAuth(settingsPath: string): boolean {
   return true;
 }
 
+const LEGACY_VARIED_MODELS: Record<string, string> = {
+  plan: 'openai/gpt-5.3-codex',
+  build: 'anthropic/claude-sonnet-4-5',
+  fast: 'anthropic/claude-haiku-4-5',
+};
+
+export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
+  const legacyPackId = 'varied';
+  const customPackId = 'custom:varied';
+  const hasLegacyReference =
+    settings.models.activeModelPackId === legacyPackId || settings.onboarding.modePackId === legacyPackId;
+
+  if (!hasLegacyReference) return false;
+
+  const existingIdx = settings.customModelPacks.findIndex(p => p.name === 'varied');
+  if (existingIdx >= 0) {
+    const existing = settings.customModelPacks[existingIdx]!;
+    const modelsMatch = Object.entries(LEGACY_VARIED_MODELS).every(([k, v]) => existing.models[k] === v);
+    if (!modelsMatch) {
+      existing.models = { ...LEGACY_VARIED_MODELS };
+    }
+  } else {
+    settings.customModelPacks.push({
+      name: 'varied',
+      models: { ...LEGACY_VARIED_MODELS },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (settings.models.activeModelPackId === legacyPackId) {
+    settings.models.activeModelPackId = customPackId;
+    if (Object.keys(settings.models.modeDefaults).length === 0) {
+      settings.models.modeDefaults = { ...LEGACY_VARIED_MODELS };
+    }
+  }
+
+  if (settings.onboarding.modePackId === legacyPackId) {
+    settings.onboarding.modePackId = customPackId;
+  }
+
+  return true;
+}
+
 export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
@@ -174,13 +269,28 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
       preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+      storage: {
+        ...STORAGE_DEFAULTS,
+        ...raw.storage,
+        libsql: { ...STORAGE_DEFAULTS.libsql, ...raw.storage?.libsql },
+        pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
+      },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
     };
 
     // Migrate legacy omModelId → omModelOverride
+    let settingsChanged = false;
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
+      settingsChanged = true;
+    }
+
+    if (migrateLegacyVariedPack(settings)) {
+      settingsChanged = true;
+    }
+
+    if (settingsChanged) {
       saveSettings(settings, filePath);
     }
 
@@ -188,6 +298,79 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   } catch {
     return structuredClone(DEFAULTS);
   }
+}
+
+export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+
+export interface ThreadSettings {
+  activeModelPackId: string | null;
+  modeModelIds: Record<string, string>;
+}
+
+export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {
+  const modeModelIds: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    const modeMatch = key.match(/^modeModelId_(.+)$/);
+    if (modeMatch?.[1] && typeof value === 'string' && value.length > 0) {
+      modeModelIds[modeMatch[1]] = value;
+    }
+  }
+
+  const rawPackId = metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const activeModelPackId = typeof rawPackId === 'string' && rawPackId.length > 0 ? rawPackId : null;
+
+  return {
+    activeModelPackId,
+    modeModelIds,
+  };
+}
+
+/**
+ * Resolve active model pack id for the current thread.
+ *
+ * Priority:
+ * 1) explicit thread metadata activeModelPackId
+ * 2) inferred from thread modeModelId_* values
+ * 3) global settings.models.activeModelPackId
+ */
+export function resolveThreadActiveModelPackId(
+  settings: GlobalSettings,
+  builtinPacks: Array<{ id: string; models: Record<string, string> }>,
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  const threadSettings = parseThreadSettings(metadata);
+
+  const isKnownPack = (packId: string): boolean => {
+    if (packId.startsWith('custom:')) {
+      const name = packId.slice('custom:'.length);
+      return settings.customModelPacks.some(p => p.name === name);
+    }
+    return builtinPacks.some(p => p.id === packId);
+  };
+
+  if (threadSettings.activeModelPackId && isKnownPack(threadSettings.activeModelPackId)) {
+    return threadSettings.activeModelPackId;
+  }
+
+  const allPacks: Array<{ id: string; models: Record<string, string> }> = [
+    ...builtinPacks,
+    ...settings.customModelPacks.map(p => ({ id: `custom:${p.name}`, models: p.models })),
+  ];
+
+  for (const pack of allPacks) {
+    const packEntries = Object.entries(pack.models);
+    const threadEntries = Object.keys(threadSettings.modeModelIds);
+    const matches =
+      packEntries.length === threadEntries.length &&
+      packEntries.every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
+    if (matches) return pack.id;
+  }
+
+  if (settings.models.activeModelPackId && isKnownPack(settings.models.activeModelPackId)) {
+    return settings.models.activeModelPackId;
+  }
+
+  return null;
 }
 
 /**

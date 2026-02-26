@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -279,6 +279,8 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageserver-protocol": "^3.17.0",
     "zod": "^3.25.76"
   },
   "engines": {

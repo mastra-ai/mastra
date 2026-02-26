@@ -18,7 +18,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { getMarkdownTheme, fg, bold, mastra } from './theme.js';
+import { getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -36,7 +36,8 @@ export function renderCompletedTasksInline(
   insertIndex = -1,
   collapsed = false,
 ): void {
-  const headerText = bold(fg('accent', 'Tasks')) + fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
+  const headerText =
+    theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
   const container = new Container();
   container.addChild(new Spacer(1));
@@ -53,7 +54,11 @@ export function renderCompletedTasksInline(
   }
   if (remaining > 0) {
     container.addChild(
-      new Text(fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`), 0, 0),
+      new Text(
+        theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
+        0,
+        0,
+      ),
     );
   }
 
@@ -73,10 +78,10 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   container.addChild(new Spacer(1));
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
-  container.addChild(new Text(fg('accent', `${label} cleared`), 0, 0));
+  container.addChild(new Text(theme.fg('accent', `${label} cleared`), 0, 0));
   for (const task of clearedTasks) {
     const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-    const text = chalk.dim.strikethrough(task.content);
+    const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
     container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
   }
   if (insertIndex >= 0) {
@@ -142,7 +147,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     // can be inserted before them (keeping them anchored at bottom).
     // Only track if the agent is already streaming a response — otherwise
     // this is the initial message that triggers the response, not a follow-up.
-    if (state.isAgentActive && state.streamingComponent) {
+    if (state.harness.getDisplayState().isRunning && state.streamingComponent) {
       state.followUpComponents.push(userComponent);
     }
   }
@@ -161,9 +166,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
   state.chatContainer.clear();
   state.pendingTools.clear();
-  state.toolInputBuffers.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
+
+  // Local accumulator for detecting task clears during history reconstruction
+  let previousTasksAcc: TaskItem[] = [];
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -269,14 +276,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               replacedWithInline = true;
             } else if (!tasks || tasks.length === 0) {
               // Tasks were cleared - show with previous tasks if we have them
-              if (state.previousTasks.length > 0) {
-                renderClearedTasksInline(state, state.previousTasks);
-                state.previousTasks = [];
+              if (previousTasksAcc.length > 0) {
+                renderClearedTasksInline(state, previousTasksAcc);
+                previousTasksAcc = [];
                 replacedWithInline = true;
               }
             } else {
               // Track for detecting clears
-              state.previousTasks = [...tasks];
+              previousTasksAcc = [...tasks];
             }
           }
 
@@ -377,8 +384,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   // Restore pinned task list from the last active task_write in history
-  if (state.previousTasks.length > 0 && state.taskProgress) {
-    state.taskProgress.updateTasks(state.previousTasks);
+  if (previousTasksAcc.length > 0 && state.taskProgress) {
+    state.taskProgress.updateTasks(previousTasksAcc);
   }
 
   state.ui.requestRender();
