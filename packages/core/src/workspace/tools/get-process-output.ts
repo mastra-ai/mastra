@@ -27,7 +27,7 @@ Use this after starting a background command with execute_command (background: t
       ),
   }),
   execute: async ({ pid, tail, wait: shouldWait }, context) => {
-    const { sandbox } = requireSandbox(context);
+    const { workspace, sandbox } = requireSandbox(context);
 
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
@@ -84,8 +84,9 @@ Use this after starting a background command with execute_command (background: t
 
     const running = handle.exitCode === undefined;
 
-    const stdout = truncateOutput(handle.stdout, tail);
-    const stderr = truncateOutput(handle.stderr, tail);
+    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
+    const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
+    const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
     if (!stdout && !stderr) {
       return '(no output yet)';
