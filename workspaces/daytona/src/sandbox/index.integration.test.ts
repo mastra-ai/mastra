@@ -108,11 +108,12 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Integration', () =
 describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () => {
   createSandboxTestSuite({
     suiteName: 'DaytonaSandbox',
-    createSandbox: async () =>
+    createSandbox: async options =>
       new DaytonaSandbox({
         id: `conformance-${Date.now()}`,
         timeout: 60000,
         language: 'typescript',
+        ...(options?.env && { env: options.env }),
       }),
     capabilities: {
       supportsMounting: false,

@@ -15,17 +15,11 @@ import type {
   Sandbox,
   VolumeMount,
 } from '@daytonaio/sdk';
-import type {
-  SandboxInfo,
-  ExecuteCommandOptions,
-  CommandResult,
-  ProviderStatus,
-  MastraSandboxOptions,
-} from '@mastra/core/workspace';
+import type { SandboxInfo, ProviderStatus, MastraSandboxOptions } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
-import { shellQuote } from '../utils/shell-quote';
+import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
 const LOG_PREFIX = '[@mastra/daytona]';
@@ -163,6 +157,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
+  private _workingDir: string | null = null;
 
   private readonly timeout: number;
   private readonly language: 'typescript' | 'javascript' | 'python';
@@ -184,7 +179,14 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
 
   constructor(options: DaytonaSandboxOptions = {}) {
-    super({ ...options, name: 'DaytonaSandbox' });
+    super({
+      ...options,
+      name: 'DaytonaSandbox',
+      processes: new DaytonaProcessManager({
+        env: options.env,
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
+    });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000;
@@ -262,6 +264,7 @@ export class DaytonaSandbox extends MastraSandbox {
       this._sandbox = existing;
       this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+      await this.detectWorkingDir();
       return;
     }
 
@@ -306,6 +309,9 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
+
+    // Detect the actual working directory (don't hardcode — custom images may differ)
+    await this.detectWorkingDir();
   }
 
   /**
@@ -390,7 +396,9 @@ export class DaytonaSandbox extends MastraSandbox {
 
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).`);
 
-    parts.push(`Default working directory: /home/daytona.`);
+    if (this._workingDir) {
+      parts.push(`Default working directory: ${this._workingDir}.`);
+    }
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
 
     parts.push(`Running as user: ${this.sandboxUser ?? 'daytona'}.`);
@@ -409,6 +417,24 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Detect the actual working directory inside the sandbox via `pwd`.
+   * Stores the result for use in `getInstructions()`.
+   */
+  private async detectWorkingDir(): Promise<void> {
+    if (!this._sandbox) return;
+    try {
+      const result = await this._sandbox.process.executeCommand('pwd');
+      const dir = result.result?.trim();
+      if (dir) {
+        this._workingDir = dir;
+        this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
+      }
+    } catch {
+      this.logger.debug(`${LOG_PREFIX} Could not detect working directory, will omit from instructions`);
+    }
+  }
 
   /**
    * Try to find and reconnect to an existing Daytona sandbox with the same
@@ -445,17 +471,6 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   /**
-   * Ensure the sandbox is started and return the Daytona Sandbox instance.
-   */
-  private async ensureSandbox(): Promise<Sandbox> {
-    await this.ensureRunning();
-    if (!this._sandbox) {
-      throw new SandboxNotReadyError(this.id);
-    }
-    return this._sandbox;
-  }
-
-  /**
    * Check if an error indicates the sandbox is dead/gone.
    * Uses DaytonaNotFoundError from the SDK when available,
    * with string fallback for edge cases.
@@ -489,167 +504,28 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
-  // Command Execution
+  // Retry on Dead
   // ---------------------------------------------------------------------------
 
   /**
-   * Execute a shell command in the sandbox via a Daytona session.
-   * Sessions provide separate stdout/stderr streams and real-time output callbacks.
-   * Automatically starts the sandbox if not already running.
-   * Retries once if the sandbox is found to be dead.
+   * Execute a function, retrying once if the sandbox is found to be dead.
+   * Used by DaytonaProcessManager to handle stale sandboxes transparently.
    */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
-    const sandbox = await this.ensureSandbox();
-
-    const startTime = Date.now();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-
-    // Merge sandbox default env with per-command env (per-command overrides)
-    const mergedEnv = { ...this.env, ...options.env };
-    const envs = Object.fromEntries(
-      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
-    );
-
-    // Bake cwd and env into the command — session API has no native cwd/envVars params
-    const sessionCommand = buildSessionCommand(fullCommand, options.cwd, envs);
-
-    const effectiveTimeout = options.timeout ?? this.timeout;
-
-    const sessionId = `mastra-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-
-    this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
-
+  async retryOnDead<T>(fn: () => Promise<T>): Promise<T> {
     try {
-      await sandbox.process.createSession(sessionId);
-
-      const { cmdId } = await sandbox.process.executeSessionCommand(sessionId, {
-        command: sessionCommand,
-        runAsync: true,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      // Stream logs until the command finishes, with a client-side timeout.
-      // On timeout, deleteSession in the finally block terminates the session and
-      // its running process server-side. Any partial output is still returned.
-      const logsPromise = sandbox.process.getSessionCommandLogs(
-        sessionId,
-        cmdId,
-        (chunk: string) => {
-          stdout += chunk;
-          options.onStdout?.(chunk);
-        },
-        (chunk: string) => {
-          stderr += chunk;
-          options.onStderr?.(chunk);
-        },
-      );
-      // Suppress the rejection that occurs when the session is deleted after timeout
-      logsPromise.catch(err => {
-        this.logger.debug(`${LOG_PREFIX} Log stream ended: ${err}`);
-      });
-
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(`Command timed out after ${effectiveTimeout}ms`)),
-          effectiveTimeout,
-        );
-      });
-
-      try {
-        await Promise.race([logsPromise, timeoutPromise]);
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      const cmd = await sandbox.process.getSessionCommand(sessionId, cmdId);
-      const exitCode = cmd.exitCode ?? 0;
-
-      const executionTimeMs = Date.now() - startTime;
-
-      this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms)`);
-      if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
-      if (stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${stderr}`);
-
-      return {
-        success: exitCode === 0,
-        exitCode,
-        stdout,
-        stderr,
-        executionTimeMs,
-        command,
-        args,
-      };
+      return await fn();
     } catch (error) {
-      // Handle sandbox-is-dead errors - retry once
       if (this.isSandboxDeadError(error) && !this._isRetrying) {
         this.handleSandboxTimeout();
         this._isRetrying = true;
         try {
-          return await this.executeCommand(command, args, options);
+          await this.ensureRunning();
+          return await fn();
         } finally {
           this._isRetrying = false;
         }
       }
-
-      const executionTimeMs = Date.now() - startTime;
-
-      const errorObj = error as { exitCode?: number; result?: string };
-      const stdout = errorObj.result ?? '';
-      const stderr = error instanceof Error ? error.message : String(error);
-      const exitCode = errorObj.exitCode ?? 1;
-
-      this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms) [error]`);
-      if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
-      if (stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${stderr}`);
-
-      return {
-        success: false,
-        exitCode,
-        stdout,
-        stderr,
-        executionTimeMs,
-        command,
-        args,
-      };
-    } finally {
-      // Best-effort session cleanup — sandbox may be dead or session already gone
-      try {
-        await sandbox.process.deleteSession(sessionId);
-      } catch {
-        // ignore
-      }
+      throw error;
     }
   }
-}
-
-/**
- * Build a shell command string that bakes in cwd and env vars.
- * Session commands have no native cwd/envVars params so we prepend them.
- *
- * @example
- * buildSessionCommand('npm test', '/app', { NODE_ENV: 'test' })
- * // → "export NODE_ENV=test && cd /app && npm test"
- */
-function buildSessionCommand(command: string, cwd: string | undefined, envs: Record<string, string>): string {
-  const parts: string[] = [];
-
-  for (const [k, v] of Object.entries(envs)) {
-    parts.push(`export ${k}=${shellQuote(v)}`);
-  }
-
-  if (cwd) {
-    parts.push(`cd ${shellQuote(cwd)}`);
-  }
-
-  parts.push(command);
-
-  return parts.join(' && ');
 }

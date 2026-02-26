@@ -28,6 +28,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
     target: 'us',
     process: {
       codeRun: vi.fn().mockResolvedValue({ exitCode: 0, result: '', artifacts: { stdout: '' } }),
+      executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, result: '' }),
       createSession: vi.fn().mockResolvedValue(undefined),
       executeSessionCommand: vi.fn().mockResolvedValue({ cmdId: 'cmd-123' }),
       getSessionCommandLogs: vi
@@ -65,6 +66,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
     mockDaytona.stop.mockResolvedValue(undefined);
     mockDaytona.start.mockResolvedValue(undefined);
     mockDaytona.list.mockResolvedValue({ items: [], total: 0 });
+    mockSandbox.process.executeCommand.mockResolvedValue({ exitCode: 0, result: '' });
     mockSandbox.process.createSession.mockResolvedValue(undefined);
     mockSandbox.process.executeSessionCommand.mockResolvedValue({ cmdId: 'cmd-123' });
     mockSandbox.process.getSessionCommandLogs.mockImplementation(
@@ -510,7 +512,8 @@ describe('DaytonaSandbox', () => {
       expect(cmd).toContain('export BASE=value');
       expect(cmd).toContain('export OVERRIDE=new');
       expect(cmd).toContain('export EXTRA=added');
-      expect(cmd).toContain('echo test');
+      // Command is wrapped in subshell — args joined by base class auto-generated executeCommand
+      expect(cmd).toMatch(/\(echo.*test.*\)/);
     });
 
     it('per-command env overrides sandbox env', async () => {
@@ -689,9 +692,20 @@ describe('DaytonaSandbox', () => {
       expect(instructions).toContain('Cloud sandbox');
     });
 
-    it('includes default working directory', () => {
+    it('includes dynamically detected working directory', async () => {
+      mockSandbox.process.executeCommand = vi.fn().mockResolvedValue({ result: '/home/daytona\n' });
       const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
       expect(sandbox.getInstructions()).toContain('/home/daytona');
+    });
+
+    it('omits working directory when detection fails', async () => {
+      mockSandbox.process.executeCommand = vi.fn().mockRejectedValue(new Error('failed'));
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      expect(sandbox.getInstructions()).not.toContain('working directory');
     });
 
     it('includes command timeout in seconds', () => {
@@ -777,7 +791,7 @@ describe('DaytonaSandbox', () => {
     });
   });
 
-  describe('Command Execution', () => {
+  describe('Command Execution (via ProcessManager)', () => {
     it('executes command and returns result', async () => {
       mockSandbox.process.getSessionCommandLogs.mockImplementationOnce(
         async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
@@ -793,8 +807,6 @@ describe('DaytonaSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe('hello world');
-      expect(result.command).toBe('echo');
-      expect(result.args).toEqual(['hello', 'world']);
       expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
@@ -838,13 +850,14 @@ describe('DaytonaSandbox', () => {
 
       await sandbox.executeCommand('ls', [], { cwd: '/tmp' });
 
-      expect(mockSandbox.process.executeSessionCommand).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ command: 'cd /tmp && ls', runAsync: true }),
-      );
+      // Command is wrapped in subshell: cd /tmp && (ls)
+      const calledCommand = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(calledCommand).toContain('cd');
+      expect(calledCommand).toContain('/tmp');
+      expect(calledCommand).toContain('(ls)');
     });
 
-    it('enforces timeout via Promise.race on getSessionCommandLogs', async () => {
+    it('enforces timeout via Promise.race', async () => {
       const sandbox = new DaytonaSandbox({ timeout: 100 });
       await sandbox._start();
 
@@ -859,14 +872,14 @@ describe('DaytonaSandbox', () => {
       expect(result.stderr).toContain('timed out');
     });
 
-    it('quotes args with special characters', async () => {
+    it('wraps command in subshell', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();
 
-      await sandbox.executeCommand('echo', ['hello world', "it's"]);
+      await sandbox.executeCommand('echo test');
 
       const calledCommand = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
-      expect(calledCommand).toBe("echo 'hello world' 'it'\\''s'");
+      expect(calledCommand).toBe('(echo test)');
     });
 
     it('streams stdout and stderr chunks to callbacks', async () => {
@@ -899,32 +912,29 @@ describe('DaytonaSandbox', () => {
       expect(result.stderr).toBe('err1');
     });
 
-    it('deletes session after command completes', async () => {
-      const sandbox = new DaytonaSandbox();
-      await sandbox._start();
-
-      await sandbox.executeCommand('echo', ['test']);
-
-      expect(mockSandbox.process.deleteSession).toHaveBeenCalledTimes(1);
-    });
-
     it('auto-starts sandbox if not running', async () => {
       const sandbox = new DaytonaSandbox();
 
-      // executeCommand should trigger start
+      // executeCommand should trigger start via ProcessManager
       await sandbox.executeCommand('echo', ['test']);
 
       expect(mockDaytona.create).toHaveBeenCalledTimes(1);
     });
+
+    it('has process manager available', () => {
+      const sandbox = new DaytonaSandbox();
+
+      expect(sandbox.processes).toBeDefined();
+    });
   });
 
   describe('Error Handling & Retry', () => {
-    it('retries once on sandbox-dead error', async () => {
+    it('retries once on sandbox-dead error via retryOnDead', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();
 
-      // First executeSessionCommand: sandbox dead
-      mockSandbox.process.executeSessionCommand.mockRejectedValueOnce(new Error('sandbox was not found'));
+      // First createSession: sandbox dead
+      mockSandbox.process.createSession.mockRejectedValueOnce(new Error('sandbox was not found'));
       // Retry: stream 'success' via getSessionCommandLogs
       mockSandbox.process.getSessionCommandLogs.mockImplementationOnce(
         async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
@@ -936,7 +946,7 @@ describe('DaytonaSandbox', () => {
 
       expect(result.success).toBe(true);
       expect(result.stdout).toBe('success');
-      // create called twice: initial _start + retry's ensureSandbox
+      // create called twice: initial _start + retry's ensureRunning
       expect(mockDaytona.create).toHaveBeenCalledTimes(2);
     });
 
@@ -945,24 +955,18 @@ describe('DaytonaSandbox', () => {
       await sandbox._start();
 
       // Both calls fail with sandbox dead
-      mockSandbox.process.executeSessionCommand.mockRejectedValue(new Error('sandbox was not found'));
+      mockSandbox.process.createSession.mockRejectedValue(new Error('sandbox was not found'));
 
-      const result = await sandbox.executeCommand('echo', ['test']);
-
-      // Should fail after one retry
-      expect(result.success).toBe(false);
-      expect(result.stderr).toContain('sandbox was not found');
+      await expect(sandbox.executeCommand('echo', ['test'])).rejects.toThrow('sandbox was not found');
     });
 
     it('does not retry on regular execution errors', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();
 
-      mockSandbox.process.executeSessionCommand.mockRejectedValue(new Error('command failed'));
+      mockSandbox.process.createSession.mockRejectedValue(new Error('command failed'));
 
-      const result = await sandbox.executeCommand('bad-command');
-
-      expect(result.success).toBe(false);
+      await expect(sandbox.executeCommand('bad-command')).rejects.toThrow('command failed');
       expect(mockDaytona.create).toHaveBeenCalledTimes(1); // No retry
     });
 
