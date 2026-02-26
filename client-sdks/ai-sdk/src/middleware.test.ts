@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
+import { ObservationalMemory } from '@mastra/memory/processors';
 import { generateText, streamText } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -764,6 +765,62 @@ describe('withMastra middleware', () => {
 
       expect(texts).toContain('What is the meaning of life?');
       expect(texts).toContain('The answer is 42.');
+    });
+
+    it('should save messages via observational memory after streaming completes', async () => {
+      const observationalMemory = new ObservationalMemory({
+        storage: memoryStore,
+        observation: { messageTokens: 100000, model: 'test-model', bufferTokens: false },
+        reflection: { observationTokens: 200000, model: 'test-model' },
+      });
+
+      const model = withMastra(createMockModel(), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: false,
+        },
+        inputProcessors: [observationalMemory],
+        outputProcessors: [observationalMemory],
+      });
+
+      const { messages: initialMessages } = await memoryStore.listMessages({ threadId });
+      expect(initialMessages).toHaveLength(0);
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'What is streaming?',
+      });
+
+      let fullText = '';
+      for await (const chunk of textStream) {
+        fullText += chunk;
+      }
+
+      expect(fullText).toBe('Test response');
+
+      const { messages: storedMessages } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      expect(storedMessages.length).toBeGreaterThanOrEqual(2);
+
+      const roles = storedMessages.map(m => m.role);
+      expect(roles).toContain('user');
+      expect(roles).toContain('assistant');
+
+      const texts = storedMessages.map(
+        m =>
+          m.content?.parts
+            ?.filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('') || '',
+      );
+
+      expect(texts).toContain('What is streaming?');
+      expect(texts).toContain('Test response');
     });
 
     it('should respect lastMessages limit', async () => {
