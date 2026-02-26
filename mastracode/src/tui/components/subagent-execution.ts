@@ -81,6 +81,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.isError = isError;
     this.durationMs = durationMs;
     this.finalResult = result;
+    this.expanded = false;
     this.rebuild();
   }
 

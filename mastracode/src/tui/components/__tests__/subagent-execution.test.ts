@@ -1,7 +1,7 @@
+import type { TUI } from '@mariozechner/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
-import type { TUI } from '@mariozechner/pi-tui';
 
 // Minimal mock TUI — only requestRender() is called by SubagentExecutionComponent
 const mockTui = { requestRender: () => {} } as unknown as TUI;
@@ -75,7 +75,12 @@ describe('SubagentExecutionComponent', () => {
 
   describe('collapse on completion (issue #13484)', () => {
     it('collapses to a single footer line when finished and not expanded', () => {
-      const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
+      const comp = new SubagentExecutionComponent(
+        'explore',
+        'Find all usages of X',
+        mockTui,
+        'claude-sonnet-4-20250514',
+      );
       comp.addToolStart('search_content', { pattern: 'foo' });
       comp.addToolEnd('search_content', 'found 3 matches', false);
       comp.addToolStart('view', { path: 'src/index.ts' });
@@ -98,7 +103,12 @@ describe('SubagentExecutionComponent', () => {
     });
 
     it('collapses to footer on error completion too', () => {
-      const comp = new SubagentExecutionComponent('execute', 'Implement feature Y', mockTui, 'claude-sonnet-4-20250514');
+      const comp = new SubagentExecutionComponent(
+        'execute',
+        'Implement feature Y',
+        mockTui,
+        'claude-sonnet-4-20250514',
+      );
       comp.addToolStart('write_file', { path: 'foo.ts' });
       comp.addToolEnd('write_file', 'written', false);
 
@@ -113,7 +123,12 @@ describe('SubagentExecutionComponent', () => {
     });
 
     it('shows full content when expanded after completion', () => {
-      const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
+      const comp = new SubagentExecutionComponent(
+        'explore',
+        'Find all usages of X',
+        mockTui,
+        'claude-sonnet-4-20250514',
+      );
       comp.addToolStart('search_content', { pattern: 'foo' });
       comp.addToolEnd('search_content', 'found 3 matches', false);
 
@@ -150,6 +165,22 @@ describe('SubagentExecutionComponent', () => {
 
       // Toggle back to collapsed
       comp.toggleExpanded();
+      lines = renderPlain(comp).filter(l => l.trim().length > 0);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('└──');
+    });
+
+    it('auto-collapses even if expanded during execution', () => {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      comp.addToolStart('search_content', { pattern: 'foo' });
+
+      // User expands during execution
+      comp.setExpanded(true);
+      let lines = renderPlain(comp).filter(l => l.trim().length > 0);
+      expect(lines.length).toBeGreaterThan(1);
+
+      // Finish should auto-collapse regardless
+      comp.finish(false, 5000);
       lines = renderPlain(comp).filter(l => l.trim().length > 0);
       expect(lines).toHaveLength(1);
       expect(lines[0]).toContain('└──');
