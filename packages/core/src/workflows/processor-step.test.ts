@@ -769,4 +769,170 @@ describe('Processor Step in Workflow - TripWire handling', () => {
       expect(result.tripwire?.metadata).toEqual({ source: 'parallel' });
     }
   });
+
+  it('should propagate TripWire from a .then().parallel().map() inner workflow through the parent', async () => {
+    // Simulates RegexPreFilter — passes through
+    const regexPreFilter: Processor = {
+      id: 'regex-pre-filter',
+      async processInput({ messages }) {
+        return messages;
+      },
+    };
+
+    // Simulates TopicGuard — aborts for off-topic messages
+    const topicGuard: Processor = {
+      id: 'topic-guard',
+      async processInput({ messages, abort }) {
+        const text = JSON.stringify(messages);
+        if (text.includes('i hate you')) {
+          abort('This question is outside our support scope.', {
+            metadata: { category: 'off-topic', confidence: 0.95 },
+          });
+        }
+        return messages;
+      },
+    };
+
+    // Simulates ModerationProcessor — passes through
+    const moderation: Processor = {
+      id: 'moderation',
+      async processInput({ messages }) {
+        return messages;
+      },
+    };
+
+    // Build the inner pipeline: regexPreFilter → parallel([topicGuard, moderation]) → map(merge)
+    const regexStep = createStep(regexPreFilter);
+    const topicGuardStep = createStep(topicGuard);
+    const moderationStep = createStep(moderation);
+
+    const inputPipeline = createWorkflow({
+      id: 'input-pipeline',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+    })
+      .then(regexStep)
+      .parallel([topicGuardStep, moderationStep])
+      .map(({ inputData }) => inputData['processor:topic-guard'] || inputData['processor:moderation'] || {})
+      .commit();
+
+    // Simulates ModelRouter — a processInputStep processor that runs AFTER the pipeline
+    const modelRouter: Processor = {
+      id: 'model-router',
+      async processInputStep({ stepNumber }) {
+        if (stepNumber === 0) return undefined;
+        return { model: 'openai/gpt-5-nano' };
+      },
+    };
+
+    // Build parent workflow: inputPipeline → modelRouter (same as combineProcessorsIntoWorkflow does)
+    const inputPipelineStep = createStep(inputPipeline);
+    const modelRouterStep = createStep(modelRouter);
+
+    const parentWorkflow = createWorkflow({
+      id: 'enterprise-agent-input-processor',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+    })
+      .then(inputPipelineStep)
+      .then(modelRouterStep)
+      .commit();
+
+    const run = await parentWorkflow.createRun();
+    const messageList = createMockMessageList([
+      {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'i hate you' }] },
+      },
+    ]);
+
+    const result = await run.start({
+      inputData: {
+        phase: 'input',
+        messages: [
+          {
+            id: '1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'i hate you' }] },
+          },
+        ],
+        messageList,
+      },
+    });
+
+    // The TripWire from topicGuard inside inputPipeline should propagate to the parent
+    expect(result.status).toBe('tripwire');
+    if (result.status === 'tripwire') {
+      expect(result.tripwire?.reason).toBe('This question is outside our support scope.');
+      expect(result.tripwire?.metadata).toEqual({ category: 'off-topic', confidence: 0.95 });
+    }
+
+    // The model-router step should NOT have run
+    const modelRouterResult = result.steps['processor:model-router'];
+    expect(modelRouterResult).toBeUndefined();
+  });
+
+  it('should NOT propagate TripWire when inner workflow succeeds', async () => {
+    const passingProcessor: Processor = {
+      id: 'passing-processor',
+      async processInput({ messages }) {
+        return messages;
+      },
+    };
+
+    const innerWorkflow = createWorkflow({
+      id: 'inner-pipeline',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+    })
+      .then(createStep(passingProcessor))
+      .commit();
+
+    const modelRouter: Processor = {
+      id: 'model-router',
+      async processInputStep() {
+        return { model: 'openai/gpt-5-nano' };
+      },
+    };
+
+    const parentWorkflow = createWorkflow({
+      id: 'parent-pipeline',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+    })
+      .then(createStep(innerWorkflow))
+      .then(createStep(modelRouter))
+      .commit();
+
+    const run = await parentWorkflow.createRun();
+    const messageList = createMockMessageList([
+      {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'what laptops do you have?' }] },
+      },
+    ]);
+
+    const result = await run.start({
+      inputData: {
+        phase: 'input',
+        messages: [
+          {
+            id: '1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'what laptops do you have?' }] },
+          },
+        ],
+        messageList,
+      },
+    });
+
+    // Should succeed — no TripWire
+    expect(result.status).toBe('success');
+  });
 });

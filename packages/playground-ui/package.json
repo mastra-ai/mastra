@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "14.0.0",
+  "version": "15.0.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -134,7 +134,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.1.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.5.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@tanstack/react-query": "^5.81.5",

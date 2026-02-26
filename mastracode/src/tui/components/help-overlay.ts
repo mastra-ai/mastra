@@ -28,8 +28,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/name', description: 'Rename current thread' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
-    { key: '/models', description: 'Configure model' },
-    { key: '/models:pack', description: 'Switch model pack' },
+    { key: '/models', description: 'Switch model pack' },
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
@@ -43,6 +42,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/login', description: 'Login with OAuth provider' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
+    { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
   ];
 
   if (modes > 1) {

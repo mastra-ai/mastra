@@ -71,7 +71,10 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         const hasAllOf = 'allOf' in propSchema;
 
         if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
-          return [key, { ...propSchema, type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'] }];
+          return [
+            key,
+            { ...propSchema, type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'], items: {} },
+          ];
         }
         // Recurse into nested object schemas
         return [key, fixTypelessProperties(propSchema)];

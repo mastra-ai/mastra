@@ -16,8 +16,14 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
+import {
+  EntityType,
+  SpanType,
+  createObservabilityContext,
+  getOrCreateSpan,
+  resolveObservabilityContext,
+} from '../observability';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
@@ -389,11 +395,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       [PUBSUB_SYMBOL]: pubsub,
       [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
-      tracingContext,
       abortSignal,
       abort,
       writer,
+      ...rest
     }) => {
+      const observabilityContext = resolveObservabilityContext(rest);
       let streamPromise = {} as {
         promise: Promise<string>;
         resolve: (value: string) => void;
@@ -419,7 +426,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           onFinish: result => {
             // Capture structured output if available
             const resultWithObject = result as typeof result & { object?: unknown };
@@ -436,7 +443,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           onFinish: result => {
             // Capture structured output if available
             const resultWithObject = result as typeof result & { object?: unknown };
@@ -540,19 +547,20 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       inputData,
       mastra,
       requestContext,
-      tracingContext,
       suspend,
       resumeData,
       runId,
       workflowId,
       state,
       setState,
+      ...rest
     }) => {
       // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
+      const observabilityContext = resolveObservabilityContext(rest);
       const toolContext = {
         mastra,
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         resumeData,
         workflow: {
           runId,
@@ -716,10 +724,10 @@ function createStepFromProcessor<TProcessorId extends string>(
             })
           : undefined;
 
-      // Create tracing context with processor span so internal agent calls nest correctly
-      const processorTracingContext: TracingContext | undefined = processorSpan
-        ? { currentSpan: processorSpan }
-        : tracingContext;
+      // Create observability context with processor span so internal agent calls nest correctly
+      const processorObservabilityContext: ObservabilityContext | undefined = createObservabilityContext(
+        processorSpan ? { currentSpan: processorSpan } : tracingContext,
+      );
 
       // Create ProcessorStreamWriter from outputWriter if available
       // This enables processors to stream data-* parts to the UI in real-time
@@ -755,7 +763,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
-        tracingContext: processorTracingContext,
+        ...processorObservabilityContext,
         state: processorState,
         writer: processorWriter,
         abortSignal,
@@ -981,10 +989,10 @@ function createStepFromProcessor<TProcessorId extends string>(
                 };
               }
 
-              // Create tracing context with processor span for internal agent calls
-              const processorTracingContext = processorSpan
-                ? { currentSpan: processorSpan }
-                : baseContext.tracingContext;
+              // Create observability context with processor span for internal agent calls
+              const processorObservabilityContext = createObservabilityContext(
+                processorSpan ? { currentSpan: processorSpan } : baseContext.tracingContext,
+              );
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
@@ -992,7 +1000,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               try {
                 result = await processor.processOutputStream({
                   ...baseContext,
-                  tracingContext: processorTracingContext,
+                  ...processorObservabilityContext,
                   part: part as ChunkType,
                   streamParts: (streamParts ?? []) as ChunkType[],
                   state: mutableState,
@@ -2121,10 +2129,12 @@ export class Workflow<
     abort,
     abortSignal,
     retryCount,
-    tracingContext,
     outputWriter,
     validateInputs,
     perStep,
+    engine: _engine,
+    bail: _bail,
+    ...rest
   }: {
     runId?: string;
     inputData: TInput;
@@ -2154,11 +2164,11 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     retryCount?: number;
-    tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     validateInputs?: boolean;
     perStep?: boolean;
-  }): Promise<TOutput | undefined> {
+  } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
+    const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
@@ -2219,19 +2229,19 @@ export class Workflow<
         context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
         nestedStepsContext: timeTravel?.nestedStepResults as any,
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
         perStep,
       });
     } else if (restart) {
-      res = await run.restart({ requestContext, tracingContext, outputWriter });
+      res = await run.restart({ requestContext, ...observabilityContext, outputWriter });
     } else if (isResume) {
       res = await run.resume({
         resumeData,
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
@@ -2241,7 +2251,7 @@ export class Workflow<
       res = await run.start({
         inputData,
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         outputWriter,
         initialState: state,
         outputOptions: { includeState: true, includeResumeLabels: true },
@@ -2277,6 +2287,18 @@ export class Workflow<
 
     if (res.status === 'failed') {
       throw res.error;
+    }
+
+    if (res.status === 'tripwire') {
+      const tripwire = res.tripwire;
+      throw new TripWire(
+        tripwire?.reason || 'Processor tripwire triggered',
+        {
+          retry: tripwire?.retry,
+          metadata: tripwire?.metadata,
+        },
+        tripwire?.processorId,
+      );
     }
 
     return res.status === 'success' ? res.result : undefined;
@@ -2835,11 +2857,11 @@ export class Run<
     initialState,
     requestContext,
     outputWriter,
-    tracingContext,
     tracingOptions,
     format,
     outputOptions,
     perStep,
+    ...rest
   }: (TInput extends unknown
     ? {
         inputData?: TInput;
@@ -2856,7 +2878,6 @@ export class Run<
         }) & {
       requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
-      tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       format?: 'legacy' | 'vnext' | undefined;
       outputOptions?: {
@@ -2864,7 +2885,8 @@ export class Run<
         includeResumeLabels?: boolean;
       };
       perStep?: boolean;
-    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -2878,7 +2900,7 @@ export class Run<
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
-      tracingContext,
+      tracingContext: observabilityContext.tracingContext,
       requestContext: requestContext as RequestContext,
       mastra: this.#mastra,
     });
@@ -2984,8 +3006,8 @@ export class Run<
       inputData,
       requestContext,
       onChunk,
-      tracingContext,
       tracingOptions,
+      ...rest
     }: (TInput extends unknown
       ? {
           inputData?: TInput;
@@ -2994,10 +3016,9 @@ export class Run<
           inputData: TInput;
         }) & {
       requestContext?: RequestContext<TRequestContext>;
-      tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
-    } = {} as (TInput extends unknown
+    } & Partial<ObservabilityContext> = {} as (TInput extends unknown
       ? {
           inputData?: TInput;
         }
@@ -3005,14 +3026,14 @@ export class Run<
           inputData: TInput;
         }) & {
       requestContext?: RequestContext<TRequestContext>;
-      tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
-    },
+    } & Partial<ObservabilityContext>,
   ): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
+    const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction) {
       return {
         stream: this.observeStreamLegacy().stream,
@@ -3066,7 +3087,7 @@ export class Run<
       inputData,
       requestContext,
       format: 'legacy',
-      tracingContext,
+      ...observabilityContext,
       tracingOptions,
     } as any).then(result => {
       if (result.status !== 'suspended') {
@@ -3146,12 +3167,12 @@ export class Run<
   stream({
     inputData,
     requestContext,
-    tracingContext,
     tracingOptions,
     closeOnSuspend = true,
     initialState,
     outputOptions,
     perStep,
+    ...rest
   }: (TInput extends unknown
     ? {
         inputData?: TInput;
@@ -3167,7 +3188,6 @@ export class Run<
           initialState: TState;
         }) & {
       requestContext?: RequestContext<TRequestContext>;
-      tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
       outputOptions?: {
@@ -3175,7 +3195,8 @@ export class Run<
         includeResumeLabels?: boolean;
       };
       perStep?: boolean;
-    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    } & Partial<ObservabilityContext>): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
     }
@@ -3227,7 +3248,7 @@ export class Run<
         const executionResultsPromise = self._start({
           inputData,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           tracingOptions,
           initialState,
           outputOptions,
@@ -3281,11 +3302,11 @@ export class Run<
     step,
     resumeData,
     requestContext,
-    tracingContext,
     tracingOptions,
     forEachIndex,
     outputOptions,
     perStep,
+    ...rest
   }: {
     resumeData?: TResume;
     step?:
@@ -3297,7 +3318,6 @@ export class Run<
       | string
       | string[];
     requestContext?: RequestContext<TRequestContext>;
-    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
     outputOptions?: {
@@ -3305,7 +3325,8 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-  } = {}) {
+  } & Partial<ObservabilityContext> = {}) {
+    const observabilityContext = resolveObservabilityContext(rest);
     this.closeStreamAction = async () => {};
 
     const self = this;
@@ -3353,7 +3374,7 @@ export class Run<
           resumeData,
           step,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
             void controller.enqueue(chunk);
@@ -3448,29 +3469,30 @@ export class Run<
     return this.watch(cb);
   }
 
-  async resume<TResume>(params: {
-    resumeData?: TResume;
-    step?:
-      | Step<string, any, any, any, TResume, any, TEngineType, any>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, any, any, TResume, any, TEngineType, any>,
-        ]
-      | string
-      | string[];
-    label?: string;
-    requestContext?: RequestContext<TRequestContext>;
-    retryCount?: number;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    outputWriter?: OutputWriter;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    forEachIndex?: number;
-    perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  async resume<TResume>(
+    params: {
+      resumeData?: TResume;
+      step?:
+        | Step<string, any, any, any, TResume, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, any, any, TResume, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      label?: string;
+      requestContext?: RequestContext<TRequestContext>;
+      retryCount?: number;
+      tracingOptions?: TracingOptions;
+      outputWriter?: OutputWriter;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      forEachIndex?: number;
+      perStep?: boolean;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
 
@@ -3482,38 +3504,39 @@ export class Run<
     args: {
       requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
-      tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
-    } = {},
+    } & Partial<ObservabilityContext> = {},
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._restart(args);
   }
 
-  protected async _resume<TResume>(params: {
-    resumeData?: TResume;
-    step?:
-      | Step<string, any, any, TResume, any, any, TEngineType, any>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, any, TResume, any, any, TEngineType, any>,
-        ]
-      | string
-      | string[];
-    label?: string;
-    requestContext?: RequestContext<TRequestContext>;
-    retryCount?: number;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    outputWriter?: OutputWriter;
-    format?: 'legacy' | 'vnext' | undefined;
-    isVNext?: boolean;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    forEachIndex?: number;
-    perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  protected async _resume<TResume>(
+    params: {
+      resumeData?: TResume;
+      step?:
+        | Step<string, any, any, TResume, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, any, TResume, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      label?: string;
+      requestContext?: RequestContext<TRequestContext>;
+      retryCount?: number;
+      tracingOptions?: TracingOptions;
+      outputWriter?: OutputWriter;
+      format?: 'legacy' | 'vnext' | undefined;
+      isVNext?: boolean;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      forEachIndex?: number;
+      perStep?: boolean;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const observabilityContext = resolveObservabilityContext(params);
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -3624,7 +3647,7 @@ export class Run<
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,
-      tracingContext: params.tracingContext,
+      tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
@@ -3678,14 +3701,14 @@ export class Run<
   protected async _restart({
     requestContext,
     outputWriter,
-    tracingContext,
     tracingOptions,
+    ...rest
   }: {
     requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
-    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     if (this.workflowEngineType !== 'default') {
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
@@ -3756,7 +3779,7 @@ export class Run<
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
-      tracingContext,
+      tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
@@ -3796,10 +3819,10 @@ export class Run<
     nestedStepsContext,
     requestContext,
     outputWriter,
-    tracingContext,
     tracingOptions,
     outputOptions,
     perStep,
+    ...rest
   }: {
     inputData?: TInput;
     resumeData?: any;
@@ -3816,14 +3839,14 @@ export class Run<
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
-    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
@@ -3888,7 +3911,7 @@ export class Run<
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
-      tracingContext,
+      tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
@@ -3921,30 +3944,31 @@ export class Run<
     return result;
   }
 
-  async timeTravel<TInput>(args: {
-    inputData?: TInput;
-    resumeData?: any;
-    initialState?: TState;
-    step:
-      | Step<string, any, TInput, any, any, any, TEngineType, any>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, TInput, any, any, any, TEngineType, any>,
-        ]
-      | string
-      | string[];
-    context?: TimeTravelContext<any, any, any, any>;
-    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  async timeTravel<TInput>(
+    args: {
+      inputData?: TInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TInput, any, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, TInput, any, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      perStep?: boolean;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._timeTravel(args);
   }
 
@@ -3956,10 +3980,10 @@ export class Run<
     context,
     nestedStepsContext,
     requestContext,
-    tracingContext,
     tracingOptions,
     outputOptions,
     perStep,
+    ...rest
   }: {
     inputData?: TTravelInput;
     initialState?: TState;
@@ -3975,14 +3999,14 @@ export class Run<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext<TRequestContext>;
-    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     this.closeStreamAction = async () => {};
 
     const self = this;
@@ -4021,7 +4045,7 @@ export class Run<
           resumeData,
           initialState,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
             void controller.enqueue(chunk);
