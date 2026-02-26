@@ -9,8 +9,7 @@
 
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
-  ObservabilityExporter,
-  ObservabilityBridge,
+  ObservabilityEvents,
   TracingEvent,
   LogEvent,
   MetricEvent,
@@ -22,12 +21,10 @@ import { TracingEventType } from '@mastra/core/observability';
 
 /**
  * Any handler that can receive routed observability events.
- * Structurally matches both ObservabilityExporter and ObservabilityBridge.
- *
- * Once @mastra/core ships a shared base interface for signal handlers,
- * this local type can be replaced with that import.
+ * Both ObservabilityExporter and ObservabilityBridge extend
+ * ObservabilityEvents, so this matches either.
  */
-export type ObservabilityHandler = (ObservabilityExporter | ObservabilityBridge) & { name: string };
+export type ObservabilityHandler = ObservabilityEvents & { name: string };
 
 /**
  * Route a single event to the appropriate method on a handler.

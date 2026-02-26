@@ -86,6 +86,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       this.observabilityBus.registerExporter(exporter);
     }
 
+    // Register bridge on the bus so it receives all signals (tracing + non-tracing)
+    if (this.config.bridge) {
+      this.observabilityBus.registerBridge(this.config.bridge);
+    }
+
     // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
     this.observabilityBus.enableAutoExtractedMetrics();
 
@@ -657,23 +662,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Emit a tracing event through the bus and bridge.
+   * Emit a tracing event through the bus.
    *
-   * The bus routes the event to each registered exporter's onTracingEvent handler
-   * and triggers auto-extracted metrics (e.g., mastra_agent_runs_started,
-   * mastra_model_duration_ms). The bridge receives the event directly via
-   * exportTracingEvent since it is not registered on the bus.
+   * The bus routes the event to each registered exporter's and bridge's
+   * onTracingEvent handler and triggers auto-extracted metrics (e.g.,
+   * mastra_agent_runs_started, mastra_model_duration_ms).
    */
   private emitTracingEvent(event: TracingEvent): void {
-    // Route through the bus for exporter delivery + auto-extracted metrics
     this.observabilityBus.emit(event);
-
-    // Export to bridge directly (bridge is not registered on the bus)
-    if (this.config.bridge) {
-      this.config.bridge.exportTracingEvent(event).catch(error => {
-        this.logger.error(`[Observability] Bridge export error [bridge=${this.config.bridge!.name}]`, error);
-      });
-    }
   }
 
   /**

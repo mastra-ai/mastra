@@ -1,16 +1,18 @@
 /**
  * ObservabilityBus - Unified event bus for all observability signals.
  *
- * Routes events to registered exporters based on event type. Each exporter
- * declares which signals it supports by implementing the corresponding handler
- * method (onTracingEvent, onLogEvent, onMetricEvent, onScoreEvent, onFeedbackEvent).
+ * Routes events to registered exporters and an optional bridge based on event
+ * type. Each handler declares which signals it supports by implementing the
+ * corresponding method (onTracingEvent, onLogEvent, onMetricEvent,
+ * onScoreEvent, onFeedbackEvent).
  *
- * Handler presence = signal support. If an exporter does not implement a handler,
- * events of that type are silently skipped for that exporter.
+ * Handler presence = signal support. If a handler does not implement a method,
+ * events of that type are silently skipped for that handler.
  */
 
 import type {
   ObservabilityExporter,
+  ObservabilityBridge,
   TracingEvent,
   ScoreEvent,
   FeedbackEvent,
@@ -32,6 +34,7 @@ function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
 
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
+  private bridge?: ObservabilityBridge;
   private autoExtractor?: AutoExtractedMetrics;
 
   constructor() {
@@ -76,6 +79,32 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
+   * Register a bridge to receive all routed events alongside exporters.
+   * Only one bridge can be registered at a time.
+   */
+  registerBridge(bridge: ObservabilityBridge): void {
+    this.bridge = bridge;
+  }
+
+  /**
+   * Unregister the bridge. Returns true if a bridge was registered and removed.
+   */
+  unregisterBridge(): boolean {
+    if (this.bridge) {
+      this.bridge = undefined;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get the registered bridge, if any.
+   */
+  getBridge(): ObservabilityBridge | undefined {
+    return this.bridge;
+  }
+
+  /**
    * Emit an event: route to exporter handlers, run auto-extraction,
    * then forward to base class for subscriber delivery.
    */
@@ -83,6 +112,11 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
       routeToHandler(exporter, event, this.logger);
+    }
+
+    // Route to bridge (same routing logic as exporters)
+    if (this.bridge) {
+      routeToHandler(this.bridge, event, this.logger);
     }
 
     // Auto-extract metrics from tracing, score, and feedback events

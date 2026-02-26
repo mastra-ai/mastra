@@ -5,6 +5,7 @@
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   ObservabilityExporter,
+  ObservabilityBridge,
   TracingEvent,
   LogEvent,
   MetricEvent,
@@ -94,6 +95,17 @@ function createFeedbackEvent(): FeedbackEvent {
       feedbackType: 'thumbs',
       value: 1,
     },
+  };
+}
+
+function createMockBridge(overrides: Partial<ObservabilityBridge> = {}): ObservabilityBridge {
+  return {
+    name: 'mock-bridge',
+    exportTracingEvent: vi.fn().mockResolvedValue(undefined),
+    createSpan: vi.fn().mockReturnValue(undefined),
+    flush: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }
 
@@ -435,6 +447,254 @@ describe('ObservabilityBus', () => {
       // exportTracingEvent should be called as a fallback when onTracingEvent is absent,
       // ensuring tracing events still reach exporters that don't implement onTracingEvent
       expect(exporter.exportTracingEvent).toHaveBeenCalledWith(event);
+    });
+  });
+
+  // ==========================================================================
+  // Bridge registration and routing
+  // ==========================================================================
+
+  describe('bridge registration', () => {
+    it('should register and return bridge', () => {
+      const bridge = createMockBridge({ name: 'test-bridge' });
+      bus.registerBridge(bridge);
+
+      expect(bus.getBridge()).toBe(bridge);
+    });
+
+    it('should unregister bridge', () => {
+      const bridge = createMockBridge();
+      bus.registerBridge(bridge);
+
+      const removed = bus.unregisterBridge();
+      expect(removed).toBe(true);
+      expect(bus.getBridge()).toBeUndefined();
+    });
+
+    it('should return false when unregistering with no bridge registered', () => {
+      expect(bus.unregisterBridge()).toBe(false);
+    });
+
+    it('should replace previously registered bridge', () => {
+      const bridge1 = createMockBridge({ name: 'bridge-1' });
+      const bridge2 = createMockBridge({ name: 'bridge-2' });
+
+      bus.registerBridge(bridge1);
+      bus.registerBridge(bridge2);
+
+      expect(bus.getBridge()!.name).toBe('bridge-2');
+    });
+  });
+
+  describe('bridge tracing event routing', () => {
+    it('should route SPAN_STARTED to bridge onTracingEvent', () => {
+      const onTracingEvent = vi.fn();
+      const bridge = createMockBridge({ onTracingEvent });
+      bus.registerBridge(bridge);
+
+      const event = createTracingEvent(TracingEventType.SPAN_STARTED);
+      bus.emit(event);
+
+      expect(onTracingEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should route SPAN_ENDED to bridge onTracingEvent', () => {
+      const onTracingEvent = vi.fn();
+      const bridge = createMockBridge({ onTracingEvent });
+      bus.registerBridge(bridge);
+
+      const event = createTracingEvent(TracingEventType.SPAN_ENDED);
+      bus.emit(event);
+
+      expect(onTracingEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should fall back to exportTracingEvent when bridge has no onTracingEvent', () => {
+      const bridge = createMockBridge({ onTracingEvent: undefined });
+      bus.registerBridge(bridge);
+
+      const event = createTracingEvent();
+      bus.emit(event);
+
+      expect(bridge.exportTracingEvent).toHaveBeenCalledWith(event);
+    });
+  });
+
+  describe('bridge log event routing', () => {
+    it('should route log events to bridge onLogEvent', () => {
+      const onLogEvent = vi.fn();
+      const bridge = createMockBridge({ onLogEvent });
+      bus.registerBridge(bridge);
+
+      const event = createLogEvent();
+      bus.emit(event);
+
+      expect(onLogEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should not fail when bridge has no onLogEvent handler', () => {
+      const bridge = createMockBridge({ onLogEvent: undefined });
+      bus.registerBridge(bridge);
+
+      // Should not throw
+      bus.emit(createLogEvent());
+    });
+  });
+
+  describe('bridge metric event routing', () => {
+    it('should route metric events to bridge onMetricEvent', () => {
+      const onMetricEvent = vi.fn();
+      const bridge = createMockBridge({ onMetricEvent });
+      bus.registerBridge(bridge);
+
+      const event = createMetricEvent();
+      bus.emit(event);
+
+      expect(onMetricEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should not fail when bridge has no onMetricEvent handler', () => {
+      const bridge = createMockBridge({ onMetricEvent: undefined });
+      bus.registerBridge(bridge);
+
+      bus.emit(createMetricEvent());
+    });
+  });
+
+  describe('bridge score event routing', () => {
+    it('should route score events to bridge onScoreEvent', () => {
+      const onScoreEvent = vi.fn();
+      const bridge = createMockBridge({ onScoreEvent });
+      bus.registerBridge(bridge);
+
+      const event = createScoreEvent();
+      bus.emit(event);
+
+      expect(onScoreEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should not fail when bridge has no onScoreEvent handler', () => {
+      const bridge = createMockBridge({ onScoreEvent: undefined });
+      bus.registerBridge(bridge);
+
+      bus.emit(createScoreEvent());
+    });
+  });
+
+  describe('bridge feedback event routing', () => {
+    it('should route feedback events to bridge onFeedbackEvent', () => {
+      const onFeedbackEvent = vi.fn();
+      const bridge = createMockBridge({ onFeedbackEvent });
+      bus.registerBridge(bridge);
+
+      const event = createFeedbackEvent();
+      bus.emit(event);
+
+      expect(onFeedbackEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should not fail when bridge has no onFeedbackEvent handler', () => {
+      const bridge = createMockBridge({ onFeedbackEvent: undefined });
+      bus.registerBridge(bridge);
+
+      bus.emit(createFeedbackEvent());
+    });
+  });
+
+  describe('bridge + exporter combined routing', () => {
+    it('should route events to both exporters and bridge', () => {
+      const exporterHandler = vi.fn();
+      const bridgeHandler = vi.fn();
+
+      const exporter = createMockExporter({ name: 'exp', onTracingEvent: exporterHandler });
+      const bridge = createMockBridge({ name: 'brg', onTracingEvent: bridgeHandler });
+
+      bus.registerExporter(exporter);
+      bus.registerBridge(bridge);
+
+      const event = createTracingEvent();
+      bus.emit(event);
+
+      expect(exporterHandler).toHaveBeenCalledWith(event);
+      expect(bridgeHandler).toHaveBeenCalledWith(event);
+    });
+
+    it('should route all signal types to a full-capability bridge alongside exporters', () => {
+      const exporterLog = vi.fn();
+      const bridgeLog = vi.fn();
+      const bridgeMetric = vi.fn();
+      const bridgeScore = vi.fn();
+      const bridgeFeedback = vi.fn();
+      const bridgeTracing = vi.fn();
+
+      const exporter = createMockExporter({ name: 'exp', onLogEvent: exporterLog });
+      const bridge = createMockBridge({
+        name: 'full-bridge',
+        onTracingEvent: bridgeTracing,
+        onLogEvent: bridgeLog,
+        onMetricEvent: bridgeMetric,
+        onScoreEvent: bridgeScore,
+        onFeedbackEvent: bridgeFeedback,
+      });
+
+      bus.registerExporter(exporter);
+      bus.registerBridge(bridge);
+
+      bus.emit(createTracingEvent());
+      bus.emit(createLogEvent());
+      bus.emit(createMetricEvent());
+      bus.emit(createScoreEvent());
+      bus.emit(createFeedbackEvent());
+
+      expect(bridgeTracing).toHaveBeenCalledTimes(1);
+      expect(bridgeLog).toHaveBeenCalledTimes(1);
+      expect(bridgeMetric).toHaveBeenCalledTimes(1);
+      expect(bridgeScore).toHaveBeenCalledTimes(1);
+      expect(bridgeFeedback).toHaveBeenCalledTimes(1);
+      expect(exporterLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle bridge errors without affecting exporter delivery', () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const exporterHandler = vi.fn();
+      const exporter = createMockExporter({ name: 'exp', onLogEvent: exporterHandler });
+      const bridge = createMockBridge({
+        name: 'error-bridge',
+        onLogEvent: () => {
+          throw new Error('bridge error');
+        },
+      });
+
+      bus.registerExporter(exporter);
+      bus.registerBridge(bridge);
+
+      // Should not throw
+      bus.emit(createLogEvent());
+
+      // Exporter should still receive the event
+      expect(exporterHandler).toHaveBeenCalledTimes(1);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should work when bridge is registered but only supports tracing', () => {
+      // Bridge with no non-tracing handlers (typical OtelBridge pattern)
+      const bridge = createMockBridge({
+        name: 'tracing-only-bridge',
+        onLogEvent: undefined,
+        onMetricEvent: undefined,
+        onScoreEvent: undefined,
+        onFeedbackEvent: undefined,
+      });
+
+      bus.registerBridge(bridge);
+
+      // All these should succeed without errors
+      bus.emit(createLogEvent());
+      bus.emit(createMetricEvent());
+      bus.emit(createScoreEvent());
+      bus.emit(createFeedbackEvent());
     });
   });
 });
