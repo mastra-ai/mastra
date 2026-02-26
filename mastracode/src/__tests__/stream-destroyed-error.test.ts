@@ -1,8 +1,27 @@
+import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
 import { isStreamDestroyedError } from '../error-classification.js';
 
 describe('isStreamDestroyedError', () => {
+  it('should detect a real ERR_STREAM_DESTROYED from a destroyed writable stream', async () => {
+    const writable = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    writable.destroy();
+
+    const error = await new Promise<Error>(resolve => {
+      writable.write('data', err => {
+        resolve(err as Error);
+      });
+    });
+
+    expect(error).toBeDefined();
+    expect(isStreamDestroyedError(error)).toBe(true);
+  });
+
   it('should detect ERR_STREAM_DESTROYED by error code', () => {
     const error = new Error('write EPIPE');
     (error as any).code = 'ERR_STREAM_DESTROYED';
