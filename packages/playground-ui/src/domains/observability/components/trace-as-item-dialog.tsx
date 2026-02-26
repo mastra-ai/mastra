@@ -34,7 +34,16 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
 
   // Initialize form values when dialog opens with trace data
   if (isOpen && traceDetails && !initialized) {
-    setInput(traceDetails.input ? JSON.stringify(traceDetails.input, null, 2) : '{}');
+    // Unwrap legacy { messages } wrapper from agent_run spans so the dataset item stores a valid MessageListInput
+    const spanInput = traceDetails.input as Record<string, unknown> | undefined;
+    const isWrappedAgentInput =
+      traceDetails.spanType === 'agent_run' &&
+      spanInput &&
+      typeof spanInput === 'object' &&
+      !Array.isArray(spanInput) &&
+      'messages' in spanInput;
+    const rawInput = isWrappedAgentInput ? spanInput.messages : traceDetails.input;
+    setInput(rawInput ? JSON.stringify(rawInput, null, 2) : '{}');
     setGroundTruth(traceDetails.output ? JSON.stringify(traceDetails.output, null, 2) : '');
     setInitialized(true);
   }
