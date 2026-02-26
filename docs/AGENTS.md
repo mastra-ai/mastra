@@ -37,3 +37,17 @@ Always follow the general styleguide at `@styleguides/STYLEGUIDE.md` when writin
 - `src/content/en/reference/` - `@styleguides/REFERENCE.md`
 
 Refer to the `@CONTRIBUTING.md` file for instructions on how to set frontmatter and use available MDX components.
+
+## E2E testing
+
+Playwright is used for end-to-end tests. The site must be built before running tests.
+
+```bash
+pnpm build                 # Build the Docusaurus site
+pnpm test:e2e              # Run all Playwright tests (desktop + tablet + mobile)
+pnpm test:smoke            # Smoke tests only (desktop)
+pnpm test:og               # OG image meta tag tests only (desktop)
+pnpm test:navigation       # Navigation tests (desktop + tablet + mobile)
+```
+
+Test files live in `tests/` and helpers in `tests/helpers/`. The Playwright config (`playwright.config.ts`) starts a local server automatically via `pnpm serve`.

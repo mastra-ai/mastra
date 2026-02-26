@@ -23,7 +23,11 @@
     "vale:sync": "vale sync",
     "lint:vale": "vale src/content/en/docs src/content/en/guides src/content/en/reference",
     "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/guides src/content/en/reference",
-    "lint:prose": "npm-run-all --parallel lint:vale lint:remark"
+    "lint:prose": "npm-run-all --parallel lint:vale lint:remark",
+    "test:e2e": "pnpm exec playwright test",
+    "test:smoke": "pnpm exec playwright test tests/smoke.spec.ts --project=desktop",
+    "test:og": "pnpm exec playwright test tests/og-image.spec.ts --project=desktop",
+    "test:navigation": "pnpm exec playwright test tests/navigation.spec.ts"
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",
@@ -71,6 +75,7 @@
     "@docusaurus/module-type-aliases": "^3.9.2",
     "@docusaurus/tsconfig": "^3.9.2",
     "@docusaurus/types": "^3.9.2",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/fs-extra": "^11.0.4",
     "@types/hast": "^3.0.4",

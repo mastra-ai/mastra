@@ -885,6 +885,9 @@ importers:
       '@docusaurus/types':
         specifier: ^3.9.2
         version: 3.9.2(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@playwright/test':
+        specifier: ^1.57.0
+        version: 1.57.0
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
