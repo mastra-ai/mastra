@@ -27,6 +27,7 @@ import type {
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
+import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, DaytonaS3MountConfig, DaytonaGCSMountConfig, MountContext } from './mounts';
 import { DaytonaProcessManager } from './process-manager';
@@ -547,7 +548,8 @@ export class DaytonaSandbox extends MastraSandbox {
     // Create mount directory with sudo (for paths outside home dir like /data)
     // Then chown to current user so mount works without issues
     this.logger.debug(`${LOG_PREFIX} Creating mount directory for ${mountPath}...`);
-    const mkdirCommand = `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`;
+    const quotedPath = shellQuote(mountPath);
+    const mkdirCommand = `sudo mkdir -p ${quotedPath} && sudo chown $(id -u):$(id -g) ${quotedPath}`;
 
     this.logger.debug(`${LOG_PREFIX} Running command: ${mkdirCommand}`);
     const mkdirResult = await runCommand(this._sandbox, mkdirCommand, { timeout: MOUNT_COMMAND_TIMEOUT_MS });

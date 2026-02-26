@@ -41,6 +41,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     const codenameResult = await runCommand(
       sandbox,
       'cat /etc/os-release 2>/dev/null | grep VERSION_CODENAME | cut -d= -f2 || echo bookworm',
+      { timeout: 30_000 },
     );
     const codename = codenameResult.output.trim() || 'bookworm';
     if (!/^[a-z0-9][a-z0-9-]*$/.test(codename)) {
@@ -92,10 +93,13 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
   const [uid, gid] = idResult.output.trim().split('\n');
+  if (!uid || !gid || !/^\d+$/.test(uid) || !/^\d+$/.test(gid)) {
+    throw new Error(`Unexpected uid/gid format: "${idResult.output.trim()}"`);
+  }
 
   // Build gcsfuse flags
   // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
-  const uidGidFlags = uid && gid ? `--uid=${uid} --gid=${gid}` : '';
+  const uidGidFlags = `--uid=${uid} --gid=${gid}`;
 
   const hasCredentials = !!config.serviceAccountKey;
   let mountCmd: string;

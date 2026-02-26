@@ -77,6 +77,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
   const [uid, gid] = idResult.output.trim().split('\n');
+  if (!uid || !gid || !/^\d+$/.test(uid) || !/^\d+$/.test(gid)) {
+    throw new Error(`Unexpected uid/gid format: "${idResult.output.trim()}"`);
+  }
 
   // Determine if we have credentials or using public bucket mode
   const hasAccessKey = !!config.accessKeyId;
@@ -106,7 +109,11 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
     await runCommand(sandbox, `sudo rm -f ${shellQuote(credentialsPath)}`, { timeout: 30_000 });
     await writeFile(sandbox, credentialsPath, credentialsContent);
-    await runCommand(sandbox, `chmod 600 ${shellQuote(credentialsPath)}`, { timeout: 30_000 });
+    await runCommand(
+      sandbox,
+      `sudo chown root:root ${shellQuote(credentialsPath)} && sudo chmod 600 ${shellQuote(credentialsPath)}`,
+      { timeout: 30_000 },
+    );
   }
 
   // Build mount options
