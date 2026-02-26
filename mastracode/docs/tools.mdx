@@ -1,8 +1,8 @@
 ---
-title: "Tools | Mastra Code"
+title: 'Tools | Mastra Code'
 description: "Learn about Mastra Code's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
 packages:
-  - "mastracode"
+  - 'mastracode'
 ---
 
 # Tools
@@ -20,10 +20,10 @@ Read file contents with line numbers or list directory contents. The agent uses 
 - Supports `view_range` to read specific line ranges in large files.
 - Output is truncated if the file exceeds the token limit. Use `view_range` to read specific sections.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `path` | `string` | Yes | Path to the file or directory (relative to project root) |
-| `view_range` | `[number, number]` | No | Line range `[start, end]` to view a section of the file |
+| Parameter    | Type               | Required | Description                                              |
+| ------------ | ------------------ | -------- | -------------------------------------------------------- |
+| `path`       | `string`           | Yes      | Path to the file or directory (relative to project root) |
+| `view_range` | `[number, number]` | No       | Line range `[start, end]` to view a section of the file  |
 
 ### `string_replace_lsp`
 
@@ -35,12 +35,12 @@ Edit a file by replacing an exact text match with new content. Returns Language 
 - When `new_str` is omitted or empty, the matched text is deleted.
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `path` | `string` | Yes | Path to the file |
-| `old_str` | `string` | Yes | Exact text to find and replace |
-| `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
-| `start_line` | `number` | No | Line number to narrow the search region |
+| Parameter    | Type     | Required | Description                                        |
+| ------------ | -------- | -------- | -------------------------------------------------- |
+| `path`       | `string` | Yes      | Path to the file                                   |
+| `old_str`    | `string` | Yes      | Exact text to find and replace                     |
+| `new_str`    | `string` | No       | Replacement text (omit to delete the matched text) |
+| `start_line` | `number` | No       | Line number to narrow the search region            |
 
 ### `ast_smart_edit`
 
@@ -54,16 +54,16 @@ Supported transformations:
 - **Rename variables**: Rename variable declarations and all references.
 - **Selector queries**: Find AST nodes matching a CSS-like selector (e.g., `"FunctionDeclaration"`).
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `path` | `string` | Yes | File path relative to project root |
-| `pattern` | `string` | No | AST pattern to search for (supports `$VARIABLE` placeholders) |
-| `replacement` | `string` | No | Replacement pattern (can use captured `$VARIABLES`) |
-| `selector` | `string` | No | CSS-like selector for AST nodes |
-| `transform` | `string` | No | Transformation type: `add-import`, `remove-import`, `rename-function`, `rename-variable`, `extract-function`, `inline-variable` |
-| `targetName` | `string` | No | Name of the target element (for rename/remove operations) |
-| `newName` | `string` | No | New name (for rename operations) |
-| `importSpec` | `object` | No | Import specification for `add-import`: `{ module, names, isDefault? }` |
+| Parameter     | Type     | Required | Description                                                                                                                     |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `path`        | `string` | Yes      | File path relative to project root                                                                                              |
+| `pattern`     | `string` | No       | AST pattern to search for (supports `$VARIABLE` placeholders)                                                                   |
+| `replacement` | `string` | No       | Replacement pattern (can use captured `$VARIABLES`)                                                                             |
+| `selector`    | `string` | No       | CSS-like selector for AST nodes                                                                                                 |
+| `transform`   | `string` | No       | Transformation type: `add-import`, `remove-import`, `rename-function`, `rename-variable`, `extract-function`, `inline-variable` |
+| `targetName`  | `string` | No       | Name of the target element (for rename/remove operations)                                                                       |
+| `newName`     | `string` | No       | New name (for rename operations)                                                                                                |
+| `importSpec`  | `object` | No       | Import specification for `add-import`: `{ module, names, isDefault? }`                                                          |
 
 ### `write_file`
 
@@ -73,10 +73,10 @@ Create a new file or overwrite an existing file entirely.
 - Parent directories are created automatically if they don't exist.
 - If overwriting an existing file, the agent reads it first with `view`.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `path` | `string` | Yes | File path to write to (relative to project root) |
-| `content` | `string` | Yes | Full content to write to the file |
+| Parameter | Type     | Required | Description                                      |
+| --------- | -------- | -------- | ------------------------------------------------ |
+| `path`    | `string` | Yes      | File path to write to (relative to project root) |
+| `content` | `string` | Yes      | Full content to write to the file                |
 
 ## Search tools
 
@@ -88,14 +88,14 @@ Search file contents using regular expressions. Uses ripgrep when available, fal
 - Respects `.gitignore` automatically in Git repositories.
 - Always preferred over running `grep` or `rg` via `execute_command`.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `pattern` | `string` | Yes | Regex pattern to search for in file contents |
-| `path` | `string` | No | Directory or file to search in (relative to project root, defaults to project root) |
-| `glob` | `string` | No | Glob pattern to filter files (e.g., `"*.ts"`, `"*.{js,jsx}"`, `"test/**"`) |
-| `contextLines` | `number` | No | Number of lines to show before and after each match (default: 0) |
-| `maxResults` | `number` | No | Maximum number of matching lines to return (default: 100) |
-| `caseSensitive` | `boolean` | No | Whether the search is case-sensitive (default: true) |
+| Parameter       | Type      | Required | Description                                                                         |
+| --------------- | --------- | -------- | ----------------------------------------------------------------------------------- |
+| `pattern`       | `string`  | Yes      | Regex pattern to search for in file contents                                        |
+| `path`          | `string`  | No       | Directory or file to search in (relative to project root, defaults to project root) |
+| `glob`          | `string`  | No       | Glob pattern to filter files (e.g., `"*.ts"`, `"*.{js,jsx}"`, `"test/**"`)          |
+| `contextLines`  | `number`  | No       | Number of lines to show before and after each match (default: 0)                    |
+| `maxResults`    | `number`  | No       | Maximum number of matching lines to return (default: 100)                           |
+| `caseSensitive` | `boolean` | No       | Whether the search is case-sensitive (default: true)                                |
 
 ### `find_files`
 
@@ -105,10 +105,10 @@ Find files by name pattern using glob matching. Results are sorted by modificati
 - Respects `.gitignore` automatically in Git repositories.
 - Always preferred over running `find` or `ls` via `execute_command`.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `pattern` | `string` | Yes | Glob pattern (e.g., `"**/*.ts"`, `"src/**/*.test.*"`, `"**/package.json"`) |
-| `path` | `string` | No | Directory to search in (relative to project root, defaults to project root) |
+| Parameter | Type     | Required | Description                                                                 |
+| --------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `pattern` | `string` | Yes      | Glob pattern (e.g., `"**/*.ts"`, `"src/**/*.test.*"`, `"**/package.json"`)  |
+| `path`    | `string` | No       | Directory to search in (relative to project root, defaults to project root) |
 
 ## Shell execution
 
@@ -122,20 +122,20 @@ Execute a shell command in the project directory.
 - Pipe to `| tail -N` for commands with long output — full output streams to the user, but only the last N lines are returned to the agent.
 - The `CI=true` environment variable is set automatically to prevent interactive prompts.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `command` | `string` | Yes | Shell command to execute |
-| `cwd` | `string` | No | Working directory (defaults to project root) |
-| `timeout` | `number` | No | Timeout in seconds (default: 30) |
+| Parameter | Type     | Required | Description                                  |
+| --------- | -------- | -------- | -------------------------------------------- |
+| `command` | `string` | Yes      | Shell command to execute                     |
+| `cwd`     | `string` | No       | Working directory (defaults to project root) |
+| `timeout` | `number` | No       | Timeout in seconds (default: 30)             |
 
 ### `request_sandbox_access`
 
 Request access to directories outside the project root. The user is prompted to approve or deny the request.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `path` | `string` | Yes | Absolute path to the directory needing access |
-| `reason` | `string` | Yes | Explanation of why access is needed |
+| Parameter | Type     | Required | Description                                   |
+| --------- | -------- | -------- | --------------------------------------------- |
+| `path`    | `string` | Yes      | Absolute path to the directory needing access |
+| `reason`  | `string` | Yes      | Explanation of why access is needed           |
 
 ## Web tools
 
@@ -148,22 +148,22 @@ This tool is available through two providers:
 - **Tavily**: When the `TAVILY_API_KEY` environment variable is set.
 - **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `query` | `string` | Yes | The search query |
-| `searchDepth` | `"basic" \| "advanced"` | No | Search depth (default: `"basic"`) |
-| `maxResults` | `number` | No | Maximum number of results (default: 10) |
-| `includeImages` | `boolean` | No | Include related images (default: false) |
+| Parameter       | Type                    | Required | Description                             |
+| --------------- | ----------------------- | -------- | --------------------------------------- |
+| `query`         | `string`                | Yes      | The search query                        |
+| `searchDepth`   | `"basic" \| "advanced"` | No       | Search depth (default: `"basic"`)       |
+| `maxResults`    | `number`                | No       | Maximum number of results (default: 10) |
+| `includeImages` | `boolean`               | No       | Include related images (default: false) |
 
 ### `web_extract`
 
 Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
 
-| Parameter | Type | Required | Description |
-| - | - | - | - |
-| `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
-| `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
-| `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
+| Parameter       | Type                    | Required | Description                                   |
+| --------------- | ----------------------- | -------- | --------------------------------------------- |
+| `urls`          | `string[]`              | Yes      | URLs to extract content from (max 20)         |
+| `extractDepth`  | `"basic" \| "advanced"` | No       | Extraction depth (default: `"basic"`)         |
+| `includeImages` | `boolean`               | No       | Include extracted image URLs (default: false) |
 
 ## Task management
 
@@ -199,22 +199,22 @@ MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, 
 
 Not all tools are available in every mode:
 
-| Tool | Build | Plan | Fast |
-| - | - | - | - |
-| `view` | Yes | Yes | Yes |
-| `search_content` | Yes | Yes | Yes |
-| `find_files` | Yes | Yes | Yes |
-| `execute_command` | Yes | Read-only | Yes |
-| `string_replace_lsp` | Yes | No | Yes |
-| `ast_smart_edit` | Yes | No | Yes |
-| `write_file` | Yes | No | Yes |
-| `web_search` | Yes | Yes | Yes |
-| `web_extract` | Yes | Yes | Yes |
-| `task_write` | Yes | Yes | Yes |
-| `task_check` | Yes | Yes | Yes |
-| `ask_user` | Yes | Yes | Yes |
-| `submit_plan` | No | Yes | No |
-| `request_sandbox_access` | Yes | Yes | Yes |
+| Tool                     | Build | Plan      | Fast |
+| ------------------------ | ----- | --------- | ---- |
+| `view`                   | Yes   | Yes       | Yes  |
+| `search_content`         | Yes   | Yes       | Yes  |
+| `find_files`             | Yes   | Yes       | Yes  |
+| `execute_command`        | Yes   | Read-only | Yes  |
+| `string_replace_lsp`     | Yes   | No        | Yes  |
+| `ast_smart_edit`         | Yes   | No        | Yes  |
+| `write_file`             | Yes   | No        | Yes  |
+| `web_search`             | Yes   | Yes       | Yes  |
+| `web_extract`            | Yes   | Yes       | Yes  |
+| `task_write`             | Yes   | Yes       | Yes  |
+| `task_check`             | Yes   | Yes       | Yes  |
+| `ask_user`               | Yes   | Yes       | Yes  |
+| `submit_plan`            | No    | Yes       | No   |
+| `request_sandbox_access` | Yes   | Yes       | Yes  |
 
 In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
 
@@ -222,12 +222,12 @@ In Plan mode, `execute_command` is available but restricted to read-only command
 
 Tools are grouped into four categories, each with a configurable approval policy:
 
-| Category | Tools | Default policy |
-| - | - | - |
-| **Read** | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow` |
-| **Edit** | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent` | `ask` |
-| **Execute** | `execute_command` | `ask` |
-| **MCP** | All MCP server tools | `ask` |
+| Category    | Tools                                                               | Default policy |
+| ----------- | ------------------------------------------------------------------- | -------------- |
+| **Read**    | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow`        |
+| **Edit**    | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent`    | `ask`          |
+| **Execute** | `execute_command`                                                   | `ask`          |
+| **MCP**     | All MCP server tools                                                | `ask`          |
 
 When YOLO mode is enabled (the default), all categories are set to `allow`. When disabled, the agent prompts for approval based on the category policy.
 
