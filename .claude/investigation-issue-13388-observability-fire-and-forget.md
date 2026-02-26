@@ -1,8 +1,9 @@
 # Investigation: Inngest Workflows Don't Emit Span Events to User-Configured Exporters
 
 **Issue:** [#13388](https://github.com/mastra-ai/mastra/issues/13388)
-**Date:** 2026-02-25
-**Status:** Root cause confirmed, solution designed
+**Date:** 2026-02-26 (updated)
+**Status:** Root cause confirmed, solution designed — ready for implementation
+**Target branch for fix:** `claude/add-notion-folder-bpOd1`
 
 ---
 
@@ -10,13 +11,12 @@
 
 1. [Problem Statement](#1-problem-statement)
 2. [Root Cause Analysis — Current Codebase](#2-root-cause-analysis--current-codebase)
-3. [The ObservabilityBus Branch Analysis](#3-the-observabilitybus-branch-analysis)
-4. [Bridge Data Path Analysis](#4-bridge-data-path-analysis)
+3. [ObservabilityBus Branch — Current Architecture](#3-observabilitybus-branch--current-architecture)
+4. [The Fire-and-Forget Problem on the Bus Branch](#4-the-fire-and-forget-problem-on-the-bus-branch)
 5. [Vendor Exporter Audit](#5-vendor-exporter-audit)
 6. [Full Impact Matrix](#6-full-impact-matrix)
-7. [Solution Options](#7-solution-options)
-8. [Recommended Fix](#8-recommended-fix)
-9. [Implementation Plan](#9-implementation-plan)
+7. [Recommended Fix](#7-recommended-fix)
+8. [Implementation Spec](#8-implementation-spec)
 
 ---
 
@@ -39,11 +39,11 @@ User-configured observability exporters (e.g., `OtelExporter`, `SentryExporter`,
 
 ---
 
-## 2. Root Cause Analysis — Current Codebase
+## 2. Root Cause Analysis — Current Codebase (main)
 
 ### The Fire-and-Forget Chain
 
-The span lifecycle in the current codebase (`observability/mastra/src/instances/base.ts`) works like this:
+The span lifecycle on `main` (`observability/mastra/src/instances/base.ts`) works like this:
 
 ```
 span.end(options)                              // synchronous
@@ -52,7 +52,7 @@ span.end(options)                              // synchronous
       → target.exportTracingEvent(event)       // actual I/O to each exporter
 ```
 
-The critical code at lines 482-488:
+The critical code:
 
 ```typescript
 protected emitSpanEnded(span: AnySpan): void {
@@ -66,14 +66,14 @@ protected emitSpanEnded(span: AnySpan): void {
   }
 ```
 
-The same pattern exists for `emitSpanStarted` (line 473) and `emitSpanUpdated` (line 497).
+The same pattern exists for `emitSpanStarted` and `emitSpanUpdated`.
 
 ### Why This Matters for Inngest
 
 In the `InngestExecutionEngine`, span operations happen inside `step.run()` callbacks (the durable execution primitive):
 
 ```typescript
-// execution-engine.ts, line 299
+// execution-engine.ts, endStepSpan()
 async endStepSpan(params) {
     await this.wrapDurableOperation(operationId, async () => {
       span.end(endOptions);
@@ -84,7 +84,7 @@ async endStepSpan(params) {
   }
 ```
 
-And in `workflow.ts`, the finalize step (lines 325-432):
+And in `workflow.ts`, the finalize step:
 
 ```typescript
 await step.run(`workflow.${this.id}.finalize`, async () => {
@@ -108,41 +108,162 @@ await step.run(`workflow.${this.id}.finalize`, async () => {
 
 In `DefaultExecutionEngine`, spans are not wrapped in `step.run()`. The fire-and-forget promises float in the same long-lived Node.js process and reliably complete via the event loop. The process doesn't get interrupted between steps.
 
-### The `flush()` Gap
+---
 
-Even if someone called `observability.flush()` after the workflow completes, the current `flush()` implementation (lines 555-577) only calls `exporter.flush()` and `bridge.flush()`:
+## 3. ObservabilityBus Branch — Current Architecture
+
+**Branch:** `claude/add-notion-folder-bpOd1`
+**As of commit:** `209142529` ("feat(observability): route all signals to bridge via ObservabilityBus")
+
+The bus branch introduces a unified `ObservabilityBus` for routing all observability signals. The architecture as of the latest commit:
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `observability/mastra/src/bus/base.ts` | `BaseObservabilityEventBus<TEvent>` — generic pub/sub, extends `MastraBase` |
+| `observability/mastra/src/bus/observability-bus.ts` | `ObservabilityBus` — routes events to exporters, bridge, auto-extracted metrics, and base subscribers |
+| `observability/mastra/src/bus/route-event.ts` | `routeToHandler()` — shared routing function used for both exporters AND bridge |
+| `observability/mastra/src/instances/base.ts` | `BaseObservabilityInstance` — orchestrates everything |
+
+### Event Flow (Current)
+
+```
+span.end(options)                                     // synchronous
+  → emitSpanEnded(span)                               // synchronous void
+    → emitTracingEvent(event)                          // synchronous void
+      → observabilityBus.emit(event)                   // synchronous void
+        ├── routeToHandler(exporter, event)             // for each exporter
+        │     └── exporter.exportTracingEvent(event)    // returns Promise — DISCARDED
+        ├── routeToHandler(bridge, event)               // for bridge
+        │     └── bridge.exportTracingEvent(event)      // returns Promise — DISCARDED
+        ├── autoExtractor.processTracingEvent(event)    // sync metric extraction
+        └── super.emit(event)                           // base class subscriber delivery
+```
+
+### Key Architectural Change: Bridge Now on the Bus
+
+The most recent commit (`209142529`) moved the bridge onto the bus. Previously, the bridge was called separately in `emitTracingEvent()` as a fire-and-forget `bridge.exportTracingEvent(event).catch(...)`. Now:
 
 ```typescript
-async flush(): Promise<void> {
-    const flushPromises = [...this.exporters.map(e => e.flush())];
-    if (this.config.bridge) {
-      flushPromises.push(this.config.bridge.flush());
+// observability-bus.ts — ObservabilityBus.emit()
+emit(event: ObservabilityEvent): void {
+    // Route to appropriate handler on each registered exporter
+    for (const exporter of this.exporters) {
+      routeToHandler(exporter, event, this.logger);
     }
-    await Promise.allSettled(flushPromises);
+
+    // Route to bridge (same routing logic as exporters)
+    if (this.bridge) {
+      routeToHandler(this.bridge, event, this.logger);
+    }
+
+    // Auto-extract metrics from tracing, score, and feedback events
+    if (this.autoExtractor) { /* ... */ }
+
+    // Deliver to subscribers
+    super.emit(event);
   }
 ```
 
-This drains exporter-internal buffers (e.g., `CloudExporter`'s batch buffer), but it does **not** await the floating promises from `emitSpanStarted/Ended/Updated`. If those promises haven't resolved, the data hasn't reached the exporter's buffer yet, so `exporter.flush()` flushes an empty buffer.
+And in `BaseObservabilityInstance`:
+
+```typescript
+// instances/base.ts — emitTracingEvent is now trivial
+private emitTracingEvent(event: TracingEvent): void {
+    this.observabilityBus.emit(event);
+  }
+```
+
+The bridge is registered on the bus during construction:
+
+```typescript
+// instances/base.ts — constructor
+if (this.config.bridge) {
+    this.observabilityBus.registerBridge(this.config.bridge);
+  }
+```
+
+### The `routeToHandler` Shared Utility
+
+Both exporters and the bridge are routed through the same function:
+
+```typescript
+// bus/route-event.ts
+export function routeToHandler(
+  handler: ObservabilityHandler,
+  event: ObservabilityEvent,
+  logger: IMastraLogger,
+): void {
+  try {
+    switch (event.type) {
+      case TracingEventType.SPAN_STARTED:
+      case TracingEventType.SPAN_UPDATED:
+      case TracingEventType.SPAN_ENDED: {
+        const fn = handler.onTracingEvent
+          ? handler.onTracingEvent.bind(handler)
+          : handler.exportTracingEvent.bind(handler);
+        catchAsyncResult(fn(event as TracingEvent), handler.name, 'tracing', logger);
+        break;
+      }
+      case 'log': /* ... */
+      case 'metric': /* ... */
+      case 'score': /* ... */
+      case 'feedback': /* ... */
+    }
+  } catch (err) { /* ... */ }
+}
+
+function catchAsyncResult(result, handlerName, signal, logger): void {
+  if (result && typeof (result as Promise<void>).catch === 'function') {
+    (result as Promise<void>).catch(err => {
+      logger.error(`[Observability] ${signal} handler error [handler=${handlerName}]:`, err);
+    });
+  }
+}
+```
+
+### The `ObservabilityEvents` Interface
+
+Both `ObservabilityExporter` and `ObservabilityBridge` extend `ObservabilityEvents`:
+
+```typescript
+// packages/core/src/observability/types/core.ts
+export interface ObservabilityEvents {
+  onTracingEvent?(event: TracingEvent): void | Promise<void>;
+  onLogEvent?(event: LogEvent): void | Promise<void>;
+  onMetricEvent?(event: MetricEvent): void | Promise<void>;
+  onScoreEvent?(event: ScoreEvent): void | Promise<void>;
+  onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
+  exportTracingEvent(event: TracingEvent): Promise<void>;
+}
+```
 
 ---
 
-## 3. The ObservabilityBus Branch Analysis
+## 4. The Fire-and-Forget Problem on the Bus Branch
 
-Branch: `claude/add-notion-folder-bpOd1`
+### Where Promises Are Discarded
 
-This branch introduces a new `ObservabilityBus` event-based system to handle observability events beyond just span start/end/update (logs, metrics, scores, feedback). The architecture:
+There are **two layers** of fire-and-forget:
 
+**Layer 1: `routeToHandler()` in `bus/route-event.ts`**
+
+The `catchAsyncResult()` helper catches rejected promises but does not track or return them:
+
+```typescript
+function catchAsyncResult(result, handlerName, signal, logger): void {
+  if (result && typeof (result as Promise<void>).catch === 'function') {
+    (result as Promise<void>).catch(err => { /* logged, not tracked */ });
+  }
+}
 ```
-ObservabilityBus (extends BaseObservabilityEventBus)
-  ├── Routes events to registered exporters via handler methods
-  │   (onTracingEvent, onLogEvent, onMetricEvent, onScoreEvent, onFeedbackEvent)
-  ├── Runs auto-extracted metrics from tracing events
-  └── Delivers to generic subscribers via base class
-```
 
-### The Same Fire-and-Forget Pattern Persists
+This is the primary fire-and-forget site. Both exporter and bridge handler promises are discarded here.
 
-**`BaseObservabilityEventBus.emit()`** (bus/base.ts):
+**Layer 2: `BaseObservabilityEventBus.emit()` in `bus/base.ts`**
+
+Generic subscriber promises are also caught and discarded:
 
 ```typescript
 emit(event: TEvent): void {
@@ -150,93 +271,27 @@ emit(event: TEvent): void {
       try {
         const result: unknown = handler(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
-          (result as Promise<void>).catch(err => {
-            console.error('[ObservabilityEventBus] Handler error:', err);
-          });
+          (result as Promise<void>).catch(err => { /* logged, not tracked */ });
         }
-      } catch (err) {
-        console.error('[ObservabilityEventBus] Handler error:', err);
-      }
+      } catch (err) { /* ... */ }
     }
   }
 ```
 
-Promise caught, not tracked. Same pattern.
-
-**`ObservabilityBus.routeToHandler()`** (bus/observability-bus.ts):
+### `flush()` Is a No-Op on the Bus
 
 ```typescript
-private routeToHandler(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
-    try {
-      switch (event.type) {
-        case TracingEventType.SPAN_STARTED:
-        case TracingEventType.SPAN_UPDATED:
-        case TracingEventType.SPAN_ENDED: {
-          const handler = exporter.onTracingEvent
-            ? exporter.onTracingEvent.bind(exporter)
-            : exporter.exportTracingEvent.bind(exporter);
-          const result = handler(event as TracingEvent);
-          if (result && typeof (result as Promise<void>).catch === 'function') {
-            (result as Promise<void>).catch(err => {
-              console.error(`[ObservabilityBus] Tracing handler error [exporter=${exporter.name}]:`, err);
-            });
-          }
-          break;
-        }
-        // Same pattern for 'log', 'metric', 'score', 'feedback'...
-```
-
-Every event type: promise caught, not tracked. Fire-and-forget.
-
-**`BaseObservabilityEventBus.flush()`** is explicitly a no-op:
-
-```typescript
+// bus/base.ts
 /** No-op — events are dispatched immediately, nothing to flush. Kept for interface compat. */
 async flush(): Promise<void> {}
 ```
 
-The buffer removal commit (4d632f6a4) documents this philosophy:
+The `ObservabilityBus` does not override `flush()` either (it inherits the no-op).
 
-> "Buffering/batching is intentionally NOT done here — individual exporters own their own batching strategy (e.g. CloudExporter batches uploads internally)."
-
-### New `emitTracingEvent()` Method
-
-The bus branch replaced the direct `exportTracingEvent().catch()` calls with a new private method:
+### `flush()` on `BaseObservabilityInstance`
 
 ```typescript
-// instances/base.ts on the bus branch
-private emitTracingEvent(event: TracingEvent): void {
-    // Route through the bus for exporter delivery + auto-extracted metrics
-    this.observabilityBus.emit(event);   // synchronous, fire-and-forget internally
-
-    // Export to bridge directly (bridge is not registered on the bus)
-    if (this.config.bridge) {
-      this.config.bridge.exportTracingEvent(event).catch(error => {
-        this.logger.error(`[Observability] Bridge export error [bridge=${this.config.bridge!.name}]`, error);
-      });
-      // ^^^ ALSO fire-and-forget
-    }
-  }
-```
-
-And the emit methods now call this:
-
-```typescript
-protected emitSpanEnded(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
-    if (exportedSpan) {
-      const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
-      this.emitTracingEvent(event);   // void, no promise at all
-    }
-  }
-```
-
-**The bus branch has the same fundamental problem as the current code.** The architecture changed (event bus + handler routing instead of direct `exportTracingEvent` calls), but the promise handling didn't. In fact, it's slightly more indirect — the current code at least has a `Promise<void>` return from `exportTracingEvent()` that _could_ be awaited; the bus branch's `emit()` is fully `void`.
-
-### The `flush()` on the Bus Branch
-
-```typescript
-// instances/base.ts on the bus branch
+// instances/base.ts
 async flush(): Promise<void> {
     const flushPromises: Promise<void>[] = [this.observabilityBus.flush()];  // no-op!
     flushPromises.push(...this.exporters.map(e => e.flush()));
@@ -247,71 +302,28 @@ async flush(): Promise<void> {
   }
 ```
 
-`this.observabilityBus.flush()` is a no-op. So `flush()` only drains exporter/bridge internal buffers — same gap as the current code.
+This only drains exporter/bridge internal buffers. If handler promises from `routeToHandler` haven't resolved, the data hasn't reached those buffers yet, so `exporter.flush()` flushes an empty buffer.
 
----
-
-## 4. Bridge Data Path Analysis
-
-The bridge (`OtelBridge`) is called in a separate fire-and-forget path from the bus:
-
-```
-emitTracingEvent(event)
-  ├── observabilityBus.emit(event)                    → exporters via bus (fire-and-forget)
-  └── bridge.exportTracingEvent(event).catch(...)     → bridge (fire-and-forget)
-```
-
-### OtelBridge Internals
-
-`OtelBridge` extends `BaseExporter` and implements `_exportTracingEvent`:
-
-```typescript
-// otel-bridge/src/bridge.ts
-protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.type === TracingEventType.SPAN_ENDED) {
-      await this.handleSpanEnded(event);
-    }
-  }
-```
-
-`handleSpanEnded` does:
-1. Look up the OTEL span from `otelSpanMap` (created at span start via `createSpan()`)
-2. Use `SpanConverter` to convert Mastra span → OTEL span format (async — awaits)
-3. Set attributes, status, events on the OTEL span
-4. Call `otelSpan.end()` — this is an OTEL SDK call that adds the span to the `BatchSpanProcessor` buffer
-
-### The Race Condition
+### The Race Condition (OtelBridge Example)
 
 ```
 emitTracingEvent()
-  → bridge.exportTracingEvent(event).catch(...)   // Promise P1 (fire-and-forget)
-      → applySpanFormatter(event)                  // awaits
-      → _exportTracingEvent(event)                 // awaits handleSpanEnded
-        → spanConverter.convertSpan(...)           // awaits
-        → otelSpan.end()                           // sync — adds to OTEL batch
-                                                   // P1 resolves
+  → bus.emit(event)
+    → routeToHandler(bridge, event)
+      → bridge.exportTracingEvent(event)       // Promise P1 (DISCARDED by catchAsyncResult)
+          → applySpanFormatter(event)           // awaits inside P1
+          → _exportTracingEvent(event)          // awaits handleSpanEnded inside P1
+            → spanConverter.convertSpan(...)    // awaits inside P1
+            → otelSpan.end()                    // sync — adds to OTEL batch
+                                                // P1 resolves
 
---- meanwhile ---
+--- meanwhile, if flush() is called before P1 resolves ---
 
 flush()
+  → observabilityBus.flush()                   // no-op!
   → bridge.flush()
-    → provider.forceFlush()                        // drains OTEL batch
+    → provider.forceFlush()                    // drains OTEL batch — but span hasn't arrived yet!
 ```
-
-If `flush()` runs before P1 resolves (before `otelSpan.end()` executes), the span isn't in the OTEL `BatchSpanProcessor` buffer yet and `forceFlush()` misses it.
-
-### OtelBridge flush() Implementation
-
-```typescript
-async flush(): Promise<void> {
-    const provider = otelTrace.getTracerProvider();
-    if (provider && 'forceFlush' in provider && typeof provider.forceFlush === 'function') {
-      await provider.forceFlush();
-    }
-  }
-```
-
-This is correct for draining the OTEL batch processor — but only if the data has reached the batch processor. The fire-and-forget call means data may not have arrived yet.
 
 ---
 
@@ -321,54 +333,44 @@ This is correct for draining the OTEL batch processor — but only if the data h
 
 - **Pattern:** Synchronous buffer add in `_exportTracingEvent`, async `flushBuffer()` for batch upload
 - **`flush()` implementation:** Drains the internal buffer via `flushBuffer()`
-- **Fire-and-forget impact:** MEDIUM. The `addToBuffer()` call is synchronous inside the async `_exportTracingEvent`. If the handler promise from the bus resolves far enough to enter `_exportTracingEvent`, the data enters the buffer synchronously. But if the bus's fire-and-forget promise hasn't even started executing `_exportTracingEvent` yet, the buffer is empty.
-- **Secondary issue:** Inside `_exportTracingEvent`, `flush()` is called as fire-and-forget when `shouldFlush()` returns true:
-  ```typescript
-  this.flush().catch(error => { ... });
-  ```
+- **Fire-and-forget impact:** MEDIUM. Data enters buffer synchronously once `_exportTracingEvent` starts, but if handler promise hasn't started executing, buffer is empty.
 
 ### LangSmith Exporter
 
-- **Pattern:** Extends `TrackingExporter`. Calls `RunTree.postRun()` (LangSmith SDK) and `RunTree.patchRun()` — both queue I/O internally in the SDK.
+- **Pattern:** Extends `TrackingExporter`. Calls `RunTree.postRun()` / `RunTree.patchRun()` — both queue I/O internally in the SDK.
 - **`_flush()` implementation:** **NONE.** No override. Base class `_flush` is a no-op.
 - **`flush()` behavior:** Inherited from `TrackingExporter` which calls `_flush()` (no-op).
-- **Fire-and-forget impact:** HIGH. Even if the handler promise resolves, data sits in the LangSmith SDK's internal queue with no way to flush it. This is a **separate bug** — the LangSmith exporter needs a `_flush()` that calls the LangSmith `Client`'s flush method.
+- **Fire-and-forget impact:** HIGH. Even if the handler promise resolves, data sits in the LangSmith SDK's internal queue. This is a **separate bug** that affects serverless/durable environments independently.
 
 ### Langfuse Exporter
 
 - **Pattern:** Extends `TrackingExporter`. Uses `Langfuse` client SDK.
-- **`_flush()` implementation:** `await this.#client.flushAsync()` — properly flushes the Langfuse SDK.
-- **Has realtime mode:** In realtime mode, also calls `flushAsync()` in `_postExportTracingEvent()`.
-- **Fire-and-forget impact:** MEDIUM. Has proper `_flush()`, but the handler promise must resolve first for data to reach the SDK.
+- **`_flush()` implementation:** `await this.#client.flushAsync()` — properly flushes.
+- **Fire-and-forget impact:** MEDIUM. Has proper `_flush()`, but handler promise must resolve first.
 
 ### Datadog Exporter
 
 - **Pattern:** Uses `tracer.llmobs` API.
 - **`flush()` implementation:** `await tracer.llmobs.flush()` — properly flushes.
-- **Fire-and-forget impact:** MEDIUM. Same dependency on handler promise resolution.
+- **Fire-and-forget impact:** MEDIUM.
 
 ### Laminar Exporter
 
 - **Pattern:** Uses OTEL `SpanProcessor`.
 - **`flush()` implementation:** `await this.processor.forceFlush()` — properly flushes.
-- **Fire-and-forget impact:** MEDIUM. Same dependency.
+- **Fire-and-forget impact:** MEDIUM.
 
 ### Sentry Exporter
 
 - **Pattern:** Uses `Sentry` SDK APIs, maintains `spanMap` in memory.
 - **`flush()` implementation:** `await Sentry.flush(2000)` — properly flushes.
-- **Fire-and-forget impact:** HIGH. Stateful exporter that requires `SPAN_STARTED` before `SPAN_ENDED`. In Inngest's durable execution, the `spanMap` is cleared between step invocations. Even if fire-and-forget was fixed, the statefulness problem remains for durable engines. The reporter specifically called this out.
+- **Fire-and-forget impact:** HIGH. Stateful exporter that requires `SPAN_STARTED` before `SPAN_ENDED`. In Inngest's durable execution, `spanMap` is cleared between step invocations. This is a **separate design limitation** — tracked independently.
 
-### PostHog Exporter
+### OtelBridge
 
-- **Pattern:** Uses PostHog Analytics SDK.
-- **`flush()` implementation:** Not visible in quick scan, but likely delegates to SDK.
-- **Fire-and-forget impact:** MEDIUM.
-
-### Arize / Braintrust Exporters
-
-- **Pattern:** Appear to be stubs on the bus branch (minimal code).
-- **Fire-and-forget impact:** Unknown until implemented.
+- **Pattern:** Extends `BaseExporter`. Creates OTEL spans and manages `otelSpanMap`.
+- **`flush()` implementation:** Calls `provider.forceFlush()` — properly drains the OTEL `BatchSpanProcessor`.
+- **Fire-and-forget impact:** MEDIUM. `flush()` is correct if data has reached the processor.
 
 ---
 
@@ -376,169 +378,177 @@ This is correct for draining the OTEL batch processor — but only if the data h
 
 | Data Path | Fire-and-Forget? | `flush()` Covers It? | Affected By Inngest? |
 |---|---|---|---|
-| Bus → Exporter `onTracingEvent` | YES — promise caught, not tracked | NO — bus flush is no-op | YES — step.run() may complete before promise resolves |
-| Bus → Exporter `onLogEvent` | YES | NO | YES (for any log events in step.run) |
-| Bus → Exporter `onMetricEvent` | YES | NO | YES (for any metric events in step.run) |
-| Bus → Exporter `onScoreEvent` | YES | NO | YES |
-| Bus → Exporter `onFeedbackEvent` | YES | NO | YES |
-| Bridge `exportTracingEvent` | YES — promise caught, not tracked | NO — bridge flush only drains SDK buffer | YES |
-| CloudExporter internal `flush()` | YES — called fire-and-forget inside `_exportTracingEvent` | Partially — external `flush()` call drains buffer | YES |
-| LangSmith SDK queue | N/A — data reaches SDK via handler | NO — no `_flush()` override | YES — SDK queue not flushed |
-| Sentry `spanMap` state | N/A | N/A | YES — state lost between Inngest steps (separate bug) |
+| Bus → Exporter `onTracingEvent`/`exportTracingEvent` | YES — via `routeToHandler` → `catchAsyncResult` | NO — bus flush is no-op | YES — `step.run()` may complete before promise resolves |
+| Bus → Bridge `exportTracingEvent` | YES — same path as exporters now | NO — bus flush is no-op | YES |
+| Bus → Exporter `onLogEvent` | YES — via `routeToHandler` | NO | YES (for any log events in step.run) |
+| Bus → Exporter `onMetricEvent` | YES — via `routeToHandler` | NO | YES |
+| Bus → Exporter `onScoreEvent` | YES — via `routeToHandler` | NO | YES |
+| Bus → Exporter `onFeedbackEvent` | YES — via `routeToHandler` | NO | YES |
+| Base class subscribers (`super.emit`) | YES — via `BaseObservabilityEventBus.emit()` | NO | YES |
+| LangSmith SDK internal queue | N/A | NO — no `_flush()` override | YES — queue never drained |
+| Sentry `spanMap` state | N/A | N/A | YES — state lost between steps (separate issue) |
 
 ---
 
-## 7. Solution Options
+## 7. Recommended Fix
 
-### Option A: Minimal Fix in `@mastra/inngest` Only
+The fix has three parts, all on the `claude/add-notion-folder-bpOd1` branch:
 
-**Approach:** Explicitly call and await `exportTracingEvent` after `span.end()` inside `step.run()` callbacks, and call `observability.flush()` in the finalize step.
+1. **Promise tracking in `routeToHandler` + bus `flush()`** — Track handler promises returned from `routeToHandler()` and base class `emit()`. Make `ObservabilityBus.flush()` and `BaseObservabilityEventBus.flush()` await all pending handler promises.
 
-**Pros:**
-- Smallest change surface
-- No observability architecture changes needed
-- Can ship quickly
+2. **Two-phase `flush()` in `BaseObservabilityInstance`** — Phase 1: await `observabilityBus.flush()` (which now drains in-flight handler promises for both exporters AND bridge). Phase 2: call `exporter.flush()` + `bridge.flush()` to drain SDK-internal buffers.
 
-**Cons:**
-- Duplicates export logic in the Inngest engine
-- Doesn't fix the underlying fire-and-forget problem for other durable engines
-- `flush()` still doesn't await in-flight promises — only drains buffers
-- Every new durable engine needs the same workaround
+3. **Add `observability.flush()` to Inngest workflow finalize** — Call `await observability.flush()` **outside** `step.run()` in `workflow.ts` after the finalize step. This ensures all export promises resolve and exporter buffers drain before the Inngest function completes.
 
-### Option B: Make `span.end()` Return an Awaitable Promise
+4. **(Optional, separate PR)** Fix LangSmith exporter missing `_flush()` override.
 
-**Approach:** Change `span.end()` to return `Promise<void>` (or return the export promise). Callers that need durability can await it.
+### Why This Approach
 
-**Pros:**
-- Clean API — callers opt in to awaiting
-- Backwards compatible (existing callers ignore the return value)
-
-**Cons:**
-- Changes the `span.end()` signature across the codebase
-- On the bus branch, `emit()` is `void` by design — would need to change the bus interface
-- Doesn't address the `flush()` gap
-
-### Option C: Track Promises in the Bus + Fix `flush()`
-
-**Approach:** The `ObservabilityBus` tracks promises returned by async handlers and its `flush()` awaits them before draining exporter buffers. The bridge promise is tracked separately in `BaseObservabilityInstance`.
-
-**Pros:**
-- Fixes the problem at the architecture level — all event types covered automatically
-- `emit()` stays synchronous — no change to calling code
-- `flush()` becomes meaningful — one call drains everything
-- Works for all durable engines, not just Inngest
-- New event types (log, metric, score, feedback) get the fix for free
-
-**Cons:**
-- Requires changes on the bus branch
-- The `Set<Promise>` tracking has a small overhead (promise creation + `finally` cleanup)
-
-### Option D: Option C + Fix Vendor Exporters
-
-**Approach:** Option C, plus audit and fix vendor exporters that lack proper `_flush()` implementations.
-
-**Pros:**
-- Complete fix — no data loss path remains
-- LangSmith, PostHog, and other exporters properly flush their SDK queues
-
-**Cons:**
-- Larger change surface
-- Requires knowledge of each vendor SDK's flush API
-
-### Option E: Option C + D + Add `observability.flush()` to Inngest Finalize
-
-**Approach:** The full solution. Fix the bus, fix vendor exporters, and add a single `await observability.flush()` call in the Inngest workflow finalize step (outside `step.run()` so it's not memoized).
+- Since the bridge is now routed through the same `routeToHandler()` as exporters, **one fix location** (promise tracking in `routeToHandler`) covers both exporters and bridge.
+- `emit()` stays synchronous — no change to calling code.
+- `flush()` becomes meaningful — one call drains everything.
+- Works for all durable engines, not just Inngest.
+- All event types (tracing, log, metric, score, feedback) get the fix for free.
 
 ---
 
-## 8. Recommended Fix
+## 8. Implementation Spec
 
-**Option E — the full solution.** Here's why:
+This section is designed to be directly actionable by an implementing agent working on `claude/add-notion-folder-bpOd1`.
 
-1. **Option C alone is necessary but not sufficient.** The bus fix ensures `flush()` awaits in-flight handler promises, but someone still needs to _call_ `flush()`. In Inngest workflows, the natural place is after the finalize step.
+### 8.1 — Track Promises in `routeToHandler`
 
-2. **Option D is needed for completeness.** The LangSmith exporter has no `_flush()` at all. Even with perfect promise tracking, data sits in the LangSmith SDK queue with no way to drain it. This is a real bug that affects non-Inngest scenarios too (e.g., serverless environments where the process is recycled).
+**File: `observability/mastra/src/bus/route-event.ts`**
 
-3. **The bus branch is the right place to fix this.** The bus already sees every handler return value and already distinguishes sync from async. Adding promise tracking is a natural extension, not a hack.
+The `routeToHandler` function currently discards handler promises via `catchAsyncResult`. Change it to **return** the promise (if any) so callers can track it.
 
-4. **The fix ordering matters.** `flush()` must:
-   - First: await all in-flight handler delivery promises (bus + bridge)
-   - Then: drain exporter/bridge internal buffers (`exporter.flush()`, `bridge.flush()`)
+**Current signature:**
+```typescript
+export function routeToHandler(handler: ObservabilityHandler, event: ObservabilityEvent, logger: IMastraLogger): void
+```
 
-   Without step 1, step 2 may flush empty buffers.
+**New signature:**
+```typescript
+export function routeToHandler(handler: ObservabilityHandler, event: ObservabilityEvent, logger: IMastraLogger): void | Promise<void>
+```
 
-### What About Sentry's Statefulness?
+**Change `catchAsyncResult` to return the caught promise instead of discarding it:**
 
-The `SentryExporter` has a separate problem: it maintains a `spanMap` that requires `SPAN_STARTED` before `SPAN_ENDED`. In Inngest's durable execution, in-memory state is lost between step invocations. This is a **design limitation of stateful exporters in durable contexts**, not a fire-and-forget problem. Possible solutions:
+```typescript
+/** Catch rejected promises from async handlers, and return the tracked promise for flush(). */
+function catchAsyncResult(
+  result: void | Promise<void>,
+  handlerName: string,
+  signal: string,
+  logger: IMastraLogger,
+): void | Promise<void> {
+  if (result && typeof (result as Promise<void>).catch === 'function') {
+    return (result as Promise<void>).catch(err => {
+      logger.error(`[Observability] ${signal} handler error [handler=${handlerName}]:`, err);
+    });
+  }
+  return undefined;
+}
+```
 
-- Sentry could use the `TrackingExporter` base class which handles out-of-order span arrival
-- Or Sentry could be documented as incompatible with durable engines
-- Or a storage-backed span map could be used
+**And update `routeToHandler` to return the result of `catchAsyncResult` instead of discarding it.** Each `case` that calls `catchAsyncResult` should propagate its return:
 
-This is a separate issue and should be tracked independently.
+```typescript
+export function routeToHandler(
+  handler: ObservabilityHandler,
+  event: ObservabilityEvent,
+  logger: IMastraLogger,
+): void | Promise<void> {
+  try {
+    switch (event.type) {
+      case TracingEventType.SPAN_STARTED:
+      case TracingEventType.SPAN_UPDATED:
+      case TracingEventType.SPAN_ENDED: {
+        const fn = handler.onTracingEvent
+          ? handler.onTracingEvent.bind(handler)
+          : handler.exportTracingEvent.bind(handler);
+        return catchAsyncResult(fn(event as TracingEvent), handler.name, 'tracing', logger);
+      }
+      case 'log':
+        if (handler.onLogEvent) {
+          return catchAsyncResult(handler.onLogEvent(event as LogEvent), handler.name, 'log', logger);
+        }
+        break;
+      case 'metric':
+        if (handler.onMetricEvent) {
+          return catchAsyncResult(handler.onMetricEvent(event as MetricEvent), handler.name, 'metric', logger);
+        }
+        break;
+      case 'score':
+        if (handler.onScoreEvent) {
+          return catchAsyncResult(handler.onScoreEvent(event as ScoreEvent), handler.name, 'score', logger);
+        }
+        break;
+      case 'feedback':
+        if (handler.onFeedbackEvent) {
+          return catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);
+        }
+        break;
+    }
+  } catch (err) {
+    logger.error(`[Observability] Handler error [handler=${handler.name}]:`, err);
+  }
+}
+```
 
----
-
-## 9. Implementation Plan
-
-### Phase 1: Fix the ObservabilityBus (on `claude/add-notion-folder-bpOd1`)
+### 8.2 — Add Promise Tracking to `ObservabilityBus`
 
 **File: `observability/mastra/src/bus/observability-bus.ts`**
 
-Add promise tracking to `routeToHandler()`:
+Add a `pendingHandlers` set and track promises returned by `routeToHandler`. Override `flush()` to drain them.
 
 ```typescript
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
+  private bridge?: ObservabilityBridge;
   private autoExtractor?: AutoExtractedMetrics;
+
+  // NEW: Track in-flight handler promises for flush()
   private pendingHandlers: Set<Promise<void>> = new Set();
 
-  // ... existing methods ...
+  // ... existing constructor, registerExporter, etc. ...
 
-  private routeToHandler(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
-    try {
-      let result: void | Promise<void>;
+  emit(event: ObservabilityEvent): void {
+    // Route to appropriate handler on each registered exporter
+    for (const exporter of this.exporters) {
+      this.trackPromise(routeToHandler(exporter, event, this.logger));
+    }
 
-      switch (event.type) {
-        case TracingEventType.SPAN_STARTED:
-        case TracingEventType.SPAN_UPDATED:
-        case TracingEventType.SPAN_ENDED: {
-          const handler = exporter.onTracingEvent
-            ? exporter.onTracingEvent.bind(exporter)
-            : exporter.exportTracingEvent.bind(exporter);
-          result = handler(event as TracingEvent);
-          break;
-        }
-        case 'log':
-          result = exporter.onLogEvent?.(event as LogEvent);
-          break;
-        case 'metric':
-          result = exporter.onMetricEvent?.(event as MetricEvent);
-          break;
-        case 'score':
-          result = exporter.onScoreEvent?.(event as ScoreEvent);
-          break;
-        case 'feedback':
-          result = exporter.onFeedbackEvent?.(event as FeedbackEvent);
-          break;
-      }
+    // Route to bridge (same routing logic as exporters)
+    if (this.bridge) {
+      this.trackPromise(routeToHandler(this.bridge, event, this.logger));
+    }
 
-      // Track async handler promises for flush()
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        const tracked = (result as Promise<void>).catch(err => {
-          console.error(`[ObservabilityBus] Handler error [exporter=${exporter.name}]:`, err);
-        });
-        this.pendingHandlers.add(tracked);
-        tracked.finally(() => this.pendingHandlers.delete(tracked));
-      }
-    } catch (err) {
-      console.error(`[ObservabilityBus] Sync handler error [exporter=${exporter.name}]:`, err);
+    // Auto-extract metrics (unchanged — these are synchronous)
+    if (this.autoExtractor) {
+      /* ... existing autoExtractor logic unchanged ... */
+    }
+
+    // Deliver to subscribers (base class)
+    super.emit(event);
+  }
+
+  /**
+   * Track an async handler promise so flush() can await it.
+   * No-ops for sync (void) results.
+   */
+  private trackPromise(result: void | Promise<void>): void {
+    if (result && typeof (result as Promise<void>).then === 'function') {
+      const promise = result as Promise<void>;
+      this.pendingHandlers.add(promise);
+      promise.finally(() => this.pendingHandlers.delete(promise));
     }
   }
 
   /**
-   * Await all in-flight handler promises.
-   * Call this before draining exporter buffers to ensure data has been delivered.
+   * Await all in-flight handler delivery promises.
+   * This ensures all event data has been delivered to exporters and bridge
+   * before their internal buffers are flushed.
    */
   async flush(): Promise<void> {
     if (this.pendingHandlers.size > 0) {
@@ -546,22 +556,25 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     }
   }
 
+  // existing shutdown() should call flush() before clearing:
   async shutdown(): Promise<void> {
     await this.flush();
-    this.exporters = [];
-    // Also clear base class subscribers
-    super.shutdown();
+    // ... existing cleanup ...
   }
 }
 ```
+
+### 8.3 — Add Promise Tracking to `BaseObservabilityEventBus`
 
 **File: `observability/mastra/src/bus/base.ts`**
 
 Same pattern for generic subscribers:
 
 ```typescript
-export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<TEvent> {
+export class BaseObservabilityEventBus<TEvent> extends MastraBase implements ObservabilityEventBus<TEvent> {
   private subscribers: Set<(event: TEvent) => void> = new Set();
+
+  // NEW: Track in-flight subscriber handler promises
   private pendingSubscriberHandlers: Set<Promise<void>> = new Set();
 
   emit(event: TEvent): void {
@@ -569,18 +582,21 @@ export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<
       try {
         const result: unknown = handler(event);
         if (result && typeof (result as Promise<void>).then === 'function') {
-          const tracked = (result as Promise<void>).catch(err => {
-            console.error('[ObservabilityEventBus] Handler error:', err);
+          const promise = (result as Promise<void>).catch(err => {
+            this.logger.error('[ObservabilityEventBus] Handler error:', err);
           });
-          this.pendingSubscriberHandlers.add(tracked);
-          tracked.finally(() => this.pendingSubscriberHandlers.delete(tracked));
+          this.pendingSubscriberHandlers.add(promise);
+          promise.finally(() => this.pendingSubscriberHandlers.delete(promise));
         }
       } catch (err) {
-        console.error('[ObservabilityEventBus] Handler error:', err);
+        this.logger.error('[ObservabilityEventBus] Handler error:', err);
       }
     }
   }
 
+  // ... existing subscribe() ...
+
+  /** Await all in-flight subscriber handler promises. */
   async flush(): Promise<void> {
     if (this.pendingSubscriberHandlers.size > 0) {
       await Promise.allSettled([...this.pendingSubscriberHandlers]);
@@ -594,46 +610,33 @@ export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<
 }
 ```
 
-### Phase 2: Track Bridge Promises in BaseObservabilityInstance
+### 8.4 — Two-Phase `flush()` in `BaseObservabilityInstance`
 
 **File: `observability/mastra/src/instances/base.ts`**
 
+The current `flush()` calls `observabilityBus.flush()` (currently a no-op), then `exporter.flush()` + `bridge.flush()` in parallel. After implementing 8.2/8.3, `observabilityBus.flush()` now actually drains handler promises. But we need **two phases** — first await handler delivery, then flush exporter/bridge internal buffers.
+
+**Replace the current `flush()` with:**
+
 ```typescript
-export class BaseObservabilityInstance implements ObservabilityInstance {
-  // ... existing fields ...
-  private pendingBridgeExports: Set<Promise<void>> = new Set();
-
-  private emitTracingEvent(event: TracingEvent): void {
-    this.observabilityBus.emit(event);
-
-    if (this.config.bridge) {
-      const p = this.config.bridge.exportTracingEvent(event).catch(error => {
-        this.logger.error(`[Observability] Bridge export error [bridge=${this.config.bridge!.name}]`, error);
-      });
-      this.pendingBridgeExports.add(p);
-      p.finally(() => this.pendingBridgeExports.delete(p));
-    }
-  }
-
-  async flush(): Promise<void> {
+async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
 
-    // Phase 1: Await in-flight handler delivery promises
-    // This ensures data has reached exporter/bridge internal buffers
-    const deliveryPromises: Promise<void>[] = [this.observabilityBus.flush()];
-    if (this.pendingBridgeExports.size > 0) {
-      deliveryPromises.push(Promise.allSettled([...this.pendingBridgeExports]).then(() => {}));
-    }
-    await Promise.allSettled(deliveryPromises);
+    // Phase 1: Await in-flight handler delivery promises.
+    // This ensures all event data has been delivered to exporters and bridge
+    // internal buffers before we attempt to flush those buffers.
+    await this.observabilityBus.flush();
 
-    // Phase 2: Drain exporter and bridge internal buffers
-    // Now that data has been delivered, flush the buffers
-    const bufferFlushPromises = [...this.exporters.map(e => e.flush())];
+    // Phase 2: Drain exporter and bridge internal buffers.
+    // Now that data has been delivered, flushing will capture everything.
+    const bufferFlushPromises: Promise<void>[] = [...this.exporters.map(e => e.flush())];
     if (this.config.bridge) {
       bufferFlushPromises.push(this.config.bridge.flush());
     }
+
     const results = await Promise.allSettled(bufferFlushPromises);
 
+    // Log any errors but don't throw
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
         const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
@@ -643,38 +646,21 @@ export class BaseObservabilityInstance implements ObservabilityInstance {
 
     this.logger.debug(`[Observability] Flush completed [name=${this.name}]`);
   }
-}
 ```
 
-### Phase 3: Fix Vendor Exporters
+**Key difference from current code:** Phase 1 (`observabilityBus.flush()`) is now awaited **before** Phase 2 starts. They are **not** run in parallel. This is critical — if run in parallel, `exporter.flush()` may still drain an empty buffer.
 
-**LangSmith** (`observability/langsmith/src/tracing.ts`):
-
-```typescript
-protected override async _flush(): Promise<void> {
-    // The LangSmith Client has an internal batch queue.
-    // Calling awaitPendingTraceBatches() ensures all queued runs are sent.
-    if (this.#client) {
-      await this.#client.awaitPendingTraceBatches();
-    }
-  }
-```
-
-> Note: The exact LangSmith SDK method may be `awaitPendingTraceBatches()`, `flush()`, or similar — needs verification against the SDK docs.
-
-**Other exporters** (Langfuse, Datadog, Laminar, Sentry) already have proper `_flush()` or `flush()` implementations.
-
-### Phase 4: Add `observability.flush()` to Inngest Workflow
+### 8.5 — Add `observability.flush()` to Inngest Workflow
 
 **File: `workflows/inngest/src/workflow.ts`**
 
-After the finalize `step.run()`, add a flush call **outside** the step so it's not memoized:
+After the finalize `step.run()` completes, add a flush call **outside** the step so it's not memoized:
 
 ```typescript
-// Inside getFunction(), after the finalize step.run():
+// Inside getFunction(), after the finalize step.run() (around line 432):
 
 await step.run(`workflow.${this.id}.finalize`, async () => {
-    // ...existing finalize logic...
+    // ...existing finalize logic (unchanged)...
 });
 
 // Flush observability OUTSIDE step.run so it executes on every invocation
@@ -687,42 +673,155 @@ if (observability) {
 return { result, runId };
 ```
 
-> **Important:** This must be outside `step.run()` because:
-> 1. Flush is idempotent — safe to run on every replay
-> 2. It must not be memoized — we need it to actually execute
-> 3. It doesn't produce state that needs to be durable
+**Why outside `step.run()`:**
+1. Flush is idempotent — safe to run on every replay
+2. It must not be memoized — we need it to actually execute every time
+3. It doesn't produce state that needs to be durable
+4. It's I/O without a return value, which Inngest allows outside steps
 
-### Phase 5: Tests
+### 8.6 — Tests
 
-1. **Bus promise tracking test:** Emit events with async handlers, verify `flush()` awaits them
-2. **Bridge promise tracking test:** Verify bridge export promises are tracked and flushed
-3. **Integration test:** Inngest workflow with a test exporter that records `exportTracingEvent` calls, verify spans are received after `flush()`
-4. **LangSmith flush test:** Verify `_flush()` drains the SDK queue
+#### Bus Promise Tracking Tests
+
+**File: `observability/mastra/src/bus/observability-bus.test.ts`** (add to existing tests)
+
+```typescript
+describe('flush()', () => {
+  it('should await pending async handler promises before resolving', async () => {
+    const bus = new ObservabilityBus();
+    const exportOrder: string[] = [];
+
+    // Create a slow async exporter
+    const slowExporter = {
+      name: 'slow',
+      exportTracingEvent: async (event: TracingEvent) => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        exportOrder.push('slow-done');
+      },
+      flush: async () => {},
+      shutdown: async () => {},
+    } as ObservabilityExporter;
+
+    bus.registerExporter(slowExporter);
+
+    // Emit an event (fire-and-forget internally)
+    const event: TracingEvent = {
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { /* minimal test span */ } as any,
+    };
+    bus.emit(event);
+
+    // Before flush, handler may not have completed
+    expect(exportOrder).not.toContain('slow-done');
+
+    // After flush, handler must have completed
+    await bus.flush();
+    expect(exportOrder).toContain('slow-done');
+  });
+
+  it('should await bridge handler promises', async () => {
+    const bus = new ObservabilityBus();
+    let bridgeDone = false;
+
+    const bridge = {
+      name: 'test-bridge',
+      exportTracingEvent: async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        bridgeDone = true;
+      },
+      createSpan: () => undefined,
+      flush: async () => {},
+      shutdown: async () => {},
+    } as unknown as ObservabilityBridge;
+
+    bus.registerBridge(bridge);
+
+    bus.emit({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: {} as any,
+    });
+
+    await bus.flush();
+    expect(bridgeDone).toBe(true);
+  });
+});
+```
+
+#### Base EventBus Promise Tracking Tests
+
+**File: `observability/mastra/src/bus/base.test.ts`** (add to existing tests)
+
+```typescript
+describe('flush()', () => {
+  it('should await pending async subscriber promises', async () => {
+    const bus = new BaseObservabilityEventBus({ name: 'test' });
+    let handlerDone = false;
+
+    bus.subscribe(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      handlerDone = true;
+    });
+
+    bus.emit({} as any);
+    expect(handlerDone).toBe(false);
+
+    await bus.flush();
+    expect(handlerDone).toBe(true);
+  });
+});
+```
+
+#### Two-Phase Flush Integration Test
+
+**File: `observability/mastra/src/integration-tests.test.ts`** (add to existing tests)
+
+Test that `BaseObservabilityInstance.flush()` ensures handler delivery completes before exporter buffer flush:
+
+```typescript
+it('flush() should deliver events before draining exporter buffers', async () => {
+  const deliveryOrder: string[] = [];
+
+  // Create a test exporter whose exportTracingEvent is async
+  const testExporter = {
+    name: 'test',
+    exportTracingEvent: async (event) => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      deliveryOrder.push('handler-delivered');
+    },
+    flush: async () => {
+      deliveryOrder.push('buffer-flushed');
+    },
+    shutdown: async () => {},
+  };
+
+  // ... create observability instance with testExporter ...
+  // ... emit a span ...
+
+  await observability.flush();
+
+  // handler-delivered MUST come before buffer-flushed
+  expect(deliveryOrder).toEqual(['handler-delivered', 'buffer-flushed']);
+});
+```
+
+### 8.7 — (Optional, Separate PR) Fix LangSmith Exporter
+
+**File: `observability/langsmith/src/tracing.ts`**
+
+Add a `_flush()` override that drains the LangSmith SDK's internal queue. The exact method depends on the LangSmith JS SDK version — check `langsmith` npm package for `Client.prototype.flush()` or `Client.prototype.awaitPendingTraceBatches()`.
 
 ---
 
-## Appendix: Code References
+## Appendix: Code References (Bus Branch as of 2091425)
 
-### Current Codebase (development branch)
-
-| File | Key Lines | Description |
-|---|---|---|
-| `observability/mastra/src/instances/base.ts` | 470-501 | `emitSpanStarted/Ended/Updated` — fire-and-forget |
-| `observability/mastra/src/instances/base.ts` | 506-529 | `exportTracingEvent` — the async method whose promise is discarded |
-| `observability/mastra/src/instances/base.ts` | 555-577 | `flush()` — only drains exporter buffers, doesn't await delivery |
-| `workflows/inngest/src/execution-engine.ts` | 288-302 | `endStepSpan` — `span.end()` inside `wrapDurableOperation` |
-| `workflows/inngest/src/workflow.ts` | 325-432 | Finalize step — `span.end()` fire-and-forget inside `step.run()` |
-
-### ObservabilityBus Branch (`claude/add-notion-folder-bpOd1`)
-
-| File | Key Lines | Description |
-|---|---|---|
-| `observability/mastra/src/bus/base.ts` | 18-35 | `BaseObservabilityEventBus.emit()` — fire-and-forget |
-| `observability/mastra/src/bus/base.ts` | 45 | `flush()` — explicit no-op |
-| `observability/mastra/src/bus/observability-bus.ts` | 100-175 | `routeToHandler()` — fire-and-forget for all event types |
-| `observability/mastra/src/instances/base.ts` | 667-676 | `emitTracingEvent()` — bus emit + bridge fire-and-forget |
-| `observability/mastra/src/instances/base.ts` | 735-765 | `flush()` — calls bus.flush() (no-op) + exporter.flush() |
-| `observability/otel-bridge/src/bridge.ts` | 83-90 | `_exportTracingEvent` — async OTEL span handling |
-| `observability/otel-bridge/src/bridge.ts` | 247-258 | `flush()` — calls OTEL provider.forceFlush() |
-| `observability/langsmith/src/tracing.ts` | entire file | No `_flush()` override — SDK queue never drained |
-| `observability/langfuse/src/tracing.ts` | 371-374 | `_flush()` — properly calls `flushAsync()` |
+| File | Description |
+|---|---|
+| `observability/mastra/src/bus/base.ts` | `BaseObservabilityEventBus.emit()` — fire-and-forget subscriber dispatch; `flush()` — no-op |
+| `observability/mastra/src/bus/observability-bus.ts` | `ObservabilityBus.emit()` — routes to exporters + bridge + auto-metrics + subscribers; no `flush()` override |
+| `observability/mastra/src/bus/route-event.ts` | `routeToHandler()` — shared routing for exporters AND bridge; `catchAsyncResult()` — discards promises |
+| `observability/mastra/src/instances/base.ts` | `emitTracingEvent()` — now just calls `bus.emit()`; `flush()` — calls bus.flush() (no-op) + exporter/bridge flush in parallel |
+| `observability/otel-bridge/src/bridge.ts` | `_exportTracingEvent()` — async OTEL span handling; `flush()` — calls `provider.forceFlush()` |
+| `observability/langsmith/src/tracing.ts` | No `_flush()` override — LangSmith SDK queue never drained |
+| `observability/langfuse/src/tracing.ts` | `_flush()` — properly calls `flushAsync()` |
+| `workflows/inngest/src/execution-engine.ts` | `endStepSpan()` — `span.end()` inside `wrapDurableOperation` / `step.run()` |
+| `workflows/inngest/src/workflow.ts` | Finalize step — `span.end()` fire-and-forget inside `step.run()`; no flush after finalize |
