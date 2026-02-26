@@ -1,0 +1,496 @@
+---
+title: "Reference: DaytonaSandbox | Workspace"
+description: "Documentation for the DaytonaSandbox provider for isolated cloud code execution."
+packages:
+  - "@mastra/daytona"
+---
+
+# DaytonaSandbox
+
+Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, and network isolation.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash
+npm install @mastra/daytona
+```
+
+Set your Daytona API key in one of three ways:
+
+```bash
+# Shell export
+export DAYTONA_API_KEY=your-api-key
+```
+
+```bash
+# .env file
+DAYTONA_API_KEY=your-api-key
+```
+
+```typescript
+// Passed directly as constructor argument
+new DaytonaSandbox({ apiKey: 'your-api-key' });
+```
+
+## Usage
+
+Add a `DaytonaSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
+import { DaytonaSandbox } from '@mastra/daytona';
+
+const sandbox = new DaytonaSandbox({
+  language: 'typescript',
+  timeout: 120_000,
+});
+
+const workspace = new Workspace({ sandbox });
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: 'anthropic/claude-sonnet-4-6',
+  workspace,
+});
+
+const response = await agent.generate('Print "Hello, world!" and show the current working directory.');
+
+console.log(response.text);
+// I'll run both commands simultaneously!
+//
+// Here are the results:
+//
+// 1. **Hello, world!** — Successfully printed the message.
+// 2. **Current Working Directory** — `/home/daytona`
+//
+// Both commands ran in parallel and completed successfully!
+```
+
+### With a snapshot
+
+Use a pre-built snapshot to skip environment setup time:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    snapshot: 'my-snapshot-id',
+    timeout: 60_000,
+  }),
+});
+```
+
+### Custom image with resources
+
+Use a custom Docker image with specific resource allocation:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    image: 'node:20-slim',
+    resources: { cpu: 2, memory: 4, disk: 6 },
+    language: 'typescript',
+  }),
+});
+```
+
+### Ephemeral sandbox
+
+For one-shot tasks — sandbox is deleted immediately on stop:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    ephemeral: true,
+    language: 'python',
+  }),
+});
+```
+
+### Streaming output
+
+Stream command output in real time via `onStdout` and `onStderr` callbacks:
+
+```typescript
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+});
+```
+
+Both callbacks are optional and can be used independently.
+
+### Network isolation
+
+Restrict outbound network access:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    networkBlockAll: true,
+    networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+  }),
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this sandbox instance.",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Daytona API key for authentication. Falls back to DAYTONA_API_KEY environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "apiUrl",
+      type: "string",
+      description: "Daytona API endpoint. Falls back to DAYTONA_API_URL environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "target",
+      type: "string",
+      description: "Runner region. Falls back to DAYTONA_TARGET environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Default execution timeout in milliseconds.",
+      isOptional: true,
+      defaultValue: "300000 (5 minutes)",
+    },
+    {
+      name: "language",
+      type: "'typescript' | 'javascript' | 'python'",
+      description: "Runtime language for the sandbox.",
+      isOptional: true,
+      defaultValue: "'typescript'",
+    },
+    {
+      name: "snapshot",
+      type: "string",
+      description: "Pre-built snapshot ID to create the sandbox from. Takes precedence over image.",
+      isOptional: true,
+    },
+    {
+      name: "image",
+      type: "string",
+      description: "Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with resources. Ignored when snapshot is set.",
+      isOptional: true,
+    },
+    {
+      name: "resources",
+      type: "{ cpu?: number; memory?: number; disk?: number }",
+      description: "Resource allocation for the sandbox (CPU cores, memory in GiB, disk in GiB). Only used when image is set.",
+      isOptional: true,
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      description: "Environment variables to set in the sandbox.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "labels",
+      type: "Record<string, string>",
+      description: "Custom metadata labels.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Sandbox display name.",
+      isOptional: true,
+      defaultValue: "Sandbox id",
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "OS user to run commands as.",
+      isOptional: true,
+      defaultValue: "'daytona'",
+    },
+    {
+      name: "public",
+      type: "boolean",
+      description: "Make port previews public.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "ephemeral",
+      type: "boolean",
+      description: "Delete sandbox immediately on stop.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "autoStopInterval",
+      type: "number",
+      description: "Auto-stop interval in minutes. Set to 0 to disable.",
+      isOptional: true,
+      defaultValue: "15",
+    },
+    {
+      name: "autoArchiveInterval",
+      type: "number",
+      description: "Auto-archive interval in minutes. Set to 0 for the maximum interval (7 days).",
+      isOptional: true,
+      defaultValue: "7 days",
+    },
+    {
+      name: "autoDeleteInterval",
+      type: "number",
+      description: "Auto-delete interval in minutes. Negative values disable auto-delete. Set to 0 to delete on stop.",
+      isOptional: true,
+      defaultValue: "disabled",
+    },
+    {
+      name: "volumes",
+      type: "Array<{ volumeId: string; mountPath: string }>",
+      description: "Daytona volumes to attach at sandbox creation time.",
+      isOptional: true,
+    },
+    {
+      name: "networkBlockAll",
+      type: "boolean",
+      description: "Block all outbound network access from the sandbox.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "networkAllowList",
+      type: "string",
+      description: "Comma-separated list of allowed CIDR addresses when network access is restricted.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Sandbox instance identifier.",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Provider name ('DaytonaSandbox').",
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "Provider identifier ('daytona').",
+    },
+    {
+      name: "status",
+      type: "ProviderStatus",
+      description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
+    },
+    {
+      name: "instance",
+      type: "Sandbox",
+      description: "The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.",
+    },
+  ]}
+/>
+
+## Methods
+
+### `start()`
+
+Create and start the Daytona sandbox.
+
+```typescript
+await sandbox.start();
+```
+
+Called automatically on first command execution or by `workspace.init()`.
+
+### `stop()`
+
+Stop the sandbox. The sandbox can be restarted later — files and state persist.
+
+```typescript
+await sandbox.stop();
+```
+
+### `destroy()`
+
+Delete the sandbox and clean up all resources.
+
+```typescript
+await sandbox.destroy();
+```
+
+### `executeCommand(command, args?, options?)`
+
+Execute a shell command in the sandbox. Automatically starts the sandbox if not already running, and retries once if the sandbox has timed out.
+
+```typescript
+const result = await sandbox.executeCommand('node', ['-e', 'console.log("Hello!")']);
+const output = await sandbox.executeCommand('pip', ['install', 'requests'], {
+  timeout: 60_000,
+  cwd: '/workspace',
+});
+
+// Stream output in real time
+await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+});
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      description: "Command to execute.",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      description: "Command arguments.",
+      isOptional: true,
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "Execution timeout in milliseconds. Overrides the instance default.",
+      isOptional: true,
+    },
+    {
+      name: "options.cwd",
+      type: "string",
+      description: "Working directory for the command.",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "Additional environment variables for this command. Merged with instance-level env.",
+      isOptional: true,
+    },
+    {
+      name: "options.onStdout",
+      type: "(data: string) => void",
+      description: "Callback for stdout streaming.",
+      isOptional: true,
+    },
+    {
+      name: "options.onStderr",
+      type: "(data: string) => void",
+      description: "Callback for stderr streaming.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### `getInfo()`
+
+Get sandbox status and resource information.
+
+```typescript
+const info = await sandbox.getInfo();
+// {
+//   id: 'daytona-sandbox-abc123',
+//   name: 'DaytonaSandbox',
+//   provider: 'daytona',
+//   status: 'running',
+//   createdAt: Date,
+//   mounts: [],
+//   resources: {
+//     cpuCores: 2,        // vCPU count from the running sandbox
+//     memoryMB: 4096,     // converted from GB (×1024)
+//     diskMB: 20480,      // converted from GiB (×1024)
+//   },
+//   metadata: {
+//     language: 'typescript',
+//     ephemeral: false,
+//     snapshot: 'my-snapshot-id',   // only when snapshot is set
+//     image: 'node:20-slim',        // only when image is set
+//     target: 'us',                 // only when sandbox is running
+//   },
+// }
+```
+
+### `getInstructions()`
+
+Get a description of the sandbox environment. Used in tool descriptions so agents understand the execution context.
+
+```typescript
+// Default (no options)
+new DaytonaSandbox().getInstructions();
+// 'Cloud sandbox with isolated execution (typescript runtime). Default working directory: /home/daytona. Command timeout: 300s. Running as user: daytona.'
+
+// All options set
+new DaytonaSandbox({
+  language: 'python',
+  timeout: 60_000,
+  user: 'app',
+  volumes: [{ volumeId: 'vol-123', mountPath: '/data' }],
+  networkBlockAll: true,
+}).getInstructions();
+// 'Cloud sandbox with isolated execution (python runtime). Default working directory: /home/daytona. Command timeout: 60s. Running as user: app. 1 volume(s) attached. Network access is blocked.'
+```
+
+## Direct SDK access
+
+Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through the `WorkspaceSandbox` interface:
+
+```typescript
+const daytonaSandbox = sandbox.instance;
+
+// Upload a file
+await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt');
+
+// Run git operations
+await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo');
+```
+
+The `instance` getter throws `SandboxNotReadyError` if the sandbox has not been started yet.
+
+## Sandbox creation modes
+
+`DaytonaSandbox` selects a creation mode based on the options provided:
+
+| Options | Creation mode |
+| --- | --- |
+| `snapshot` set | Snapshot-based (snapshot takes precedence over image) |
+| `image` set (no snapshot) | Image-based (optionally with `resources`) |
+| Neither set | Default snapshot-based |
+
+Resources are only applied when `image` is set. Passing `resources` without `image` has no effect.
+
+## Related
+
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [Workspace overview](/docs/workspace/overview)

@@ -13,7 +13,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -343,7 +343,7 @@ export class CoreToolBuilder extends MastraBase {
               },
               options.outputWriter || execOptions.outputWriter,
             ),
-            tracingContext: { currentSpan: toolSpan },
+            ...createObservabilityContext({ currentSpan: toolSpan }),
             abortSignal: execOptions.abortSignal,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;

@@ -12,7 +12,7 @@ import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/type
 
 import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
@@ -80,29 +80,29 @@ export interface MCPToolExecutionContext {
  * - Converts to: ToolExecutionContext for Mastra tool execution
  * - Returns: Results back to AI SDK
  */
-export type MastraToolInvocationOptions = ToolInvocationOptions & {
-  suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
-  resumeData?: any;
-  outputWriter?: OutputWriter;
-  tracingContext?: TracingContext;
-  /**
-   * Optional MCP-specific context passed when tool is executed in MCP server.
-   * This is populated by the MCP server and passed through to the tool's execution context.
-   */
-  mcp?: MCPToolExecutionContext;
-  /**
-   * Workspace for tool execution. When provided at execution time, this overrides
-   * any workspace configured at tool build time. Allows dynamic workspace selection
-   * per-step via prepareStep.
-   */
-  workspace?: Workspace;
-  /**
-   * Request context for tool execution. When provided at execution time, this overrides
-   * any requestContext configured at tool build time. Allows workflow steps to forward
-   * their requestContext (e.g., authenticated API clients, feature flags) to tools.
-   */
-  requestContext?: RequestContext;
-};
+export type MastraToolInvocationOptions = ToolInvocationOptions &
+  Partial<ObservabilityContext> & {
+    suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
+    resumeData?: any;
+    outputWriter?: OutputWriter;
+    /**
+     * Optional MCP-specific context passed when tool is executed in MCP server.
+     * This is populated by the MCP server and passed through to the tool's execution context.
+     */
+    mcp?: MCPToolExecutionContext;
+    /**
+     * Workspace for tool execution. When provided at execution time, this overrides
+     * any workspace configured at tool build time. Allows dynamic workspace selection
+     * per-step via prepareStep.
+     */
+    workspace?: Workspace;
+    /**
+     * Request context for tool execution. When provided at execution time, this overrides
+     * any requestContext configured at tool build time. Allows workflow steps to forward
+     * their requestContext (e.g., authenticated API clients, feature flags) to tools.
+     */
+    requestContext?: RequestContext;
+  };
 
 /**
  * The type of tool registered with the MCP server.
@@ -262,11 +262,10 @@ export interface ToolExecutionContext<
   TSuspend = unknown,
   TResume = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> {
+> extends Partial<ObservabilityContext> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
   requestContext?: RequestContext<TRequestContext>;
-  tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
 
   /**
