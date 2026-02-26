@@ -189,14 +189,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
-    let wrapped: any = {
-      ...tool,
-      requireApproval: config.requireApproval,
-      execute: async (input: any, context: any = {}) => {
-        const enrichedContext = { ...context, workspace: context?.workspace ?? workspace };
-        return tool.execute(input, enrichedContext);
-      },
-    };
+    let wrapped: any = { ...tool, requireApproval: config.requireApproval };
     if (readTracker && opts?.readTrackerMode) {
       wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     }
