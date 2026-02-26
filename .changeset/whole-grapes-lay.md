@@ -20,5 +20,5 @@ const workspace = new Workspace({
 
 await workspace.init();
 // Sandboxed commands can access the mount path via symlink
-await workspace.sandbox.executeCommand('ls', ['data']);
+await workspace.sandbox.executeCommand('ls data');
 ```

@@ -428,9 +428,17 @@ export class LocalSandbox extends MastraSandbox {
     }
 
     this.logger.debug(`[LocalSandbox] Config type: ${config.type}`);
+
+    // Reject unsupported types early — before any filesystem work
+    if (config.type !== 'local') {
+      const error = `Unsupported mount type: ${(config as FilesystemMountConfig).type}`;
+      this.mounts.set(mountPath, { filesystem, state: 'unsupported', config, error });
+      return { success: false, mountPath, error };
+    }
+
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
-    // Check if host directory exists and is non-empty
+    // Check if host path exists and would conflict with the symlink
     try {
       const entries = await fs.readdir(hostPath);
       if (entries.length > 0) {
@@ -439,73 +447,31 @@ export class LocalSandbox extends MastraSandbox {
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
+      // Empty directory from a previous failed attempt — remove so symlink can be created
+      await fs.rmdir(hostPath);
     } catch (err: unknown) {
       const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
       if (code === 'ENOTDIR') {
-        // Path is a regular file — fail with a clear message
         const error = `Cannot mount at ${hostPath}: path is a regular file. Use a different mount path or remove the file first.`;
         this.logger.error(`[LocalSandbox] ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
-      // ENOENT: dir doesn't exist yet (mkdir below creates it)
-      // Other: proceed; mkdir will surface the real error
+      // ENOENT: path doesn't exist yet — exactly what we want for symlink creation
     }
 
-    // Create mount directory under working directory
+    // Create symlink: ensure parent directory exists, then link
+    const localConfig = config as { type: 'local'; basePath: string };
     try {
-      this.logger.debug(`[LocalSandbox] Creating mount directory at ${hostPath}...`);
-      await fs.mkdir(hostPath, { recursive: true });
-    } catch (mkdirError) {
-      this.logger.debug(`[LocalSandbox] mkdir error for "${hostPath}":`, mkdirError);
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(mkdirError) });
-      return { success: false, mountPath, error: String(mkdirError) };
-    }
-
-    try {
-      switch (config.type) {
-        case 'local': {
-          // Local filesystem — create a symlink from hostPath to the basePath
-          const localConfig = config as { type: 'local'; basePath: string };
-          // Remove the empty directory created above — symlink replaces it
-          await fs.rmdir(hostPath);
-          await fs.symlink(localConfig.basePath, hostPath);
-          this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
-          break;
-        }
-        default:
-          try {
-            await fs.rmdir(hostPath);
-          } catch {
-            // best-effort cleanup
-          }
-          this.mounts.set(mountPath, {
-            filesystem,
-            state: 'unsupported',
-            config,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          });
-          return {
-            success: false,
-            mountPath,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          };
-      }
+      await fs.mkdir(path.dirname(hostPath), { recursive: true });
+      await fs.symlink(localConfig.basePath, hostPath);
+      this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
     } catch (error) {
-      // Actual mount failure — error
       this.logger.error(
         `[LocalSandbox] Error mounting "${filesystem.provider}" (${filesystem.id}) at "${hostPath}":`,
         error,
       );
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
-
-      // Clean up the directory we created since mount failed
-      try {
-        await fs.rmdir(hostPath);
-        this.logger.debug(`[LocalSandbox] Cleaned up directory after failed mount: ${hostPath}`);
-      } catch {
-        // Ignore cleanup errors
-      }
 
       return { success: false, mountPath, error: String(error) };
     }
@@ -556,16 +522,14 @@ export class LocalSandbox extends MastraSandbox {
       // Ignore if doesn't exist
     }
 
-    // Remove mount point (symlink or empty directory)
-    try {
-      if (isSymlink) {
+    // Remove symlink
+    if (isSymlink) {
+      try {
         await fs.unlink(hostPath);
-      } else {
-        await fs.rmdir(hostPath);
+        this.logger.debug(`[LocalSandbox] Unmounted and removed symlink ${hostPath}`);
+      } catch {
+        this.logger.debug(`[LocalSandbox] Could not remove symlink ${hostPath}`);
       }
-      this.logger.debug(`[LocalSandbox] Unmounted and removed ${hostPath}`);
-    } catch {
-      this.logger.debug(`[LocalSandbox] Unmounted ${hostPath} (not removed: does not exist or not empty)`);
     }
   }
 
