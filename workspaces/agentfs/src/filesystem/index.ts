@@ -29,11 +29,102 @@ import {
   NotDirectoryError,
   DirectoryNotFoundError,
   DirectoryNotEmptyError,
+  PermissionError,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 
-import { mapError, hasCode } from './error-mapping';
-import { normalizePath, getParentPath, getBaseName, joinPath } from './path-utils';
+// ---------------------------------------------------------------------------
+// Path utilities (POSIX-style with leading slash)
+// ---------------------------------------------------------------------------
+
+function normalizePath(input: string): string {
+  let path = input.startsWith('/') ? input : '/' + input;
+
+  let result = '';
+  let prevSlash = false;
+  for (let i = 0; i < path.length; i++) {
+    const ch = path[i];
+    if (ch === '/') {
+      if (!prevSlash) {
+        result += ch;
+      }
+      prevSlash = true;
+    } else {
+      result += ch;
+      prevSlash = false;
+    }
+  }
+
+  if (result.length > 1 && result.endsWith('/')) {
+    result = result.slice(0, -1);
+  }
+
+  return result;
+}
+
+function getParentPath(path: string): string {
+  const normalized = normalizePath(path);
+  if (normalized === '/') return '/';
+  const lastSlash = normalized.lastIndexOf('/');
+  return lastSlash <= 0 ? '/' : normalized.slice(0, lastSlash);
+}
+
+function joinPath(base: string, name: string): string {
+  if (base === '/') return normalizePath('/' + name);
+  return normalizePath(base + '/' + name);
+}
+
+function getBaseName(path: string): string {
+  const normalized = normalizePath(path);
+  if (normalized === '/') return '';
+  const lastSlash = normalized.lastIndexOf('/');
+  return normalized.slice(lastSlash + 1);
+}
+
+// ---------------------------------------------------------------------------
+// Error mapping (AgentFS errno → Mastra workspace errors)
+// ---------------------------------------------------------------------------
+
+interface ErrnoError {
+  code?: string;
+  message?: string;
+}
+
+function isErrnoError(error: unknown): error is ErrnoError {
+  return typeof error === 'object' && error !== null && 'code' in error;
+}
+
+function mapError(error: unknown, path: string, context: 'file' | 'directory' = 'file'): Error {
+  if (!isErrnoError(error)) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  switch (error.code) {
+    case 'ENOENT':
+      return context === 'directory' ? new DirectoryNotFoundError(path) : new FileNotFoundError(path);
+    case 'EEXIST':
+      return new FileExistsError(path);
+    case 'EISDIR':
+      return new IsDirectoryError(path);
+    case 'ENOTDIR':
+      return new NotDirectoryError(path);
+    case 'ENOTEMPTY':
+      return new DirectoryNotEmptyError(path);
+    case 'EPERM':
+    case 'EACCES':
+      return new PermissionError(path, 'access');
+    default:
+      return error instanceof Error ? error : new Error(String(error));
+  }
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return isErrnoError(error) && error.code === code;
+}
+
+// ---------------------------------------------------------------------------
+// AgentFS Filesystem
+// ---------------------------------------------------------------------------
 
 /**
  * AgentFS filesystem provider configuration.
