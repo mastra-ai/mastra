@@ -342,6 +342,41 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('abort signal passthrough', () => {
+    it('passes context.abortSignal to sandbox.executeCommand', async () => {
+      const controller = new AbortController();
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      context.abortSignal = controller.signal;
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBe(controller.signal);
+    });
+
+    it('passes undefined abortSignal when context has none', async () => {
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBeUndefined();
+    });
+  });
+
   describe('tail pipe extraction', () => {
     it('strips | tail -N from command and applies tail to result', async () => {
       let receivedCommand = '';
