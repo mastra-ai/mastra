@@ -363,8 +363,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
         const isAgentTool = inputData.toolName?.startsWith('agent-');
+        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !(isAgentTool || isWorkflowTool) && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
             : resumeData;
 
@@ -484,7 +485,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
 
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
