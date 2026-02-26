@@ -52,9 +52,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       { timeout: 120_000 },
     );
     if (prepResult.exitCode !== 0) {
-      throw new Error(
-        `Failed to install gcsfuse prerequisites.\n` + `Error details: ${prepResult.output}`,
-      );
+      throw new Error(`Failed to install gcsfuse prerequisites.\n` + `Error details: ${prepResult.output}`);
     }
 
     // Add gcsfuse repo and install

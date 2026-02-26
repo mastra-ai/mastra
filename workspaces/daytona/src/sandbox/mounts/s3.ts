@@ -51,8 +51,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     const updateResult = await runCommand(sandbox, 'sudo apt-get update 2>&1', { timeout: 60000 });
     if (updateResult.exitCode !== 0) {
       throw new Error(
-        `Failed to update package lists for s3fs installation.\n` +
-          `Error details: ${updateResult.output}`,
+        `Failed to update package lists for s3fs installation.\n` + `Error details: ${updateResult.output}`,
       );
     }
 
