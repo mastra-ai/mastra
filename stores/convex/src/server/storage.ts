@@ -147,9 +147,44 @@ async function handleTypedOperation(
       // Use take() to avoid hitting Convex's 32k document limit
       const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
 
-      // Build query with index if hint provided for efficient filtering
+      // Try to use an index that matches the table + filters to avoid full
+      // table scans that exceed Convex's 16 MB read limit.
       let docs: any[];
-      if (request.indexHint) {
+      let remainingFilters = request.filters ?? [];
+
+      if (convexTable === 'mastra_messages') {
+        const threadFilter = remainingFilters.find(f => f.field === 'thread_id');
+        if (threadFilter) {
+          docs = await ctx.db
+            .query(convexTable)
+            .withIndex('by_thread', (q: any) => q.eq('thread_id', threadFilter.value))
+            .take(maxDocs);
+          remainingFilters = remainingFilters.filter(f => f.field !== 'thread_id');
+        } else {
+          const resourceFilter = remainingFilters.find(f => f.field === 'resourceId');
+          if (resourceFilter) {
+            docs = await ctx.db
+              .query(convexTable)
+              .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceFilter.value))
+              .take(maxDocs);
+            remainingFilters = remainingFilters.filter(f => f.field !== 'resourceId');
+          } else {
+            docs = await ctx.db.query(convexTable).take(maxDocs);
+          }
+        }
+      } else if (convexTable === 'mastra_threads') {
+        const resourceFilter = remainingFilters.find(f => f.field === 'resourceId');
+        if (resourceFilter) {
+          docs = await ctx.db
+            .query(convexTable)
+            .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceFilter.value))
+            .take(maxDocs);
+          remainingFilters = remainingFilters.filter(f => f.field !== 'resourceId');
+        } else {
+          docs = await ctx.db.query(convexTable).take(maxDocs);
+        }
+      } else if (request.indexHint) {
+        // Build query with index if hint provided for efficient filtering
         const hint = request.indexHint;
         if (hint.index === 'by_workflow') {
           docs = await ctx.db
@@ -168,9 +203,9 @@ async function handleTypedOperation(
         docs = await ctx.db.query(convexTable).take(maxDocs);
       }
 
-      // Apply additional filters if provided
-      if (request.filters && request.filters.length > 0) {
-        docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+      // Apply remaining filters that weren't handled by the index
+      if (remainingFilters.length > 0) {
+        docs = docs.filter((doc: any) => remainingFilters.every(filter => doc[filter.field] === filter.value));
       }
 
       // Apply limit if provided
