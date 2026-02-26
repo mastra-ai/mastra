@@ -1365,15 +1365,11 @@ describe('Memory', () => {
       });
     });
 
-    it('should not call deleteVectors when no vector store is configured', async () => {
+    it('should not throw when no vector store is configured', async () => {
       const memory = new Memory({ storage: new InMemoryStore() });
-      const deleteVectorsSpy = vi.fn();
 
-      // No vector store, so deleteVectors should never be called
-      await memory.deleteThread('thread-789');
-      await memory.deleteMessages(['msg-789']);
-
-      expect(deleteVectorsSpy).not.toHaveBeenCalled();
+      await expect(memory.deleteThread('thread-789')).resolves.not.toThrow();
+      await expect(memory.deleteMessages(['msg-789'])).resolves.not.toThrow();
     });
 
     it('should batch message vector deletions when messageIds exceed batch size', async () => {

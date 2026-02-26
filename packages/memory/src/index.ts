@@ -408,7 +408,6 @@ export class Memory extends MastraMemory {
       const indexes = await this.vector.listIndexes();
       const memoryIndexes = indexes.filter((name: string) => name.startsWith(prefix));
 
-      // Delete vectors from each memory index that match the thread_id
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
           try {
@@ -416,22 +415,13 @@ export class Memory extends MastraMemory {
               indexName,
               filter: { thread_id: threadId },
             });
-            this.logger.debug(`Deleted vectors for thread ${threadId} from index ${indexName}`);
-          } catch (error) {
-            this.logger.debug(
-              `Could not delete vectors for thread ${threadId} from index ${indexName}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
+          } catch {
+            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
           }
         }),
       );
-    } catch (error) {
-      this.logger.debug(
-        `No memory indexes found to clean up for thread ${threadId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+    } catch {
+      this.logger.debug(`No memory indexes found to clean up for thread ${threadId}`);
     }
   }
 
