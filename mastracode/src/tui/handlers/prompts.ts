@@ -7,7 +7,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -127,7 +127,7 @@ export async function handleSandboxAccessRequest(
   return new Promise(resolve => {
     const questionComponent = new AskQuestionInlineComponent(
       {
-        question: `Grant sandbox access to "${requestedPath}"?\n${fg('dim', `Reason: ${reason}`)}`,
+        question: `Grant sandbox access to "${requestedPath}"?\n${theme.fg('dim', `Reason: ${reason}`)}`,
         options: [
           { label: 'Yes', description: 'Allow access to this directory' },
           { label: 'No', description: 'Deny access' },

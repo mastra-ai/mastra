@@ -180,13 +180,7 @@ const sidebars = {
       type: 'category',
       label: 'Harness',
       collapsed: true,
-      items: [{ type: 'doc', id: 'harness/harness-class', label: 'Harness Class' }],
-    },
-    {
-      type: 'category',
-      label: 'Mastra Code',
-      collapsed: true,
-      items: [{ type: 'doc', id: 'mastra-code/createMastraCode', label: 'createMastraCode()' }],
+      items: [{ type: 'doc', id: 'harness/harness-class', label: 'Harness Class', customProps: { tags: ['alpha'] } }],
     },
     {
       type: 'category',
@@ -541,6 +535,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },

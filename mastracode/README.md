@@ -77,8 +77,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | ----------------- | -------------------------------------------- |
 | `/new`            | Start a new conversation thread              |
 | `/threads`        | List and switch between threads              |
-| `/models`         | Configure model (global/thread/mode)         |
-| `/models:pack`    | Switch model pack                            |
+| `/models`         | Switch/manage model packs (built-in/custom)  |
 | `/mode`           | Switch agent mode                            |
 | `/subagents`      | Configure subagent model defaults            |
 | `/om`             | Configure Observational Memory models        |

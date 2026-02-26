@@ -54,9 +54,17 @@ function validateMountPath(mountPath: string): void {
     );
   }
   const segments = mountPath.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error(`Invalid mount path: ${mountPath}. Root path "/" is not allowed.`);
+  }
   if (segments.some(seg => seg === '.' || seg === '..')) {
     throw new Error(`Invalid mount path: ${mountPath}. Path segments cannot be "." or "..".`);
   }
+}
+
+/** Canonicalize mount path so `/data`, `/data/`, `//data` all resolve to `/data`. */
+function normalizeMountPath(mountPath: string): string {
+  return `/${mountPath.split('/').filter(Boolean).join('/')}`;
 }
 
 // =============================================================================
@@ -176,7 +184,11 @@ export class LocalSandbox extends MastraSandbox {
     this._createdAt = new Date();
     this.workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
     this.env = options.env ?? {};
-    this._nativeSandboxConfig = options.nativeSandbox ?? {};
+    this._nativeSandboxConfig = {
+      ...options.nativeSandbox,
+      readWritePaths: [...(options.nativeSandbox?.readWritePaths ?? [])],
+      readOnlyPaths: [...(options.nativeSandbox?.readOnlyPaths ?? [])],
+    };
     this.isolation = requestedIsolation;
     this._instructionsOverride = options.instructions;
   }
@@ -247,7 +259,7 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Stop the local sandbox.
-   * Unmounts all active FUSE mounts before stopping.
+   * Unmounts all active mounts before stopping.
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
@@ -390,6 +402,7 @@ export class LocalSandbox extends MastraSandbox {
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
     validateMountPath(mountPath);
+    mountPath = normalizeMountPath(mountPath);
 
     // Resolve virtual mount path to host filesystem path
     const hostPath = this.resolveHostPath(mountPath);
@@ -413,6 +426,7 @@ export class LocalSandbox extends MastraSandbox {
       );
       this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
       this._activeMountPaths.add(mountPath);
+      this.addMountPathToIsolation(hostPath);
       return { success: true, mountPath };
     } else if (existingMount === 'foreign') {
       // Something is already mounted/symlinked here but we didn't create it — refuse to touch it
@@ -426,9 +440,17 @@ export class LocalSandbox extends MastraSandbox {
     }
 
     this.logger.debug(`[LocalSandbox] Config type: ${config.type}`);
+
+    // Reject unsupported types early — before any filesystem work
+    if (config.type !== 'local' && config.type !== 's3' && config.type !== 'gcs') {
+      const error = `Unsupported mount type: ${(config as FilesystemMountConfig).type}`;
+      this.mounts.set(mountPath, { filesystem, state: 'unsupported', config, error });
+      return { success: false, mountPath, error };
+    }
+
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
-    // Check if host directory exists and is non-empty
+    // Check if host path exists and would conflict
     try {
       const entries = await fs.readdir(hostPath);
       if (entries.length > 0) {
@@ -437,65 +459,47 @@ export class LocalSandbox extends MastraSandbox {
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
+      // Empty directory from a previous failed attempt — remove so symlink/mount can proceed
+      await fs.rmdir(hostPath);
     } catch (err: unknown) {
       const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
       if (code === 'ENOTDIR') {
-        // Path is a regular file — fail with a clear message
         const error = `Cannot mount at ${hostPath}: path is a regular file. Use a different mount path or remove the file first.`;
         this.logger.error(`[LocalSandbox] ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
-      // ENOENT: dir doesn't exist yet (mkdir below creates it)
-      // Other: proceed; mkdir will surface the real error
+      // ENOENT: path doesn't exist yet — exactly what we want
     }
-
-    // Create mount directory under working directory
-    try {
-      this.logger.debug(`[LocalSandbox] Creating mount directory at ${hostPath}...`);
-      await fs.mkdir(hostPath, { recursive: true });
-    } catch (mkdirError) {
-      this.logger.debug(`[LocalSandbox] mkdir error for "${hostPath}":`, mkdirError);
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(mkdirError) });
-      return { success: false, mountPath, error: String(mkdirError) };
-    }
-
-    // Create mount context
-    const mountCtx = this.createMountContext();
 
     try {
       switch (config.type) {
         case 'local': {
-          // Local filesystem — create a symlink from hostPath to the basePath
+          // Local filesystem — create symlink directly (no intermediate directory)
           const localConfig = config as { type: 'local'; basePath: string };
-          // Remove the empty directory created above — symlink replaces it
-          await fs.rmdir(hostPath);
+          await fs.mkdir(path.dirname(hostPath), { recursive: true });
           await fs.symlink(localConfig.basePath, hostPath);
           this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
           break;
         }
-        case 's3':
+        case 's3': {
+          // S3 FUSE mount — needs a directory to mount into
           this.logger.debug(`[LocalSandbox] Mounting S3 bucket at ${hostPath}...`);
+          await fs.mkdir(hostPath, { recursive: true });
+          const mountCtx = this.createMountContext();
           await mountS3(hostPath, config as LocalS3MountConfig, mountCtx);
           this.logger.debug(`[LocalSandbox] Mounted S3 bucket at ${hostPath}`);
           break;
-        case 'gcs':
+        }
+        case 'gcs': {
+          // GCS FUSE mount — needs a directory to mount into
           this.logger.debug(`[LocalSandbox] Mounting GCS bucket at ${hostPath}...`);
+          await fs.mkdir(hostPath, { recursive: true });
+          const mountCtx = this.createMountContext();
           await mountGCS(hostPath, config as LocalGCSMountConfig, mountCtx);
           this.logger.debug(`[LocalSandbox] Mounted GCS bucket at ${hostPath}`);
           break;
-        default:
-          this.mounts.set(mountPath, {
-            filesystem,
-            state: 'unsupported',
-            config,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          });
-          return {
-            success: false,
-            mountPath,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          };
+        }
       }
     } catch (error) {
       // Tool not installed — warn and mark as unavailable (workspace still works via SDK)
@@ -521,12 +525,13 @@ export class LocalSandbox extends MastraSandbox {
       );
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
 
-      // Clean up the directory we created since mount failed
-      try {
-        await fs.rmdir(hostPath);
-        this.logger.debug(`[LocalSandbox] Cleaned up directory after failed mount: ${hostPath}`);
-      } catch {
-        // Ignore cleanup errors
+      // Clean up the directory we created for FUSE mounts
+      if (config.type !== 'local') {
+        try {
+          await fs.rmdir(hostPath);
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       return { success: false, mountPath, error: String(error) };
@@ -551,6 +556,7 @@ export class LocalSandbox extends MastraSandbox {
    */
   async unmount(mountPath: string): Promise<void> {
     validateMountPath(mountPath);
+    mountPath = normalizeMountPath(mountPath);
 
     const hostPath = this.resolveHostPath(mountPath);
 

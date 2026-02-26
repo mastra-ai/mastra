@@ -4,7 +4,7 @@
  */
 import chalk from 'chalk';
 
-import { fg, bold } from '../theme.js';
+import { theme } from '../theme.js';
 
 // Mastra brand purple gradient stops (left → right)
 const GRADIENT_STOPS = ['#5b21b6', '#6d28d9', '#7c3aed', '#8b5cf6', '#a78bfa'];
@@ -65,14 +65,16 @@ export function renderBanner(version: string, appName?: string): string {
 
   // Custom app names get the simple text format (no Mastra branding)
   if (name !== 'Mastra Code') {
-    return fg('accent', '◆') + ' ' + bold(fg('accent', name)) + fg('dim', ` v${version}`);
+    return theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', name)) + theme.fg('dim', ` v${version}`);
   }
 
   const cols = process.stdout.columns || 80;
 
   // Narrow terminal — compact single line
   if (cols < 30) {
-    return fg('accent', '◆') + ' ' + bold(fg('accent', 'Mastra Code')) + fg('dim', ` v${version}`);
+    return (
+      theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', 'Mastra Code')) + theme.fg('dim', ` v${version}`)
+    );
   }
 
   // Select art based on available width
@@ -80,7 +82,7 @@ export function renderBanner(version: string, appName?: string): string {
   const coloredLines = art.map(line => colorLine(line));
 
   // Append version below the art
-  coloredLines.push(fg('dim', `v${version}`));
+  coloredLines.push(theme.fg('dim', `v${version}`));
 
   return coloredLines.join('\n');
 }

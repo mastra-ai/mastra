@@ -6,7 +6,7 @@
 import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import type { HarnessThread } from '@mastra/core/harness';
-import { bg, fg, bold } from '../theme.js';
+import { theme } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -53,7 +53,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   }
 
   constructor(options: ThreadSelectorOptions) {
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
 
     this.tui = options.tui;
     this.currentResourceId = options.currentResourceId;
@@ -87,9 +87,9 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   }
 
   private buildUI(): void {
-    this.addChild(new Text(bold(fg('accent', 'Select Thread')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Select Thread')), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
     this.addChild(new Spacer(1));
 
     this.searchInput = new Input();
@@ -168,19 +168,19 @@ export class ThreadSelectorComponent extends Box implements Focusable {
 
       const isSelected = i === this.selectedIndex;
       const isCurrent = thread.id === this.currentThreadId;
-      const checkmark = isCurrent ? fg('success', ' ✓') : '';
+      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
       const shortId = thread.id.slice(-6);
       const threadPath = thread.metadata?.projectPath as string | undefined;
-      const pathTag = threadPath ? fg('dim', ` [${threadPath.split('/').pop()}]`) : '';
+      const pathTag = threadPath ? theme.fg('dim', ` [${threadPath.split('/').pop()}]`) : '';
       const displayId = `${thread.resourceId}/${shortId}`;
-      const timeAgo = fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
+      const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
 
       // Only show custom titles (not auto-generated "New Thread")
       const hasCustomTitle = thread.title && thread.title !== 'New Thread';
 
       let line = '';
       if (isSelected) {
-        line = fg('accent', `→ ${displayId}`) + pathTag + timeAgo + checkmark;
+        line = theme.fg('accent', `→ ${displayId}`) + pathTag + timeAgo + checkmark;
       } else {
         line = `  ${displayId}` + pathTag + timeAgo + checkmark;
       }
@@ -190,19 +190,19 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       // Show message preview or custom title on second line
       const preview = this.messagePreviews.get(thread.id);
       if (preview) {
-        this.listContainer.addChild(new Text(`     ${fg('muted', `"${preview}"`)}`, 0, 0));
+        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${preview}"`)}`, 0, 0));
       } else if (hasCustomTitle) {
-        this.listContainer.addChild(new Text(`     ${fg('muted', `"${thread.title}"`)}`, 0, 0));
+        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${thread.title}"`)}`, 0, 0));
       }
     }
 
     if (startIndex > 0 || endIndex < this.filteredThreads.length) {
-      const scrollInfo = fg('muted', `(${this.selectedIndex + 1}/${this.filteredThreads.length})`);
+      const scrollInfo = theme.fg('muted', `(${this.selectedIndex + 1}/${this.filteredThreads.length})`);
       this.listContainer.addChild(new Text(scrollInfo, 0, 0));
     }
 
     if (this.filteredThreads.length === 0) {
-      this.listContainer.addChild(new Text(fg('muted', 'No matching threads'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching threads'), 0, 0));
     }
   }
 

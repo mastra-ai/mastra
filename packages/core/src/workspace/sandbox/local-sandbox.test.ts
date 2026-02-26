@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createSandboxTestSuite } from '../../../../../workspaces/_test-utils/src/sandbox/factory';
 
 import { RequestContext } from '../../request-context';
+import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox, MARKER_DIR } from './local-sandbox';
 import * as gcsMod from './mounts/gcs';
@@ -525,7 +526,7 @@ describe('LocalSandbox', () => {
       const configHash = crypto
         .createHash('sha256')
         .update(tempDir)
-        .update(JSON.stringify({}))
+        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [] }))
         .digest('hex')
         .slice(0, 8);
       const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
@@ -685,7 +686,7 @@ describe('LocalSandbox', () => {
       const configHash = crypto
         .createHash('sha256')
         .update(tempDir)
-        .update(JSON.stringify({}))
+        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [] }))
         .digest('hex')
         .slice(0, 8);
       const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
@@ -822,9 +823,10 @@ describe('LocalSandbox', () => {
     let mountSandbox: LocalSandbox;
     let mountDir: string;
 
-    function makeMockFs(overrides: Record<string, unknown> = {}) {
+    function makeMockFs(overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
       return {
         id: 'test-s3',
+        name: 'MockS3Filesystem',
         provider: 's3',
         getMountConfig: () => ({ type: 's3' as const, bucket: 'my-bucket', region: 'us-east-1' }),
         readFile: vi.fn(),
@@ -836,7 +838,25 @@ describe('LocalSandbox', () => {
         getInstructions: vi.fn(),
         init: vi.fn(),
         ...overrides,
-      };
+      } as WorkspaceFilesystem;
+    }
+
+    function makeMockLocalFs(basePath: string, overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
+      return {
+        id: 'test-local',
+        name: 'MockLocalFilesystem',
+        provider: 'local',
+        getMountConfig: () => ({ type: 'local' as const, basePath }),
+        readFile: vi.fn(),
+        writeFile: vi.fn(),
+        deleteFile: vi.fn(),
+        listFiles: vi.fn(),
+        stat: vi.fn(),
+        exists: vi.fn(),
+        getInstructions: vi.fn(),
+        init: vi.fn(),
+        ...overrides,
+      } as WorkspaceFilesystem;
     }
 
     beforeEach(async () => {
@@ -848,10 +868,6 @@ describe('LocalSandbox', () => {
     afterEach(async () => {
       vi.restoreAllMocks();
       try {
-        // Clear active mount paths so destroy doesn't try to unmount
-        // (mocks are already restored at this point)
-        (mountSandbox as any)._activeMountPaths.clear();
-        mountSandbox.mounts.clear();
         await mountSandbox._destroy();
       } catch {
         // Ignore
@@ -868,22 +884,13 @@ describe('LocalSandbox', () => {
     });
 
     it('should create symlink for local filesystem mount', async () => {
-      vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
-
       // Create a source directory with a file
       const sourceDir = path.join(mountDir, 'local-source');
       await fs.mkdir(sourceDir, { recursive: true });
       await fs.writeFile(path.join(sourceDir, 'test.txt'), 'hello from local');
 
       const mountPath = '/local-data';
-      const result = await mountSandbox.mount(
-        makeMockFs({
-          id: 'test-local',
-          provider: 'local',
-          getMountConfig: () => ({ type: 'local' as const, basePath: sourceDir }),
-        }) as any,
-        mountPath,
-      );
+      const result = await mountSandbox.mount(makeMockLocalFs(sourceDir), mountPath);
 
       expect(result.success).toBe(true);
       expect(result.mountPath).toBe(mountPath);
@@ -907,7 +914,7 @@ describe('LocalSandbox', () => {
       vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
 
       const mountPath = '/s3-data';
-      const result = await mountSandbox.mount(makeMockFs() as any, mountPath);
+      const result = await mountSandbox.mount(makeMockFs(), mountPath);
 
       expect(result.success).toBe(true);
       expect(result.mountPath).toBe(mountPath);
@@ -926,7 +933,7 @@ describe('LocalSandbox', () => {
           id: 'test-gcs',
           provider: 'gcs',
           getMountConfig: () => ({ type: 'gcs' as const, bucket: 'my-gcs-bucket' }),
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -938,18 +945,19 @@ describe('LocalSandbox', () => {
     it('should reject invalid mount paths', async () => {
       const mockFs = makeMockFs();
 
-      await expect(mountSandbox.mount(mockFs as any, 'relative/path')).rejects.toThrow('Invalid mount path');
-      await expect(mountSandbox.mount(mockFs as any, '/tmp/bad path')).rejects.toThrow('Invalid mount path');
+      await expect(mountSandbox.mount(mockFs, 'relative/path')).rejects.toThrow('Invalid mount path');
+      await expect(mountSandbox.mount(mockFs, '/tmp/bad path')).rejects.toThrow('Invalid mount path');
+      await expect(mountSandbox.mount(mockFs, '/')).rejects.toThrow('Invalid mount path');
     });
 
     it('should reject mount paths with path traversal segments', async () => {
       const mockFs = makeMockFs();
 
-      await expect(mountSandbox.mount(mockFs as any, '/data/../etc')).rejects.toThrow(
+      await expect(mountSandbox.mount(mockFs, '/data/../etc')).rejects.toThrow(
         'Path segments cannot be "." or ".."',
       );
-      await expect(mountSandbox.mount(mockFs as any, '/./data')).rejects.toThrow('Path segments cannot be "." or ".."');
-      await expect(mountSandbox.mount(mockFs as any, '/..')).rejects.toThrow('Path segments cannot be "." or ".."');
+      await expect(mountSandbox.mount(mockFs, '/./data')).rejects.toThrow('Path segments cannot be "." or ".."');
+      await expect(mountSandbox.mount(mockFs, '/..')).rejects.toThrow('Path segments cannot be "." or ".."');
     });
 
     it('should return error for unsupported mount type', async () => {
@@ -961,7 +969,7 @@ describe('LocalSandbox', () => {
           id: 'test-unknown',
           provider: 'unknown',
           getMountConfig: () => ({ type: 'ftp' }),
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -976,7 +984,7 @@ describe('LocalSandbox', () => {
           id: 'test-no-config',
           provider: 'local',
           getMountConfig: undefined,
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -992,7 +1000,7 @@ describe('LocalSandbox', () => {
       await fs.mkdir(hostDir, { recursive: true });
       await fs.writeFile(path.join(hostDir, 'existing.txt'), 'content');
 
-      const result = await mountSandbox.mount(makeMockFs() as any, '/nonempty');
+      const result = await mountSandbox.mount(makeMockFs(), '/nonempty');
       expect(result.success).toBe(false);
       expect(result.error).toContain('not empty');
     });
@@ -1003,7 +1011,7 @@ describe('LocalSandbox', () => {
       vi.spyOn(platformMod, 'unmountFuse').mockResolvedValue(undefined);
 
       const mountPath = '/s3-cleanup';
-      const mountResult = await mountSandbox.mount(makeMockFs() as any, mountPath);
+      const mountResult = await mountSandbox.mount(makeMockFs(), mountPath);
       expect(mountResult.success).toBe(true);
 
       await mountSandbox.unmount(mountPath);
@@ -1025,16 +1033,13 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox._start();
 
       const mountPath = '/seatbelt-test';
-      await seatbeltSandbox.mount(makeMockFs() as any, mountPath);
+      await seatbeltSandbox.mount(makeMockFs(), mountPath);
 
       const info = await seatbeltSandbox.getInfo();
       const isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
       // Isolation allowlist uses the resolved host path
       expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([path.join(mountDir, 'seatbelt-test')]));
 
-      // Clear before destroy to avoid real unmount attempts
-      (seatbeltSandbox as any)._activeMountPaths.clear();
-      seatbeltSandbox.mounts.clear();
       await seatbeltSandbox._destroy();
     });
 
@@ -1043,7 +1048,7 @@ describe('LocalSandbox', () => {
       vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
 
       const mountPath = '/fail-test';
-      const result = await mountSandbox.mount(makeMockFs() as any, mountPath);
+      const result = await mountSandbox.mount(makeMockFs(), mountPath);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('mount command failed');
@@ -1057,7 +1062,7 @@ describe('LocalSandbox', () => {
       vi.spyOn(platformMod, 'isMountPoint').mockResolvedValue(false);
 
       const mountPath = '/unavail-test';
-      const result = await mountSandbox.mount(makeMockFs() as any, mountPath);
+      const result = await mountSandbox.mount(makeMockFs(), mountPath);
 
       expect(result.success).toBe(false);
       expect(result.unavailable).toBe(true);
@@ -1080,7 +1085,7 @@ describe('LocalSandbox', () => {
       await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${configHash}`);
 
       try {
-        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }) as any, mountPath);
+        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }), mountPath);
         expect(result.success).toBe(true);
         // Should NOT have called mountS3 since it was already mounted with matching config
         expect(mountS3Spy).not.toHaveBeenCalled();
@@ -1114,7 +1119,7 @@ describe('LocalSandbox', () => {
             id: 'local-test',
             provider: 'local',
             getMountConfig: () => config,
-          }) as any,
+          }),
           mountPath,
         );
         expect(result.success).toBe(true);
@@ -1139,7 +1144,7 @@ describe('LocalSandbox', () => {
           id: 'test-s3',
           provider: 's3',
           getMountConfig: () => ({ type: 's3', bucket: 'my-bucket', region: 'us-east-1' }),
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -1167,7 +1172,7 @@ describe('LocalSandbox', () => {
             id: 'local-test',
             provider: 'local',
             getMountConfig: () => ({ type: 'local', basePath: ourBasePath }),
-          }) as any,
+          }),
           mountPath,
         );
 
@@ -1199,7 +1204,7 @@ describe('LocalSandbox', () => {
       await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${oldHash}`);
 
       try {
-        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => newConfig }) as any, mountPath);
+        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => newConfig }), mountPath);
         expect(result.success).toBe(true);
         // Should have unmounted the old mount and re-mounted with new config
         expect(mountS3Spy).toHaveBeenCalledTimes(1);
@@ -1226,7 +1231,7 @@ describe('LocalSandbox', () => {
       try {
         // Should proceed to mount normally since isMountPoint is false
         // and the path isn't a symlink
-        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }) as any, mountPath);
+        const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }), mountPath);
         expect(result.success).toBe(true);
         expect(mountS3Spy).toHaveBeenCalledTimes(1);
       } finally {
@@ -1249,7 +1254,7 @@ describe('LocalSandbox', () => {
           id: 'local-persist',
           provider: 'local',
           getMountConfig: () => ({ type: 'local', basePath: sourceDir }),
-        }) as any,
+        }),
         mountPath,
       );
       expect(result.success).toBe(true);
@@ -1274,7 +1279,7 @@ describe('LocalSandbox', () => {
       const result = await mountSandbox.mount(
         makeMockFs({
           getMountConfig: () => ({ type: 's3', bucket: 'fail-bucket', region: 'us-east-1' }),
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -1291,7 +1296,7 @@ describe('LocalSandbox', () => {
       const hostPath = path.join(mountDir, 'marker-test');
       const config = { type: 's3' as const, bucket: 'marker-bucket', region: 'us-east-1' };
 
-      const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }) as any, mountPath);
+      const result = await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }), mountPath);
       expect(result.success).toBe(true);
 
       // Read and verify marker file
@@ -1323,7 +1328,7 @@ describe('LocalSandbox', () => {
           id: 's3-1',
           provider: 's3',
           getMountConfig: () => ({ type: 's3', bucket: 'bucket-1', region: 'us-east-1' }),
-        }) as any,
+        }),
         '/mount-a',
       );
       await mountSandbox.mount(
@@ -1331,7 +1336,7 @@ describe('LocalSandbox', () => {
           id: 'gcs-1',
           provider: 'gcs',
           getMountConfig: () => ({ type: 'gcs', bucket: 'bucket-2' }),
-        }) as any,
+        }),
         '/mount-b',
       );
 
@@ -1339,7 +1344,7 @@ describe('LocalSandbox', () => {
       expect(mountSandbox['_activeMountPaths'].size).toBe(2);
 
       // Stop should clean up both
-      await mountSandbox.stop();
+      await mountSandbox._stop();
       expect(mountSandbox['_activeMountPaths'].size).toBe(0);
     });
 
@@ -1353,13 +1358,13 @@ describe('LocalSandbox', () => {
           id: 's3-destroy',
           provider: 's3',
           getMountConfig: () => ({ type: 's3', bucket: 'destroy-bucket', region: 'us-east-1' }),
-        }) as any,
+        }),
         '/destroy-mount',
       );
 
       expect(mountSandbox['_activeMountPaths'].size).toBe(1);
 
-      await mountSandbox.destroy();
+      await mountSandbox._destroy();
       expect(mountSandbox['_activeMountPaths'].size).toBe(0);
     });
 
@@ -1394,7 +1399,7 @@ describe('LocalSandbox', () => {
       const result = await mountSandbox.mount(
         makeMockFs({
           getMountConfig: () => ({ type: 's3', bucket: 'test', region: 'us-east-1' }),
-        }) as any,
+        }),
         mountPath,
       );
 
@@ -1417,7 +1422,7 @@ describe('LocalSandbox', () => {
       const config = { type: 's3' as const, bucket: 'cleanup-bucket', region: 'us-east-1' };
 
       // Mount successfully to create the marker file
-      await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }) as any, mountPath);
+      await mountSandbox.mount(makeMockFs({ getMountConfig: () => config }), mountPath);
 
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
       const markerPath = path.join(MARKER_DIR, markerFilename);
@@ -1446,7 +1451,7 @@ describe('LocalSandbox', () => {
       const result = await mountSandbox.mount(
         makeMockFs({
           getMountConfig: () => ({ type: 's3', bucket: 'test', region: 'us-east-1' }),
-        }) as any,
+        }),
         mountPath,
       );
 

@@ -6,7 +6,7 @@
 import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { bg, fg, bold } from '../theme.js';
+import { theme } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -73,7 +73,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
   constructor(options: ModelSelectorOptions) {
     // Box with padding and background
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
 
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
@@ -92,12 +92,12 @@ export class ModelSelectorComponent extends Box implements Focusable {
     // Title — optionally with a mode-colored background
     const titleText = this.titleColor
       ? chalk.bgHex(this.titleColor).white.bold(` ${this.title} `)
-      : bold(fg('accent', this.title));
+      : theme.bold(theme.fg('accent', this.title));
     this.addChild(new Text(titleText, 0, 0));
     this.addChild(new Spacer(1));
 
     // Hint
-    this.addChild(new Text(fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
     this.addChild(new Spacer(1));
 
     // Search input (Input has built-in "> " prompt)
@@ -195,8 +195,8 @@ export class ModelSelectorComponent extends Box implements Focusable {
         const query = this.searchInput.getValue().trim();
         const isSelected = this.selectedIndex === 0;
         const line = isSelected
-          ? fg('accent', '→ ') + bold(fg('accent', `Use: ${query}`))
-          : '  ' + fg('muted', `Use: ${query}`);
+          ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
+          : '  ' + theme.fg('muted', `Use: ${query}`);
         this.listContainer.addChild(new Text(line, 0, 0));
         continue;
       }
@@ -208,16 +208,16 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
-      const checkmark = isCurrent ? fg('success', ' ✓') : '';
+      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
       const noKeyIndicator = !item.hasApiKey
-        ? fg('error', ' ✗') + fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
+        ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
         : '';
 
       let line = '';
       if (isSelected) {
-        line = fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
+        line = theme.fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
       } else {
-        const modelText = item.hasApiKey ? item.id : fg('muted', item.id);
+        const modelText = item.hasApiKey ? item.id : theme.fg('muted', item.id);
         line = '  ' + modelText + checkmark + noKeyIndicator;
       }
 
@@ -226,13 +226,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
     // Scroll indicator
     if (startIndex > 0 || endIndex < totalItems) {
-      const scrollInfo = fg('muted', `(${this.selectedIndex + 1}/${totalItems})`);
+      const scrollInfo = theme.fg('muted', `(${this.selectedIndex + 1}/${totalItems})`);
       this.listContainer.addChild(new Text(scrollInfo, 0, 0));
     }
 
     // Empty state
     if (totalItems === 0) {
-      this.listContainer.addChild(new Text(fg('muted', 'No matching models'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
     }
   }
 

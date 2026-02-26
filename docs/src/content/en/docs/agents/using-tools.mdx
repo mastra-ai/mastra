@@ -81,7 +81,7 @@ export const weatherAgent = new Agent({
 
 ## Using agents as tools
 
-Agents can be added to other agents through the `agents` configuration. When you add a subagent, Mastra automatically converts it to a tool that the parent agent can call. The generated tool is named `agent-<agentName>`.
+Agents can be added to other agents through the `agents` configuration. When you add subagents, the parent agent becomes a supervisor. A supervisor can delegate tasks to subagents using the [supervisor pattern](/docs/agents/supervisor-agents), with support for delegation hooks, message filtering, iteration monitoring, and task completion scoring. Mastra automatically converts each subagent to a tool that the parent agent can call, named `agent-<agentName>`.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -221,4 +221,5 @@ When using tools with [structured output](/docs/agents/structured-output), some 
 - [Dynamic Tool Search](/reference/processors/tool-search-processor) - Load tools on demand for agents with large tool libraries
 - [Structured Output](/docs/agents/structured-output)
 - [Agent Memory](/docs/agents/agent-memory)
+- [Supervisor Agents](/docs/agents/supervisor-agents)
 - [Request Context](/docs/server/request-context)

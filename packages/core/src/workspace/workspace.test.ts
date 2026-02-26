@@ -1210,6 +1210,106 @@ Line 3 conclusion`;
 
       await workspace.destroy();
     });
+
+    it('should auto-index a single file path (not a directory)', async () => {
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Billing FAQ content');
+      await fs.writeFile(path.join(tempDir, 'content', 'guide.md'), 'Setup guide content');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/content/faq.md'],
+      });
+
+      await workspace.init();
+
+      // The single file should be indexed
+      const results = await workspace.search('Billing FAQ');
+      expect(results.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // The other file should NOT be indexed
+      const otherResults = await workspace.search('Setup guide');
+      expect(otherResults.some(r => r.id === '/content/guide.md')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with trailing slash path /docs/', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs/'],
+      });
+
+      await workspace.init();
+
+      const results = await workspace.search('project');
+      expect(results.some(r => r.id === '/docs/readme.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with unscoped file glob **/*.md', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.md'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Frequently asked questions');
+      await fs.writeFile(path.join(tempDir, 'notes.txt'), 'Internal notes text file');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['**/*.md'],
+      });
+
+      await workspace.init();
+
+      // .md files anywhere should be indexed
+      const apiResults = await workspace.search('API reference');
+      expect(apiResults.some(r => r.id === '/docs/api.md')).toBe(true);
+
+      const faqResults = await workspace.search('Frequently asked');
+      expect(faqResults.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // .txt files should NOT be indexed
+      const txtResults = await workspace.search('Internal notes');
+      expect(txtResults.some(r => r.id === '/notes.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index with directory-matching glob **/content', async () => {
+      await fs.mkdir(path.join(tempDir, 'content'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'src', 'content'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'content', 'faq.md'), 'Root FAQ content');
+      await fs.writeFile(path.join(tempDir, 'src', 'content', 'api.md'), 'API documentation');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['**/content'],
+      });
+
+      await workspace.init();
+
+      // Files inside /content should be indexed
+      const rootResults = await workspace.search('Root FAQ');
+      expect(rootResults.some(r => r.id === '/content/faq.md')).toBe(true);
+
+      // Files inside /src/content should also be indexed
+      const nestedResults = await workspace.search('API documentation');
+      expect(nestedResults.some(r => r.id === '/src/content/api.md')).toBe(true);
+
+      await workspace.destroy();
+    });
   });
 
   // ===========================================================================

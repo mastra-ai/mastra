@@ -1,0 +1,270 @@
+---
+title: "Migration: .network() to Supervisor Pattern | Migration Guide"
+description: "Learn how to migrate from .network() to the supervisor pattern using .stream() and .generate() for better multi-agent coordination."
+---
+
+# Migrate from `.network()` to Supervisor Pattern
+
+The supervisor pattern using `Agent.stream()` and `Agent.generate()` is the recommended approach for coordinating multiple agents, replacing the older `.network()` API. This guide walks you through each step of the migration.
+
+:::warning[.network() Deprecation]
+
+`.network()` is deprecated and will be removed in a future release. While existing code will continue to work until then, no new features will be added to it. Migrate to the supervisor pattern as soon as possible.
+
+:::
+
+## Replace `.network()` with `.stream()` or `.generate()`
+
+The core change is replacing `.network()` calls with `.stream()` (for streaming) or `.generate()` (for non-streaming). The agent configuration stays the same -- you still define `agents`, `workflows`, `tools`, and `memory` on the agent. The difference is how you call it and how you process the results.
+
+With `.network()`, you iterated over custom event types like `network-execution-event-step-finish`. With `.stream()`, you use the standard `textStream` or `fullStream` iterators.
+
+**Before:**
+
+```typescript
+const result = await routingAgent.network('Research AI in education')
+
+for await (const chunk of result) {
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
+  }
+}
+```
+
+**After:**
+
+```typescript
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+The `maxSteps` option limits how many iterations the supervisor can take. This replaces the implicit iteration limit in `.network()`.
+
+For non-streaming use cases, use `generate()` with the same options:
+
+```typescript
+const result = await supervisorAgent.generate('Research AI in education', {
+  maxSteps: 10,
+})
+
+console.log(result.text)
+```
+
+## Write clear supervisor instructions
+
+With `.network()`, the routing agent relied on generic instructions and primitive descriptions to decide what to call. The supervisor pattern works the same way, but clear and specific instructions significantly improve delegation accuracy.
+
+Your supervisor's `instructions` should specify what resources are available, when to use each one, how to coordinate them, and when the task is complete.
+
+**Before:**
+
+```typescript
+const routingAgent = new Agent({
+  id: 'routing-agent',
+  instructions: 'You are a network of researchers and writers...',
+  agents: { researchAgent, writingAgent },
+  memory: new Memory(),
+})
+```
+
+**After:**
+
+```typescript
+const supervisorAgent = new Agent({
+  id: 'supervisor-agent',
+  instructions: `You coordinate research and writing tasks using specialized agents.
+
+Available resources:
+- researchAgent: Gathers factual data and sources (returns bullet points)
+- writingAgent: Transforms research into narrative content (returns full paragraphs)
+
+Delegation strategy:
+1. For research requests: Delegate to researchAgent first
+2. For writing requests: Delegate to writingAgent (provide research if available)
+3. For complex requests: Delegate to researchAgent first, then writingAgent
+
+Success criteria:
+- All user questions are fully answered
+- Response is well-formatted and complete
+- If information is incomplete, continue iterating`,
+  agents: { researchAgent, writingAgent },
+  memory: new Memory(),
+})
+```
+
+## Add descriptions to subagents
+
+Each subagent should have a `description` field that explains what it does, what format it returns, and when it should be used. The supervisor uses these descriptions to decide which agent to delegate to.
+
+```typescript
+const researchAgent = new Agent({
+  id: 'research-agent',
+  description: `Specializes in gathering factual information and data on any topic.
+    Returns concise bullet-point summaries with key facts and sources.
+    Does not write full articles or narrative content.`,
+})
+
+const writingAgent = new Agent({
+  id: 'writing-agent',
+  description: `Transforms research material into well-structured written content.
+    Produces full paragraphs and complete articles.
+    Best used after research has been gathered.`,
+})
+```
+
+## Update event handling
+
+If you were handling specific `.network()` events, update them to use the standard stream chunk types:
+
+| `.network()` event | Supervisor pattern chunk |
+| - | - |
+| `routing-agent-start` | `step-start` |
+| `routing-agent-end` | `step-finish` |
+| `agent-execution-start` | `step-start` (when delegating) |
+| `agent-execution-event-text-delta` | `text-delta` |
+| `agent-execution-event-finish` | `step-finish` |
+| `network-execution-event-step-finish` | `step-finish` + `finishReason: 'stop'` |
+| `network-object` | `object-delta` (with structuredOutput) |
+| `network-object-result` | `object` (with structuredOutput) |
+
+## Add delegation hooks
+
+The supervisor pattern lets you hook into the delegation lifecycle to monitor, modify, or reject delegations. These hooks can be configured in the agent's `defaultOptions` or passed per-call.
+
+`onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt, limit the subagent's steps, or reject the delegation entirely:
+
+```typescript
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationStart: async context => {
+      console.log(`Delegating to: ${context.primitiveId}`)
+
+      if (context.primitiveId === 'research-agent') {
+        return {
+          proceed: true,
+          modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
+          modifiedMaxSteps: 5,
+        }
+      }
+
+      if (context.iteration > 8) {
+        return {
+          proceed: false,
+          rejectionReason: 'Max iterations reached. Synthesize current findings.',
+        }
+      }
+
+      return { proceed: true }
+    },
+  },
+})
+```
+
+`onDelegationComplete` is called after a delegation finishes. You can inspect the result, call `context.bail()` to stop the supervisor loop, and return feedback that gets saved to the supervisor's memory:
+
+```typescript
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationComplete: async context => {
+      if (context.error) {
+        context.bail() // Stop further delegations
+        return {
+          feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+        }
+      }
+    },
+  },
+})
+```
+
+## Add message filtering
+
+By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared -- for example, to remove sensitive data or limit the number of messages:
+
+```typescript
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+  delegation: {
+    messageFilter: ({ messages, primitiveId, prompt }) => {
+      return messages
+        .filter(msg => {
+          const content =
+            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+          return !content.includes('confidential')
+        })
+        .slice(-10)
+    },
+  },
+})
+```
+
+## Add iteration monitoring
+
+`onIterationComplete` is called after each iteration of the supervisor loop. You can use it to log progress, provide feedback to guide the agent, or stop execution early:
+
+```typescript
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+  onIterationComplete: async context => {
+    console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
+
+    if (!context.text.includes('recommendations')) {
+      return {
+        continue: true,
+        feedback: 'Please include specific recommendations in your analysis.',
+      }
+    }
+
+    if (context.text.length > 1000 && context.finishReason === 'stop') {
+      return { continue: false }
+    }
+
+    return { continue: true }
+  },
+})
+```
+
+## Add task completion scoring
+
+Task completion scorers automatically validate whether the task is complete. If validation fails, the supervisor continues iterating. The feedback from failed scorers is included in the conversation context so subagents can see what was missing:
+
+```typescript
+import { createScorer } from '@mastra/core/evals'
+
+const taskCompleteScorer = createScorer({
+  id: 'task-complete',
+  name: 'Task Completeness',
+}).generateScore(async context => {
+  const text = (context.run.output || '').toString()
+  const hasAnalysis = text.includes('analysis')
+  const hasRecommendations = text.includes('recommendation')
+  return hasAnalysis && hasRecommendations ? 1 : 0
+})
+
+const stream = await supervisorAgent.stream('Research AI in education', {
+  maxSteps: 10,
+  isTaskComplete: {
+    scorers: [taskCompleteScorer],
+    strategy: 'all',
+    onComplete: async result => {
+      console.log('Task complete:', result.complete)
+    },
+  },
+})
+```
+
+## See also
+
+- [Supervisor Agents](/docs/agents/supervisor-agents)
+- [Agent Networks](/docs/agents/networks)
+- [Agent.stream() Reference](/reference/streaming/agents/stream)
+- [Agent.generate() Reference](/reference/agents/generate)
+- [Agent Approval](/docs/agents/agent-approval)
+- [Guide: Research Coordinator](/guides/guide/research-coordinator)
