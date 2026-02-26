@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import {
   Plus,
   Upload,
@@ -12,15 +12,16 @@ import {
   Trash2,
   ChevronDownIcon,
   MoveRightIcon,
-  Search,
   History,
-  ArrowRightIcon,
-  ScaleIcon,
+  GitCompareIcon,
+  AmpersandIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Badge } from '@/ds/components/Badge';
+
 import { Column } from '@/ds/components/Columns/column';
 import { SearchField } from '@/ds/components/FormFields/search-field';
+import { Chip } from '@/ds/components/Chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 interface ActionsMenuProps {
   onExportClick: () => void;
@@ -43,22 +44,24 @@ function ActionsMenu({
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
         <Button variant="standard" size="default" aria-label="Actions menu">
-          <ArrowRightIcon /> Select and ...
+          Select <AmpersandIcon />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
         <DropdownMenu.Item onSelect={onCompareClick}>
-          <ScaleIcon />
+          <GitCompareIcon />
           <span>Compare Items</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={onExportClick}>
           <Download />
           <span>Export Items as CSV</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item onSelect={onExportJsonClick}>
-          <FileJson />
+          <Download />
           <span>Export Items as JSON</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={onCreateDatasetClick}>
           <FolderPlus />
           <span>Create Dataset from Items</span>
@@ -133,7 +136,7 @@ export function DatasetItemsToolbar({
 }: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
     return (
-      <Column.Toolbar>
+      <Column.Toolbar className="">
         <SearchField
           label="Search"
           placeholder="Search items..."
@@ -146,26 +149,39 @@ export function DatasetItemsToolbar({
         />
 
         <div className="flex gap-5">
-          <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
-            <Badge className="text-ui-md">{selectedCount}</Badge>
-            <span>selected items</span>
-            <MoveRightIcon />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="text-sm text-neutral3 flex items-center gap-2">
+                <Chip
+                  size="large"
+                  color={
+                    (selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0 ? 'red' : 'green'
+                  }
+                >
+                  {selectedCount}
+                </Chip>
+                <span>selected items</span>
+                <MoveRightIcon />
+              </div>
+            </TooltipTrigger>
+            {((selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0) && (
+              <TooltipContent>
+                {selectionMode === 'compare-items'
+                  ? selectedCount <= 2
+                    ? 'Select 2 items to compare'
+                    : undefined
+                  : selectedCount === 0
+                    ? 'Select at least one item'
+                    : undefined}
+              </TooltipContent>
+            )}
+          </Tooltip>
           <ButtonsGroup>
-            <ButtonWithTooltip
+            <Button
               variant="cta"
               size="default"
               disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
               onClick={onExecuteAction}
-              tooltipContent={
-                selectionMode === 'compare-items'
-                  ? selectedCount !== 2
-                    ? 'Select exactly 2 items to compare'
-                    : undefined
-                  : selectedCount === 0
-                    ? 'Select at least one item'
-                    : undefined
-              }
             >
               {selectionMode === 'compare-items' && 'Compare Items'}
               {selectionMode === 'export' && 'Export Items as CSV'}
@@ -173,7 +189,7 @@ export function DatasetItemsToolbar({
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
-            </ButtonWithTooltip>
+            </Button>
             <Button variant="standard" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>

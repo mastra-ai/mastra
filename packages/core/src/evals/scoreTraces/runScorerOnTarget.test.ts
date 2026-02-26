@@ -336,6 +336,7 @@ describe('runScorerOnTarget Function', () => {
             id: 'test-scorer',
             name: 'test-scorer',
             description: 'Test scorer for unit tests',
+            hasJudge: false,
           },
           traceId: 'trace-1', // No spanId suffix
           entityId: 'root-span',
@@ -370,6 +371,7 @@ describe('runScorerOnTarget Function', () => {
             id: 'test-scorer',
             name: 'test-scorer',
             description: 'Test scorer for unit tests',
+            hasJudge: false,
           },
           traceId: 'trace-1',
           spanId: 'span-2',

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.1.4",
+  "version": "1.1.6",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "@internal/types-builder": "workspace:*",
     "fastify": "^5.6.2",
     "@fastify/swagger": "^9.6.1",

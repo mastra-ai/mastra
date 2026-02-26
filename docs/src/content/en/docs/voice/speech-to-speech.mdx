@@ -23,44 +23,44 @@ STS enables continuous bidirectional audio communication through listening to ev
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  apiKey: "your-openai-api-key",
-  model: "gpt-5.1-realtime",
-  speaker: "alloy", // Default voice
-});
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-5.1-realtime',
+  speaker: 'alloy', // Default voice
+})
 
 // If using default settings the configuration can be simplified to:
-const voice = new OpenAIRealtimeVoice();
+const voice = new OpenAIRealtimeVoice()
 ```
 
 ## Using STS
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { Agent } from '@mastra/core/agent'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: "agent",
-  name: "OpenAI Realtime Agent",
+  id: 'agent',
+  name: 'OpenAI Realtime Agent',
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   voice: new OpenAIRealtimeVoice(),
-});
+})
 
 // Connect to the voice service
-await agent.voice.connect();
+await agent.voice.connect()
 
 // Listen for agent audio responses
-agent.voice.on("speaker", ({ audio }) => {
-  playAudio(audio);
-});
+agent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio)
+})
 
 // Initiate the conversation
-await agent.voice.speak("How can I help you today?");
+await agent.voice.speak('How can I help you today?')
 
 // Send continuous audio from the microphone
-const micStream = getMicrophoneStream();
-await agent.voice.send(micStream);
+const micStream = getMicrophoneStream()
+await agent.voice.send(micStream)
 ```
 
 For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](/docs/agents/adding-voice) documentation.
@@ -68,21 +68,20 @@ For integrating Speech-to-Speech capabilities with agents, refer to the [Adding 
 ## Google Gemini Live (Realtime)
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
-import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { Agent } from '@mastra/core/agent'
+import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: "agent",
-  name: "Gemini Live Agent",
-  instructions:
-    "You are a helpful assistant with real-time voice capabilities.",
+  id: 'agent',
+  name: 'Gemini Live Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
-    model: "gemini-2.0-flash-exp",
-    speaker: "Puck",
+    model: 'gemini-2.0-flash-exp',
+    speaker: 'Puck',
     debug: true,
     // Vertex AI option:
     // vertexAI: true,
@@ -90,22 +89,22 @@ const agent = new Agent({
     // location: 'us-central1',
     // serviceAccountKeyFile: '/path/to/service-account.json',
   }),
-});
+})
 
-await agent.voice.connect();
+await agent.voice.connect()
 
-agent.voice.on("speaker", ({ audio }) => {
-  playAudio(audio);
-});
+agent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio)
+})
 
-agent.voice.on("writing", ({ role, text }) => {
-  console.log(`${role}: ${text}`);
-});
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`)
+})
 
-await agent.voice.speak("How can I help you today?");
+await agent.voice.speak('How can I help you today?')
 
-const micStream = getMicrophoneStream();
-await agent.voice.send(micStream);
+const micStream = getMicrophoneStream()
+await agent.voice.send(micStream)
 ```
 
 Note:

@@ -6,12 +6,12 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import type { TodoItem } from './todo-progress.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 
@@ -184,9 +184,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isViewCommand = this.toolName === 'view' || this.toolName === 'mastra_workspace_read_file';
     const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
     const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
-    const isTodoWrite = this.toolName === 'todo_write';
+    const isTaskWrite = this.toolName === 'task_write';
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isTodoWrite) {
+    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isTaskWrite) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
@@ -229,8 +229,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case 'mastra_workspace_list_files':
         this.renderListFilesEnhanced();
         break;
-      case 'todo_write':
-        this.renderTodoWriteEnhanced();
+      case 'task_write':
+        this.renderTaskWriteEnhanced();
         break;
       default:
         this.renderGenericToolEnhanced();
@@ -241,16 +241,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsObj = this.args as Record<string, unknown> | undefined;
     const fullPath = argsObj?.path ? String(argsObj.path) : '';
     const viewRange = argsObj?.view_range as [number, number] | undefined;
-    const startLine = viewRange?.[0] ?? 1;
+    // view tool uses view_range[0], workspace read_file uses offset
+    const startLine = viewRange?.[0] ?? (argsObj?.offset as number | undefined) ?? 1;
     // Don't show border until we have a result
     if (!this.result || this.isPartial) {
       // Just show pending indicator
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
       const rangeDisplay = viewRange ? theme.fg('muted', `:${viewRange[0]},${viewRange[1]}`) : '';
       const status = this.getStatusIndicator();
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('accent', path), fullPath, viewRange?.[0])
-        : theme.fg('accent', path);
+      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
       const headerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
       this.contentBox.addChild(new Text(headerText, 0, 0));
       return;
@@ -269,9 +268,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('accent', path), fullPath, viewRange?.[0])
-      : theme.fg('accent', path);
+    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
@@ -833,15 +830,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
   }
 
-  private renderTodoWriteEnhanced(): void {
-    const argsObj = this.args as { todos?: TodoItem[] } | undefined;
-    const todos = argsObj?.todos;
+  private renderTaskWriteEnhanced(): void {
+    const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
+    const tasks = argsObj?.tasks;
     const status = this.getStatusIndicator();
 
-    // Show a compact header — the pinned TodoProgressComponent handles live rendering
-    const count = todos?.length ?? 0;
+    // Show a compact header — the pinned TaskProgressComponent handles live rendering
+    const count = tasks?.length ?? 0;
     const countSuffix = count > 0 ? theme.fg('muted', ` (${count} tasks)`) : '';
-    const header = `${theme.bold(theme.fg('toolTitle', 'todo_write'))}${countSuffix}${status}`;
+    const header = `${theme.bold(theme.fg('toolTitle', 'task_write'))}${countSuffix}${status}`;
     this.contentBox.addChild(new Text(header, 0, 0));
 
     // Surface error details when the tool call fails
@@ -1108,27 +1105,35 @@ function getLanguageFromPath(path: string): string | undefined {
   return ext ? langMap[ext] : undefined;
 }
 
-/** Strip cat -n formatting and apply syntax highlighting */
+/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
 function highlightCode(content: string, path: string, startLine?: number): string {
   let lines = content.split('\n').map(line => line.trimEnd());
-  // Remove "[Truncated N tokens]" and "Here's the result of running `cat -n`..." headers
+  // Remove known headers:
+  // - "[Truncated N tokens]" from token truncation
+  // - "Here's the result of running `cat -n`..." from view tool
+  // - "/path/to/file (NNN bytes)" or "/path/to/file (lines N-M of T, NNN bytes)" from workspace read_file
   while (
     lines.length > 0 &&
-    (lines[0]!.includes("Here's the result of running") || lines[0]!.match(/^\[Truncated \d+ tokens\]$/))
+    (lines[0]!.includes("Here's the result of running") ||
+      lines[0]!.match(/^\[Truncated \d+ tokens\]$/) ||
+      lines[0]!.match(/^.*\(\d+ bytes\)$/) ||
+      lines[0]!.match(/^.*\(lines \d+-\d+ of \d+, \d+ bytes\)$/))
   ) {
     lines = lines.slice(1);
   }
 
   // Strip line numbers - we know they're sequential starting from startLine
+  // Supports two formats:
+  //   view tool:           "   123\tcode" (tab separator)
+  //   workspace read_file: "     123→code" (arrow separator)
+  // Separator is optional because trimEnd() strips trailing tabs on blank lines
   let expectedLineNum = startLine ?? 1;
   const codeLines = lines.map(line => {
     const numStr = String(expectedLineNum);
-    // Line format is like "   123\tcode" or "   123" for blank lines
-    // Check if line starts with spaces + our expected number
-    const match = line.match(/^(\s*)(\d+)(\t?)(.*)$/);
+    const match = line.match(/^(\s*)(\d+)[\t→]?(.*)$/);
     if (match && match[2] === numStr) {
       expectedLineNum++;
-      return match[4]; // Return just the code part after the tab
+      return match[3]; // Return just the code part after the separator
     }
     return line;
   });

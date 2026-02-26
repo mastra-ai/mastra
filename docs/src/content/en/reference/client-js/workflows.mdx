@@ -14,7 +14,7 @@ The Workflows API provides methods to interact with and execute automated workfl
 Retrieve a list of all available workflows:
 
 ```typescript
-const workflows = await mastraClient.listWorkflows();
+const workflows = await mastraClient.listWorkflows()
 ```
 
 ## Working with a Specific Workflow
@@ -23,12 +23,12 @@ Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
-  id: "city-workflow",
-});
+  id: 'city-workflow',
+})
 ```
 
 ```typescript
-const workflow = mastraClient.getWorkflow("city-workflow");
+const workflow = mastraClient.getWorkflow('city-workflow')
 ```
 
 ## Workflow Methods
@@ -38,7 +38,7 @@ const workflow = mastraClient.getWorkflow("city-workflow");
 Retrieve detailed information about a workflow:
 
 ```typescript
-const details = await workflow.details();
+const details = await workflow.details()
 ```
 
 ### createRun()
@@ -46,16 +46,16 @@ const details = await workflow.details();
 Create a new workflow run instance:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 // Or with an existing runId
-const run = await workflow.createRun({ runId: "existing-run-id" });
+const run = await workflow.createRun({ runId: 'existing-run-id' })
 
 // Or with a resourceId to associate the run with a specific resource
 const run = await workflow.createRun({
-  runId: "my-run-id",
-  resourceId: "user-123"
-});
+  runId: 'my-run-id',
+  resourceId: 'user-123',
+})
 ```
 
 The `resourceId` parameter associates the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the run and can be used for filtering and querying runs later.
@@ -65,13 +65,13 @@ The `resourceId` parameter associates the workflow run with a specific resource 
 Start a workflow run and await the full result:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const result = await run.startAsync({
   inputData: {
-    city: "New York",
+    city: 'New York',
   },
-});
+})
 ```
 
 You can also pass `initialState` to set the starting values for the workflow's state:
@@ -79,13 +79,13 @@ You can also pass `initialState` to set the starting values for the workflow's s
 ```typescript
 const result = await run.startAsync({
   inputData: {
-    city: "New York",
+    city: 'New York',
   },
   initialState: {
     count: 0,
     items: [],
   },
-});
+})
 ```
 
 The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/workflows/workflow-state) for more details.
@@ -93,13 +93,13 @@ The `initialState` object should match the structure defined in the workflow's `
 To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 
 ```typescript
-const run = await workflow.createRun({ resourceId: "user-123" });
+const run = await workflow.createRun({ resourceId: 'user-123' })
 
 const result = await run.startAsync({
   inputData: {
-    city: "New York",
+    city: 'New York',
   },
-});
+})
 ```
 
 ### start()
@@ -107,16 +107,16 @@ const result = await run.startAsync({
 Start a workflow run without waiting for completion:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 await run.start({
   inputData: {
-    city: "New York",
+    city: 'New York',
   },
-});
+})
 
 // Poll for results later
-const result = await workflow.runById(run.runId);
+const result = await workflow.runById(run.runId)
 ```
 
 This is useful for long-running workflows where you want to start execution and check results later.
@@ -126,12 +126,12 @@ This is useful for long-running workflows where you want to start execution and 
 Resume a suspended workflow step and await the full result:
 
 ```typescript
-const run = await workflow.createRun({ runId: prevRunId });
+const run = await workflow.createRun({ runId: prevRunId })
 
 const result = await run.resumeAsync({
-  step: "step-id",
-  resumeData: { key: "value" },
-});
+  step: 'step-id',
+  resumeData: { key: 'value' },
+})
 ```
 
 ### resume()
@@ -139,12 +139,12 @@ const result = await run.resumeAsync({
 Resume a suspended workflow step without waiting for completion:
 
 ```typescript
-const run = await workflow.createRun({ runId: prevRunId });
+const run = await workflow.createRun({ runId: prevRunId })
 
 await run.resume({
-  step: "step-id",
-  resumeData: { key: "value" },
-});
+  step: 'step-id',
+  resumeData: { key: 'value' },
+})
 ```
 
 ### cancel()
@@ -152,9 +152,9 @@ await run.resume({
 Cancel a running workflow:
 
 ```typescript
-const run = await workflow.createRun({ runId: existingRunId });
+const run = await workflow.createRun({ runId: existingRunId })
 
-const result = await run.cancel();
+const result = await run.cancel()
 // Returns: { message: 'Workflow run canceled' }
 ```
 
@@ -167,16 +167,16 @@ See the [Run.cancel()](/reference/workflows/run-methods/cancel) reference for de
 Stream workflow execution for real-time updates:
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const stream = await run.stream({
   inputData: {
-    city: "New York",
+    city: 'New York',
   },
-});
+})
 
 for await (const chunk of stream) {
-  console.log(JSON.stringify(chunk, null, 2));
+  console.log(JSON.stringify(chunk, null, 2))
 }
 ```
 
@@ -185,14 +185,14 @@ for await (const chunk of stream) {
 Get the execution result for a workflow run:
 
 ```typescript
-const result = await workflow.runById(runId);
+const result = await workflow.runById(runId)
 
 // Or with options for performance optimization:
 const result = await workflow.runById(runId, {
-  fields: ['status', 'result'],  // Only fetch specific fields
-  withNestedWorkflows: false,    // Skip expensive nested workflow data
+  fields: ['status', 'result'], // Only fetch specific fields
+  withNestedWorkflows: false, // Skip expensive nested workflow data
   requestContext: { userId: 'user-123' }, // Optional request context
-});
+})
 ```
 
 <h3>Run result format</h3>
@@ -201,20 +201,20 @@ A workflow run result yields the following:
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "Unique identifier for this workflow run instance",
-    },
-    {
-      name: "eventTimestamp",
-      type: "Date",
-      description: "The timestamp of the event",
-    },
-    {
-      name: "payload",
-      type: "object",
-      description: "Contains currentStep (id, status, output, payload) and workflowState (status, steps record)",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "Unique identifier for this workflow run instance",
+},
+{
+name: "eventTimestamp",
+type: "Date",
+description: "The timestamp of the event",
+},
+{
+name: "payload",
+type: "object",
+description: "Contains currentStep (id, status, output, payload) and workflowState (status, steps record)",
+},
+]}
 />

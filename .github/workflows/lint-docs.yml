@@ -1,0 +1,196 @@
+name: Lint Docs
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/scripts/check-deleted-pages.js'
+      - '.github/scripts/validate-redirects.js'
+      - '.github/workflows/lint-docs.yml'
+
+jobs:
+  check-deleted-pages:
+    name: Check for deleted pages without redirects
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for MDX changes
+        id: mdx-changes
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q '\.mdx$'; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22.13.0'
+          package-manager-cache: false
+
+      - name: Check for removed pages without redirects
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        run: node .github/scripts/check-deleted-pages.js
+        env:
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          COREPACK_ENABLE_STRICT: '0'
+
+      - name: Comment on PR if redirects are missing
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const identifier = '<!-- redirect-check: missing-redirects -->';
+            const body = [
+              identifier,
+              '## 🚨 Missing Redirects Detected',
+              '',
+              'Some pages were removed in this PR but don\'t have corresponding redirects in `vercel.json`.',
+              '',
+              '**Action Required:** Add redirects for the deleted pages to prevent 404 errors.',
+              '',
+              `📋 [View workflow logs for details](${logsUrl})`
+            ].join('\n');
+
+            try {
+              const { data: comments } = await github.rest.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+
+              const existingComment = comments.find(comment => comment.body.includes(identifier));
+
+              if (existingComment) {
+                await github.rest.issues.updateComment({
+                  comment_id: existingComment.id,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.error('Failed to post comment:', error);
+            }
+
+  validate-redirects:
+    name: Validate redirects
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Run validate-redirects
+        run: node .github/scripts/validate-redirects.js
+
+      - name: Comment on PR if redirect issues found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const identifier = '<!-- redirect-check: validate-redirects -->';
+            const body = [
+              identifier,
+              '## 🚨 Redirect Validation Failed',
+              '',
+              'The redirect validation found issues in `vercel.json` (duplicate sources or broken destination links).',
+              '',
+              '**Action Required:** Review and fix the redirect configuration.',
+              '',
+              `📋 [View workflow logs for details](${logsUrl})`
+            ].join('\n');
+
+            try {
+              const { data: comments } = await github.rest.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+
+              const existingComment = comments.find(comment => comment.body.includes(identifier));
+
+              if (existingComment) {
+                await github.rest.issues.updateComment({
+                  comment_id: existingComment.id,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.error('Failed to post comment:', error);
+            }
+
+  lint-docs:
+    name: Lint docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Check formatting
+        working-directory: ./docs
+        run: pnpm prettier --check .
+
+      - name: Lint with remark
+        working-directory: ./docs
+        run: pnpm lint:remark
+
+      - name: Check for MDX changes
+        id: mdx-changes
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q '\.mdx$'; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate frontmatter
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        working-directory: ./docs
+        run: pnpm dlx tsx scripts/validate-frontmatter.ts
+
+      - name: Validate reference sidebar sort order
+        working-directory: ./docs
+        run: pnpm validate:reference-sidebar
+
+      - name: Check for docs not linked in sidebars
+        working-directory: ./docs
+        run: pnpm validate:sidebar-docs

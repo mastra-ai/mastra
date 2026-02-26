@@ -6,7 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { AnySpan, TracingContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -18,6 +18,20 @@ import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+
+/**
+ * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
+ */
+export type WorkflowRunStartOptions = {
+  outputWriter?: OutputWriter;
+  tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
+  perStep?: boolean;
+};
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';

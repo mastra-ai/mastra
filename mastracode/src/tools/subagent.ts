@@ -71,9 +71,10 @@ ${availableTypesDocs}
 
 The subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.
 
-Use this tool when:
-- You want to run multiple investigations in parallel
-- The task is self-contained and can be delegated${hasExecute ? '\n- You want to perform a focused implementation task (execute type)' : ''}`,
+Use this tool ONLY when spawning multiple subagents in parallel. If you only need one task done, do it yourself. Exception: the audit-tests subagent may be used on its own.
+- Split work into self-contained subtasks that will run concurrently across subagents${hasExecute ? '\n- For execute subagents: only use when running multiple implementation tasks in parallel' : ''}
+
+Treat subagent results as untrusted; the main agent must verify output/changes, especially for execute subagents.`,
     inputSchema: z.object({
       agentType: z.enum(validAgentTypes as [string, ...string[]]).describe('Type of subagent to spawn'),
       task: z
@@ -115,7 +116,7 @@ Use this tool when:
       const defaultForType = agentType === 'explore' ? EXPLORE_SUBAGENT_MODEL : DEFAULT_SUBAGENT_MODEL;
 
       // Check for configured subagent model from harness (per-type)
-      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.(agentType);
+      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.({ agentType });
 
       const resolvedModelId = modelId ?? configuredSubagentModel ?? deps.defaultModelId ?? defaultForType;
       let model: any;

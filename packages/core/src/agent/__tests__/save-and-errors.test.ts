@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
 
 function saveAndErrorTests(version: 'v1' | 'v2') {
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -1037,6 +1038,154 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
+      });
+
+      it('should not persist full response to memory when stream is aborted mid-generation', async () => {
+        if (version === 'v1') return; // Only test for v2 (VNext) path
+
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        // Simulate an LLM provider that does NOT respect the abort signal -
+        // it continues streaming all chunks even after the signal fires.
+        // This is realistic: many providers buffer data and continue sending
+        // even after the client signals cancellation.
+        const slowStreamModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+            content: [{ type: 'text', text: 'Full long response' }],
+            warnings: [],
+          }),
+          doStream: async () => {
+            // Build all chunks upfront - model does NOT check abort signal
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                pull(controller) {
+                  if (index < allChunks.length) {
+                    const chunk = allChunks[index++]!;
+
+                    // Fire abort after a few text-delta chunks, but keep streaming
+                    // This simulates the HTTP disconnect signal firing mid-stream
+                    const textDeltaCount = index - 3; // offset for header chunks
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const mockMemory = new MockMemory();
+        let savedMessages: MastraDBMessage[] = [];
+        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async function (args) {
+          savedMessages.push(...args.messages);
+          return origSaveMessages(args);
+        };
+
+        const agent = new Agent({
+          id: 'test-abort-no-persist-full',
+          name: 'Test Abort No Persist Full',
+          model: slowStreamModel,
+          instructions: 'You are a helpful assistant.',
+          memory: mockMemory,
+        });
+
+        const stream = await agent.stream('Write a very long essay', {
+          abortSignal: abortController.signal,
+          memory: {
+            thread: 'abort-test-thread',
+            resource: 'abort-test-resource',
+          },
+        });
+
+        // Consume the stream - it should end due to abort
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort error
+        }
+
+        // Wait a bit for any background persistence to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Collect all text that was persisted across all saved assistant messages
+        const assistantMessages = savedMessages.filter(m => m.role === 'assistant');
+        const savedText = assistantMessages
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        // Also check the memory store directly for messages on this thread
+        const recalled = await mockMemory.recall({
+          threadId: 'abort-test-thread',
+          count: 100,
+        });
+        const recalledAssistant = recalled.messages.filter(m => m.role === 'assistant');
+        const recalledText = recalledAssistant
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        const allPersistedText = savedText + recalledText;
+
+        // The persisted text should NOT contain the later chunks that were generated
+        // after the abort signal fired. The model produced all 20 chunks, but chunks
+        // after the abort point (chunk 5) should not be in memory.
+        // Using a generous buffer (checking chunks 10+) to account for buffering.
+        for (let i = 10; i <= totalChunks; i++) {
+          expect(allPersistedText).not.toContain(`chunk-${i} `);
+        }
       });
     });
   }

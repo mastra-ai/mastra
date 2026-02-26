@@ -1,0 +1,174 @@
+import { Spacer } from '@mariozechner/pi-tui';
+import type { HarnessMessage } from '@mastra/core/harness';
+import { ThreadLockError } from '../../utils/thread-lock.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { ThreadSelectorComponent } from '../components/thread-selector.js';
+import type { SlashCommandContext } from './types.js';
+
+function extractTextContent(message: HarnessMessage): string {
+  return message.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map(c => c.text)
+    .join(' ')
+    .trim();
+}
+
+function truncatePreview(text: string, maxLength = 50): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength - 3) + '...';
+}
+
+export function showThreadLockPrompt(
+  ctx: SlashCommandContext,
+  threadTitle: string,
+  ownerPid: number,
+  lockedThreadId?: string,
+): void {
+  const questionComponent = new AskQuestionInlineComponent(
+    {
+      question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
+      options: [
+        { label: 'New thread', description: 'Start a fresh thread' },
+        ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
+        { label: 'Exit', description: 'Exit' },
+      ],
+      formatResult: answer => {
+        if (answer === 'Clone thread') return 'Cloning thread...';
+        if (answer === 'New thread') return 'Starting new thread.';
+        return 'Exiting.';
+      },
+      onSubmit: async answer => {
+        ctx.state.activeInlineQuestion = undefined;
+        if (answer === 'Clone thread' && lockedThreadId) {
+          try {
+            const clonedThread = await ctx.state.harness.cloneThread({ sourceThreadId: lockedThreadId });
+            ctx.state.pendingNewThread = false;
+            ctx.state.chatContainer.clear();
+            ctx.state.pendingTools.clear();
+            ctx.state.allToolComponents = [];
+            ctx.state.harness.getDisplayState().modifiedFiles.clear();
+            if (ctx.state.taskProgress) {
+              ctx.state.taskProgress.updateTasks([]);
+            }
+            ctx.state.taskWriteInsertIndex = -1;
+            ctx.updateStatusLine();
+            await ctx.renderExistingMessages();
+            ctx.state.ui.requestRender();
+            ctx.showInfo(`Cloned thread: ${clonedThread.title || clonedThread.id}`);
+          } catch (error) {
+            ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        } else if (answer === 'New thread') {
+          // pendingNewThread is already true from the caller
+        } else {
+          process.exit(0);
+        }
+      },
+      onCancel: () => {
+        ctx.state.activeInlineQuestion = undefined;
+        process.exit(0);
+      },
+    },
+    ctx.state.ui,
+  );
+
+  ctx.state.activeInlineQuestion = questionComponent;
+  ctx.state.chatContainer.addChild(questionComponent);
+  ctx.state.chatContainer.addChild(new Spacer(1));
+  ctx.state.ui.requestRender();
+  ctx.state.chatContainer.invalidate();
+}
+
+export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
+  const { state } = ctx;
+  const threads = await state.harness.listThreads({ allResources: true });
+  const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
+  const currentResourceId = state.harness.getResourceId();
+
+  if (threads.length === 0) {
+    ctx.showInfo('No threads yet. Send a message to create one.');
+    return;
+  }
+
+  return new Promise(resolve => {
+    const selector = new ThreadSelectorComponent({
+      tui: state.ui,
+      threads,
+      currentThreadId: currentId,
+      currentResourceId,
+      getMessagePreview: async (threadId: string) => {
+        const firstUserMessage = await state.harness.getFirstUserMessageForThread({ threadId });
+        if (firstUserMessage) {
+          const text = extractTextContent(firstUserMessage);
+          return truncatePreview(text);
+        }
+        return null;
+      },
+      onSelect: async thread => {
+        state.ui.hideOverlay();
+
+        if (thread.id === currentId) {
+          resolve();
+          return;
+        }
+
+        if (thread.resourceId !== currentResourceId) {
+          state.harness.setResourceId({ resourceId: thread.resourceId });
+        }
+        try {
+          await state.harness.switchThread({ threadId: thread.id });
+        } catch (error) {
+          if (error instanceof ThreadLockError) {
+            showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
+          } else {
+            ctx.showError(`Failed to switch thread: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          resolve();
+          return;
+        }
+        state.pendingNewThread = false;
+
+        state.chatContainer.clear();
+        state.allToolComponents = [];
+        state.pendingTools.clear();
+        await ctx.renderExistingMessages();
+
+        ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
+        resolve();
+      },
+      onClone: async thread => {
+        state.ui.hideOverlay();
+        try {
+          const clonedThread = await state.harness.cloneThread({ sourceThreadId: thread.id });
+          state.pendingNewThread = false;
+          state.chatContainer.clear();
+          state.pendingTools.clear();
+          state.allToolComponents = [];
+          state.harness.getDisplayState().modifiedFiles.clear();
+          if (state.taskProgress) {
+            state.taskProgress.updateTasks([]);
+          }
+          state.taskWriteInsertIndex = -1;
+          ctx.updateStatusLine();
+          await ctx.renderExistingMessages();
+          state.ui.requestRender();
+          ctx.showInfo(`Cloned thread: ${clonedThread.title || clonedThread.id}`);
+        } catch (error) {
+          ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        resolve();
+      },
+      onCancel: () => {
+        state.ui.hideOverlay();
+        resolve();
+      },
+    });
+
+    state.ui.showOverlay(selector, {
+      width: '80%',
+      maxHeight: '60%',
+      anchor: 'center',
+    });
+    selector.focused = true;
+  });
+}

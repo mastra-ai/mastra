@@ -2512,6 +2512,9 @@ export class MemoryPG extends MemoryStorage {
         ],
       );
 
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
       return {
         chunksActivated: activatedChunks.length,
         messageTokensActivated: activatedMessageTokens,
@@ -2527,6 +2530,8 @@ export class MemoryPG extends MemoryStorage {
           messageCount: c.messageIds.length,
           observations: c.observations,
         })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
       if (error instanceof MastraError) {

@@ -5,23 +5,36 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { loadSettings } from './onboarding/settings.js';
 import { MastraTUI } from './tui/index.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode();
+let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
+let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
+let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
+let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 
-const tui = new MastraTUI({
-  harness,
-  hookManager,
-  authStorage,
-  appName: 'Mastra Code',
-  version: '0.1.0',
-  inlineQuestions: true,
+// Global safety nets — catch any uncaught errors from storage init, etc.
+process.on('uncaughtException', error => {
+  handleFatalError(error);
+});
+process.on('unhandledRejection', reason => {
+  handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
 async function main() {
+  const result = await createMastraCode();
+  harness = result.harness;
+  mcpManager = result.mcpManager;
+  hookManager = result.hookManager;
+  authStorage = result.authStorage;
+
+  if (result.storageWarning) {
+    console.info(`⚠ ${result.storageWarning}`);
+  }
+
   if (mcpManager?.hasServers()) {
     await mcpManager.init();
     const statuses = mcpManager.getServerStatuses();
@@ -45,7 +58,6 @@ async function main() {
       return String(a);
     }
   };
-  const originalConsoleError = console.error.bind(console);
   console.error = (...args: unknown[]) => {
     logStream.write(`[ERROR] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
   };
@@ -53,15 +65,24 @@ async function main() {
     logStream.write(`[WARN] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
   };
 
+  const tui = new MastraTUI({
+    harness,
+    hookManager,
+    authStorage,
+    mcpManager,
+    appName: 'Mastra Code',
+    version: '0.1.0',
+    inlineQuestions: true,
+  });
+
   tui.run().catch(error => {
-    originalConsoleError('Fatal error:', error);
-    process.exit(1);
+    handleFatalError(error);
   });
 }
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness.stopHeartbeats()]);
+  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
 };
 
 process.on('beforeExit', () => {
@@ -77,7 +98,37 @@ process.on('SIGTERM', () => {
   void asyncCleanup().finally(() => process.exit(0));
 });
 
-main().catch(error => {
-  console.error('Fatal error:', error);
+function hasEconnrefused(err: unknown, depth = 0): boolean {
+  if (!err || depth > 5) return false;
+  const e = err as any;
+  if (e.code === 'ECONNREFUSED') return true;
+  if (e.cause) return hasEconnrefused(e.cause, depth + 1);
+  // AggregateError has .errors array
+  if (Array.isArray(e.errors)) return e.errors.some((inner: unknown) => hasEconnrefused(inner, depth + 1));
+  return false;
+}
+
+function handleFatalError(error: unknown): never {
+  // Always write to real stderr, even if console.error was overridden
+  const write = (msg: string) => process.stderr.write(msg + '\n');
+
+  if (hasEconnrefused(error)) {
+    const settings = loadSettings();
+    const connStr = settings.storage?.pg?.connectionString;
+    const target = connStr ?? 'localhost:5432';
+    write(
+      `\nFailed to connect to PostgreSQL at ${target}.` +
+        `\nMake sure the database is running and accessible.` +
+        `\n\nTo switch back to LibSQL:` +
+        `\n  Set MASTRA_STORAGE_BACKEND=libsql or change the backend in /settings\n`,
+    );
+    process.exit(1);
+  }
+
+  write(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
+}
+
+main().catch(error => {
+  handleFatalError(error);
 });

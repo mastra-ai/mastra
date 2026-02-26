@@ -13,10 +13,10 @@ The `.listStoredAgents()` method retrieves a paginated list of agent configurati
 
 ```typescript
 // Get Agent instances from storage
-const { agents, total, hasMore } = await mastra.listStoredAgents();
+const { agents, total, hasMore } = await mastra.listStoredAgents()
 
 for (const agent of agents) {
-  console.log(agent.id, agent.name);
+  console.log(agent.id, agent.name)
   // Each agent is ready to use
   // const response = await agent.generate("Hello");
 }
@@ -28,13 +28,13 @@ const result = await mastra.listStoredAgents({
   page: 0,
   perPage: 10,
   raw: true,
-});
+})
 
-console.log(`Showing ${result.agents.length} of ${result.total} agents`);
-console.log(`Has more: ${result.hasMore}`);
+console.log(`Showing ${result.agents.length} of ${result.total} agents`)
+console.log(`Has more: ${result.hasMore}`)
 
 for (const config of result.agents) {
-  console.log(config.id, config.name, config.createdAt);
+  console.log(config.id, config.name, config.createdAt)
 }
 ```
 
@@ -42,77 +42,77 @@ for (const config of result.agents) {
 
 <PropertiesTable
   content={[
-    {
-      name: "args",
-      type: "object",
-      description:
-        "Optional configuration object for pagination and output format.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "args",
+type: "object",
+description:
+"Optional configuration object for pagination and output format.",
+isOptional: true,
+},
+]}
 />
 
 ### Args Options
 
 <PropertiesTable
   content={[
-    {
-      name: "page",
-      type: "number",
-      description: "Zero-indexed page number for pagination.",
-      isOptional: true,
-      defaultValue: "0",
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description:
-        "Number of items per page. Set to `false` to fetch all records without pagination.",
-      isOptional: true,
-      defaultValue: "100",
-    },
-    {
-      name: "raw",
-      type: "boolean",
-      description:
-        "When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "page",
+type: "number",
+description: "Zero-indexed page number for pagination.",
+isOptional: true,
+defaultValue: "0",
+},
+{
+name: "perPage",
+type: "number | false",
+description:
+"Number of items per page. Set to `false` to fetch all records without pagination.",
+isOptional: true,
+defaultValue: "100",
+},
+{
+name: "raw",
+type: "boolean",
+description:
+"When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "agents",
-      type: "Agent[] | StorageAgentType[]",
-      description:
-        "Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.",
-    },
-    {
-      name: "total",
-      type: "number",
-      description: "Total number of stored agents across all pages.",
-    },
-    {
-      name: "page",
-      type: "number",
-      description: "Current page number (zero-indexed).",
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description: "Number of items per page, or `false` if fetching all.",
-    },
-    {
-      name: "hasMore",
-      type: "boolean",
-      description: "Whether there are more pages available.",
-    },
-  ]}
+{
+name: "agents",
+type: "Agent[] | StorageAgentType[]",
+description:
+"Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.",
+},
+{
+name: "total",
+type: "number",
+description: "Total number of stored agents across all pages.",
+},
+{
+name: "page",
+type: "number",
+description: "Current page number (zero-indexed).",
+},
+{
+name: "perPage",
+type: "number | false",
+description: "Number of items per page, or `false` if fetching all.",
+},
+{
+name: "hasMore",
+type: "boolean",
+description: "Whether there are more pages available.",
+},
+]}
 />
 
 ## Primitive Resolution
@@ -131,18 +131,18 @@ If a referenced primitive is not found, a warning is logged but the agent is sti
 
 ```typescript
 async function getAllStoredAgents(mastra: Mastra) {
-  const allAgents: Agent[] = [];
-  let page = 0;
-  let hasMore = true;
+  const allAgents: Agent[] = []
+  let page = 0
+  let hasMore = true
 
   while (hasMore) {
-    const result = await mastra.listStoredAgents({ page, perPage: 50 });
-    allAgents.push(...result.agents);
-    hasMore = result.hasMore;
-    page++;
+    const result = await mastra.listStoredAgents({ page, perPage: 50 })
+    allAgents.push(...result.agents)
+    hasMore = result.hasMore
+    page++
   }
 
-  return allAgents;
+  return allAgents
 }
 ```
 
