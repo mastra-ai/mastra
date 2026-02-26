@@ -134,8 +134,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
 
     expect(toolCallId).toBeTruthy();
 
-    // Step 2: Approve the tool call
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Step 2: Approve the tool call — no delay needed, snapshot is persisted before stream closes
     const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
 
     for await (const _chunk of resumeStream.fullStream) {
@@ -187,8 +186,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
 
     expect(toolCallId).toBeTruthy();
 
-    // Step 2: Approve the tool call — now works because Mastra provides storage
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Step 2: Approve the tool call — no delay needed, snapshot is persisted before stream closes
     const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
 
     for await (const _chunk of resumeStream.fullStream) {

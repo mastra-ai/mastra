@@ -110,10 +110,9 @@ describe('tool approval with LibSQLStore via Harness', () => {
       modes: [
         {
           id: 'default',
-          label: 'Default',
+          name: 'Default',
           default: true,
           agent,
-          tools: {},
         },
       ],
       initialState: { yolo: false },
