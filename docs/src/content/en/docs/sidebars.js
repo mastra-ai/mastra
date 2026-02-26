@@ -74,6 +74,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
         },
@@ -220,6 +225,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -227,14 +240,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/semantic-recall',
           label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -426,6 +431,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
           id: 'deployment/monorepo',
           label: 'Monorepo',
         },
@@ -590,6 +600,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -644,6 +670,7 @@ const sidebars = {
         },
       ],
     },
+
     {
       type: 'category',
       label: 'Build with AI',

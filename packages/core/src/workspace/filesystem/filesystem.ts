@@ -19,7 +19,8 @@
  * ```
  */
 
-import type { Lifecycle, ProviderStatus } from '../lifecycle';
+import type { RequestContext } from '../../request-context';
+import type { FilesystemLifecycle, ProviderStatus } from '../lifecycle';
 import type { FilesystemMountConfig, FilesystemIcon } from './mount';
 
 // =============================================================================
@@ -108,7 +109,7 @@ export interface CopyOptions {
 /**
  * Information about a filesystem provider's current state.
  */
-export interface FilesystemInfo {
+export interface FilesystemInfo<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Unique identifier */
   id: string;
   /** Human-readable name */
@@ -121,18 +122,10 @@ export interface FilesystemInfo {
   error?: string;
   /** Whether filesystem is read-only */
   readOnly?: boolean;
-  /** Base path (for local filesystems) */
-  basePath?: string;
   /** Icon identifier for UI display */
   icon?: FilesystemIcon;
-  /** Storage usage (if available) */
-  storage?: {
-    totalBytes?: number;
-    usedBytes?: number;
-    availableBytes?: number;
-  };
   /** Provider-specific metadata */
-  metadata?: Record<string, unknown>;
+  metadata?: TMetadata;
 }
 
 // =============================================================================
@@ -148,15 +141,13 @@ export interface FilesystemInfo {
  * All paths are absolute within the filesystem's namespace.
  * Implementations handle path normalization.
  *
- * Lifecycle methods (from Lifecycle interface) are all optional:
+ * Lifecycle methods (from FilesystemLifecycle interface) are all optional:
  * - init(): One-time setup (create directories, tables)
- * - start(): Begin operation (establish connections)
- * - stop(): Pause operation (close connections)
  * - destroy(): Clean up resources
  * - isReady(): Check if ready for operations
  * - getInfo(): Get status and metadata
  */
-export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
+export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo> {
   /** Unique identifier for this filesystem instance */
   readonly id: string;
 
@@ -201,9 +192,10 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
    * Get instructions describing how this filesystem works.
    * Used in tool descriptions to help agents understand path semantics.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this filesystem
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   /**
    * Get mount configuration for this filesystem.
@@ -286,6 +278,19 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
   // ---------------------------------------------------------------------------
   // Path Operations
   // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   *
+   * Used by LSP and other features that need the real filesystem location
+   * of a file. The resolution depends on the filesystem's containment mode:
+   * - `contained: true` — `/file.ts` resolves to `basePath/file.ts`
+   * - `contained: false` — `/file.ts` stays as `/file.ts` (real host path)
+   *
+   * Returns `undefined` if the filesystem doesn't support disk-path resolution
+   * (e.g., remote/in-memory filesystems).
+   */
+  resolveAbsolutePath?(path: string): string | undefined;
 
   /**
    * Check if a path exists.

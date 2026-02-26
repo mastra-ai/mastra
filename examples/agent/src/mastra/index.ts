@@ -4,6 +4,7 @@ import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
+import { ComposioToolProvider } from '@mastra/editor/composio';
 
 import {
   agentThatHarassesYou,
@@ -23,6 +24,7 @@ import {
   agentWithAdvancedModeration,
   agentWithBranchingModeration,
   agentWithSequentialModeration,
+  supervisorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -76,6 +78,7 @@ const config = {
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+    supervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -221,5 +224,9 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
-  editor: new MastraEditor(),
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
 });

@@ -4,15 +4,15 @@ import { useState, useEffect } from 'react';
 
 import type { MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useMergedRequestContext } from '@/domains/request-context';
 import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['memory', agentId],
+    queryKey: ['memory', agentId, requestContext],
     queryFn: () => (agentId ? client.getMemoryStatus(agentId, requestContext) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -23,10 +23,10 @@ export const useMemory = (agentId?: string) => {
 
 export const useMemoryConfig = (agentId?: string) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['memory', 'config', agentId],
+    queryKey: ['memory', 'config', agentId, requestContext],
     queryFn: () => (agentId ? client.getMemoryConfig({ agentId, requestContext }) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -46,10 +46,10 @@ export const useThreads = ({
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['memory', 'threads', resourceId, agentId],
+    queryKey: ['memory', 'threads', resourceId, agentId, requestContext],
     queryFn: async () => {
       if (!isMemoryEnabled) return null;
       const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
@@ -66,7 +66,7 @@ export const useThreads = ({
 export const useDeleteThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useMutation({
     mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
@@ -95,7 +95,7 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
@@ -107,7 +107,7 @@ export const useMemorySearch = ({
 export const useCloneThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useMutation({
     mutationFn: async ({ threadId, agentId, title }: { threadId: string; agentId: string; title?: string }) => {
@@ -146,10 +146,10 @@ export const useObservationalMemory = ({
   isActive?: boolean;
 }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useQuery<GetObservationalMemoryResponse | null>({
-    queryKey: ['observational-memory', agentId, resourceId, threadId],
+    queryKey: ['observational-memory', agentId, resourceId, threadId, requestContext],
     queryFn: async () => {
       if (!resourceId && !threadId) return null;
       return client.getObservationalMemory({
@@ -186,11 +186,11 @@ export const useMemoryWithOMStatus = ({
   pollWhenActive?: boolean;
 }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
   const [isActive, setIsActive] = useState(false);
 
   const query = useQuery<GetMemoryStatusResponse | null>({
-    queryKey: ['memory-status', agentId, resourceId, threadId],
+    queryKey: ['memory-status', agentId, resourceId, threadId, requestContext],
     queryFn: () =>
       agentId
         ? client.getMemoryStatus(agentId, {

@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@mastra/core": "*",
-    "@testing-library/react": "^16.3.0",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "22.19.7",
     "get-port": "^7.1.0",
     "mastra": "*",

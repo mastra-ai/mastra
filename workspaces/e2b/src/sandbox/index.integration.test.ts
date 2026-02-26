@@ -1055,10 +1055,17 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
 if (process.env.E2B_API_KEY) {
   createSandboxTestSuite({
     suiteName: 'E2BSandbox Conformance',
-    createSandbox: () => {
+    createSandbox: options => {
       return new E2BSandbox({
         id: `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         timeout: 120000,
+        ...(options?.env && { env: options.env }),
+      });
+    },
+    createInvalidSandbox: () => {
+      return new E2BSandbox({
+        id: `bad-config-${Date.now()}`,
+        template: 'nonexistent-template-id-12345',
       });
     },
     cleanupSandbox: async sandbox => {

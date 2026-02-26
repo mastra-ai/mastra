@@ -109,6 +109,7 @@ describe('create mastra', () => {
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},
               "description": "",
+              "hasDraft": false,
               "id": "weather-agent",
               "inputProcessors": [],
               "instructions": "

@@ -3,12 +3,36 @@ import { v4 as uuid } from '@lukeed/uuid';
 import type { JsonSchema } from '@/lib/json-schema';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
 
-export type InstructionBlock = {
+export type InMemoryFileNode = {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: InMemoryFileNode[];
+};
+
+export type SkillFormValue = {
+  localId: string;
+  name: string;
+  description: string;
+  workspaceId: string;
+  files: InMemoryFileNode[];
+};
+
+export type InlineInstructionBlock = {
   id: string;
   type: 'prompt_block';
   content: string;
   rules?: RuleGroup;
 };
+
+export type RefInstructionBlock = {
+  id: string;
+  type: 'prompt_block_ref';
+  promptBlockId: string;
+};
+
+export type InstructionBlock = InlineInstructionBlock | RefInstructionBlock;
 
 const ruleSchema = z.object({
   field: z.string(),
@@ -44,18 +68,32 @@ const ruleGroupSchema: z.ZodType<RuleGroup> = z.object({
   conditions: z.array(z.union([ruleSchema, ruleGroupDepth1Schema])),
 });
 
-const instructionBlockSchema = z.object({
+const inlineInstructionBlockSchema = z.object({
   id: z.string(),
   type: z.literal('prompt_block'),
   content: z.string(),
   rules: ruleGroupSchema.optional(),
 });
 
-export const createInstructionBlock = (content = '', rules?: RuleGroup): InstructionBlock => ({
+const refInstructionBlockSchema = z.object({
+  id: z.string(),
+  type: z.literal('prompt_block_ref'),
+  promptBlockId: z.string(),
+});
+
+const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);
+
+export const createInstructionBlock = (content = '', rules?: RuleGroup): InlineInstructionBlock => ({
   id: uuid(),
   type: 'prompt_block',
   content,
   rules,
+});
+
+export const createRefInstructionBlock = (promptBlockId: string): RefInstructionBlock => ({
+  id: uuid(),
+  type: 'prompt_block_ref',
+  promptBlockId,
 });
 
 const scoringSamplingConfigSchema = z.object({
@@ -65,11 +103,20 @@ const scoringSamplingConfigSchema = z.object({
 
 const entityConfigSchema = z.object({
   description: z.string().max(500).optional(),
+  rules: ruleGroupSchema.optional(),
+});
+
+const skillConfigSchema = z.object({
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  pin: z.string().optional(),
+  strategy: z.enum(['latest', 'live']).optional(),
 });
 
 const scorerConfigSchema = z.object({
   description: z.string().max(500).optional(),
   sampling: scoringSamplingConfigSchema.optional(),
+  rules: ruleGroupSchema.optional(),
 });
 
 const memoryConfigSchema = z
@@ -136,6 +183,24 @@ const memoryConfigSchema = z
     },
   );
 
+const inMemoryFileNodeSchema: z.ZodType<InMemoryFileNode> = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.enum(['file', 'folder']),
+    content: z.string().optional(),
+    children: z.array(inMemoryFileNodeSchema).optional(),
+  }),
+);
+
+const skillFormValueSchema = z.object({
+  localId: z.string(),
+  name: z.string().min(1, 'Skill name is required'),
+  description: z.string(),
+  workspaceId: z.string().min(1, 'Workspace is required'),
+  files: z.array(inMemoryFileNodeSchema),
+});
+
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
@@ -145,12 +210,44 @@ export const agentFormSchema = z.object({
     name: z.string().min(1, 'Model is required'),
   }),
   tools: z.record(z.string(), entityConfigSchema).optional(),
+  integrationTools: z.record(z.string(), entityConfigSchema).optional(),
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
   memory: memoryConfigSchema.optional(),
   variables: z.custom<JsonSchema>().optional(),
   instructionBlocks: z.array(instructionBlockSchema).optional(),
+  mcpClients: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        servers: z.record(z.string(), z.any()),
+        selectedTools: z
+          .record(
+            z.string(),
+            z.object({
+              description: z.string().optional(),
+            }),
+          )
+          .optional()
+          .default({}),
+      }),
+    )
+    .optional()
+    .default([]),
+  mcpClientsToDelete: z.array(z.string()).optional().default([]),
+  skills: z.record(z.string(), skillConfigSchema).optional().default({}),
+  workspace: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('id'), workspaceId: z.string() }),
+      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+    ])
+    .optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
+export type EntityConfig = z.infer<typeof entityConfigSchema>;
+export type ScorerConfig = z.infer<typeof scorerConfigSchema>;
+export type SkillConfig = z.infer<typeof skillConfigSchema>;

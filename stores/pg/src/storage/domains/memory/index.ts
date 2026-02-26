@@ -20,6 +20,19 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+
+/**
+ * Try to import the OM schema statically. On older @mastra/core versions that
+ * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
+ * and getExportDDL / init() will simply skip the OM table.
+ */
+let _omTableSchema: Record<string, Record<string, any>> | undefined;
+try {
+  const storage = require('@mastra/core/storage');
+  _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
+} catch {
+  // OM not available in this version of core
+}
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -42,7 +55,15 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import {
+  PgDB,
+  resolvePgConfig,
+  generateTableSQL,
+  generateIndexSQL,
+  getSchemaName as dbGetSchemaName,
+  getTableName as dbGetTableName,
+} from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 // Database row type that includes timezone-aware columns
@@ -156,9 +177,9 @@ export class MemoryPG extends MemoryStorage {
 
   /**
    * Returns default index definitions for the memory domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
         name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
@@ -171,6 +192,63 @@ export class MemoryPG extends MemoryStorage {
         columns: ['thread_id', 'createdAt DESC'],
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables (threads, messages, resources, OM), indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+    const quotedSchemaName = dbGetSchemaName(schemaName);
+
+    // Tables: threads, messages, resources
+    for (const tableName of [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    // Observational memory table (if schema available in this version of core)
+    const omSchema = _omTableSchema?.[OM_TABLE];
+    if (omSchema) {
+      statements.push(
+        generateTableSQL({
+          tableName: OM_TABLE as any,
+          schema: omSchema,
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+      // idx_om_lookup_key index
+      const fullOmTableName = dbGetTableName({ indexName: OM_TABLE, schemaName: quotedSchemaName });
+      const idxPrefix = schemaPrefix ? `${schemaPrefix}` : '';
+      statements.push(
+        `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
+      );
+    }
+
+    // Default indexes
+    for (const idx of MemoryPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return MemoryPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
@@ -1460,7 +1538,7 @@ export class MemoryPG extends MemoryStorage {
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
-          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
           metadata: {
             ...metadata,
             clone: cloneMetadata,
@@ -1789,8 +1867,8 @@ export class MemoryPG extends MemoryStorage {
           input.observations,
           lastObservedAtStr,
           lastObservedAtStr,
-          input.tokenCount,
-          input.tokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.tokenCount),
           observedMessageIdsJson,
           nowStr,
           nowStr,
@@ -1885,8 +1963,8 @@ export class MemoryPG extends MemoryStorage {
           nowStr, // lastReflectionAt
           nowStr, // lastReflectionAtZ
           record.pendingMessageTokens,
-          record.totalTokensObserved,
-          record.observationTokenCount,
+          Math.round(record.totalTokensObserved),
+          Math.round(record.observationTokenCount),
           false, // isObserving
           false, // isReflecting
           false, // isBufferingObservation
@@ -2002,7 +2080,7 @@ export class MemoryPG extends MemoryStorage {
 
       if (lastBufferedAtTokens !== undefined) {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`;
-        values = [isBuffering, lastBufferedAtTokens, nowStr, nowStr, id];
+        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id];
       } else {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`;
         values = [isBuffering, nowStr, nowStr, id];
@@ -2106,7 +2184,7 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $2,
           "updatedAtZ" = $3
         WHERE id = $4`,
-        [tokenCount, nowStr, nowStr, id],
+        [Math.round(tokenCount), nowStr, nowStr, id],
       );
 
       if (result.rowCount === 0) {
@@ -2151,9 +2229,9 @@ export class MemoryPG extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
-        tokenCount: input.chunk.tokenCount,
+        tokenCount: Math.round(input.chunk.tokenCount),
         messageIds: input.chunk.messageIds,
-        messageTokens: input.chunk.messageTokens,
+        messageTokens: Math.round(input.chunk.messageTokens ?? 0),
         lastObservedAt: input.chunk.lastObservedAt,
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
@@ -2248,48 +2326,62 @@ export class MemoryPG extends MemoryStorage {
       const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
       const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-      // Find the closest chunk boundary to the target, biased under
+      // Find the closest chunk boundary to the target, biased over (prefer removing
+      // slightly more than the target so remaining context lands at or below retentionFloor).
+      // Track both best-over and best-under boundaries so we can fall back to under
+      // if the over boundary would overshoot by too much.
       let cumulativeMessageTokens = 0;
       let chunksToActivate = 0;
-      let bestBoundary = 0;
-      let bestBoundaryMessageTokens = 0;
+      let bestOverBoundary = 0;
+      let bestOverTokens = 0;
+      let bestUnderBoundary = 0;
+      let bestUnderTokens = 0;
 
       for (let i = 0; i < chunks.length; i++) {
         cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
         const boundary = i + 1;
 
-        // Prefer boundaries that are under the target (leaves more raw messages in context)
-        // Only go over if there's no under option
-        const isUnder = cumulativeMessageTokens <= targetMessageTokens;
-        const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
-
-        if (bestBoundary === 0) {
-          // First boundary, take it
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && !bestIsUnder) {
-          // Current is under, best is over - prefer under
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && bestIsUnder) {
-          // Both under - prefer the one closer to target (higher)
-          if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        if (cumulativeMessageTokens >= targetMessageTokens) {
+          // Over or equal — track the closest (lowest) over boundary
+          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+            bestOverBoundary = boundary;
+            bestOverTokens = cumulativeMessageTokens;
           }
-        } else if (!isUnder && !bestIsUnder) {
-          // Both over - prefer the one closer to target (lower)
-          if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        } else {
+          // Under — track the closest (highest) under boundary
+          if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
-        // If current is over and best is under, keep best (do nothing)
       }
 
-      // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
-      // since we've reached threshold and need to clear some context
-      chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
+      // Safeguard: if the over boundary would eat into more than 95% of the
+      // retention floor, fall back to the best under boundary instead.
+      // This prevents edge cases where a large chunk overshoots dramatically.
+      // When forceMaxActivation is set (above blockAfter), still prefer the over
+      // boundary, but never if it would leave fewer than the smaller of 1000
+      // tokens or the retention floor remaining.
+      const maxOvershoot = retentionFloor * 0.95;
+      const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+      const minRemaining = Math.min(1000, retentionFloor);
+
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+        chunksToActivate = bestUnderBoundary;
+      } else if (bestOverBoundary > 0) {
+        // All boundaries are over and exceed the safeguard — still activate
+        // the closest over boundary (better than nothing)
+        chunksToActivate = bestOverBoundary;
+      } else {
+        chunksToActivate = 1;
+      }
 
       // Split chunks
       const activatedChunks = chunks.slice(0, chunksToActivate);
@@ -2297,8 +2389,8 @@ export class MemoryPG extends MemoryStorage {
 
       // Combine activated observations
       const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedTokens = Math.round(activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0));
+      const activatedMessageTokens = Math.round(activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0));
       const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
       const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
       const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
@@ -2343,6 +2435,9 @@ export class MemoryPG extends MemoryStorage {
         ],
       );
 
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
       return {
         chunksActivated: activatedChunks.length,
         messageTokensActivated: activatedMessageTokens,
@@ -2358,6 +2453,8 @@ export class MemoryPG extends MemoryStorage {
           messageCount: c.messageIds.length,
           observations: c.observations,
         })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
       if (error instanceof MastraError) {
@@ -2399,8 +2496,8 @@ export class MemoryPG extends MemoryStorage {
         WHERE id = $7`,
         [
           input.reflection,
-          input.tokenCount,
-          input.inputTokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.inputTokenCount),
           input.reflectedObservationLineCount,
           nowStr,
           nowStr,

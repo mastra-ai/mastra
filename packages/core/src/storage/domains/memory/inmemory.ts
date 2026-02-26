@@ -934,47 +934,62 @@ export class InMemoryMemory extends MemoryStorage {
     const retentionFloor = input.messageTokensThreshold * (1 - activationRatio);
     const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-    // Find the closest chunk boundary to the target, biased under
+    // Find the closest chunk boundary to the target, biased over (prefer removing
+    // slightly more than the target so remaining context lands at or below retentionFloor).
+    // Track both best-over and best-under boundaries so we can fall back to under
+    // if the over boundary would overshoot by too much.
     let cumulativeMessageTokens = 0;
-    let bestBoundary = 0;
-    let bestBoundaryMessageTokens = 0;
+    let bestOverBoundary = 0;
+    let bestOverTokens = 0;
+    let bestUnderBoundary = 0;
+    let bestUnderTokens = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
       const boundary = i + 1;
 
-      // Prefer boundaries that are under the target (leaves more raw messages in context)
-      // Only go over if there's no under option
-      const isUnder = cumulativeMessageTokens <= targetMessageTokens;
-      const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
-
-      if (bestBoundary === 0) {
-        // First boundary, take it
-        bestBoundary = boundary;
-        bestBoundaryMessageTokens = cumulativeMessageTokens;
-      } else if (isUnder && !bestIsUnder) {
-        // Current is under, best is over - prefer under
-        bestBoundary = boundary;
-        bestBoundaryMessageTokens = cumulativeMessageTokens;
-      } else if (isUnder && bestIsUnder) {
-        // Both under - prefer the one closer to target (higher)
-        if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
+      if (cumulativeMessageTokens >= targetMessageTokens) {
+        // Over or equal — track the closest (lowest) over boundary
+        if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+          bestOverBoundary = boundary;
+          bestOverTokens = cumulativeMessageTokens;
         }
-      } else if (!isUnder && !bestIsUnder) {
-        // Both over - prefer the one closer to target (lower)
-        if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else {
+        // Under — track the closest (highest) under boundary
+        if (cumulativeMessageTokens > bestUnderTokens) {
+          bestUnderBoundary = boundary;
+          bestUnderTokens = cumulativeMessageTokens;
         }
       }
-      // If current is over and best is under, keep best (do nothing)
     }
 
-    // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
-    // since we've reached threshold and need to clear some context
-    const chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
+    // Safeguard: if the over boundary would eat into more than 95% of the
+    // retention floor, fall back to the best under boundary instead.
+    // This prevents edge cases where a large chunk overshoots dramatically.
+    // When forceMaxActivation is set (above blockAfter), still prefer the over
+    // boundary, but never if it would leave fewer than the smaller of 1000
+    // tokens or the retention floor remaining.
+    const maxOvershoot = retentionFloor * 0.95;
+    const overshoot = bestOverTokens - targetMessageTokens;
+    const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+    const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+    const minRemaining = Math.min(1000, retentionFloor);
+
+    let chunksToActivate: number;
+    if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+      chunksToActivate = bestOverBoundary;
+    } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+      chunksToActivate = bestOverBoundary;
+    } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+      chunksToActivate = bestUnderBoundary;
+    } else if (bestOverBoundary > 0) {
+      // All boundaries are over and exceed the safeguard — still activate
+      // the closest over boundary (better than nothing)
+      chunksToActivate = bestOverBoundary;
+    } else {
+      chunksToActivate = 1;
+    }
     const activatedChunks = chunks.slice(0, chunksToActivate);
     const remainingChunks = chunks.slice(chunksToActivate);
 
@@ -1017,6 +1032,9 @@ export class InMemoryMemory extends MemoryStorage {
     record.lastObservedAt = derivedLastObservedAt;
     record.updatedAt = new Date();
 
+    // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+    const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
     return {
       chunksActivated: activatedChunks.length,
       messageTokensActivated: activatedMessageTokens,
@@ -1032,6 +1050,8 @@ export class InMemoryMemory extends MemoryStorage {
         messageCount: c.messageIds.length,
         observations: c.observations,
       })),
+      suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+      currentTask: latestChunkHints?.currentTask ?? undefined,
     };
   }
 

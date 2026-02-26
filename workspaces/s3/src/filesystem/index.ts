@@ -23,6 +23,7 @@ import type {
   FilesystemIcon,
   FilesystemInfo,
   ProviderStatus,
+  MastraFilesystemOptions,
 } from '@mastra/core/workspace';
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
@@ -113,7 +114,7 @@ function isAccessDeniedError(error: unknown): boolean {
 /**
  * S3 filesystem provider configuration.
  */
-export interface S3FilesystemOptions {
+export interface S3FilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** S3 bucket name */
@@ -231,7 +232,7 @@ export class S3Filesystem extends MastraFilesystem {
   private _client: S3Client | null = null;
 
   constructor(options: S3FilesystemOptions) {
-    super({ name: 'S3Filesystem' });
+    super({ ...options, name: 'S3Filesystem' });
     this.id = options.id ?? `s3-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucket = options.bucket;
     this.region = options.region;
@@ -276,13 +277,19 @@ export class S3Filesystem extends MastraFilesystem {
   /**
    * Get filesystem info for status reporting.
    */
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{
+    bucket: string;
+    region: string;
+    endpoint?: string;
+    prefix?: string;
+  }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       status: this.status,
       error: this.error,
+      readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
         bucket: this.bucket,

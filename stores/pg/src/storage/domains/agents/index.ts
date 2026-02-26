@@ -23,7 +23,7 @@ import type {
   ListVersionsInput,
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -44,6 +44,28 @@ export class AgentsPG extends AgentsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Tables
+    for (const tableName of AgentsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    return statements;
   }
 
   /**
@@ -77,6 +99,11 @@ export class AgentsPG extends AgentsStorage {
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
       ifNotExists: ['status', 'authorId'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -452,87 +479,7 @@ export class AgentsPG extends AgentsStorage {
         });
       }
 
-      // Separate metadata fields from config fields
-      const { authorId, activeVersionId, metadata, ...configFields } = updates;
-
-      // Extract just the config field names from StorageAgentSnapshotType
-      const configFieldNames = [
-        'name',
-        'description',
-        'instructions',
-        'model',
-        'tools',
-        'defaultOptions',
-        'workflows',
-        'agents',
-        'integrationTools',
-        'inputProcessors',
-        'outputProcessors',
-        'memory',
-        'scorers',
-      ];
-
-      // Check if any config fields are present in the update
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
-
-      // Handle config updates by creating a new version
-      if (hasConfigUpdate) {
-        // Get the latest version to use as base
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NO_VERSIONS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `No versions found for agent ${id}`,
-            details: { agentId: id },
-          });
-        }
-
-        // Extract config from latest version
-        const {
-          id: _versionId,
-          agentId: _agentId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        // Merge updates into latest config
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-        const newConfig = {
-          ...latestConfig,
-          ...sanitizedConfigFields,
-        };
-
-        // Identify which fields changed
-        const changedFields = configFieldNames.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        // Create new version only if fields changed
-        if (changedFields.length > 0) {
-          const newVersionId = crypto.randomUUID();
-          const newVersionNumber = latestVersion.versionNumber + 1;
-
-          await this.createVersion({
-            id: newVersionId,
-            agentId: id,
-            versionNumber: newVersionNumber,
-            ...newConfig,
-            changedFields,
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Update metadata fields on the agent record
       const setClauses: string[] = [];
@@ -548,6 +495,11 @@ export class AgentsPG extends AgentsStorage {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
         // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+
+      if (status !== undefined) {
+        setClauses.push(`status = $${paramIndex++}`);
+        values.push(status);
       }
 
       if (metadata !== undefined) {
@@ -566,13 +518,8 @@ export class AgentsPG extends AgentsStorage {
       // Add the ID for the WHERE clause
       values.push(id);
 
-      if (setClauses.length > 2) {
-        // More than just updatedAt and updatedAtZ
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      // Always update the record (at minimum updatedAt/updatedAtZ are set)
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       // Return the updated agent
       const updatedAgent = await this.getById(id);
@@ -627,7 +574,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -648,8 +595,33 @@ export class AgentsPG extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIdx = 1;
+
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
+
+      if (authorId !== undefined) {
+        conditions.push(`"authorId" = $${paramIdx++}`);
+        queryParams.push(authorId);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        conditions.push(`metadata @> $${paramIdx++}::jsonb`);
+        queryParams.push(JSON.stringify(metadata));
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
       // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -665,8 +637,8 @@ export class AgentsPG extends AgentsStorage {
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "${field}" ${direction} LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+        [...queryParams, limitValue, offset],
       );
 
       const agents = (dataResult || []).map(row => this.parseRow(row));
@@ -707,9 +679,10 @@ export class AgentsPG extends AgentsStorage {
           name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
+          "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
         [
           input.id,
           input.agentId,
@@ -727,6 +700,11 @@ export class AgentsPG extends AgentsStorage {
           input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
           input.memory ? JSON.stringify(input.memory) : null,
           input.scorers ? JSON.stringify(input.scorers) : null,
+          input.mcpClients ? JSON.stringify(input.mcpClients) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
+          input.workspace ? JSON.stringify(input.workspace) : null,
+          input.skills ? JSON.stringify(input.skills) : null,
+          input.skillsFormat ?? null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -993,6 +971,11 @@ export class AgentsPG extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
+      workspace: this.parseJson(row.workspace, 'workspace'),
+      skills: this.parseJson(row.skills, 'skills'),
+      skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

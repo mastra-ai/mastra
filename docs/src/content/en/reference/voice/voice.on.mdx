@@ -14,67 +14,68 @@ The `on()` method registers event listeners for various voice events. This is pa
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import Speaker from "@mastra/node-speaker";
-import chalk from "chalk";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import Speaker from '@mastra/node-speaker'
+import chalk from 'chalk'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: 'gpt-5.1-realtime',
     apiKey: process.env.OPENAI_API_KEY,
   },
-});
+})
 
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 
 // Register event listener for transcribed text
-voice.on("writing", (event) => {
-  if (event.role === "user") {
-    process.stdout.write(chalk.green(event.text));
+voice.on('writing', event => {
+  if (event.role === 'user') {
+    process.stdout.write(chalk.green(event.text))
   } else {
-    process.stdout.write(chalk.blue(event.text));
+    process.stdout.write(chalk.blue(event.text))
   }
-});
+})
 
 // Listen for audio data and play it
 const speaker = new Speaker({
   sampleRate: 24100,
   channels: 1,
   bitDepth: 16,
-});
+})
 
-voice.on("speaker", (stream) => {
-  stream.pipe(speaker);
-});
+voice.on('speaker', stream => {
+  stream.pipe(speaker)
+})
 
 // Register event listener for errors
-voice.on("error", ({ message, code, details }) => {
-  console.error(`Error ${code}: ${message}`, details);
-});
+voice.on('error', ({ message, code, details }) => {
+  console.error(`Error ${code}: ${message}`, details)
+})
 ```
 
 ## Parameters
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "event",
-      type: "string",
-      description:
-        "Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
-      isOptional: false,
-    },
-    {
-      name: "callback",
-      type: "function",
-      description:
-        "Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "event",
+type: "string",
+description:
+"Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
+isOptional: false,
+},
+{
+name: "callback",
+type: "function",
+description:
+"Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
+isOptional: false,
+},
+]}
 />
 
 ## Return Value
@@ -101,28 +102,28 @@ Different voice providers may support different sets of events with varying payl
 When using `CompositeVoice`, the `on()` method delegates to the configured real-time provider:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import Speaker from "@mastra/node-speaker";
+import { CompositeVoice } from '@mastra/core/voice'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import Speaker from '@mastra/node-speaker'
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
   channels: 1, // Mono audio output (as opposed to stereo which would be 2)
   bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
-});
+})
 
-const realtimeVoice = new OpenAIRealtimeVoice();
+const realtimeVoice = new OpenAIRealtimeVoice()
 const voice = new CompositeVoice({
   realtime: realtimeVoice,
-});
+})
 
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 
 // This will register the event listener with the OpenAIRealtimeVoice provider
-voice.on("speaker", (stream) => {
-  stream.pipe(speaker);
-});
+voice.on('speaker', stream => {
+  stream.pipe(speaker)
+})
 ```
 
 ## Notes

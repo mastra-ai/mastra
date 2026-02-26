@@ -437,6 +437,79 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
+  describe('MongoDB Message Upsert Behavior', () => {
+    beforeEach(async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
+    });
+
+    it('should not overwrite createdAt when updating existing message via saveMessages', async () => {
+      const threadId = `thread-upsert-test-${Date.now()}`;
+      const resourceId = 'resource-upsert-test';
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+
+      // Create thread
+      await memoryStore?.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Upsert Test Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // First save — establishes original createdAt
+      const messageId = `msg-upsert-test-${Date.now()}`;
+      const originalMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        createdAt: new Date(),
+      };
+
+      await memoryStore?.saveMessages({ messages: [originalMessage] });
+
+      // Retrieve and record original createdAt
+      const firstResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const originalCreatedAt = firstResult?.messages?.[0]?.createdAt;
+      expect(originalCreatedAt).toBeDefined();
+
+      // Wait a bit to ensure a different timestamp if overwritten
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Second save (upsert) — same id, updated content
+      const updatedMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello updated' }] },
+        createdAt: new Date(), // newer timestamp passed in
+      };
+
+      await memoryStore?.saveMessages({ messages: [updatedMessage] });
+
+      // Verify createdAt was NOT overwritten
+      const secondResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const afterUpsertCreatedAt = secondResult?.messages?.[0]?.createdAt;
+      expect(afterUpsertCreatedAt).toEqual(originalCreatedAt);
+
+      // Verify content WAS updated
+      const updatedContent = secondResult?.messages?.[0]?.content;
+      expect(typeof updatedContent === 'string' ? updatedContent : JSON.stringify(updatedContent)).toContain(
+        'Hello updated',
+      );
+    });
+  });
+
   describe('MongoDB Schemaless Collection Behavior', () => {
     it('should create collections on-demand when using connector directly', async () => {
       // This tests MongoDB's schemaless nature - collections are created automatically

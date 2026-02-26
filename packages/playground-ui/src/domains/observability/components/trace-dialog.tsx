@@ -13,6 +13,7 @@ import {
   GaugeIcon,
   CircleGaugeIcon,
   ListTreeIcon,
+  SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
@@ -20,6 +21,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { SpanRecord } from '@mastra/core/storage';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
+import { TraceAsItemDialog } from './trace-as-item-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { type UISpan, type UISpanState } from '../types';
 import { TraceTimelineTools } from './trace-timeline-tools';
@@ -78,6 +80,7 @@ export function TraceDialog({
   const [fadedSpanTypes, setFadedSpanTypes] = useState<string[]>([]);
   const [featuredSpanIds, setFeaturedSpanIds] = useState<string[]>([]);
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+  const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
 
   useEffect(() => {
     if (searchPhrase.trim() === '') {
@@ -239,6 +242,12 @@ export function TraceDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
+          <Button variant="standard" size="default" className="ml-auto mr-8" onClick={() => setDatasetDialogOpen(true)}>
+            <Icon>
+              <SaveIcon />
+            </Icon>
+            Save as Dataset Item
+          </Button>
         </SideDialog.Top>
 
         <div
@@ -359,6 +368,13 @@ export function TraceDialog({
           )}
         </div>
       </SideDialog>
+
+      <TraceAsItemDialog
+        traceDetails={traceDetails}
+        traceId={traceId}
+        isOpen={datasetDialogOpen}
+        onClose={() => setDatasetDialogOpen(false)}
+      />
 
       {traceDetails && (
         <SpanDialog

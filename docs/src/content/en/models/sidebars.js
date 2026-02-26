@@ -153,6 +153,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/cloudferro-sherlock',
+          label: 'CloudFerro Sherlock',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudflare-ai-gateway',
           label: 'Cloudflare AI Gateway',
         },
@@ -175,6 +180,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
+        },
+        {
+          type: 'doc',
+          id: 'providers/evroc',
+          label: 'evroc',
         },
         {
           type: 'doc',
@@ -243,8 +253,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kilo',
+          label: 'Kilo Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kuae-cloud-coding-plan',
+          label: 'KUAE Cloud Coding Plan',
         },
         {
           type: 'doc',
@@ -260,6 +280,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/meganova',
+          label: 'Meganova',
         },
         {
           type: 'doc',
@@ -343,6 +368,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/opencode-go',
+          label: 'OpenCode Go',
+        },
+        {
+          type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
         },
@@ -368,6 +398,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/qihang-ai',
+          label: 'QiHang',
+        },
+        {
+          type: 'doc',
+          id: 'providers/qiniu-ai',
+          label: 'Qiniu',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
@@ -390,6 +430,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun',
+          label: 'StepFun',
         },
         {
           type: 'doc',

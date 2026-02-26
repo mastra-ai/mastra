@@ -4,6 +4,22 @@ import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 
 /**
+ * Shared default encoder singleton.
+ * Tiktoken(o200k_base) builds two internal Maps with ~200k entries each,
+ * costing ~80-120 MB of heap per instance. Since ObservationalMemory creates
+ * a TokenCounter for both input and output processors per request, sharing
+ * the default encoder avoids duplicating this cost.
+ */
+let sharedDefaultEncoder: Tiktoken | undefined;
+
+function getDefaultEncoder(): Tiktoken {
+  if (!sharedDefaultEncoder) {
+    sharedDefaultEncoder = new Tiktoken(o200k_base);
+  }
+  return sharedDefaultEncoder;
+}
+
+/**
  * Token counting utility using tiktoken.
  * For POC we use o200k_base (GPT-4o encoding) as a reasonable default.
  * Production will add provider-aware counting.
@@ -19,7 +35,7 @@ export class TokenCounter {
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(encoding?: TiktokenBPE) {
-    this.encoder = new Tiktoken(encoding || o200k_base);
+    this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
   }
 
   /**
@@ -79,6 +95,11 @@ export class TokenCounter {
                 `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
               );
             }
+          } else if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+            // Skip data-* parts (e.g. data-om-activation, data-om-buffering-start, etc.)
+            // These are OM metadata parts that are never sent to the LLM.
+          } else if (part.type === 'reasoning') {
+            // Skip reasoning parts (not sent to the model context).
           } else {
             tokenString += JSON.stringify(part);
           }
@@ -92,7 +113,7 @@ export class TokenCounter {
     }
 
     // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return this.encoder.encode(tokenString, 'all').length + overhead;
+    return Math.round(this.encoder.encode(tokenString, 'all').length + overhead);
   }
 
   /**

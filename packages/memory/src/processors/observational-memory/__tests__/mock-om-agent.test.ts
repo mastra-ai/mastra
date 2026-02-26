@@ -37,7 +37,11 @@ type StreamPart =
       usage: { inputTokens: number; outputTokens: number; totalTokens: number };
     };
 
-function createMockOmModel(responseText: string) {
+function createMockOmModel(
+  responseText: string,
+  toolName = 'test',
+  toolInput: Record<string, unknown> = { action: 'trigger' },
+) {
   let callCount = 0;
 
   const isFirstCall = (): boolean => {
@@ -65,8 +69,8 @@ function createMockOmModel(responseText: string) {
             {
               type: 'tool-call' as const,
               toolCallId: `call-${Date.now()}`,
-              toolName: 'test',
-              input: JSON.stringify({ action: 'trigger' }),
+              toolName,
+              input: JSON.stringify(toolInput),
             },
           ],
           warnings: [],
@@ -93,8 +97,8 @@ function createMockOmModel(responseText: string) {
             {
               type: 'tool-call',
               toolCallId: `call-${Date.now()}`,
-              toolName: 'test',
-              input: JSON.stringify({ action: 'trigger' }),
+              toolName,
+              input: JSON.stringify(toolInput),
             },
             {
               type: 'finish',
@@ -464,5 +468,70 @@ describe('Mock OM Agent Integration', () => {
     expect(record).toBeTruthy();
     expect(record!.activeObservations).toBeTruthy();
     expect(record!.activeObservations).toContain('User asked for help');
+  });
+
+  it('should complete when primary agent with OM calls a sub-agent with OM', async () => {
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      instructions: 'You are a research agent.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory: new Memory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: { model: createMockObserverModel() as any, messageTokens: 20, bufferTokens: false },
+            reflection: { model: createMockReflectorModel() as any, observationTokens: 50000 },
+          },
+        },
+      }),
+    });
+
+    const primaryAgent = new Agent({
+      id: 'primary-agent',
+      name: 'Primary Agent',
+      instructions: 'Use your sub-agent.',
+      model: createMockOmModel(longResponseText, 'agent-researcher', { prompt: 'Research this topic' }) as any,
+      agents: { researcher: subAgent },
+      memory: new Memory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: { model: createMockObserverModel() as any, messageTokens: 20, bufferTokens: false },
+            reflection: { model: createMockReflectorModel() as any, observationTokens: 50000 },
+          },
+        },
+      }),
+    });
+
+    const result = await primaryAgent.generate('Research something for me.', {
+      memory: { thread: 'test-thread-sub', resource: 'test-resource' },
+    });
+
+    expect(result.text).toBeTruthy();
+    expect(result.steps.length).toBeGreaterThanOrEqual(2);
+
+    const memoryStore = await store.getStore('memory');
+
+    // Primary agent's OM should have observed under the correct thread/resource
+    const primaryRecord = await memoryStore!.getObservationalMemory('test-thread-sub', 'test-resource');
+    expect(primaryRecord).toBeTruthy();
+    expect(primaryRecord!.activeObservations).toContain('User asked for help');
+
+    // Sub-agent should have its own thread with a separate resourceId
+    const subAgentThreads = await memoryStore!.listThreads({
+      filter: { resourceId: 'primary-agent-researcher' },
+    });
+    expect(subAgentThreads.threads.length).toBe(1);
+
+    // Sub-agent's OM record should have its own observations under its own identity
+    const subThreadId = subAgentThreads.threads[0]!.id;
+    const subRecord = await memoryStore!.getObservationalMemory(subThreadId, 'primary-agent-researcher');
+    expect(subRecord).toBeTruthy();
+    expect(subRecord!.resourceId).toBe('primary-agent-researcher');
+    expect(subRecord!.activeObservations).toContain('User asked for help');
   });
 });
