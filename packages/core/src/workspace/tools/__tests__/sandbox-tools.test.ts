@@ -773,6 +773,30 @@ describe('token limit integration', () => {
     expect((result as string).length).toBeLessThan(hugeOutput.length);
   });
 
+  it('respects custom maxOutputTokens from workspace config', async () => {
+    const hugeLines = Array.from({ length: 5000 }, (_, i) => `output line number ${i + 1}`);
+    const hugeOutput = hugeLines.join('\n');
+    const sandbox = createMockSandbox({
+      executeCommand: vi.fn().mockResolvedValue({
+        success: true,
+        exitCode: 0,
+        stdout: hugeOutput,
+        stderr: '',
+        executionTimeMs: 5,
+      }),
+    });
+    // Use a very small token limit so truncation is aggressive
+    const workspace = new Workspace({
+      sandbox,
+      tools: { mastra_workspace_execute_command: { maxOutputTokens: 100 } },
+    });
+    const result = await executeCommandTool.execute({ command: 'cat big.log', tail: 0 }, { workspace });
+    expect(result).toContain('lines truncated');
+    // With only 100 tokens, result should be much shorter than default 3k limit
+    const defaultResult = await executeCommandTool.execute({ command: 'cat big.log', tail: 0 }, createContext(sandbox));
+    expect((result as string).length).toBeLessThan((defaultResult as string).length);
+  });
+
   it('process_output truncates huge stdout', async () => {
     const hugeLines = Array.from({ length: 5000 }, (_, i) => `log entry number ${i + 1}`);
     const hugeStdout = hugeLines.join('\n');

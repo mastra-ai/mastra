@@ -472,5 +472,9 @@ describe('workspace_grep', () => {
     )) as string;
 
     expect(result).toContain('[output truncated');
+    // Summary should appear before matches (survives end-truncation)
+    const summaryIndex = result.indexOf('matches across');
+    const firstMatchIndex = result.indexOf('match_');
+    expect(summaryIndex).toBeLessThan(firstMatchIndex);
   });
 });
