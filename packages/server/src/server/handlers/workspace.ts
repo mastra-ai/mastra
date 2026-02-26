@@ -1047,7 +1047,12 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       // Decode the reference path (it may be URL encoded)
       const decodedPath = decodeURIComponent(referencePath);
 
-      const content = await skills.getReference(skillName, decodedPath);
+      // Prevent path traversal via the reference path parameter
+      assertSafeFilePath(decodedPath);
+
+      // getReference expects a path relative to skill.path, so prepend 'references/'
+      // since the URL path already contains the literal /references/ segment
+      const content = await skills.getReference(skillName, `references/${decodedPath}`);
       if (content === null) {
         throw new HTTPException(404, { message: `Reference "${decodedPath}" not found in skill "${skillName}"` });
       }

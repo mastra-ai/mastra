@@ -203,7 +203,7 @@ When message tokens reach the `messageTokens` threshold, buffered chunks activat
 
 Buffered observations also include continuation hints — a suggested next response and the current task — so the main agent maintains conversational continuity after activation shrinks the context window.
 
-If the agent produces messages faster than the Observer can process them, a `blockAfter` safety threshold forces a synchronous observation as a last resort.
+If the agent produces messages faster than the Observer can process them, a `blockAfter` safety threshold forces a synchronous observation as a last resort. Buffered activation still preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor).
 
 Reflection works similarly — the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 

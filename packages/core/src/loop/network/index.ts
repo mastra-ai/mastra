@@ -10,7 +10,8 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
@@ -239,8 +240,8 @@ export async function prepareMemoryStep({
   routingAgent,
   requestContext,
   generateId,
-  tracingContext,
   memoryConfig,
+  ...rest
 }: {
   threadId: string;
   resourceId: string;
@@ -248,9 +249,9 @@ export async function prepareMemoryStep({
   routingAgent: Agent;
   requestContext: RequestContext;
   generateId: NetworkIdGenerator;
-  tracingContext?: TracingContext;
   memoryConfig?: any;
-}) {
+} & Partial<ObservabilityContext>) {
+  const observabilityContext = resolveObservabilityContext(rest);
   const memory = await routingAgent.getMemory({ requestContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
@@ -337,13 +338,7 @@ export async function prepareMemoryStep({
       if (isFirstUserMessage) {
         promises.push(
           routingAgent
-            .genTitle(
-              userMessage,
-              requestContext,
-              tracingContext || { currentSpan: undefined },
-              titleModel,
-              titleInstructions,
-            )
+            .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
             .then(title => {
               if (title) {
                 return memory.createThread({
@@ -384,9 +379,8 @@ async function saveMessagesWithProcessors(
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
   context?: {
-    tracingContext?: TracingContext;
     requestContext?: RequestContext;
-  },
+  } & Partial<ObservabilityContext>,
 ): Promise<void> {
   if (!memory) return;
 
@@ -402,7 +396,12 @@ async function saveMessagesWithProcessors(
   }
 
   // Run output processors on the messages
-  await processorRunner.runOutputProcessors(messageList, context?.tracingContext, context?.requestContext);
+  const { requestContext, ...observabilityContext } = context ?? {};
+  await processorRunner.runOutputProcessors(
+    messageList,
+    resolveObservabilityContext(observabilityContext),
+    requestContext,
+  );
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
@@ -1723,7 +1722,7 @@ export async function createNetworkLoop({
           memory,
           context: inputDataToUse,
           // TODO: Pass proper tracing context when network supports tracing
-          tracingContext: { currentSpan: undefined },
+          ...createObservabilityContext({ currentSpan: undefined }),
           writer,
         },
         { toolCallId, messages: [] },
@@ -2137,7 +2136,7 @@ export async function networkLoop<OUTPUT = undefined>({
                 requestContext,
                 messageList,
                 agentId: routingAgent.id,
-                tracingContext: routingAgentOptions?.tracingContext!,
+                ...resolveObservabilityContext(routingAgentOptions ?? {}),
                 structuredOutput: {
                   schema: z.object({
                     resumeData: z.string(),
@@ -2583,7 +2582,7 @@ export async function networkLoop<OUTPUT = undefined>({
     messages,
     routingAgent,
     generateId,
-    tracingContext: routingAgentOptions?.tracingContext,
+    ...resolveObservabilityContext(routingAgentOptions ?? {}),
     memoryConfig: routingAgentMemoryOptions?.options,
   });
 

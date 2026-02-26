@@ -11,7 +11,7 @@
 import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { bg, fg, getTheme } from '../theme.js';
+import { theme } from '../theme.js';
 
 export type ApprovalAction =
   | { type: 'approve' }
@@ -44,7 +44,7 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: ToolApprovalDialogOptions) {
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
 
     this.toolName = options.toolName;
     this.args = options.args;
@@ -56,24 +56,24 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
 
   private buildUI(): void {
     // Title
-    this.addChild(new Text(fg('warning', '⚠ Tool Approval Required'), 0, 0));
+    this.addChild(new Text(theme.fg('warning', '⚠ Tool Approval Required'), 0, 0));
     this.addChild(new Spacer(1));
 
     // Tool name
-    this.addChild(new Text(fg('accent', `Tool: `) + fg('text', this.toolName), 0, 0));
+    this.addChild(new Text(theme.fg('accent', `Tool: `) + theme.fg('text', this.toolName), 0, 0));
     if (this.categoryLabel) {
-      this.addChild(new Text(fg('accent', `Category: `) + fg('text', this.categoryLabel), 0, 0));
+      this.addChild(new Text(theme.fg('accent', `Category: `) + theme.fg('text', this.categoryLabel), 0, 0));
     }
     this.addChild(new Spacer(1));
 
     // Arguments (formatted)
-    this.addChild(new Text(fg('muted', 'Arguments:'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Arguments:'), 0, 0));
     const argsText = this.formatArgs(this.args);
     for (const line of argsText.split('\n').slice(0, 10)) {
-      this.addChild(new Text(fg('text', '  ' + line), 0, 0));
+      this.addChild(new Text(theme.fg('text', '  ' + line), 0, 0));
     }
     if (argsText.split('\n').length > 10) {
-      this.addChild(new Text(fg('muted', '  ... (truncated)'), 0, 0));
+      this.addChild(new Text(theme.fg('muted', '  ... (truncated)'), 0, 0));
     }
 
     this.addChild(new Spacer(1));
@@ -81,19 +81,19 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
     const categoryHint = this.categoryLabel
       ? `lways allow ${this.categoryLabel.toLowerCase()}`
       : 'lways allow category';
-    const dim = chalk.hex(getTheme().dim);
-    const key = chalk.hex(getTheme().text).bold;
+    const dimColor = chalk.hex(theme.getTheme().dim);
+    const key = chalk.hex(theme.getTheme().text).bold;
     this.addChild(
       new Text(
-        fg('accent', 'Allow? ') +
+        theme.fg('accent', 'Allow? ') +
           key('y') +
-          dim('es  ') +
+          dimColor('es  ') +
           key('n') +
-          dim('o  ') +
+          dimColor('o  ') +
           key('a') +
-          dim(categoryHint + '  ') +
+          dimColor(categoryHint + '  ') +
           key('Y') +
-          dim('olo'),
+          dimColor('olo'),
         0,
         0,
       ),
