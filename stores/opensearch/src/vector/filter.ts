@@ -36,7 +36,7 @@ export class OpenSearchFilterTranslator extends ElasticDSLFilterTranslator<OpenS
     };
   }
 
-  protected translateLogicalOperator(operator: QueryOperator, value: any): any {
+  protected override translateLogicalOperator(operator: QueryOperator, value: any): any {
     const conditions = Array.isArray(value) ? value.map(item => this.translateNode(item)) : [this.translateNode(value)];
     switch (operator) {
       case '$and':
@@ -77,7 +77,7 @@ export class OpenSearchFilterTranslator extends ElasticDSLFilterTranslator<OpenS
   /**
    * Translates regex patterns to OpenSearch query syntax
    */
-  protected translateRegexOperator(field: string, value: any): any {
+  protected override translateRegexOperator(field: string, value: any): any {
     // Convert value to string if it's not already
     const regexValue = typeof value === 'string' ? value : value.toString();
 
