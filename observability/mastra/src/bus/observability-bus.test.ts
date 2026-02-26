@@ -845,5 +845,59 @@ describe('ObservabilityBus', () => {
       await bus.flush();
       expect(Date.now() - start).toBeLessThan(10);
     });
+
+    it('should call flush() on registered exporters during phase 2', async () => {
+      const exporterFlush = vi.fn(async () => {});
+      const exporter = createMockExporter({
+        name: 'buffered-exp',
+        flush: exporterFlush,
+      });
+
+      bus.registerExporter(exporter);
+      bus.emit(createTracingEvent());
+
+      await bus.flush();
+
+      expect(exporterFlush).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call flush() on the bridge during phase 2', async () => {
+      const bridgeFlush = vi.fn(async () => {});
+      const bridge = createMockBridge({
+        name: 'buffered-bridge',
+        flush: bridgeFlush,
+      });
+
+      bus.registerBridge(bridge);
+      bus.emit(createTracingEvent());
+
+      await bus.flush();
+
+      expect(bridgeFlush).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call exporter/bridge flush after handler delivery completes', async () => {
+      const order: string[] = [];
+
+      const exporter = createMockExporter({
+        name: 'ordered-exp',
+        onTracingEvent: undefined,
+        exportTracingEvent: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 30));
+          order.push('handler-done');
+        }),
+        flush: vi.fn(async () => {
+          order.push('exporter-flush');
+        }),
+      });
+
+      bus.registerExporter(exporter);
+      bus.emit(createTracingEvent());
+
+      await bus.flush();
+
+      // Handler must complete before exporter.flush() is called
+      expect(order).toEqual(['handler-done', 'exporter-flush']);
+    });
   });
 });

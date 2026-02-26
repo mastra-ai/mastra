@@ -720,18 +720,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Two-phase flush to ensure all observability data is fully exported.
+   * Flush all observability data: awaits in-flight handler promises, then
+   * drains exporter and bridge SDK-internal buffers.
    *
-   * **Phase 1 — Delivery:** Await all in-flight handler promises on the bus.
-   * This ensures event data has been delivered to exporter/bridge handler
-   * methods (e.g., `exportTracingEvent`, `onLogEvent`).
-   *
-   * **Phase 2 — Buffer drain:** Call `flush()` on each exporter and bridge
-   * to drain their SDK-internal buffers (e.g., OTEL BatchSpanProcessor,
-   * Langfuse client queue).
-   *
-   * The phases are sequential, not parallel — Phase 2 must not start until
-   * Phase 1 completes, otherwise exporters would flush empty buffers.
+   * Delegates to ObservabilityBus.flush() which owns the two-phase logic.
    *
    * This is critical for durable execution engines (e.g., Inngest) where
    * the process may be interrupted after a step completes. Calling flush()
@@ -739,27 +731,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
-
-    // Phase 1: Await in-flight handler delivery promises.
-    // After this, all event data has been delivered to exporter/bridge methods.
     await this.observabilityBus.flush();
-
-    // Phase 2: Drain exporter and bridge SDK-internal buffers.
-    const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
-    if (this.config.bridge) {
-      bufferFlushPromises.push(this.config.bridge.flush());
-    }
-
-    const results = await Promise.allSettled(bufferFlushPromises);
-
-    // Log any errors but don't throw
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
-        this.logger.error(`[Observability] Flush error [target=${targetName}]`, result.reason);
-      }
-    });
-
     this.logger.debug(`[Observability] Flush completed [name=${this.name}]`);
   }
 

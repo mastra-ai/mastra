@@ -153,18 +153,32 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Await all in-flight handler delivery promises (exporters + bridge),
-   * then flush base class subscriber promises.
+   * Two-phase flush to ensure all observability data is fully exported.
    *
-   * After flush() resolves, all event data has been delivered to handler
-   * methods. Callers should then call exporter.flush() / bridge.flush()
-   * to drain SDK-internal buffers.
+   * **Phase 1 — Delivery:** Await all in-flight handler promises (exporters,
+   * bridge, and base-class subscribers). After this resolves, all event data
+   * has been delivered to handler methods.
+   *
+   * **Phase 2 — Buffer drain:** Call flush() on each exporter and bridge to
+   * drain their SDK-internal buffers (e.g., OTEL BatchSpanProcessor, Langfuse
+   * client queue). Phases are sequential — Phase 2 must not start until
+   * Phase 1 completes, otherwise exporters would flush empty buffers.
    */
   async flush(): Promise<void> {
+    // Phase 1: Await in-flight handler delivery promises.
     if (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);
     }
     await super.flush();
+
+    // Phase 2: Drain exporter and bridge SDK-internal buffers.
+    const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
+    if (this.bridge) {
+      bufferFlushPromises.push(this.bridge.flush());
+    }
+    if (bufferFlushPromises.length > 0) {
+      await Promise.allSettled(bufferFlushPromises);
+    }
   }
 
   async shutdown(): Promise<void> {
