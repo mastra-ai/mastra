@@ -197,8 +197,26 @@ export function openaiCodexProvider(
     const shouldRewrite = parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
+    // Patch the request body for the Codex proxy which has different
+    // requirements than the standard OpenAI API:
+    //  - max_output_tokens is not supported (causes 400)
+    let finalBody = init?.body;
+    if (shouldRewrite && finalBody && typeof finalBody === 'string') {
+      try {
+        const bodyObj = JSON.parse(finalBody);
+
+        if ('max_output_tokens' in bodyObj) {
+          delete bodyObj.max_output_tokens;
+          finalBody = JSON.stringify(bodyObj);
+        }
+      } catch {
+        // not JSON, leave as-is
+      }
+    }
+
     return fetch(finalUrl, {
       ...init,
+      body: finalBody,
       headers,
     });
   };
