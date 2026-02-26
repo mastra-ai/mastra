@@ -32,8 +32,15 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
-import type { TracingContext, TracingProperties } from '../observability';
-import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
+import type { ObservabilityContext, TracingProperties } from '../observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  getOrCreateSpan,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../observability';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -1673,16 +1680,16 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     requestContext = new RequestContext(),
-    tracingContext,
     model,
     instructions,
+    ...rest
   }: {
     message: string | MessageInput;
     requestContext?: RequestContext;
-    tracingContext: TracingContext;
     model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
@@ -1736,7 +1743,7 @@ export class Agent<
       const result = (llm as MastraLLMVNext).stream({
         methodType: 'generate',
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messageList,
         agentId: this.id,
         agentName: this.name,
@@ -1746,7 +1753,7 @@ export class Agent<
     } else {
       const result = await (llm as MastraLLMV1).__text({
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messages: [
           {
             role: 'system',
@@ -1775,7 +1782,7 @@ export class Agent<
   async genTitle(
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
-    tracingContext: TracingContext,
+    observabilityContext: ObservabilityContext,
     model?: DynamicArgument<MastraModelConfig>,
     instructions?: DynamicArgument<string>,
   ) {
@@ -1786,7 +1793,7 @@ export class Agent<
           return await this.generateTitleFromUserMessage({
             message: normMessage,
             requestContext,
-            tracingContext,
+            ...observabilityContext,
             model,
             instructions,
           });
@@ -1826,20 +1833,20 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     memoryConfig,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
@@ -1877,7 +1884,7 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
@@ -1899,18 +1906,18 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
@@ -1943,7 +1950,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
@@ -1962,17 +1969,16 @@ export class Agent<
    */
   private async __runInputProcessors({
     requestContext,
-    tracingContext,
     messageList,
     inputProcessorOverrides,
     processorStates,
+    ...observabilityContext
   }: {
     requestContext: RequestContext;
-    tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
-  }): Promise<{
+  } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -1996,7 +2002,7 @@ export class Agent<
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
+        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -2031,19 +2037,14 @@ export class Agent<
    * that would otherwise only run in the v5 agentic loop.
    * @internal
    */
-  private async __runProcessInputStep({
-    requestContext,
-    tracingContext,
-    messageList,
-    stepNumber = 0,
-    processorStates,
-  }: {
-    requestContext: RequestContext;
-    tracingContext: TracingContext;
-    messageList: MessageList;
-    stepNumber?: number;
-    processorStates?: Map<string, ProcessorState>;
-  }): Promise<{
+  private async __runProcessInputStep(
+    args: Partial<ObservabilityContext> & {
+      requestContext: RequestContext;
+      messageList: MessageList;
+      stepNumber?: number;
+      processorStates?: Map<string, ProcessorState>;
+    },
+  ): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -2052,6 +2053,9 @@ export class Agent<
       processorId?: string;
     };
   }> {
+    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
     if (this.#inputProcessors || this.#memory) {
@@ -2066,7 +2070,7 @@ export class Agent<
           messageList,
           stepNumber,
           steps: [],
-          tracingContext,
+          ...observabilityContext,
           requestContext,
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
@@ -2107,15 +2111,14 @@ export class Agent<
    */
   private async __runOutputProcessors({
     requestContext,
-    tracingContext,
     messageList,
     outputProcessorOverrides,
+    ...observabilityContext
   }: {
     requestContext: RequestContext;
-    tracingContext: TracingContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
-  }): Promise<{
+  } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -2133,7 +2136,7 @@ export class Agent<
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext, requestContext);
+        messageList = await runner.runOutputProcessors(messageList, observabilityContext, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwire = {
@@ -2201,20 +2204,20 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     outputWriter,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
@@ -2242,7 +2245,7 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
@@ -2273,19 +2276,19 @@ export class Agent<
     resourceId,
     toolsets,
     requestContext,
-    tracingContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
 
     const memory = await this.getMemory({ requestContext });
@@ -2308,7 +2311,7 @@ export class Agent<
             memory,
             agentName: this.name,
             requestContext,
-            tracingContext,
+            ...observabilityContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
@@ -2331,20 +2334,20 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     mastraProxy,
     clientTools,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ requestContext });
     // Convert client tools
@@ -2354,7 +2357,7 @@ export class Agent<
         runId,
       });
       for (const [toolName, tool] of clientToolsForInput) {
-        const { execute, ...rest } = tool;
+        const { execute, ...toolRest } = tool;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2365,12 +2368,12 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -2387,20 +2390,20 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
 
@@ -2669,7 +2672,7 @@ export class Agent<
                   ? await agent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
@@ -2684,7 +2687,7 @@ export class Agent<
                     })
                   : await agent.generate(messagesForSubAgent, {
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
@@ -2751,7 +2754,7 @@ export class Agent<
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
                 result = { text: generateResult.text };
               } else if (
@@ -2762,7 +2765,7 @@ export class Agent<
                   ? await agent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
@@ -2779,7 +2782,7 @@ export class Agent<
                     })
                   : await agent.stream(messagesForSubAgent, {
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
@@ -2887,7 +2890,7 @@ export class Agent<
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
 
                 let fullText = '';
@@ -3090,7 +3093,7 @@ export class Agent<
           agentName: this.name,
           requestContext,
           model: await this.getModel({ requestContext }),
-          tracingContext,
+          ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
@@ -3116,18 +3119,18 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     methodType,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
@@ -3180,13 +3183,13 @@ export class Agent<
                   result = await run.resume({
                     resumeData,
                     requestContext,
-                    tracingContext: context?.tracingContext,
+                    ...resolveObservabilityContext(context ?? {}),
                   });
                 } else {
                   result = await run.start({
                     inputData: workflowInputData,
                     requestContext,
-                    tracingContext: context?.tracingContext,
+                    ...resolveObservabilityContext(context ?? {}),
                     ...(initialState && { initialState }),
                   });
                 }
@@ -3194,7 +3197,7 @@ export class Agent<
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
 
                 if (context?.writer) {
@@ -3211,12 +3214,12 @@ export class Agent<
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                     })
                   : run.stream({
                       inputData: workflowInputData,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
 
@@ -3301,7 +3304,7 @@ export class Agent<
           agentName: this.name,
           requestContext,
           model: await this.getModel({ requestContext }),
-          tracingContext,
+          ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
@@ -3328,12 +3331,12 @@ export class Agent<
     resourceId,
     runId,
     requestContext,
-    tracingContext,
     outputWriter,
     methodType,
     memoryConfig,
     autoResumeSuspendedTools,
     delegation,
+    ...rest
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -3341,13 +3344,13 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
-  }): Promise<Record<string, CoreTool>> {
+  } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
     const logger = this.logger;
 
@@ -3360,7 +3363,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       outputWriter,
       autoResumeSuspendedTools,
@@ -3371,7 +3374,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       memoryConfig,
       autoResumeSuspendedTools,
@@ -3382,7 +3385,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
       autoResumeSuspendedTools,
@@ -3393,7 +3396,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       clientTools: clientTools!,
       autoResumeSuspendedTools,
@@ -3405,7 +3408,7 @@ export class Agent<
       threadId,
       requestContext,
       methodType,
-      tracingContext,
+      ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
     });
@@ -3416,7 +3419,7 @@ export class Agent<
       threadId,
       requestContext,
       methodType,
-      tracingContext,
+      ...observabilityContext,
       autoResumeSuspendedTools,
     });
 
@@ -3425,7 +3428,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
     });
@@ -3523,7 +3526,7 @@ export class Agent<
     overrideScorers,
     threadId,
     resourceId,
-    tracingContext,
+    ...observabilityContext
   }: {
     messageList: MessageList;
     runId: string;
@@ -3534,8 +3537,7 @@ export class Agent<
       | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
-    tracingContext: TracingContext;
-  }) {
+  } & ObservabilityContext) {
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
@@ -3573,7 +3575,7 @@ export class Agent<
           structuredOutput: !!structuredOutput,
           threadId,
           resourceId,
-          tracingContext,
+          ...observabilityContext,
         });
       }
     }
@@ -3911,7 +3913,8 @@ export class Agent<
     });
 
     const run = await executionWorkflow.createRun();
-    const result = await run.start({ tracingContext: { currentSpan: agentSpan } });
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+    const result = await run.start({ ...observabilityContext });
 
     return result;
   }
@@ -3936,6 +3939,8 @@ export class Agent<
     structuredOutput = false,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
     const resToLog = {
       text: result.text,
       object: result.object,
@@ -4018,7 +4023,7 @@ export class Agent<
             const title = await this.genTitle(
               userMessage,
               requestContext,
-              { currentSpan: agentSpan },
+              observabilityContext,
               titleModel,
               titleInstructions,
             );
@@ -4082,7 +4087,7 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentSpan },
+      ...observabilityContext,
     });
 
     agentSpan?.end({

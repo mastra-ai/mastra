@@ -7,8 +7,8 @@ import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
-import { InternalSpans } from '../observability';
+import { InternalSpans, resolveObservabilityContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
@@ -47,13 +47,12 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
 }
 
 // Standardized input type for all pipelines
-interface ScorerRun<TInput = any, TOutput = any> {
+interface ScorerRun<TInput = any, TOutput = any> extends Partial<ObservabilityContext> {
   runId?: string;
   input?: TInput;
   output: TOutput;
   groundTruth?: any;
   requestContext?: Record<string, any>;
-  tracingContext?: TracingContext;
 }
 
 // Prompt object definition with conditional typing
@@ -409,7 +408,7 @@ class MastraScorer<
       });
     }
 
-    const { tracingContext } = input;
+    const observabilityContext = resolveObservabilityContext(input);
 
     let runId = input.runId;
     if (!runId) {
@@ -424,7 +423,7 @@ class MastraScorer<
       inputData: {
         run,
       },
-      tracingContext,
+      ...observabilityContext,
     });
 
     if (workflowResult.status === 'failed') {
@@ -480,7 +479,8 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, tracingContext }) => {
+        execute: async ({ inputData, getInitData, ...rest }) => {
+          const observabilityContext = resolveObservabilityContext(rest);
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
@@ -489,7 +489,7 @@ class MastraScorer<
           let stepResult;
           let newGeneratedPrompts = generatedPrompts;
           if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
+            const { result, prompt } = await this.executePromptStep(scorerStep, observabilityContext, context);
             stepResult = result;
             newGeneratedPrompts = {
               ...generatedPrompts,
@@ -567,7 +567,11 @@ class MastraScorer<
     return await scorerStep.definition(context);
   }
 
-  private async executePromptStep(scorerStep: ScorerStepDefinition, tracingContext: TracingContext, context: any) {
+  private async executePromptStep(
+    scorerStep: ScorerStepDefinition,
+    observabilityContext: ObservabilityContext,
+    context: any,
+  ) {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -611,12 +615,12 @@ class MastraScorer<
           structuredOutput: {
             schema,
           },
-          tracingContext,
+          ...observabilityContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
           output: schema,
-          tracingContext,
+          ...observabilityContext,
         });
       }
       return { result: result.object.score, prompt };
@@ -625,9 +629,9 @@ class MastraScorer<
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { tracingContext });
+        result = await judge.generate(prompt, { ...observabilityContext });
       } else {
-        result = await judge.generateLegacy(prompt, { tracingContext });
+        result = await judge.generateLegacy(prompt, { ...observabilityContext });
       }
       return { result: result.text, prompt };
     } else {
@@ -638,12 +642,12 @@ class MastraScorer<
           structuredOutput: {
             schema: promptStep.outputSchema,
           },
-          tracingContext,
+          ...observabilityContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
           output: promptStep.outputSchema,
-          tracingContext,
+          ...observabilityContext,
         });
       }
       return { result: result.object, prompt };
