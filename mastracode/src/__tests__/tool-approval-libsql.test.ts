@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
+import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
@@ -7,77 +8,54 @@ import z from 'zod';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-// Minimal mock model that emits a tool call on first stream, text on second
-function createMockModel() {
-  let callCount = 0;
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'test',
-    modelId: 'mock',
-    defaultObjectGenerationMode: 'json' as const,
-    supportsUrl: () => false,
-    supportsStructuredOutputs: true,
-    doGenerate: async () => {
-      throw new Error('not implemented');
+function createToolCallStream() {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({
+        type: 'response-metadata',
+        id: 'id-0',
+        modelId: 'mock',
+        timestamp: new Date(0),
+      });
+      controller.enqueue({
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'readFile',
+        input: '{"path":"test.txt"}',
+        providerExecuted: false,
+      });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      });
+      controller.close();
     },
-    doStream: async () => {
-      callCount++;
-      if (callCount === 1) {
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock',
-                timestamp: new Date(0),
-              });
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: 'call-1',
-                toolName: 'readFile',
-                input: '{"path":"test.txt"}',
-                providerExecuted: false,
-              });
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              });
-              controller.close();
-            },
-          }),
-        };
-      }
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'id-1',
-              modelId: 'mock',
-              timestamp: new Date(0),
-            });
-            controller.enqueue({ type: 'text-start', id: 'text-1' });
-            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'File contents here' });
-            controller.enqueue({ type: 'text-end', id: 'text-1' });
-            controller.enqueue({
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            });
-            controller.close();
-          },
-        }),
-      };
+  });
+}
+
+function createTextStream() {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({
+        type: 'response-metadata',
+        id: 'id-1',
+        modelId: 'mock',
+        timestamp: new Date(0),
+      });
+      controller.enqueue({ type: 'text-start', id: 'text-1' });
+      controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'File contents here' });
+      controller.enqueue({ type: 'text-end', id: 'text-1' });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      });
+      controller.close();
     },
-  };
+  });
 }
 
 describe('tool approval with LibSQLStore via Harness', () => {
@@ -95,7 +73,15 @@ describe('tool approval with LibSQLStore via Harness', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You read files.',
-      model: createMockModel() as any,
+      model: new MastraLanguageModelV2Mock({
+        doStream: (() => {
+          let callCount = 0;
+          return async () => {
+            callCount++;
+            return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
+          };
+        })(),
+      }),
       tools: { readFile: readFileTool },
     });
 
