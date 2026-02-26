@@ -21,10 +21,10 @@ In this guide, you'll build a code review bot that automatically reviews pull re
 In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes. On the `Workspace` instance, configure the `skills` option to point to a skills directory. The `skills` directory will live inside the filesystem's `basePath`.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 // highlight-start
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 // highlight-end
 
 // highlight-start
@@ -33,13 +33,13 @@ const workspace = new Workspace({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
   skills: ['/skills'],
-});
+})
 // highlight-end
 
 export const mastra = new Mastra({
   // highlight-next-line
   workspace,
-});
+})
 ```
 
 At the root of your project, create a new folder called `workspace`. Inside that, create a `skills` folder. This is where you'll define the code standards skill in the next step.
@@ -92,19 +92,21 @@ Inside `workspace/skills/code-standards`, create a `references` folder to hold r
 
 ```typescript
 // 1. Imports
-import { foo } from 'bar';
+import { foo } from 'bar'
 
 // 2. Constants
-const MAX_SIZE = 100;
+const MAX_SIZE = 100
 
 // 3. Types
-interface User { id: string; }
+interface User {
+  id: string
+}
 
 // 4. Functions
 function doSomething() {}
 
 // 5. Exports
-export { doSomething };
+export { doSomething }
 ```
 
 ## Error Handling
@@ -121,7 +123,7 @@ Write "why" not "what".
 Now it's time to create the code review bot agent that uses the code-standards skill. Create a new file at `src/mastra/agents/code-reviewer.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/code-reviewer.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const codeReviewer = new Agent({
   id: 'code-reviewer',
@@ -134,30 +136,30 @@ When asked to review code:
 3. Check against the style guide in skill references
 4. Be constructive and specific with line numbers`,
   model: 'openai/gpt-4o',
-});
+})
 ```
 
 Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Mastra } from '@mastra/core'
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 // highlight-next-line
-import { codeReviewer } from './agents/code-reviewer';
+import { codeReviewer } from './agents/code-reviewer'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
   skills: ['/skills'],
-});
+})
 
 export const mastra = new Mastra({
   workspace,
   // highlight-next-line
   agents: { codeReviewer },
-});
+})
 ```
 
 ## Test the bot
@@ -189,16 +191,19 @@ The bot should activate the `code-standards` skill and provide structured feedba
 debugging statements, and missing error handling.
 
 **Critical Issues**:
+
 - Missing error handling for fetch (line 2)
 - No async/await for asynchronous operation (line 2)
 
 **Suggestions**:
+
 - Use const instead of var (line 2)
 - Remove console.log before committing (line 3)
 - Add TypeScript type for id parameter
 - Use template literals instead of concatenation
 
 **Positive Notes**:
+
 - Function name is clear and descriptive
 ```
 

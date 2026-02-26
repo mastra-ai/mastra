@@ -122,7 +122,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   }
 
   // Use custom terminal UI for sandbox execution tools
-  const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+  const isSandboxExecution =
+    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS;
 
   if (isSandboxExecution) {
     return (

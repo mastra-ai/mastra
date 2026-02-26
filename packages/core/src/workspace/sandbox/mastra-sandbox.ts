@@ -30,7 +30,10 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
+import type { SandboxProcessManager } from './process-manager';
 import type { WorkspaceSandbox } from './sandbox';
+import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
+import { shellQuote } from './utils';
 
 /**
  * Lifecycle hook that fires during sandbox state transitions.
@@ -49,6 +52,28 @@ export interface MastraSandboxOptions {
   onStop?: SandboxLifecycleHook;
   /** Called before the sandbox is destroyed */
   onDestroy?: SandboxLifecycleHook;
+
+  /**
+   * Process manager for this sandbox.
+   *
+   * When provided, the base class automatically:
+   * 1. Sets the sandbox back-reference on the process manager
+   * 2. Exposes it via `this.processes`
+   * 3. Creates a default `executeCommand` implementation (spawn + wait)
+   *
+   * @example
+   * ```typescript
+   * class MySandbox extends MastraSandbox {
+   *   constructor() {
+   *     super({
+   *       name: 'MySandbox',
+   *       processes: new MyProcessManager({ env: myEnv }),
+   *     });
+   *   }
+   * }
+   * ```
+   */
+  processes?: SandboxProcessManager;
 }
 
 /**
@@ -68,20 +93,15 @@ export interface MastraSandboxOptions {
  *   status: ProviderStatus = 'pending';
  *
  *   constructor() {
- *     super({ name: 'MyCustomSandbox' });
+ *     super({
+ *       name: 'MyCustomSandbox',
+ *       processes: new MyProcessManager({ env: myEnv }),
+ *     });
  *   }
  *
- *   // Override start() to provide startup logic
- *   async start(): Promise<void> {
- *     // Your startup logic here
- *   }
- *
+ *   async start(): Promise<void> { /* startup logic *\/ }
  *   async mount(filesystem, mountPath) { ... }
  *   async unmount(mountPath) { ... }
- *   async executeCommand(command: string, args?: string[]): Promise<CommandResult> {
- *     this.logger.debug('Executing command', { command, args });
- *     // Implementation...
- *   }
  * }
  * ```
  */
@@ -98,11 +118,41 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Current status of the sandbox */
   abstract status: ProviderStatus;
 
+  // ---------------------------------------------------------------------------
+  // Optional WorkspaceSandbox members
+  //
+  // Re-declared here so that variables typed as `MastraSandbox` (not just
+  // `WorkspaceSandbox`) can see them.  TypeScript's `implements` is a
+  // constraint check, not a type merge — optional interface members are
+  // invisible on the class type unless explicitly listed.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Execute a shell command and wait for completion.
+   *
+   * Method syntax (not property syntax) is intentional — it prevents
+   * `useDefineForClassFields` from emitting `this.executeCommand = undefined`
+   * which would shadow prototype methods defined by subclasses.
+   */
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  /** Process manager */
+  readonly processes?: SandboxProcessManager;
+
   /** Mount manager - automatically created if subclass implements mount() */
   readonly mounts?: MountManager;
 
   /** Optional mount method - implement to enable mounting support */
   mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+
+  /** Optional unmount method */
+  unmount?(mountPath: string): Promise<void>;
+
+  /** Get instructions describing how this sandbox works */
+  getInstructions?(): string;
+
+  /** Get sandbox status and metadata */
+  getInfo?(): SandboxInfo | Promise<SandboxInfo>;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
@@ -135,6 +185,32 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
         mount: this.mount.bind(this),
         logger: this.logger,
       });
+    }
+
+    // Wire up process manager if provided
+    if (options.processes) {
+      const pm = options.processes;
+      // Set the sandbox back-reference. The process manager reads this
+      // lazily (at call time), so it's fine that the subclass constructor
+      // hasn't finished yet.
+      pm.sandbox = this;
+      this.processes = pm;
+
+      // Auto-create executeCommand (spawn + wait) unless the subclass
+      // defines its own implementation.
+      if (!this.executeCommand) {
+        this.executeCommand = async (command: string, args?: string[], opts?: ExecuteCommandOptions) => {
+          const fullCommand = args?.length ? `${command} ${args.map(a => shellQuote(a)).join(' ')}` : command;
+          this.logger.debug(`[${this.name}] Executing: ${fullCommand}`, { cwd: opts?.cwd });
+
+          const handle = await pm.spawn(fullCommand, opts ?? {});
+          const result = await handle.wait();
+
+          this.logger.debug(`[${this.name}] Exit code: ${result.exitCode} (${result.executionTimeMs}ms)`);
+
+          return { ...result, command: fullCommand };
+        };
+      }
     }
   }
 
@@ -248,7 +324,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * }
    * ```
    */
-  protected async ensureRunning(): Promise<void> {
+  async ensureRunning(): Promise<void> {
+    // Already destroyed — cannot use this sandbox
+    if (this.status === 'destroyed') {
+      throw new SandboxNotReadyError(this.id);
+    }
+    // During teardown the sandbox is still operational (e.g. destroy()
+    // may need to list/kill processes).  Allow operations to proceed
+    // without trying to restart.
+    if (this.status === 'destroying' || this.status === 'stopping') {
+      return;
+    }
     if (this.status !== 'running') {
       await this._start();
     }
@@ -328,6 +414,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   async _destroy(): Promise<void> {
     // Already destroyed
     if (this.status === 'destroyed') {
+      return;
+    }
+
+    // Never started — nothing to clean up
+    if (this.status === 'pending') {
+      this.status = 'destroyed';
       return;
     }
 

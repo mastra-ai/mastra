@@ -1,5 +1,29 @@
 # @mastra/schema-compat
 
+## 1.1.3
+
+### Patch Changes
+
+- Fix `ZodNull` throwing "does not support zod type: ZodNull" for Anthropic and OpenAI reasoning models. MCP tools with nullable properties in their JSON Schema produce `z.null()` which was unhandled by these provider compat layers. ([#13496](https://github.com/mastra-ai/mastra/pull/13496))
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Fix `ZodNull` throwing "does not support zod type: ZodNull" for Anthropic and OpenAI reasoning models. MCP tools with nullable properties in their JSON Schema produce `z.null()` which was unhandled by these provider compat layers. ([#13496](https://github.com/mastra-ai/mastra/pull/13496))
+
+## 1.1.2
+
+### Patch Changes
+
+- Fixed Groq provider not receiving schema compatibility transformations, which caused HTTP 400 errors when AI models omitted optional parameters from workspace tool calls (e.g. list_files). Groq now correctly gets the same optional-to-nullable schema handling as OpenAI. ([#13303](https://github.com/mastra-ai/mastra/pull/13303))
+
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed Groq provider not receiving schema compatibility transformations, which caused HTTP 400 errors when AI models omitted optional parameters from workspace tool calls (e.g. list_files). Groq now correctly gets the same optional-to-nullable schema handling as OpenAI. ([#13303](https://github.com/mastra-ai/mastra/pull/13303))
+
 ## 1.1.1
 
 ### Patch Changes

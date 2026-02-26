@@ -391,7 +391,7 @@ export class DatasetsPG extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "createdAt" DESC LIMIT $1 OFFSET $2`,
+        `SELECT * FROM ${tableName} ORDER BY "createdAt" DESC, "id" ASC LIMIT $1 OFFSET $2`,
         [limitValue, offset],
       );
 
@@ -859,7 +859,7 @@ export class DatasetsPG extends DatasetsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "datasetId" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $3) AND "isDeleted" = false ORDER BY "createdAt" DESC`,
+        `SELECT * FROM ${tableName} WHERE "datasetId" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $3) AND "isDeleted" = false ORDER BY "createdAt" DESC, "id" ASC`,
         [datasetId, version, version],
       );
       return (rows || []).map(row => this.transformItemRow(row));
@@ -944,7 +944,7 @@ export class DatasetsPG extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 

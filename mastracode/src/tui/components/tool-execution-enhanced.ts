@@ -241,16 +241,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsObj = this.args as Record<string, unknown> | undefined;
     const fullPath = argsObj?.path ? String(argsObj.path) : '';
     const viewRange = argsObj?.view_range as [number, number] | undefined;
-    const startLine = viewRange?.[0] ?? 1;
+    // view tool uses view_range[0], workspace read_file uses offset
+    const startLine = viewRange?.[0] ?? (argsObj?.offset as number | undefined) ?? 1;
     // Don't show border until we have a result
     if (!this.result || this.isPartial) {
       // Just show pending indicator
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
       const rangeDisplay = viewRange ? theme.fg('muted', `:${viewRange[0]},${viewRange[1]}`) : '';
       const status = this.getStatusIndicator();
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('accent', path), fullPath, viewRange?.[0])
-        : theme.fg('accent', path);
+      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
       const headerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
       this.contentBox.addChild(new Text(headerText, 0, 0));
       return;
@@ -269,9 +268,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('accent', path), fullPath, viewRange?.[0])
-      : theme.fg('accent', path);
+    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
@@ -575,17 +572,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const maxDiags = shouldCollapse ? COLLAPSED_DIAG_LINES : diagnostics.entries.length;
       const entriesToShow = diagnostics.entries.slice(0, maxDiags);
       for (const diag of entriesToShow) {
-        const color = diag.severity === 'error' ? '#e06c75' : diag.severity === 'warning' ? '#f59e0b' : '#71717a';
+        const t = theme.getTheme();
+        const color = diag.severity === 'error' ? t.error : diag.severity === 'warning' ? t.warning : t.muted;
         const icon = diag.severity === 'error' ? '✗' : diag.severity === 'warning' ? '⚠' : 'ℹ';
         const location = diag.location ? chalk.hex(color)(diag.location) + ' ' : '';
-        const line = `  ${chalk.hex(color)(icon)} ${location}${chalk.hex('#a1a1aa')(diag.message)}`;
+        const line = `  ${chalk.hex(color)(icon)} ${location}${theme.fg('thinkingText', diag.message)}`;
         this.contentBox.addChild(new Text(line, 0, 0));
       }
       if (shouldCollapse) {
         const remaining = diagnostics.entries.length - COLLAPSED_DIAG_LINES;
         this.contentBox.addChild(
           new Text(
-            chalk.hex('#71717a')(`  ... ${remaining} more diagnostic${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
+            theme.fg('muted', `  ... ${remaining} more diagnostic${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
             0,
             0,
           ),
@@ -651,7 +649,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // Use soft red for removed, green for added
     const removedColor = chalk.hex(mastra.red); // soft red
-    const addedColor = chalk.hex('#5cb85c'); // soft green
+    const addedColor = chalk.hex(theme.getTheme().success); // soft green
 
     const maxLines = Math.max(oldLines.length, newLines.length);
 
@@ -1108,27 +1106,35 @@ function getLanguageFromPath(path: string): string | undefined {
   return ext ? langMap[ext] : undefined;
 }
 
-/** Strip cat -n formatting and apply syntax highlighting */
+/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
 function highlightCode(content: string, path: string, startLine?: number): string {
   let lines = content.split('\n').map(line => line.trimEnd());
-  // Remove "[Truncated N tokens]" and "Here's the result of running `cat -n`..." headers
+  // Remove known headers:
+  // - "[Truncated N tokens]" from token truncation
+  // - "Here's the result of running `cat -n`..." from view tool
+  // - "/path/to/file (NNN bytes)" or "/path/to/file (lines N-M of T, NNN bytes)" from workspace read_file
   while (
     lines.length > 0 &&
-    (lines[0]!.includes("Here's the result of running") || lines[0]!.match(/^\[Truncated \d+ tokens\]$/))
+    (lines[0]!.includes("Here's the result of running") ||
+      lines[0]!.match(/^\[Truncated \d+ tokens\]$/) ||
+      lines[0]!.match(/^.*\(\d+ bytes\)$/) ||
+      lines[0]!.match(/^.*\(lines \d+-\d+ of \d+, \d+ bytes\)$/))
   ) {
     lines = lines.slice(1);
   }
 
   // Strip line numbers - we know they're sequential starting from startLine
+  // Supports two formats:
+  //   view tool:           "   123\tcode" (tab separator)
+  //   workspace read_file: "     123→code" (arrow separator)
+  // Separator is optional because trimEnd() strips trailing tabs on blank lines
   let expectedLineNum = startLine ?? 1;
   const codeLines = lines.map(line => {
     const numStr = String(expectedLineNum);
-    // Line format is like "   123\tcode" or "   123" for blank lines
-    // Check if line starts with spaces + our expected number
-    const match = line.match(/^(\s*)(\d+)(\t?)(.*)$/);
+    const match = line.match(/^(\s*)(\d+)[\t→]?(.*)$/);
     if (match && match[2] === numStr) {
       expectedLineNum++;
-      return match[4]; // Return just the code part after the tab
+      return match[3]; // Return just the code part after the separator
     }
     return line;
   });

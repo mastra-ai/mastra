@@ -1,0 +1,306 @@
+---
+title: 'Configuration'
+description: 'Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, storage backends (LibSQL and PostgreSQL), and environment variables.'
+packages:
+  - 'mastracode'
+---
+
+# Configuration
+
+Mastra Code is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
+
+## Authentication
+
+Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
+
+### API keys
+
+The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GOOGLE_GENERATIVE_AI_API_KEY=...
+export DEEPSEEK_API_KEY=...
+export CEREBRAS_API_KEY=...
+```
+
+Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
+
+### OAuth login (optional)
+
+If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
+
+| Provider | OAuth flow | What you get |
+| - | - | - |
+| **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
+| **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+
+OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
+
+### Anthropic OAuth warning
+
+Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.
+
+## MCP servers
+
+Mastra Code can connect to external [MCP](https://mastra.ai/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/mcp.json` | Project |
+| | `~/.mastracode/mcp.json` | Global |
+| Lowest | `.claude/settings.local.json` | Project (Claude Code compatible) |
+
+Project config overrides global config by server name. Claude Code settings are the lowest priority fallback.
+
+### MCP config format
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@my-org/mcp-server"],
+      "env": {
+        "API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+Each server entry requires a `command` field. The `args` and `env` fields are optional.
+
+On startup, Mastra Code connects to all configured servers and reports the status:
+
+```
+MCP: 2 server(s) connected, 15 tool(s)
+```
+
+Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools.
+
+## Hooks
+
+Hooks are user-configured shell commands that run at specific lifecycle events. Use hooks for custom validation, logging, notifications, or integration with external systems.
+
+### Hook config format
+
+```json title=".mastracode/hooks.json"
+{
+  "PreToolUse": [
+    {
+      "type": "command",
+      "command": "node scripts/validate-tool.js",
+      "matcher": {
+        "tool_name": "execute_command"
+      },
+      "timeout": 5000,
+      "description": "Validate shell commands before execution"
+    }
+  ],
+  "PostToolUse": [
+    {
+      "type": "command",
+      "command": "node scripts/log-tool.js",
+      "description": "Log tool usage"
+    }
+  ]
+}
+```
+
+### Hook events
+
+| Event | When it fires | Can block? |
+| - | - | - |
+| `PreToolUse` | Before a tool call executes | Yes |
+| `PostToolUse` | After a tool call completes | No |
+| `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
+| `UserPromptSubmit` | When the user sends a message | Yes |
+| `SessionStart` | When a session begins | No |
+| `SessionEnd` | When a session ends | No |
+| `Notification` | When the TUI fires a notification | No |
+
+`UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
+
+### Hook I/O protocol
+
+Hook processes receive a JSON payload on stdin with context about the event:
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "execute_command",
+  "tool_input": { "command": "npm test" }
+}
+```
+
+For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can respond on stdout with a JSON object:
+
+```json
+{
+  "decision": "block",
+  "reason": "This command is not allowed"
+}
+```
+
+### Hook config locations
+
+| Priority | Path | Scope |
+| - | - | - |
+| Higher | `.mastracode/hooks.json` | Project (appended after global) |
+| Lower | `~/.mastracode/hooks.json` | Global (runs first) |
+
+Global hooks run before project hooks. For the same event, all hooks execute in order.
+
+## Custom slash commands
+
+Define reusable prompt templates as markdown files. Mastra Code scans these directories for `.md` files:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/commands/` | Project |
+| | `.claude/commands/` | Project (Claude Code compatible) |
+| | `~/.mastracode/commands/` | Global |
+| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+
+Each command file can include YAML frontmatter with `name` and `description` fields:
+
+```yaml title=".mastracode/commands/review.md"
+---
+name: review
+description: Review the current diff for issues
+---
+Review my current git diff. Look for bugs, security issues,
+and violations of the project's coding standards.
+```
+
+The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`.
+
+Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
+
+## Skills
+
+Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
+
+Mastra Code scans these directories for skills:
+
+| Priority | Path | Scope |
+| - | - | - |
+| Highest | `.mastracode/skills/` | Project |
+| | `.claude/skills/` | Project (Claude Code compatible) |
+| | `~/.mastracode/skills/` | Global |
+| Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
+
+Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
+
+## Agent instructions
+
+Mastra Code loads project-specific instructions from `AGENTS.md` or `CLAUDE.md` files and injects them into the agent's system prompt. This is how you can customize the agent's behavior for your project.
+
+### Lookup order
+
+For project instructions (first match wins):
+
+1. `AGENTS.md` or `CLAUDE.md` in the project root
+1. `.claude/AGENTS.md` or `.claude/CLAUDE.md`
+1. `.mastracode/AGENTS.md` or `.mastracode/CLAUDE.md`
+
+For global instructions (first match wins):
+
+1. `~/.claude/AGENTS.md` or `~/.claude/CLAUDE.md`
+1. `~/.mastracode/AGENTS.md` or `~/.mastracode/CLAUDE.md`
+1. `~/.config/claude/AGENTS.md` or `~/.config/claude/CLAUDE.md`
+1. `~/.config/mastracode/AGENTS.md` or `~/.config/mastracode/CLAUDE.md`
+
+`AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
+
+## Storage
+
+Mastra Code stores threads, messages, state, and observational memory in a database. It uses LibSQL by default with a local file — no setup needed.
+
+To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
+
+If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
+
+## Observational memory
+
+[Observational memory](https://mastra.ai/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
+
+### OM scope
+
+Control whether observations are scoped to individual threads or shared across all threads for a project:
+
+| Scope | Behavior |
+| - | - |
+| `thread` (default) | Observations are private to each conversation thread |
+| `resource` | Observations are shared across all threads for the same project |
+
+Configure the scope through:
+
+1. `MASTRA_OM_SCOPE` environment variable (`"thread"` or `"resource"`)
+1. `.mastracode/database.json` → `omScope` field
+1. `~/.mastracode/database.json` → `omScope` field
+
+### OM model settings
+
+The observer and reflector models default to `google/gemini-2.5-flash`. Override them per-thread through the `/settings` panel or in the harness state.
+
+### OM thresholds
+
+| Threshold | Default | Description |
+| - | - | - |
+| Observation threshold | 30,000 tokens | Token count that triggers an observation pass |
+| Reflection threshold | 40,000 tokens | Token count that triggers a reflection pass |
+
+## Color theme
+
+Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. You can override the detected theme with the `/theme` slash command or the `MASTRA_THEME` environment variable.
+
+### Detection order
+
+1. `MASTRA_THEME` environment variable — explicit `dark` or `light`
+1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. OSC 11 query — asks your terminal for its actual background color
+1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
+1. Falls back to dark theme
+
+### Switching themes
+
+Use the `/theme` command to change the theme at runtime:
+
+```
+/theme light
+/theme dark
+/theme auto
+```
+
+Running `/theme` with no arguments shows the current theme. The choice is persisted across sessions.
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `MASTRA_DB_URL` | LibSQL database URL (e.g., `libsql://...` or `file:./data.db`) |
+| `MASTRA_DB_AUTH_TOKEN` | Auth token for remote LibSQL database |
+| `MASTRA_DB_PATH` | Override the local database file path |
+| `MASTRA_USER_ID` | Override the auto-detected user identity |
+| `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
+| `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
+| `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
+| `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
+
+## Resource ID override
+
+Resource IDs determine how threads are grouped. By default, Mastra Code generates one from the Git remote URL or filesystem path. Override it to share threads across repositories or isolate threads within a monorepo:
+
+```json title=".mastracode/database.json"
+{
+  "resourceId": "my-custom-project-id"
+}
+```
+
+You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.

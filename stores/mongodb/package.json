@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.4.0",
+  "version": "1.5.2",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -50,7 +50,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.1.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

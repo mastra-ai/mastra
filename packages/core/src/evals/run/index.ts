@@ -1,14 +1,19 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import type { Agent, AgentExecutionOptions, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
-import type { AnyWorkflow, WorkflowResult, StepResult } from '../../workflows';
+import type { AnyWorkflow, WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
+
+type WorkflowRunOptions = WorkflowRunStartOptions & {
+  initialState?: any;
+};
 
 type RunEvalsDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
@@ -18,8 +23,8 @@ type RunEvalsDataItem<TTarget = unknown> = {
       : unknown;
   groundTruth?: any;
   requestContext?: RequestContext;
-  tracingContext?: TracingContext;
-};
+  startOptions?: WorkflowRunOptions;
+} & Partial<ObservabilityContext>;
 
 type WorkflowScorerConfig = {
   workflow?: MastraScorer<any, any, any, any>[];
@@ -38,6 +43,7 @@ export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TAgent;
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
@@ -51,6 +57,7 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
+  targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
     targetResult: WorkflowResult<any, any, any, any>;
@@ -64,6 +71,7 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;
+  targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
     targetResult: WorkflowResult<any, any, any, any>;
@@ -78,6 +86,9 @@ export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
   target: Agent | Workflow;
+  targetOptions?:
+    | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
+    | WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
     targetResult: any;
@@ -85,7 +96,7 @@ export async function runEvals(config: {
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult> {
-  const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
+  const { data, scorers, target, targetOptions, onItemComplete, concurrency = 1 } = config;
 
   validateEvalsInputs(data, scorers, target);
 
@@ -101,7 +112,7 @@ export async function runEvals(config: {
   await pMap(
     data,
     async (item: RunEvalsDataItem<any>) => {
-      const targetResult = await executeTarget(target, item);
+      const targetResult = await executeTarget(target, item, targetOptions);
       const scorerResults = await runScorers(scorers, targetResult, item);
       scoreAccumulator.addScores(scorerResults);
 
@@ -203,12 +214,22 @@ function validateEvalsInputs(
   }
 }
 
-async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<any>) {
+async function executeTarget(
+  target: Agent | Workflow,
+  item: RunEvalsDataItem<any>,
+  targetOptions?:
+    | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
+    | WorkflowRunOptions,
+) {
   try {
     if (isWorkflow(target)) {
-      return await executeWorkflow(target, item);
+      return await executeWorkflow(target, item, targetOptions as WorkflowRunOptions);
     } else {
-      return await executeAgent(target, item);
+      return await executeAgent(
+        target,
+        item,
+        targetOptions as Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
+      );
     }
   } catch (error) {
     throw new MastraError(
@@ -226,11 +247,15 @@ async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<an
   }
 }
 
-async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
+async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, targetOptions?: WorkflowRunOptions) {
+  const observabilityContext = resolveObservabilityContext(item);
   const run = await target.createRun({ disableScorers: true });
   const workflowResult = await run.start({
+    ...targetOptions,
+    ...item.startOptions,
     inputData: item.input,
     requestContext: item.requestContext,
+    ...observabilityContext,
   });
 
   return {
@@ -242,19 +267,27 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
   };
 }
 
-async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
+async function executeAgent(
+  agent: Agent,
+  item: RunEvalsDataItem<any>,
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
+) {
+  const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
     return await agent.generate(item.input as any, {
+      ...targetOptions,
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      ...observabilityContext,
     });
   } else {
     return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      ...observabilityContext,
     });
   }
 }
@@ -274,7 +307,7 @@ async function runScorers(
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
 
         scorerResults[scorer.id] = score;
@@ -304,7 +337,7 @@ async function runScorers(
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
         workflowScorerResults[scorer.id] = score;
       }
@@ -326,7 +359,7 @@ async function runScorers(
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 requestContext: item.requestContext,
-                tracingContext: item.tracingContext,
+                ...resolveObservabilityContext(item),
               });
               stepResults[scorer.id] = score;
             } catch (error) {
@@ -499,6 +532,7 @@ async function saveSingleScore({
         name: scorer?.name || scorerId,
         description: scorer?.description || '',
         type: scorer?.type || 'unknown',
+        ...(scorer ? { hasJudge: !!scorer.judge } : {}),
       },
       entity: {
         id: target.id,

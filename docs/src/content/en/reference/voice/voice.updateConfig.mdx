@@ -12,47 +12,48 @@ The `updateConfig()` method allows you to update the configuration of a voice pr
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: 'gpt-5.1-realtime',
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: "alloy",
-});
+  speaker: 'alloy',
+})
 
 // Connect to the real-time service
-await voice.connect();
+await voice.connect()
 
 // Later, update the configuration
 voice.updateConfig({
-  voice: "nova", // Change the default voice
+  voice: 'nova', // Change the default voice
   turn_detection: {
-    type: "server_vad",
+    type: 'server_vad',
     threshold: 0.5,
     silence_duration_ms: 1000,
   },
-});
+})
 
 // The next speak() call will use the new configuration
-await voice.speak("Hello with my new voice!");
+await voice.speak('Hello with my new voice!')
 ```
 
 ## Parameters
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "Record<string, unknown>",
-      description:
-        "Configuration options to update. The specific properties depend on the voice provider.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "options",
+type: "Record<string, unknown>",
+description:
+"Configuration options to update. The specific properties depend on the voice provider.",
+isOptional: false,
+},
+]}
 />
 
 ## Return Value
@@ -66,23 +67,24 @@ Different voice providers support different configuration options:
 ### OpenAI Realtime
 
 <br />
+
 <PropertiesTable
   content={[
-    {
-      name: "voice",
-      type: "string",
-      description:
-        "Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
-      isOptional: true,
-    },
-    {
-      name: "turn_detection",
-      type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-      description:
-        "Configuration for detecting when a user has finished speaking",
-      isOptional: true,
-    },
-  ]}
+{
+name: "voice",
+type: "string",
+description:
+"Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
+isOptional: true,
+},
+{
+name: "turn_detection",
+type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
+description:
+"Configuration for detecting when a user has finished speaking",
+isOptional: true,
+},
+]}
 />
 
 ## Notes

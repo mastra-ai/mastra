@@ -6,11 +6,12 @@
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
-import type { Harness, HarnessMessage, TokenUsage, TaskItem } from '@mastra/core/harness';
+import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
+import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
@@ -20,8 +21,7 @@ import { CustomEditor } from './components/custom-editor.js';
 
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
-import { defaultOMProgressState } from './components/om-progress.js';
-import type { OMProgressComponent, OMProgressState } from './components/om-progress.js';
+import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -92,13 +92,10 @@ export interface TUIState {
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
-  isAgentActive: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
-  /** Buffer partial JSON args text per toolCallId for streaming input */
-  toolInputBuffers: Map<string, { text: string; toolName: string }>;
   /** Position hint for task_write inline rendering when streaming */
   taskWriteInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
@@ -126,6 +123,7 @@ export interface TUIState {
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
+  activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
   /** Follow-up messages sent via Ctrl+F while streaming */
   followUpComponents: UserMessageComponent[];
@@ -136,25 +134,18 @@ export interface TUIState {
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
-  tokenUsage: TokenUsage;
   statusLine?: Text;
   memoryStatusLine?: Text;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
 
   // ── Observational Memory ──────────────────────────────────────────────
-  omProgress: OMProgressState;
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
-  /** Drives statusline label animation */
-  bufferingMessages: boolean;
-  bufferingObservations: boolean;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
-  /** Track previous state for diff */
-  previousTasks: TaskItem[];
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -166,11 +157,6 @@ export interface TUIState {
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
   userInitiatedAbort: boolean;
-
-  // ── File tracking (for /diff) ─────────────────────────────────────────
-  modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
-  /** Map toolCallId -> { toolName, filePath } for pending tool calls that modify files */
-  pendingFileTools: Map<string, { toolName: string; filePath: string }>;
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
@@ -212,9 +198,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Agent / streaming
     isInitialized: false,
-    isAgentActive: false,
     pendingTools: new Map(),
-    toolInputBuffers: new Map(),
     taskWriteInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
@@ -236,16 +220,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Status line
     projectInfo: detectProject(process.cwd()),
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     modelAuthStatus: { hasAuth: true },
-
-    // Observational Memory
-    omProgress: defaultOMProgressState(),
-    bufferingMessages: false,
-    bufferingObservations: false,
-
-    // Tasks
-    previousTasks: [],
 
     // Input
     customSlashCommands: [],
@@ -254,9 +229,5 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
-
-    // File tracking
-    modifiedFiles: new Map(),
-    pendingFileTools: new Map(),
   };
 }

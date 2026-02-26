@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, Plus, Trash2 } from 'lucide-react';
+import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 
 import { Tree } from '@/ds/components/Tree/tree';
 import { IconButton } from '@/ds/components/IconButton';
@@ -122,6 +122,25 @@ function removeNode(nodes: InMemoryFileNode[], nodeId: string): InMemoryFileNode
     });
 }
 
+function findNodeById(nodes: InMemoryFileNode[], id: string): InMemoryFileNode | undefined {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    if (node.children) {
+      const found = findNodeById(node.children, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function containsNode(nodes: InMemoryFileNode[], targetId: string): boolean {
+  for (const node of nodes) {
+    if (node.id === targetId) return true;
+    if (node.children && containsNode(node.children, targetId)) return true;
+  }
+  return false;
+}
+
 export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, content: string): InMemoryFileNode[] {
   return nodes.map(node => {
     if (node.id === nodeId) {
@@ -139,6 +158,19 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
     <span className="opacity-0 group-hover:opacity-100">
       <IconButton size="sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
         <Plus />
+      </IconButton>
+    </span>
+  );
+}
+
+function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAddFolder: () => void }) {
+  return (
+    <span className="flex opacity-0 group-hover:opacity-100">
+      <IconButton size="sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
+        <Plus />
+      </IconButton>
+      <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
+        <FolderPlus />
       </IconButton>
     </span>
   );
@@ -162,27 +194,101 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
   );
 }
 
-function UserFileList({
+function UserNodeList({
   nodes,
   readOnly,
+  openFolders,
+  pendingInput,
   onRemove,
+  onAddFile,
+  onAddFolder,
+  onFolderOpenChange,
+  onInputSubmit,
+  onInputCancel,
 }: {
   nodes: InMemoryFileNode[];
   readOnly?: boolean;
+  openFolders: Record<string, boolean>;
+  pendingInput: PendingInput | null;
   onRemove: (id: string) => void;
+  onAddFile: (parentId: string) => void;
+  onAddFolder: (parentId: string) => void;
+  onFolderOpenChange: (folderId: string, open: boolean) => void;
+  onInputSubmit: (name: string) => void;
+  onInputCancel: () => void;
 }) {
   return nodes
     .filter(n => !STRUCTURAL_IDS.has(n.id))
-    .map(node => (
-      <Tree.File key={node.id} id={node.id}>
-        <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
-        <Tree.Label>{node.name}</Tree.Label>
-        {!readOnly && !STRUCTURAL_IDS.has(node.id) && <FileDeleteAction nodeId={node.id} onRemove={onRemove} />}
-      </Tree.File>
-    ));
+    .map(node => {
+      if (node.type === 'folder') {
+        const isOpen = openFolders[node.id] ?? true;
+        return (
+          <Tree.Folder key={node.id} open={isOpen} onOpenChange={open => onFolderOpenChange(node.id, open)}>
+            <Tree.FolderTrigger
+              actions={
+                !readOnly && (
+                  <span className="flex opacity-0 group-hover:opacity-100">
+                    <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
+                      <Plus />
+                    </IconButton>
+                    <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
+                      <FolderPlus />
+                    </IconButton>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      tooltip="Delete folder"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onRemove(node.id);
+                      }}
+                    >
+                      <Trash2 />
+                    </IconButton>
+                  </span>
+                )
+              }
+            >
+              <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
+              <Tree.Label>{node.name}</Tree.Label>
+            </Tree.FolderTrigger>
+            <Tree.FolderContent>
+              <UserNodeList
+                nodes={node.children ?? []}
+                readOnly={readOnly}
+                openFolders={openFolders}
+                pendingInput={pendingInput}
+                onRemove={onRemove}
+                onAddFile={onAddFile}
+                onAddFolder={onAddFolder}
+                onFolderOpenChange={onFolderOpenChange}
+                onInputSubmit={onInputSubmit}
+                onInputCancel={onInputCancel}
+              />
+              {pendingInput?.parentId === node.id && (
+                <Tree.Input
+                  type={pendingInput.type === 'folder' ? 'folder' : 'file'}
+                  placeholder={pendingInput.type === 'folder' ? 'folder name' : 'filename.ext'}
+                  onSubmit={onInputSubmit}
+                  onCancel={onInputCancel}
+                />
+              )}
+            </Tree.FolderContent>
+          </Tree.Folder>
+        );
+      }
+
+      return (
+        <Tree.File key={node.id} id={node.id}>
+          <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
+          <Tree.Label>{node.name}</Tree.Label>
+          {!readOnly && <FileDeleteAction nodeId={node.id} onRemove={onRemove} />}
+        </Tree.File>
+      );
+    });
 }
 
-type PendingInput = { parentId: string; type: 'file' };
+type PendingInput = { parentId: string; type: 'file' | 'folder' };
 
 export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, readOnly }: SkillFileTreeProps) {
   const [pendingInput, setPendingInput] = useState<PendingInput | null>(null);
@@ -201,6 +307,14 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
     (parentId: string) => {
       setFolderOpen(parentId, true);
       setPendingInput({ parentId, type: 'file' });
+    },
+    [setFolderOpen],
+  );
+
+  const handleAddFolder = useCallback(
+    (parentId: string) => {
+      setFolderOpen(parentId, true);
+      setPendingInput({ parentId, type: 'folder' });
     },
     [setFolderOpen],
   );
@@ -238,16 +352,18 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
   const handleInputSubmit = useCallback(
     (name: string) => {
       if (!pendingInput) return;
-      const newNode: InMemoryFileNode = {
-        id: uuid(),
-        name,
-        type: 'file',
-        content: '',
-      };
+      const newId = uuid();
+      const newNode: InMemoryFileNode =
+        pendingInput.type === 'folder'
+          ? { id: newId, name, type: 'folder', children: [] }
+          : { id: newId, name, type: 'file', content: '' };
       onChange(insertNode(files, pendingInput.parentId, newNode));
+      if (pendingInput.type === 'folder') {
+        setFolderOpen(newId, true);
+      }
       setPendingInput(null);
     },
-    [pendingInput, files, onChange],
+    [pendingInput, files, onChange, setFolderOpen],
   );
 
   const handleInputCancel = useCallback(() => {
@@ -257,8 +373,15 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
   const handleRemove = useCallback(
     (nodeId: string) => {
       if (STRUCTURAL_IDS.has(nodeId)) return;
-      if (selectedFileId === nodeId) {
-        onSelectFile(null);
+      if (selectedFileId) {
+        if (selectedFileId === nodeId) {
+          onSelectFile(null);
+        } else {
+          const node = findNodeById(files, nodeId);
+          if (node?.children && containsNode(node.children, selectedFileId)) {
+            onSelectFile(null);
+          }
+        }
       }
       onChange(removeNode(files, nodeId));
     },
@@ -297,16 +420,37 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
               <Tree.Folder open={openFolders.references} onOpenChange={open => setFolderOpen('references', open)}>
                 <Tree.FolderTrigger
                   actions={
-                    !readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('references')} />
+                    !readOnly && (
+                      <FolderActions
+                        onAddFile={() => handleAddFile('references')}
+                        onAddFolder={() => handleAddFolder('references')}
+                      />
+                    )
                   }
                 >
                   <Tree.Icon>{getFolderIcon(openFolders.references)}</Tree.Icon>
                   <Tree.Label>references</Tree.Label>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
-                  <UserFileList nodes={referencesFolder.children ?? []} readOnly={readOnly} onRemove={handleRemove} />
+                  <UserNodeList
+                    nodes={referencesFolder.children ?? []}
+                    readOnly={readOnly}
+                    openFolders={openFolders}
+                    pendingInput={pendingInput}
+                    onRemove={handleRemove}
+                    onAddFile={handleAddFile}
+                    onAddFolder={handleAddFolder}
+                    onFolderOpenChange={setFolderOpen}
+                    onInputSubmit={handleInputSubmit}
+                    onInputCancel={handleInputCancel}
+                  />
                   {pendingInput?.parentId === 'references' && (
-                    <Tree.Input type="file" onSubmit={handleInputSubmit} onCancel={handleInputCancel} />
+                    <Tree.Input
+                      type={pendingInput.type === 'folder' ? 'folder' : 'file'}
+                      placeholder={pendingInput.type === 'folder' ? 'folder name' : 'filename.ext'}
+                      onSubmit={handleInputSubmit}
+                      onCancel={handleInputCancel}
+                    />
                   )}
                 </Tree.FolderContent>
               </Tree.Folder>
@@ -315,15 +459,38 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             {scriptsFolder && (
               <Tree.Folder open={openFolders.scripts} onOpenChange={open => setFolderOpen('scripts', open)}>
                 <Tree.FolderTrigger
-                  actions={!readOnly && <FolderAddAction tooltip="New file" onClick={() => handleAddFile('scripts')} />}
+                  actions={
+                    !readOnly && (
+                      <FolderActions
+                        onAddFile={() => handleAddFile('scripts')}
+                        onAddFolder={() => handleAddFolder('scripts')}
+                      />
+                    )
+                  }
                 >
                   <Tree.Icon>{getFolderIcon(openFolders.scripts)}</Tree.Icon>
                   <Tree.Label>scripts</Tree.Label>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
-                  <UserFileList nodes={scriptsFolder.children ?? []} readOnly={readOnly} onRemove={handleRemove} />
+                  <UserNodeList
+                    nodes={scriptsFolder.children ?? []}
+                    readOnly={readOnly}
+                    openFolders={openFolders}
+                    pendingInput={pendingInput}
+                    onRemove={handleRemove}
+                    onAddFile={handleAddFile}
+                    onAddFolder={handleAddFolder}
+                    onFolderOpenChange={setFolderOpen}
+                    onInputSubmit={handleInputSubmit}
+                    onInputCancel={handleInputCancel}
+                  />
                   {pendingInput?.parentId === 'scripts' && (
-                    <Tree.Input type="file" onSubmit={handleInputSubmit} onCancel={handleInputCancel} />
+                    <Tree.Input
+                      type={pendingInput.type === 'folder' ? 'folder' : 'file'}
+                      placeholder={pendingInput.type === 'folder' ? 'folder name' : 'filename.ext'}
+                      onSubmit={handleInputSubmit}
+                      onCancel={handleInputCancel}
+                    />
                   )}
                 </Tree.FolderContent>
               </Tree.Folder>
@@ -338,7 +505,15 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
                   <Tree.Label>assets</Tree.Label>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
-                  <UserFileList nodes={assetsFolder.children ?? []} readOnly={readOnly} onRemove={handleRemove} />
+                  {(assetsFolder.children ?? [])
+                    .filter(n => !STRUCTURAL_IDS.has(n.id))
+                    .map(node => (
+                      <Tree.File key={node.id} id={node.id}>
+                        <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
+                        <Tree.Label>{node.name}</Tree.Label>
+                        {!readOnly && <FileDeleteAction nodeId={node.id} onRemove={handleRemove} />}
+                      </Tree.File>
+                    ))}
                 </Tree.FolderContent>
               </Tree.Folder>
             )}

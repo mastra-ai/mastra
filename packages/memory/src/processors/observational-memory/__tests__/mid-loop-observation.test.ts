@@ -273,5 +273,140 @@ describe('Mid-Loop Observation', () => {
       // No observations should be saved on step 0
       expect(record?.activeObservations).toBeFalsy();
     });
+
+    it('should activate buffered observations mid-step when threshold is crossed (not defer to next user turn)', async () => {
+      // This test uses async buffering (bufferTokens enabled) to expose the bug where
+      // unbufferedPendingTokens is calculated using c.tokenCount (observation tokens)
+      // instead of c.messageTokens (message tokens being removed from context).
+
+      // Create a separate OM instance with async buffering enabled.
+      const omWithBuffering = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: {
+          model: createMockObserverModel(),
+          messageTokens: 1000, // Threshold for activation
+          bufferTokens: 200, // Buffer every 200 tokens (async buffering enabled)
+          bufferActivation: 0.8, // Activate 80% of buffered content
+        },
+        reflection: {
+          model: createMockObserverModel(),
+          observationTokens: 50000, // High to prevent reflection
+        },
+      });
+
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+
+      const messageList = new MessageList({ threadId, resourceId });
+
+      // Step 0: Add messages below threshold to trigger async buffering (not activation).
+      // Each message is ~50 tokens, so 10 messages = ~500 tokens (below 1000 threshold).
+      // With bufferTokens=200, buffering should trigger multiple times.
+      for (let i = 0; i < 10; i++) {
+        const msg = createTestMessage(
+          `Warmup ${i}: `.padEnd(200, 'x'),
+          i % 2 === 0 ? 'user' : 'assistant',
+          `warmup-${i}`,
+          new Date(Date.now() - (100 - i) * 1000),
+        );
+        messageList.add(msg, 'memory');
+      }
+
+      console.log('Step 0 - Total tokens:', tokenCounter.countMessages(messageList.get.all.db()));
+
+      await omWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: new AbortController().signal,
+      });
+
+      // Wait for async buffering to complete (fire-and-forget operation)
+      // Poll for buffered chunks to appear
+      let recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+      for (let i = 0; i < 20; i++) {
+        if (recordAfterStep0?.bufferedObservationChunks?.length) break;
+        await new Promise(r => setTimeout(r, 100));
+        recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+      }
+
+      console.log('Record after step 0:', {
+        id: recordAfterStep0?.id,
+        lastObservedAt: recordAfterStep0?.lastObservedAt,
+        activeObservations: recordAfterStep0?.activeObservations?.slice(0, 50),
+        bufferedChunks: recordAfterStep0?.bufferedObservationChunks?.length,
+        bufferedChunkDetails: recordAfterStep0?.bufferedObservationChunks?.map(c => ({
+          cycleId: c.cycleId,
+          messageTokens: c.messageTokens,
+          tokenCount: c.tokenCount,
+        })),
+      });
+
+      // Should have buffered chunks but no active observations yet (below threshold).
+      expect(recordAfterStep0?.bufferedObservationChunks?.length).toBeGreaterThan(0);
+      expect(recordAfterStep0?.activeObservations).toBeFalsy();
+
+      // Step 1: Add more messages to cross threshold and trigger mid-step activation.
+      // Add 15 more messages (~750 tokens) to push total past 1000 threshold.
+      for (let i = 0; i < 15; i++) {
+        const msg = createTestMessage(
+          `Cross threshold ${i}: `.padEnd(200, 'y'),
+          i % 2 === 0 ? 'user' : 'assistant',
+          `cross-${i}`,
+          new Date(Date.now() - (20 - i) * 500),
+        );
+        messageList.add(msg, 'memory');
+      }
+
+      console.log('Step 1 - Total tokens:', tokenCounter.countMessages(messageList.get.all.db()));
+
+      await omWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: new AbortController().signal,
+      });
+
+      const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+      console.log('Record after step 1:', {
+        id: recordAfterStep1?.id,
+        lastObservedAt: recordAfterStep1?.lastObservedAt,
+        activeObservations: recordAfterStep1?.activeObservations?.slice(0, 100),
+        bufferedChunks: recordAfterStep1?.bufferedObservationChunks?.length,
+        bufferedChunkDetails: recordAfterStep1?.bufferedObservationChunks?.map(c => ({
+          cycleId: c.cycleId?.slice(0, 20),
+          messageTokens: c.messageTokens,
+          tokenCount: c.tokenCount,
+          messageIds: c.messageIds?.slice(0, 3),
+        })),
+      });
+
+      // CRITICAL ASSERTION: Mid-step activation should have happened on step 1.
+      // If this fails (activeObservations is empty), it means activation was deferred
+      // to step 0 of the next turn, indicating the bug where unbufferedPendingTokens
+      // calculation uses c.tokenCount instead of c.messageTokens.
+      expect(recordAfterStep1?.activeObservations).toBeTruthy();
+      expect(recordAfterStep1?.activeObservations).toContain('*');
+      expect(recordAfterStep1?.lastObservedAt).toBeDefined();
+
+      // Note: We don't assert that buffered chunks are empty because new buffering
+      // can legitimately trigger during the same step for unbuffered messages.
+      // The key assertion is that activation happened (above checks).
+      // The bug we're fixing is that activation was DEFERRED to step 0 of next turn,
+      // which would have left activeObservations empty after step 1.
+    });
   });
 });

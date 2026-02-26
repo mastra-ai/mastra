@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
+import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType } from '../../../stream/types';
@@ -39,8 +40,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         })
       : undefined;
 
-  // Get tracing context from modelSpanTracker if available
-  const tracingContext = rest.modelSpanTracker?.getTracingContext();
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
 
   // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
   const streamWriter = rest.outputWriter
@@ -60,7 +61,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        tracingContext,
+        observabilityContext,
         rest.requestContext,
         rest.messageList,
         0,
@@ -378,6 +379,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             createdAt: new Date(),
           };
           rest.messageList.add(providerResultMessage, 'response');
+        }
+
+        // Check if any delegation hook called ctx.bail() — signal the loop to stop.
+        // The bail flag is communicated via requestContext because Zod output validation
+        // strips unknown fields (like _bailed) from the tool result object.
+        if (rest.requestContext?.get('__mastra_delegationBailed') && _internal) {
+          _internal._delegationBailed = true;
+          rest.requestContext.set('__mastra_delegationBailed', false);
         }
 
         return {

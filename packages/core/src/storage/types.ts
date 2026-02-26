@@ -685,6 +685,8 @@ export interface StoragePromptBlockSnapshotType {
   content: string;
   /** Rules for conditional inclusion */
   rules?: RuleGroup;
+  /** JSON Schema for validating request context values. Defines available variables for {{variableName}} interpolation and conditions. */
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /** Resolved prompt block: thin record merged with active version snapshot */
@@ -1210,9 +1212,8 @@ export interface SwapBufferedToActiveInput {
    */
   currentPendingTokens: number;
   /**
-   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
-   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
-   * aggressively reducing context is more important than preserving the retention floor.
+   * When true, prefer removing more chunks (above `blockAfter`), while still respecting
+   * the minimum remaining tokens safeguard (min(1000, retention floor)).
    */
   forceMaxActivation?: boolean;
   /**
