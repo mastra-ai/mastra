@@ -66,18 +66,12 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
             model: getObserverModel,
             messageTokens: obsThreshold,
             blockAfter: 2,
-            modelSettings: {
-              maxOutputTokens: 60000,
-            },
           },
           reflection: {
             bufferActivation: 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,
-            modelSettings: {
-              maxOutputTokens: 60000,
-            },
           },
         },
       },
