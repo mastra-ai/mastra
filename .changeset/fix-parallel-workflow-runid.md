@@ -2,6 +2,6 @@
 "@mastra/core": patch
 ---
 
-fix(agent): use unique runId per parallel workflow tool call (#13473)
+Fixed parallel workflow tool calls so each call runs independently.
 
-Generate a unique runId for each fresh workflow tool call to prevent parallel calls from sharing the same cached Run instance. For resume cases, correctly fall back to the outer runId when suspendedToolRunId is not present (manual resume via resumeStream/resumeGenerate).
+When an agent starts multiple tool calls to the same workflow at the same time, each call now runs with its own workflow run context. This prevents duplicated results across parallel calls and ensures each call returns output for its own input. Also ensures workflow tool suspension and manual resumption correctly preserves the run context.
