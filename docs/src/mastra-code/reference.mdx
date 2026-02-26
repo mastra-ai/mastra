@@ -5,11 +5,13 @@ packages:
   - 'mastracode'
 ---
 
-# createMastraCode()
+# API Reference
+
+## createMastraCode()
 
 `createMastraCode()` is the main factory function that bootstraps the Mastra Code coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the [Harness](/reference/harness/harness-class) that drives the TUI or any other frontend.
 
-## Usage example
+### Usage example
 
 ```typescript title="src/main.ts"
 import { createMastraCode } from 'mastracode'
@@ -33,7 +35,7 @@ await harness.selectOrCreateThread()
 await harness.sendMessage({ content: 'Explain the auth flow' })
 ```
 
-## Parameters
+### Parameters
 
 `createMastraCode()` accepts an optional `MastraCodeConfig` object:
 
@@ -105,7 +107,7 @@ defaultValue: 'false',
 ]}
 />
 
-## Return value
+### Return value
 
 `createMastraCode()` returns an object with four properties:
 
@@ -137,7 +139,7 @@ description:
 ]}
 />
 
-## Default modes
+### Default modes
 
 When no `modes` are specified, Mastra Code creates three modes:
 
@@ -147,7 +149,7 @@ When no `modes` are specified, Mastra Code creates three modes:
 | **Plan** | `openai/gpt-5.2-codex` | Read-only mode. Explore the codebase and produce implementation plans. |
 | **Fast** | `cerebras/zai-glm-4.7` | Quick answers and small edits with minimal overhead. |
 
-## Default subagents
+### Default subagents
 
 When no `subagents` are specified, Mastra Code creates three subagent types:
 
@@ -157,7 +159,7 @@ When no `subagents` are specified, Mastra Code creates three subagent types:
 | **Plan** | `view`, `search_content`, `find_files` | Read-only analysis and planning with structured plan output. |
 | **Execute** | All read tools + `string_replace_lsp`, `write_file`, `execute_command`, `task_write`, `task_check` | Focused task execution with full write capabilities. |
 
-## Project detection
+### Project detection
 
 Mastra Code automatically detects project identity from the working directory:
 
@@ -166,7 +168,7 @@ Mastra Code automatically detects project identity from the working directory:
 
 The resulting `resourceId` scopes threads to the project, so conversations are shared across clones, worktrees, and SSH/HTTPS URLs of the same repository.
 
-## Storage resolution
+### Storage resolution
 
 Storage configuration is resolved in priority order:
 
@@ -181,9 +183,3 @@ Storage configuration is resolved in priority order:
 The returned `harness` object is a full [Harness](/reference/harness/harness-class) instance with methods for sending messages, switching modes and models, managing threads, and subscribing to events.
 
 :::
-
-## Related
-
-- [Mastra Code overview](/docs/mastra-code/overview)
-- [Harness Class reference](/reference/harness/harness-class)
-- [Mastra Code configuration](/docs/mastra-code/configuration)
