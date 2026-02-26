@@ -150,3 +150,45 @@ describe('uncaughtException handler integration', () => {
     expect(result.code).toBe(0);
   });
 });
+
+describe('unhandledRejection handler integration', () => {
+  function spawnWithRejectionHandler(useFilter: boolean): Promise<{ code: number | null; stderr: string }> {
+    return new Promise(resolve => {
+      const script = `
+        function isStreamDestroyedError(err, depth = 0) {
+          if (!err || depth > 5) return false;
+          if (err.code === 'ERR_STREAM_DESTROYED') return true;
+          if (typeof err.message === 'string' && err.message.includes('stream was destroyed')) return true;
+          if (err.cause && isStreamDestroyedError(err.cause, depth + 1)) return true;
+          if (Array.isArray(err.errors) && err.errors.some(inner => isStreamDestroyedError(inner, depth + 1))) return true;
+          return false;
+        }
+
+        process.on('unhandledRejection', (reason) => {
+          ${useFilter ? 'if (isStreamDestroyedError(reason)) return;' : ''}
+          process.exit(1);
+        });
+
+        const err = new Error('Cannot call write after a stream was destroyed');
+        err.code = 'ERR_STREAM_DESTROYED';
+        Promise.reject(err);
+
+        setTimeout(() => process.exit(0), 50);
+      `;
+
+      execFile('node', ['-e', script], { timeout: 5000 }, (err, _stdout, stderr) => {
+        resolve({ code: err ? (err as any).code ?? 1 : 0, stderr });
+      });
+    });
+  }
+
+  it('should crash without the ERR_STREAM_DESTROYED filter', async () => {
+    const result = await spawnWithRejectionHandler(false);
+    expect(result.code).not.toBe(0);
+  });
+
+  it('should survive with the ERR_STREAM_DESTROYED filter', async () => {
+    const result = await spawnWithRejectionHandler(true);
+    expect(result.code).toBe(0);
+  });
+});
