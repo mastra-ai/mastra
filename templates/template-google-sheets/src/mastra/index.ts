@@ -46,7 +46,7 @@ export const mastra = new Mastra({
         // TODO: Retrieve unique user id and set it on the request context
         // Consider using Authentication headers for user identification
         // e.g const bearerToken = c.get('Authorization')
-        // https://mastra.ai/en/docs/server-db/middleware#common-examples
+        // https://mastra.ai/docs/server/middleware#common-examples
         const userId = 'unique-user-id';
         requestContext.set('userId', userId);
 

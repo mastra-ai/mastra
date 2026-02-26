@@ -26,7 +26,7 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: process.env.MODEL || 'anthropic/claude-3-7-sonnet-20250219',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'financial-modeling-agent-storage',
