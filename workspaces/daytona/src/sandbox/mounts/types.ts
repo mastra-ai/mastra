@@ -58,21 +58,31 @@ export function validateEndpoint(endpoint: string): void {
 }
 
 /**
- * Run a command in the Daytona sandbox and return the result.
- * Wraps the process.executeCommand API to match the command execution pattern
- * used in mount operations.
+ * Result of running a command in the Daytona sandbox.
  *
- * Does NOT throw on non-zero exit codes — callers should check `exitCode` themselves.
+ * Note: Daytona's `executeCommand` returns a single combined string (stdout + stderr).
+ * There is no separate stderr stream. If you need stderr isolated, redirect it in the
+ * shell command itself (e.g. `2>/dev/null` or `2>&1`).
+ */
+export interface CommandResult {
+  exitCode: number;
+  /** Combined stdout/stderr output from the command. */
+  output: string;
+}
+
+/**
+ * Run a command in the Daytona sandbox.
  *
- * Note: Daytona's executeCommand returns a single `result` string (stdout).
- * Stderr is not captured separately — use `2>&1` redirection in commands
- * that need stderr captured.
+ * Thin wrapper around `sandbox.process.executeCommand` that converts timeout
+ * from milliseconds to seconds and null-coalesces the output string.
+ *
+ * Does NOT throw on non-zero exit codes — callers should check `exitCode`.
  */
 export async function runCommand(
   sandbox: Sandbox,
   command: string,
   options?: { timeout?: number },
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<CommandResult> {
   const result = await sandbox.process.executeCommand(
     command,
     undefined, // cwd
@@ -82,8 +92,7 @@ export async function runCommand(
 
   return {
     exitCode: result.exitCode,
-    stdout: result.result ?? '',
-    stderr: '', // Daytona executeCommand doesn't separate stderr
+    output: result.result ?? '',
   };
 }
 

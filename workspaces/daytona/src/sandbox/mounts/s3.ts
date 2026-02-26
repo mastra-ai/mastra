@@ -44,7 +44,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   // Check if s3fs is installed
   const checkResult = await runCommand(sandbox, 'which s3fs || echo "not found"');
-  if (checkResult.stdout.includes('not found')) {
+  if (checkResult.output.includes('not found')) {
     logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
 
@@ -52,7 +52,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     if (updateResult.exitCode !== 0) {
       throw new Error(
         `Failed to update package lists for s3fs installation.\n` +
-          `Error details: ${updateResult.stderr || updateResult.stdout}`,
+          `Error details: ${updateResult.output}`,
       );
     }
 
@@ -67,7 +67,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
         `Failed to install s3fs. ` +
           `For S3 mounting, your sandbox image needs s3fs and fuse packages.\n\n` +
           `Pre-install in your image: apt-get install -y s3fs fuse\n\n` +
-          `Error details: ${installResult.stderr || installResult.stdout}`,
+          `Error details: ${installResult.output}`,
       );
     }
   }
@@ -75,9 +75,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   // Get user's uid/gid for proper file ownership
   const idResult = await runCommand(sandbox, 'id -u && id -g');
   if (idResult.exitCode !== 0) {
-    throw new Error(`Failed to get uid/gid: ${idResult.stderr || idResult.stdout}`);
+    throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
-  const [uid, gid] = idResult.stdout.trim().split('\n');
+  const [uid, gid] = idResult.output.trim().split('\n');
 
   // Determine if we have credentials or using public bucket mode
   const hasAccessKey = !!config.accessKeyId;
@@ -147,12 +147,8 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
-  logger.debug(`${LOG_PREFIX} s3fs result:`, {
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
+  logger.debug(`${LOG_PREFIX} s3fs result:`, { exitCode: result.exitCode, output: result.output });
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
+    throw new Error(`Failed to mount S3 bucket: ${result.output}`);
   }
 }

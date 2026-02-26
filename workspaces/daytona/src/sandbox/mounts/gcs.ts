@@ -33,7 +33,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
 
   // Install gcsfuse if not present
   const checkResult = await runCommand(sandbox, 'which gcsfuse || echo "not found"');
-  if (checkResult.stdout.includes('not found')) {
+  if (checkResult.output.includes('not found')) {
     logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
 
@@ -42,7 +42,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       sandbox,
       'cat /etc/os-release 2>/dev/null | grep VERSION_CODENAME | cut -d= -f2 || echo bookworm',
     );
-    const codename = codenameResult.stdout.trim() || 'bookworm';
+    const codename = codenameResult.output.trim() || 'bookworm';
     logger.debug(`${LOG_PREFIX} Detected distro codename: ${codename}`);
 
     // Ensure required tools and keyring directory exist
@@ -53,7 +53,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     );
     if (prepResult.exitCode !== 0) {
       throw new Error(
-        `Failed to install gcsfuse prerequisites.\n` + `Error details: ${prepResult.stderr || prepResult.stdout}`,
+        `Failed to install gcsfuse prerequisites.\n` + `Error details: ${prepResult.output}`,
       );
     }
 
@@ -71,7 +71,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
         `Failed to install gcsfuse. ` +
           `For GCS mounting, your sandbox image needs gcsfuse and fuse packages.\n\n` +
           `Pre-install in your image: apt-get install -y gcsfuse fuse\n\n` +
-          `Error details: ${installResult.stderr || installResult.stdout}`,
+          `Error details: ${installResult.output}`,
       );
     }
 
@@ -80,7 +80,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     if (verifyResult.exitCode !== 0) {
       throw new Error(
         `gcsfuse installation appeared to succeed but binary not found on PATH.\n` +
-          `Install output: ${installResult.stdout}\n${installResult.stderr}`,
+          `Install output: ${installResult.output}`,
       );
     }
   }
@@ -88,9 +88,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   // Get user's uid/gid for proper file ownership
   const idResult = await runCommand(sandbox, 'id -u && id -g');
   if (idResult.exitCode !== 0) {
-    throw new Error(`Failed to get uid/gid: ${idResult.stderr || idResult.stdout}`);
+    throw new Error(`Failed to get uid/gid: ${idResult.output}`);
   }
-  const [uid, gid] = idResult.stdout.trim().split('\n');
+  const [uid, gid] = idResult.output.trim().split('\n');
 
   // Build gcsfuse flags
   // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
@@ -123,12 +123,8 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
-  logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
+  logger.debug(`${LOG_PREFIX} gcsfuse result:`, { exitCode: result.exitCode, output: result.output });
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
+    throw new Error(`Failed to mount GCS bucket: ${result.output}`);
   }
 }

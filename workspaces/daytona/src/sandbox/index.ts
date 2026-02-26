@@ -527,7 +527,7 @@ export class DaytonaSandbox extends MastraSandbox {
         `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      if (checkResult.stdout.trim() === 'non-empty') {
+      if (checkResult.output.trim() === 'non-empty') {
         const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
         this.logger.error(`${LOG_PREFIX} ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
@@ -546,7 +546,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const mkdirResult = await runCommand(this._sandbox, mkdirCommand);
 
     if (mkdirResult.exitCode !== 0) {
-      const mkdirError = `Failed to create mount directory "${mountPath}": ${mkdirResult.stderr || mkdirResult.stdout}`;
+      const mkdirError = `Failed to create mount directory "${mountPath}": ${mkdirResult.output}`;
       this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, mkdirError);
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: mkdirError });
       return { success: false, mountPath, error: mkdirError };
@@ -632,7 +632,7 @@ export class DaytonaSandbox extends MastraSandbox {
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       if (result.exitCode !== 0) {
-        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${result.stderr || result.stdout}`);
+        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${result.output}`);
       }
     } catch (error) {
       this.logger.debug(`${LOG_PREFIX} Unmount error:`, error);
@@ -654,7 +654,7 @@ export class DaytonaSandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
       this.logger.debug(
-        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${rmdirResult.stderr?.trim() || rmdirResult.stdout?.trim() || 'not empty'})`,
+        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${rmdirResult.output.trim() || 'not empty'})`,
       );
     }
   }
@@ -678,7 +678,7 @@ export class DaytonaSandbox extends MastraSandbox {
       `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}' || true`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
-    const currentMounts = mountsResult.stdout
+    const currentMounts = mountsResult.output
       .trim()
       .split('\n')
       .filter(p => p.length > 0);
@@ -687,7 +687,7 @@ export class DaytonaSandbox extends MastraSandbox {
 
     // Read our marker files to know which mounts WE created
     const markersResult = await runCommand(this._sandbox, `ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`);
-    const markerFiles = markersResult.stdout
+    const markerFiles = markersResult.output
       .trim()
       .split('\n')
       .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
@@ -699,7 +699,7 @@ export class DaytonaSandbox extends MastraSandbox {
         this._sandbox,
         `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
       );
-      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
+      const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
       if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
         managedMountPaths.set(parsed.path, markerFile);
       }
@@ -796,7 +796,7 @@ export class DaytonaSandbox extends MastraSandbox {
       `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
     );
 
-    if (mountCheck.stdout.trim() !== 'mounted') {
+    if (mountCheck.output.trim() !== 'mounted') {
       return 'not_mounted';
     }
 
@@ -806,7 +806,7 @@ export class DaytonaSandbox extends MastraSandbox {
 
     try {
       const markerResult = await runCommand(this._sandbox, `cat "${markerPath}" 2>/dev/null || echo ""`);
-      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
+      const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
 
       if (!parsed) {
         return 'mismatched';
