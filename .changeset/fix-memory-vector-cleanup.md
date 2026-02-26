@@ -6,6 +6,6 @@ Fix cascading cleanup of vector embeddings when memory threads or messages are d
 - Deleting a thread removes all associated vector embeddings
 - Deleting messages removes their corresponding vector embeddings
 - Cleanup runs as fire-and-forget (non-blocking) after storage deletion completes
-- Index name matching uses the vector store's `indexSeparator` to support all backends (e.g. `memory_messages` for PG, `memory-messages` for Pinecone)
+- Works across all supported vector store backends
 
 Fixes `#12225`
