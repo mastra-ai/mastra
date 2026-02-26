@@ -70,6 +70,7 @@ const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
+const VECTOR_DELETE_BATCH_SIZE = 100;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -1246,26 +1247,26 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
+            const separator = this.vector.indexSeparator ?? '_';
+            const prefix = `memory${separator}messages`;
             const indexes = await this.vector.listIndexes();
-            const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+            const memoryIndexes = indexes.filter(name => name.startsWith(prefix));
+            const idsToDelete = [...messageIdsNeedingDeletion];
 
             for (const indexName of memoryIndexes) {
-              for (const messageId of messageIdsNeedingDeletion) {
+              for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
+                const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
                 try {
                   await this.vector.deleteVectors({
                     indexName,
-                    filter: { message_id: messageId },
+                    filter: { message_id: { $in: batch } },
                   });
                 } catch {
-                  // Ignore errors if vectors don't exist for this message
-                  this.logger.debug(
-                    `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
-                  );
+                  this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
                 }
               }
             }
           } catch {
-            // Ignore errors if no indexes exist yet
             this.logger.debug(`No memory indexes found to delete from`);
           }
         }
@@ -1358,26 +1359,19 @@ Notes:
       const indexes = await this.vector.listIndexes();
       const memoryIndexes = indexes.filter((name: string) => name.startsWith(prefix));
 
-      // Delete vectors from each memory index in parallel
-      await Promise.all(
-        memoryIndexes.map(async indexName => {
-          // Delete all message vectors for this index in parallel
-          await Promise.all(
-            messageIds.map(async messageId => {
-              try {
-                await this.vector!.deleteVectors({
-                  indexName,
-                  filter: { message_id: messageId },
-                });
-              } catch {
-                this.logger.debug(
-                  `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
-                );
-              }
-            }),
-          );
-        }),
-      );
+      for (const indexName of memoryIndexes) {
+        for (let i = 0; i < messageIds.length; i += VECTOR_DELETE_BATCH_SIZE) {
+          const batch = messageIds.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+          try {
+            await this.vector.deleteVectors({
+              indexName,
+              filter: { message_id: { $in: batch } },
+            });
+          } catch {
+            this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+          }
+        }
+      }
     } catch {
       this.logger.debug(`No memory indexes found to clean up for deleted messages`);
     }

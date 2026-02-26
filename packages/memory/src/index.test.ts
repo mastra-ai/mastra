@@ -1318,7 +1318,7 @@ describe('Memory', () => {
       await vi.waitFor(() => {
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory_messages',
-          filter: { message_id: messageId },
+          filter: { message_id: { $in: [messageId] } },
         });
       });
     });
@@ -1346,7 +1346,7 @@ describe('Memory', () => {
       await vi.waitFor(() => {
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory-messages',
-          filter: { message_id: messageId },
+          filter: { message_id: { $in: [messageId] } },
         });
       });
     });
@@ -1374,6 +1374,51 @@ describe('Memory', () => {
       await memory.deleteMessages(['msg-789']);
 
       expect(deleteVectorsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should batch message vector deletions when messageIds exceed batch size', async () => {
+      const memory = createMemoryWithMockVector('_');
+      const messageIds = Array.from({ length: 250 }, (_, i) => `msg-${i}`);
+
+      await memory.deleteMessages(messageIds);
+
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(3);
+
+        expect(memory.mockVector.deleteVectors).toHaveBeenNthCalledWith(1, {
+          indexName: 'memory_messages',
+          filter: { message_id: { $in: messageIds.slice(0, 100) } },
+        });
+        expect(memory.mockVector.deleteVectors).toHaveBeenNthCalledWith(2, {
+          indexName: 'memory_messages',
+          filter: { message_id: { $in: messageIds.slice(100, 200) } },
+        });
+        expect(memory.mockVector.deleteVectors).toHaveBeenNthCalledWith(3, {
+          indexName: 'memory_messages',
+          filter: { message_id: { $in: messageIds.slice(200, 250) } },
+        });
+      });
+    });
+
+    it('should continue processing after a batch error', async () => {
+      const memory = createMemoryWithMockVector('_');
+      memory.mockVector.deleteVectors
+        .mockRejectedValueOnce(new Error('batch 1 failed'))
+        .mockResolvedValueOnce(undefined);
+
+      const messageIds = Array.from({ length: 150 }, (_, i) => `msg-${i}`);
+
+      await memory.deleteMessages(messageIds);
+
+      await vi.waitFor(() => {
+        // Both batches attempted despite the first one failing
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(2);
+
+        expect(memory.mockVector.deleteVectors).toHaveBeenNthCalledWith(2, {
+          indexName: 'memory_messages',
+          filter: { message_id: { $in: messageIds.slice(100, 150) } },
+        });
+      });
     });
   });
 });
