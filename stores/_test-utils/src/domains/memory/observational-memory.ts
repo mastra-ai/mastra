@@ -44,13 +44,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       }
     });
 
-    const createChunk = ({
-      observations,
-      messageTokens,
-    }: {
-      observations: string;
-      messageTokens: number;
-    }) => ({
+    const createChunk = ({ observations, messageTokens }: { observations: string; messageTokens: number }) => ({
       cycleId: `cycle-${randomUUID()}`,
       observations,
       tokenCount: Math.round(messageTokens / 2),
