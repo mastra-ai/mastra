@@ -7,7 +7,7 @@ packages:
 
 # Customization
 
-Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference/mastra-code/createMastraCode) factory function accepts configuration overrides, and the returned [`Harness`](/reference/harness/harness-class) can drive any frontend, not just the built-in TUI.
+Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference) factory function accepts configuration overrides, and the returned [`Harness`](https://mastra.ai/reference/harness/harness-class) can drive any frontend, not just the built-in TUI.
 
 ## Programmatic usage
 
@@ -35,7 +35,7 @@ harness.subscribe(event => {
 await harness.sendMessage({ content: 'Explain the auth module' })
 ```
 
-The `harness` object is a standard [Harness](/reference/harness/harness-class) instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
+The `harness` object is a standard `Harness` instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
 
 ## Custom modes
 
