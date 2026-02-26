@@ -18,7 +18,7 @@ import { z } from 'zod';
 
 // Tracing imports
 import { Observability } from './default';
-import { JsonExporter } from './exporters';
+import { TestExporter } from './exporters';
 
 /**
  * Performs final test expectations that are common to all tracing tests.
@@ -27,9 +27,9 @@ import { JsonExporter } from './exporters';
  * - All spans share the same trace ID (context propagation)
  * - No incomplete spans remain (all spans completed properly)
  *
- * @param exporter - The JsonExporter instance to validate
+ * @param exporter - The TestExporter instance to validate
  */
-function finalExpectations(exporter: JsonExporter): void {
+function finalExpectations(exporter: TestExporter): void {
   try {
     // All spans should share the same trace ID (context propagation)
     const allSpans = exporter.getAllSpans();
@@ -440,15 +440,15 @@ const mockModelV2 = createMockModelV2();
 /**
  * Creates base Mastra configuration for tests with tracing enabled.
  *
- * @param testExporter - The JsonExporter instance to capture tracing events
+ * @param testExporter - The TestExporter instance to capture tracing events
  * @returns Base configuration object with tracing configured
  *
  * Features:
  * - Mock storage for isolation
- * - tracing with JsonExporter for span validation
+ * - tracing with TestExporter for span validation
  * - Integration tests configuration
  */
-function getBaseMastraConfig(testExporter: JsonExporter, options = {}) {
+function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
     storage: new MockStore(),
     observability: new Observability({
@@ -491,13 +491,13 @@ const agentMethods = [
 ];
 
 describe('Tracing Integration Tests', () => {
-  let testExporter: JsonExporter;
+  let testExporter: TestExporter;
 
   beforeEach(() => {
     // Reset tool call tracking for each test
     resetToolCallTracking();
     // Create fresh test exporter for each test
-    testExporter = new JsonExporter();
+    testExporter = new TestExporter();
   });
 
   afterEach(async context => {

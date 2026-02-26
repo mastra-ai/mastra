@@ -105,7 +105,7 @@ This requires a different approach (e.g., persisting span state in durable stora
 
 After implementing the Inngest flush change:
 
-1. Configure an exporter (e.g., `OtelExporter` or `JsonExporter`)
+1. Configure an exporter (e.g., `OtelExporter` or `TestExporter`)
 2. Run an Inngest-based workflow
 3. Verify that span events appear in the exporter output
 4. Verify that `flush()` completes before the Inngest function returns

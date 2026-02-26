@@ -16,7 +16,7 @@ import type {
   ExportedFeedback,
 } from '@mastra/core/observability';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { JsonExporter } from './json';
+import { TestExporter } from './test';
 
 // Helper to create mock spans
 function createMockSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSpan {
@@ -37,11 +37,11 @@ function createEvent(type: TracingEventType, span: AnyExportedSpan): TracingEven
   return { type, exportedSpan: span } as TracingEvent;
 }
 
-describe('JsonExporter', () => {
-  let exporter: JsonExporter;
+describe('TestExporter', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ validateLifecycle: true, storeLogs: true });
+    exporter = new TestExporter({ validateLifecycle: true, storeLogs: true });
   });
 
   describe('basic event collection', () => {
@@ -383,7 +383,7 @@ describe('JsonExporter', () => {
     });
 
     it('should not store logs when disabled', async () => {
-      const noLogExporter = new JsonExporter({ storeLogs: false });
+      const noLogExporter = new TestExporter({ storeLogs: false });
       const span = createMockSpan();
 
       await noLogExporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
@@ -414,16 +414,16 @@ describe('JsonExporter', () => {
       // is called at module initialization time, before any method is invoked.
       //
       // In CloudFlare Workers, import.meta.url is undefined during worker startup,
-      // causing the module to fail to load even if JsonExporter is never used.
+      // causing the module to fail to load even if TestExporter is never used.
       //
       // The fix moves the SNAPSHOTS_DIR initialization inside assertMatchesSnapshot(),
       // making it lazy and only executed when the testing functionality is actually needed.
 
-      // Verify the JsonExporter class can be instantiated without errors
+      // Verify the TestExporter class can be instantiated without errors
       // (proves the module loaded successfully without executing Node.js-specific code)
-      const exporter = new JsonExporter();
+      const exporter = new TestExporter();
       expect(exporter).toBeDefined();
-      expect(exporter.name).toBe('json-exporter');
+      expect(exporter.name).toBe('test-exporter');
 
       // Verify basic functionality works without triggering snapshot-related code
       const span = createMockSpan({ name: 'cf-worker-test' });
@@ -438,10 +438,10 @@ describe('JsonExporter', () => {
       // The fileURLToPath and dirname imports should only be used inside
       // assertMatchesSnapshot, not at module load time.
       //
-      // This test ensures that all other JsonExporter methods work without
+      // This test ensures that all other TestExporter methods work without
       // needing the __snapshots__ directory path to be resolved.
 
-      const exporter = new JsonExporter();
+      const exporter = new TestExporter();
 
       // All these operations should work without needing SNAPSHOTS_DIR:
       const span = createMockSpan({ name: 'snapshot-independence-test' });
@@ -473,7 +473,7 @@ describe('JsonExporter', () => {
         debug: vi.fn(),
       };
 
-      const validatingExporter = new JsonExporter({
+      const validatingExporter = new TestExporter({
         logger,
         validateLifecycle: true,
       });
@@ -494,7 +494,7 @@ describe('JsonExporter', () => {
         debug: vi.fn(),
       };
 
-      const validatingExporter = new JsonExporter({
+      const validatingExporter = new TestExporter({
         logger,
         validateLifecycle: true,
       });
@@ -569,11 +569,11 @@ function createMockFeedbackEvent(overrides: Partial<ExportedFeedback> = {}): Fee
 // Tests for new signal handlers (Phase 2.2)
 // ============================================================================
 
-describe('JsonExporter - Log Events', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Log Events', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+    exporter = new TestExporter({ storeLogs: true, logMetricsOnFlush: false });
   });
 
   it('should collect log events', async () => {
@@ -627,11 +627,11 @@ describe('JsonExporter - Log Events', () => {
   });
 });
 
-describe('JsonExporter - Metric Events', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Metric Events', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+    exporter = new TestExporter({ storeLogs: true, logMetricsOnFlush: false });
   });
 
   it('should collect metric events', async () => {
@@ -687,11 +687,11 @@ describe('JsonExporter - Metric Events', () => {
   });
 });
 
-describe('JsonExporter - Score Events', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Score Events', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+    exporter = new TestExporter({ storeLogs: true, logMetricsOnFlush: false });
   });
 
   it('should collect score events', async () => {
@@ -741,11 +741,11 @@ describe('JsonExporter - Score Events', () => {
   });
 });
 
-describe('JsonExporter - Feedback Events', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Feedback Events', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+    exporter = new TestExporter({ storeLogs: true, logMetricsOnFlush: false });
   });
 
   it('should collect feedback events', async () => {
@@ -798,11 +798,11 @@ describe('JsonExporter - Feedback Events', () => {
   });
 });
 
-describe('JsonExporter - Cross-Signal Integration', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Cross-Signal Integration', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+    exporter = new TestExporter({ storeLogs: true, logMetricsOnFlush: false });
   });
 
   it('should include all signals in getByTraceId', async () => {
@@ -899,11 +899,11 @@ describe('JsonExporter - Cross-Signal Integration', () => {
   });
 });
 
-describe('JsonExporter - Statistics with All Signals', () => {
-  let exporter: JsonExporter;
+describe('TestExporter - Statistics with All Signals', () => {
+  let exporter: TestExporter;
 
   beforeEach(() => {
-    exporter = new JsonExporter({ logMetricsOnFlush: false });
+    exporter = new TestExporter({ logMetricsOnFlush: false });
   });
 
   it('should include all signal statistics', async () => {
@@ -957,9 +957,9 @@ describe('JsonExporter - Statistics with All Signals', () => {
   });
 });
 
-describe('JsonExporter - Internal Metrics', () => {
+describe('TestExporter - Internal Metrics', () => {
   it('should track internal metrics across all signal types', async () => {
-    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+    const exporter = new TestExporter({ logMetricsOnFlush: false });
 
     const span = createMockSpan();
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
@@ -984,7 +984,7 @@ describe('JsonExporter - Internal Metrics', () => {
   });
 
   it('should track flush count', async () => {
-    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+    const exporter = new TestExporter({ logMetricsOnFlush: false });
 
     await exporter.flush();
     await exporter.flush();
@@ -1002,7 +1002,7 @@ describe('JsonExporter - Internal Metrics', () => {
       debug: vi.fn(),
     };
 
-    const exporter = new JsonExporter({ logger, logMetricsOnFlush: true });
+    const exporter = new TestExporter({ logger, logMetricsOnFlush: true });
 
     const span = createMockSpan();
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
@@ -1027,7 +1027,7 @@ describe('JsonExporter - Internal Metrics', () => {
       debug: vi.fn(),
     };
 
-    const exporter = new JsonExporter({ logger, logMetricsOnFlush: false });
+    const exporter = new TestExporter({ logger, logMetricsOnFlush: false });
 
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, createMockSpan()));
     await exporter.flush();
@@ -1040,7 +1040,7 @@ describe('JsonExporter - Internal Metrics', () => {
   });
 
   it('should report lastEventAt as null when no events received', () => {
-    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+    const exporter = new TestExporter({ logMetricsOnFlush: false });
 
     const metrics = exporter.getInternalMetrics();
     expect(metrics.lastEventAt).toBeNull();
@@ -1048,7 +1048,7 @@ describe('JsonExporter - Internal Metrics', () => {
   });
 
   it('should not reset internal metrics on clearEvents', async () => {
-    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+    const exporter = new TestExporter({ logMetricsOnFlush: false });
 
     await exporter.onLogEvent(createMockLogEvent());
     await exporter.onMetricEvent(createMockMetricEvent());
