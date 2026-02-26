@@ -230,7 +230,13 @@ export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
   if (!hasLegacyReference) return false;
 
   const existingIdx = settings.customModelPacks.findIndex(p => p.name === 'varied');
-  if (existingIdx < 0) {
+  if (existingIdx >= 0) {
+    const existing = settings.customModelPacks[existingIdx]!;
+    const modelsMatch = Object.entries(LEGACY_VARIED_MODELS).every(([k, v]) => existing.models[k] === v);
+    if (!modelsMatch) {
+      existing.models = { ...LEGACY_VARIED_MODELS };
+    }
+  } else {
     settings.customModelPacks.push({
       name: 'varied',
       models: { ...LEGACY_VARIED_MODELS },
