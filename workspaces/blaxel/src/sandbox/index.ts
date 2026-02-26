@@ -626,7 +626,6 @@ export class BlaxelSandbox extends MastraSandbox {
         image: this.image,
         memory: this.memory,
         ...(this.timeout && { ttl: this.timeout }),
-        envs: Object.entries(this.env).map(([name, value]) => ({ name, value })),
         labels: {
           ...this.labels,
           'mastra-sandbox-id': this.id,

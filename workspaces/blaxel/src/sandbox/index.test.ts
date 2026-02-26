@@ -263,17 +263,15 @@ describe('BlaxelSandbox', () => {
   });
 
   describe('Environment Variables', () => {
-    it('env vars passed as envs array to SandboxInstance.create', async () => {
+    it('env vars are not baked into sandbox creation (applied per-command instead)', async () => {
       const { SandboxInstance } = await import('@blaxel/core');
       const sandbox = new BlaxelSandbox({ env: { KEY: 'value' } });
 
       await sandbox._start();
 
-      expect(SandboxInstance.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          envs: expect.arrayContaining([{ name: 'KEY', value: 'value' }]),
-        }),
-      );
+      // Env should NOT be passed at creation time — it's merged per-command
+      // so that reconnecting to an existing sandbox picks up current env
+      expect(SandboxInstance.create).toHaveBeenCalledWith(expect.not.objectContaining({ envs: expect.anything() }));
     });
 
     it('env vars merged and passed per-command', async () => {

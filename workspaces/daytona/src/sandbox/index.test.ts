@@ -264,7 +264,6 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledWith(
         expect.objectContaining({
           language: 'python',
-          envVars: { FOO: 'bar' },
           labels: expect.objectContaining({
             team: 'ai',
             'mastra-sandbox-id': sandbox.id,
@@ -273,6 +272,10 @@ describe('DaytonaSandbox', () => {
           autoStopInterval: 30,
         }),
       );
+
+      // Env should NOT be passed at creation time — it's merged per-command
+      // so that reconnecting to an existing sandbox picks up current env
+      expect(mockDaytona.create).toHaveBeenCalledWith(expect.not.objectContaining({ envVars: expect.anything() }));
     });
 
     it('passes snapshot when provided', async () => {
