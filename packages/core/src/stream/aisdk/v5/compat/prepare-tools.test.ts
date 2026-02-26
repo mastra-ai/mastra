@@ -396,12 +396,14 @@ describe('prepareToolsAndToolChoice', () => {
 
       // Verify suspension fields don't produce anyOf or description (Vertex AI compat)
       const suspendedSchema = properties.suspendedToolRunId as Record<string, any>;
-      expect(suspendedSchema.type).toBeDefined();
+      expect(suspendedSchema).toBeDefined();
+      expect(suspendedSchema.type).toBe('string');
       expect(suspendedSchema.default).toBe('');
       expect(suspendedSchema.anyOf).toBeUndefined();
       expect(suspendedSchema.description).toBeUndefined();
 
       const resumeSchema = properties.resumeData as Record<string, any>;
+      expect(resumeSchema).toBeDefined();
       expect(resumeSchema.anyOf).toBeUndefined();
       expect(resumeSchema.description).toBeUndefined();
     });
