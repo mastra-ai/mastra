@@ -53,6 +53,7 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
   const {
     suiteName,
     createSandbox,
+    createInvalidSandbox,
     cleanupSandbox,
     capabilities: userCapabilities = {},
     testDomains = {},
@@ -91,6 +92,7 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
       testTimeout,
       fastOnly,
       createSandbox,
+      createInvalidSandbox,
       createMountableFilesystem,
     });
 

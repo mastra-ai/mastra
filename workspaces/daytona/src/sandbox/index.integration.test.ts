@@ -115,6 +115,11 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
         language: 'typescript',
         ...(options?.env && { env: options.env }),
       }),
+    createInvalidSandbox: () =>
+      new DaytonaSandbox({
+        id: `bad-config-${Date.now()}`,
+        image: 'nonexistent/fake-image:latest',
+      }),
     capabilities: {
       supportsMounting: false,
       supportsReconnection: true,

@@ -340,6 +340,18 @@ export class DaytonaSandbox extends MastraSandbox {
       } catch {
         // Ignore errors during cleanup
       }
+    } else if (!this._sandbox && this._daytona) {
+      // Orphan cleanup: _start() may have failed after the SDK created
+      // a server-side sandbox (e.g. bad image → BUILD_FAILED).
+      // Try to find and delete it so it doesn't leak.
+      try {
+        const orphan = await this._daytona.findOne({ labels: { 'mastra-sandbox-id': this.id } });
+        if (orphan) {
+          await this._daytona.delete(orphan);
+        }
+      } catch {
+        // Best-effort — orphan may not exist or may already be gone
+      }
     }
 
     this._sandbox = null;
@@ -454,7 +466,12 @@ export class DaytonaSandbox extends MastraSandbox {
       const state = sandbox.state;
 
       if (state && DEAD_STATES.includes(state)) {
-        this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), creating fresh`);
+        this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`);
+        try {
+          await this._daytona!.delete(sandbox);
+        } catch {
+          // Best-effort cleanup of dead sandbox
+        }
         return null;
       }
 
