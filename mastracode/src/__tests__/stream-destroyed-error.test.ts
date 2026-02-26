@@ -113,7 +113,12 @@ const detectorScript = `
 function spawnScript(script: string): Promise<{ code: number | null; stderr: string }> {
   return new Promise(resolve => {
     execFile('node', ['-e', script], { timeout: 5000 }, (err, _stdout, stderr) => {
-      const code = err && typeof (err as NodeJS.ErrnoException).code === 'number' ? (err as NodeJS.ErrnoException).code : err ? 1 : 0;
+      const code =
+        err && typeof (err as NodeJS.ErrnoException).code === 'number'
+          ? (err as NodeJS.ErrnoException).code
+          : err
+            ? 1
+            : 0;
       resolve({ code: code as number | null, stderr });
     });
   });
