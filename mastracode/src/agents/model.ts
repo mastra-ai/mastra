@@ -88,11 +88,7 @@ export function resolveModel(
  * Dynamic model function that reads the current model from harness state.
  * This allows runtime model switching via the /models picker.
  */
-export function getDynamicModel({
-  requestContext,
-}: {
-  requestContext: RequestContext;
-}): ResolvedModel {
+export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
   const harnessContext = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
 
   const modelId = harnessContext?.state?.currentModelId;
