@@ -1,6 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -195,6 +197,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // OAuth providers are checked via authStorage, env-only providers via process.env.
+  // Also scan the full provider registry so any configured API key satisfies access checks.
   const startupAccess: ProviderAccess = {
     anthropic: authStorage.isLoggedIn('anthropic') ? 'oauth' : process.env.ANTHROPIC_API_KEY ? 'apikey' : false,
     openai: authStorage.isLoggedIn('openai-codex') ? 'oauth' : process.env.OPENAI_API_KEY ? 'apikey' : false,
@@ -202,6 +205,20 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
+  // Check all providers in the registry for API keys
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    for (const [provider, config] of Object.entries(registry)) {
+      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      const envVars = config?.apiKeyEnvVar;
+      const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
+      if (envVarList.some(envVar => process.env[envVar])) {
+        startupAccess[provider] = 'apikey';
+      }
+    }
+  } catch {
+    // Registry may not be loaded yet; the 5 hardcoded providers are sufficient fallback
+  }
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
