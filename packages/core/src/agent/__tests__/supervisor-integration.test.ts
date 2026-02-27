@@ -2849,6 +2849,10 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       const allSystemText = capturedSystemMessages.join('\n');
       expect(allSystemText).toContain('You are a research assistant. Always cite your sources.');
       expect(allSystemText).toContain('Be concise and use bullet points');
+
+      const ownIdx = allSystemText.indexOf('You are a research assistant. Always cite your sources.');
+      const llmIdx = allSystemText.indexOf('Be concise and use bullet points');
+      expect(ownIdx).toBeLessThan(llmIdx);
     });
 
     it('should use only agent own instructions when parent LLM does not provide instructions', async () => {

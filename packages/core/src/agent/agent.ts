@@ -2629,17 +2629,7 @@ export class Agent<
             if (effectiveInstructions) {
               const agentOwnInstructions = await agent.getInstructions({ requestContext });
               if (agentOwnInstructions) {
-                const ownStr =
-                  typeof agentOwnInstructions === 'string'
-                    ? agentOwnInstructions
-                    : Array.isArray(agentOwnInstructions)
-                      ? agentOwnInstructions
-                          .map(m => (typeof m === 'string' ? m : 'content' in m ? String(m.content) : ''))
-                          .filter(Boolean)
-                          .join('\n')
-                      : 'content' in agentOwnInstructions
-                        ? String(agentOwnInstructions.content)
-                        : '';
+                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
                   effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
                 }
