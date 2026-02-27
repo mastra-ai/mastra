@@ -86,7 +86,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     const bgConfig = toolConfig?.backgroundProcesses;
 
-    // Resolve abort signal: undefined = use context signal, null/false = disabled
+    // Resolve abort signal: undefined = use context signal (from agent), null/false = disabled
     const bgAbortSignal =
       bgConfig?.abortSignal === undefined ? context?.abortSignal : bgConfig.abortSignal || undefined;
 
@@ -133,7 +133,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
-      abortSignal: context?.abortSignal,
+      abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
       onStdout: async (data: string) => {
         stdout += data;
         await context?.writer?.custom({
