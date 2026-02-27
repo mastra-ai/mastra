@@ -15,8 +15,6 @@ const experimentsListColumns = [
   { name: 'date', label: 'Created', size: '10rem' },
 ];
 
-const experimentsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...experimentsListColumns];
-
 /**
  * Truncate experiment ID to first 8 characters or until the first dash
  */
@@ -57,7 +55,7 @@ export function DatasetExperimentsList({
   onRowClick,
   onToggleSelection,
 }: DatasetExperimentsListProps) {
-  const columns = isSelectionActive ? experimentsListColumnsWithCheckbox : experimentsListColumns;
+  const columns = experimentsListColumns;
 
   if (experiments.length === 0) {
     return <EmptyDatasetExperimentsList />;
@@ -65,7 +63,7 @@ export function DatasetExperimentsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columns}>
+      <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
         {columns.map(col => (
           <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
         ))}
@@ -80,25 +78,21 @@ export function DatasetExperimentsList({
 
             return (
               <ItemList.Row key={experiment.id} isSelected={isSelected}>
+                {isSelectionActive && (
+                  <ItemList.LabelCell>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleSelection(experiment.id)}
+                      aria-label={`Select experiment ${experiment.id}`}
+                    />
+                  </ItemList.LabelCell>
+                )}
                 <ItemList.RowButton
                   item={entry}
                   isFeatured={isSelected}
-                  columns={columns}
+                  columns={experimentsListColumns}
                   onClick={() => onRowClick(experiment.id)}
                 >
-                  {isSelectionActive && (
-                    <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => {}}
-                        onClick={e => {
-                          e.stopPropagation();
-                          onToggleSelection(experiment.id);
-                        }}
-                        aria-label={`Select experiment ${experiment.id}`}
-                      />
-                    </div>
-                  )}
                   <ItemList.IdCell id={experiment.id} />
                   <ItemList.StatusCell status={status} />
                   <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>

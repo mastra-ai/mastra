@@ -2666,6 +2666,9 @@ importers:
       radash:
         specifier: ^12.1.1
         version: 12.1.1
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -2763,6 +2766,9 @@ importers:
       '@types/picomatch':
         specifier: 4.0.2
         version: 4.0.2
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18)
