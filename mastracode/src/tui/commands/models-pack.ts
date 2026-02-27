@@ -481,6 +481,14 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     google: hasEnv('google') ? ('apikey' as const) : false,
     deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
   };
+  // Include all other providers that have API keys configured
+  const seen = new Set(Object.keys(access));
+  for (const m of models) {
+    if (!seen.has(m.provider) && m.hasApiKey) {
+      access[m.provider] = 'apikey';
+      seen.add(m.provider);
+    }
+  }
 
   const settings = loadSettings();
   const packs = getAvailableModePacks(access, settings.customModelPacks);

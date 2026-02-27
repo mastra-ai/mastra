@@ -54,6 +54,16 @@ export type JSONArray = JSONValue[];
  */
 export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
 
+export type StreamTransport = {
+  type: 'openai-websocket';
+  close: () => void;
+  closeOnFinish: boolean;
+};
+
+export type StreamTransportRef = {
+  current?: StreamTransport;
+};
+
 interface BaseChunkType {
   runId: string;
   from: ChunkFrom;
@@ -862,6 +872,7 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  transportRef?: StreamTransportRef;
 } & Partial<ObservabilityContext>;
 
 /**
