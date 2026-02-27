@@ -867,9 +867,18 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Try to find and reconnect to an existing Daytona sandbox with the same
-   * logical ID (via the mastra-sandbox-id label). Returns the sandbox if
-   * found and usable, or null if a fresh sandbox should be created.
+   * Try to find and reconnect to an existing Daytona sandbox.
+   *
+   * Uses two strategies:
+   * 1. `get()` by sandbox name — calls the getSandbox API directly, which
+   *    returns sandboxes in ANY state (including stopped). This is the
+   *    primary path and fixes reconnection after stop/start cycles.
+   * 2. `findOne()` by label — falls back to label-based search. Note: the
+   *    SDK's list() API only returns started sandboxes by default (no states
+   *    param in v0.143.0), so this only finds running sandboxes.
+   *
+   * Returns the sandbox if found and usable, or null if a fresh one should
+   * be created.
    */
   private async findExistingSandbox(): Promise<Sandbox | null> {
     const DEAD_STATES: SandboxState[] = [
@@ -879,32 +888,53 @@ export class DaytonaSandbox extends MastraSandbox {
       SandboxState.BUILD_FAILED,
     ];
 
-    try {
-      const sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-      const state = sandbox.state;
+    // Try to locate an existing sandbox. We attempt two strategies:
+    //  1. get() by name — calls getSandbox() directly, works for ANY state
+    //     (including stopped). This is the primary path.
+    //  2. findOne() by label — calls list() which only returns started
+    //     sandboxes in SDK v0.143.0 (no states param passed). This is a
+    //     fallback for edge cases where the name might differ from the ID.
+    let sandbox: Sandbox | null = null;
 
-      if (state && DEAD_STATES.includes(state)) {
-        this.logger.debug(
-          `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
-        );
-        try {
-          await this._daytona!.delete(sandbox);
-        } catch {
-          // Best-effort cleanup of dead sandbox
-        }
+    // Strategy 1: lookup by name (works for stopped sandboxes)
+    if (this.sandboxName) {
+      try {
+        sandbox = await this._daytona!.get(this.sandboxName);
+      } catch {
+        // Not found by name — fall through to label lookup
+      }
+    }
+
+    // Strategy 2: fallback to label-based lookup
+    if (!sandbox) {
+      try {
+        sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
+      } catch {
+        // Not found by label either — create a fresh sandbox
         return null;
       }
+    }
 
-      if (state !== SandboxState.STARTED) {
-        this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-        await this._daytona!.start(sandbox);
+    const state = sandbox.state;
+
+    if (state && DEAD_STATES.includes(state)) {
+      this.logger.debug(
+        `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
+      );
+      try {
+        await this._daytona!.delete(sandbox);
+      } catch {
+        // Best-effort cleanup of dead sandbox
       }
-
-      return sandbox;
-    } catch {
-      // Not found or any error — create a fresh sandbox
       return null;
     }
+
+    if (state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
+      await this._daytona!.start(sandbox);
+    }
+
+    return sandbox;
   }
 
   /**
