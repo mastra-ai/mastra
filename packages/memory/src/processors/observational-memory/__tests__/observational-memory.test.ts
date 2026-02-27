@@ -2396,8 +2396,8 @@ Ask about favorite vegetarian dishes
     const storage = createInMemoryStorage();
 
     let capturedPrompt: any = null;
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async options => {
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async (options: any) => {
         capturedPrompt = options.prompt;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -2850,8 +2850,8 @@ Ask about preferred brewing method
     const storage = createInMemoryStorage();
 
     let capturedPrompt: any = null;
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async options => {
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async (options: any) => {
         capturedPrompt = options.prompt;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
