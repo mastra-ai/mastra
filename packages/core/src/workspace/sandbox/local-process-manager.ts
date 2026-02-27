@@ -5,6 +5,8 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import { execSync } from 'node:child_process';
+
 import { execa } from 'execa';
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
@@ -12,6 +14,30 @@ import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
 import type { CommandResult } from './types';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+const isWindows = process.platform === 'win32';
+
+/**
+ * Kill an entire process tree.
+ *
+ * - **Linux / macOS** — sends a signal to the process *group* (negative PID).
+ *   Requires the child to have been spawned with `detached: true` (`setsid`).
+ * - **Windows** — uses `taskkill /T /F /PID` which walks the process tree
+ *   natively.  `detached: true` is intentionally *not* used on Windows because
+ *   the `DETACHED_PROCESS` creation flag breaks stdout pipe inheritance for
+ *   sub-processes of cmd.exe.
+ */
+function killProcessTree(pid: number, signal: string = 'SIGKILL'): void {
+  if (isWindows) {
+    execSync(`taskkill /T /F /PID ${pid}`, { stdio: 'ignore' });
+  } else {
+    process.kill(-pid, signal);
+  }
+}
 
 // =============================================================================
 // Local Process Handle
@@ -39,11 +65,11 @@ class LocalProcessHandle extends ProcessHandle {
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
-          // Kill the entire process group so child processes are also terminated.
+          // Kill the process tree so child processes are also terminated.
           // We handle timeout ourselves rather than using execa's timeout option
-          // because execa only kills the direct subprocess, not the process group.
+          // because execa only kills the direct subprocess, not the process tree.
           try {
-            process.kill(-this.pid, 'SIGTERM');
+            killProcessTree(this.pid, 'SIGTERM');
           } catch {
             subprocess.kill('SIGTERM');
           }
@@ -100,12 +126,12 @@ class LocalProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    // Kill the entire process group (negative PID) to ensure child processes
+    // Kill the entire process tree to ensure child processes
     // spawned by the shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
     // Execa doesn't handle process tree killing natively.
     try {
-      process.kill(-this.pid, 'SIGKILL');
+      killProcessTree(this.pid);
       return true;
     } catch {
       // Fallback to direct kill if process group kill fails
@@ -145,8 +171,11 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       cwd,
       env,
       shell: this.sandbox.isolation === 'none',
-      // detached: true creates a new process group so we can kill the entire tree.
-      detached: true,
+      // detached: true creates a new process group so we can kill the entire tree
+      // on Linux/macOS (via setsid). On Windows, detached: true sets the
+      // DETACHED_PROCESS flag which breaks stdout pipe inheritance for external
+      // executables launched by cmd.exe — so we only enable it on non-Windows.
+      detached: !isWindows,
       stdio: 'pipe',
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
