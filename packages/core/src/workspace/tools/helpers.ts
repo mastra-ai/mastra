@@ -100,7 +100,7 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
         diagTimer = setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS);
       }),
     ]).finally(() => clearTimeout(diagTimer!));
-    if (diagnostics.length === 0) return '';
+    if (diagnostics.length === 0) return '\n\nLSP Diagnostics:\nNo errors or warnings';
 
     // Deduplicate by severity + location + message
     const seen = new Set<string>();

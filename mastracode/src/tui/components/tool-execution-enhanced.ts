@@ -628,7 +628,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // LSP diagnostics below the box
     const diagnostics = this.parseLSPDiagnostics();
-    if (diagnostics && diagnostics.hasIssues) {
+    if (diagnostics && !diagnostics.hasIssues) {
+      this.contentBox.addChild(
+        new Text(theme.fg('muted', `  ✓ No LSP issues`), 0, 0),
+      );
+    } else if (diagnostics && diagnostics.hasIssues) {
       const COLLAPSED_DIAG_LINES = 3;
       const shouldCollapse = !this.expanded && diagnostics.entries.length > COLLAPSED_DIAG_LINES + 1;
       const maxDiags = shouldCollapse ? COLLAPSED_DIAG_LINES : diagnostics.entries.length;
