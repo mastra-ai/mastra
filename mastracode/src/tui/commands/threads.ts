@@ -29,18 +29,22 @@ export function showThreadLockPrompt(
     {
       question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
       options: [
+        { label: 'Switch thread', description: 'Pick a different thread' },
         { label: 'New thread', description: 'Start a fresh thread' },
         ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
         { label: 'Exit', description: 'Exit' },
       ],
       formatResult: answer => {
+        if (answer === 'Switch thread') return 'Opening thread selector...';
         if (answer === 'Clone thread') return 'Cloning thread...';
         if (answer === 'New thread') return 'Starting new thread.';
         return 'Exiting.';
       },
       onSubmit: async answer => {
         ctx.state.activeInlineQuestion = undefined;
-        if (answer === 'Clone thread' && lockedThreadId) {
+        if (answer === 'Switch thread') {
+          await handleThreadsCommand(ctx);
+        } else if (answer === 'Clone thread' && lockedThreadId) {
           try {
             const customTitle = await askCloneName(ctx.state);
             const clonedThread = await ctx.state.harness.cloneThread({
@@ -90,6 +94,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       threads,
       currentThreadId: currentId,
       currentResourceId,
+      currentProjectPath: state.projectInfo.rootPath,
       getMessagePreview: async (threadId: string) => {
         const firstUserMessage = await state.harness.getFirstUserMessageForThread({ threadId });
         if (firstUserMessage) {

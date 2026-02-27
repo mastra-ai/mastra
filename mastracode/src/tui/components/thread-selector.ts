@@ -18,6 +18,8 @@ export interface ThreadSelectorOptions {
   currentThreadId: string | null;
   /** Current resource ID — threads from this resource sort to the top */
   currentResourceId?: string;
+  /** Current project root path — threads tagged with this directory sort above other same-resource threads */
+  currentProjectPath?: string;
   onSelect: (thread: HarnessThread) => void;
   onCancel: () => void;
   /** Called when user presses 'c' to clone the selected thread */
@@ -38,6 +40,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private selectedIndex = 0;
   private currentThreadId: string | null;
   private currentResourceId: string | undefined;
+  private currentProjectPath: string | undefined;
   private onSelectCallback: (thread: HarnessThread) => void;
   private onCancelCallback: () => void;
   private onCloneCallback: ((thread: HarnessThread) => void) | undefined;
@@ -60,6 +63,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
 
     this.tui = options.tui;
     this.currentResourceId = options.currentResourceId;
+    this.currentProjectPath = options.currentProjectPath;
     this.allThreads = this.sortThreads(options.threads, options.currentThreadId);
     this.currentThreadId = options.currentThreadId;
     this.onSelectCallback = options.onSelect;
@@ -118,10 +122,18 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private sortThreads(threads: HarnessThread[], currentThreadId: string | null): HarnessThread[] {
     const sorted = [...threads];
     const resId = this.currentResourceId;
+    const projPath = this.currentProjectPath;
     sorted.sort((a, b) => {
       // Current thread first
       if (a.id === currentThreadId) return -1;
       if (b.id === currentThreadId) return 1;
+      // Threads tagged with the current directory before others
+      if (projPath) {
+        const aDir = (a.metadata?.projectPath as string) === projPath;
+        const bDir = (b.metadata?.projectPath as string) === projPath;
+        if (aDir && !bDir) return -1;
+        if (!aDir && bDir) return 1;
+      }
       // Current resource threads before other resources
       if (resId) {
         const aLocal = a.resourceId === resId;

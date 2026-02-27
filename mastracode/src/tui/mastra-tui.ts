@@ -21,6 +21,7 @@ import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from 
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { askCloneName, resetUIAfterClone } from './commands/clone.js';
+import { handleThreadsCommand } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
@@ -288,8 +289,12 @@ export class MastraTUI {
     // One-time Claude Max OAuth warning at startup
     await this.checkClaudeMaxOAuthWarning();
 
-    // Show deferred thread lock prompt (must happen after TUI is started)
-    if (this.state.pendingLockConflict) {
+    // Show deferred thread selection or lock prompt (must happen after TUI is started)
+    if (this.state.pendingThreadChoice) {
+      this.state.pendingThreadChoice = false;
+      await handleThreadsCommand(this.buildCommandContext());
+      // Skip onboarding when there's a thread choice — it'll run on next clean startup
+    } else if (this.state.pendingLockConflict) {
       this.showThreadLockPrompt(
         this.state.pendingLockConflict.threadTitle,
         this.state.pendingLockConflict.ownerPid,
@@ -468,18 +473,22 @@ export class MastraTUI {
       {
         question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
         options: [
+          { label: 'Switch thread', description: 'Pick a different thread' },
           { label: 'New thread', description: 'Start a fresh thread' },
           ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
           { label: 'Exit', description: 'Exit' },
         ],
         formatResult: answer => {
+          if (answer === 'Switch thread') return 'Opening thread selector...';
           if (answer === 'Clone thread') return 'Cloning thread...';
           if (answer === 'New thread') return 'Starting new thread.';
           return 'Exiting.';
         },
         onSubmit: async answer => {
           this.state.activeInlineQuestion = undefined;
-          if (answer === 'Clone thread' && lockedThreadId) {
+          if (answer === 'Switch thread') {
+            await handleThreadsCommand(this.buildCommandContext());
+          } else if (answer === 'Clone thread' && lockedThreadId) {
             try {
               const customTitle = await askCloneName(this.state);
               const clonedThread = await this.state.harness.cloneThread({

@@ -412,27 +412,33 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const mostRecent = sortedThreads[0]!;
-  // Auto-resume the most recent thread for this directory
-  try {
-    await state.harness.switchThread({ threadId: mostRecent.id });
-    // Retroactively tag untagged legacy threads
-    if (!mostRecent.metadata?.projectPath) {
-      await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
-    }
-  } catch (error) {
-    if (error instanceof ThreadLockError) {
-      // Defer the lock conflict prompt until after the TUI is started
-      state.pendingNewThread = true;
-      state.pendingLockConflict = {
-        threadTitle: mostRecent.title || mostRecent.id,
-        ownerPid: error.ownerPid,
-        threadId: mostRecent.id,
-      };
+
+  // If there's only one thread, auto-resume it directly
+  if (sortedThreads.length === 1) {
+    const thread = sortedThreads[0]!;
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
       return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        state.pendingNewThread = true;
+        state.pendingLockConflict = {
+          threadTitle: thread.title || thread.id,
+          ownerPid: error.ownerPid,
+          threadId: thread.id,
+        };
+        return;
+      }
+      throw error;
     }
-    throw error;
   }
+
+  // Multiple threads for this directory — defer to the thread selector
+  state.pendingNewThread = true;
+  state.pendingThreadChoice = true;
 }
 
 // =============================================================================
