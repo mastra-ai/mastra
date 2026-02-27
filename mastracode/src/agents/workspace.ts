@@ -116,6 +116,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   const lspConfig = loadSettings().lsp ?? true;
 
+
   // First call for this project — create the workspace
   return new Workspace({
     id: workspaceId,

@@ -4,6 +4,7 @@ import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
@@ -207,7 +208,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
-    this.config.threadLock?.acquire(mostRecent.id);
+    await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
 
@@ -579,11 +580,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const oldThreadId = this.currentThreadId;
     if (this.config.threadLock) {
       try {
-        this.config.threadLock.acquire(thread.id);
+        await this.config.threadLock.acquire(thread.id);
       } catch (err) {
         if (oldThreadId) {
           try {
-            this.config.threadLock.acquire(oldThreadId);
+            await this.config.threadLock.acquire(oldThreadId);
           } catch {
             // Best-effort re-acquire; original error is more important
           }
@@ -591,7 +592,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         throw err;
       }
       if (oldThreadId) {
-        this.config.threadLock.release(oldThreadId);
+        await this.config.threadLock.release(oldThreadId);
       }
     }
 
@@ -631,11 +632,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     // Acquire lock on new thread before releasing old one
-    this.config.threadLock?.acquire(threadId);
+    await this.config.threadLock?.acquire(threadId);
 
     const previousThreadId = this.currentThreadId;
     if (previousThreadId) {
-      this.config.threadLock?.release(previousThreadId);
+      await this.config.threadLock?.release(previousThreadId);
     }
     this.currentThreadId = threadId;
 
@@ -1059,9 +1060,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   async sendMessage({
     content,
     images,
+    tracingContext,
+    tracingOptions,
   }: {
     content: string;
     images?: Array<{ data: string; mimeType: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1086,6 +1091,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         maxSteps: 1000,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
       };
 
       streamOptions.toolsets = await this.buildToolsets(requestContext);
@@ -1141,7 +1148,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next });
+        await this.sendMessage({ content: next, tracingContext, tracingOptions });
       }
     }
   }

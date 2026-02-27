@@ -1,6 +1,10 @@
 ---
-'@mastra/core': minor
+'@mastra/core': patch
 'mastracode': patch
 ---
 
-Added tail pipe extraction to execute_command tool — strips `| tail -N` from commands before execution so output streams in real time, then applies tail to the final result. Added `sandboxToModelOutput` to sandbox tools (execute_command, get_process_output, kill_process) to strip ANSI escape codes from tool results sent to the model while preserving colors in the stream. Added `setToolsConfig()` method to Workspace for dynamically updating per-tool configuration at runtime.
+Switch mastracode to use workspace tools for filesystem, grep, glob, edit, write, and command execution instead of built-in tool implementations
+
+- Map sandbox `data-sandbox-stdout`/`data-sandbox-stderr` data chunks to `shell_output` harness events for TUI streaming
+- Add TUI rendering for process management tools (`get_process_output`, `kill_process`)
+- Fix TUI edit file diff rendering to support workspace tool arg names (`old_string`/`new_string`)

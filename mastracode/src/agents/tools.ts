@@ -3,7 +3,12 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
+import {
+  createWebSearchTool,
+  createWebExtractTool,
+  hasTavilyKey,
+  requestSandboxAccessTool,
+} from '../tools';
 
 export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
