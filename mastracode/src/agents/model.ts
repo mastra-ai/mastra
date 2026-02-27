@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';

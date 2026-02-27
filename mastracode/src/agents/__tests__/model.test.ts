@@ -51,8 +51,8 @@ vi.mock('@mastra/core/llm', () => ({
   }),
 }));
 
-import { resolveModel, getAnthropicApiKey } from '../model.js';
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
+import { resolveModel, getAnthropicApiKey } from '../model.js';
 
 describe('resolveModel', () => {
   const originalEnv = { ...process.env };
