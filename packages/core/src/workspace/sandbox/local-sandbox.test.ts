@@ -270,6 +270,61 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Abort Signal
+  // ===========================================================================
+  describe('abort signal', () => {
+    beforeEach(async () => {
+      await sandbox._start();
+    });
+
+    it('should abort a running command when signal fires', async () => {
+      if (os.platform() === 'win32') return;
+      const controller = new AbortController();
+
+      setTimeout(() => controller.abort(), 100);
+      const result = await sandbox.executeCommand('sleep', ['10'], {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(130);
+      expect(result.stderr).toContain('Process aborted');
+      expect(result.executionTimeMs).toBeLessThan(5000);
+    });
+
+    it('should return immediately when signal is already aborted', async () => {
+      if (os.platform() === 'win32') return;
+      const controller = new AbortController();
+      controller.abort();
+
+      const start = Date.now();
+      const result = await sandbox.executeCommand('sleep', ['10'], {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(130);
+      expect(Date.now() - start).toBeLessThan(2000);
+    });
+
+    it('should include partial stdout captured before abort', async () => {
+      if (os.platform() === 'win32') return;
+      const controller = new AbortController();
+
+      setTimeout(() => controller.abort(), 300);
+      const result = await sandbox.executeCommand(
+        'node',
+        ['-e', 'process.stdout.write("before abort\\n"); setTimeout(() => {}, 30000)'],
+        { abortSignal: controller.signal },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.stdout).toContain('before abort');
+      expect(result.executionTimeMs).toBeLessThan(5000);
+    });
+  });
+
+  // ===========================================================================
   // Working Directory
   // ===========================================================================
   describe('working directory', () => {

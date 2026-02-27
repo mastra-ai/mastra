@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import type { LSPConfig } from '@mastra/core/workspace';
 import type { stateSchema } from '../schema';
+import { loadSettings } from '../onboarding/settings.js';
 
 // =============================================================================
 // Create Workspace with Skills
@@ -77,51 +78,69 @@ const skillPaths = collectSkillPaths([
   claudeGlobalSkillsPath,
 ]);
 
-/**
- * Create a workspace provider function with the given LSP config.
- * Pass `true` to enable LSP with defaults, a config object for custom settings,
- * or `false`/`undefined` to disable LSP.
- */
-export function createWorkspaceProvider(lspConfig?: boolean | LSPConfig) {
-  return function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
-    const state = ctx?.getState?.();
-    const projectPath = state?.projectPath;
+const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
-    if (!projectPath) {
-      throw new Error('Project path is required');
-    }
+export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
+  const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
+  const state = ctx?.getState?.();
+  const modeId = ctx?.modeId ?? 'build';
+  const projectPath = state?.projectPath;
 
-    // Sync filesystem's allowedPaths with sandbox-granted paths from harness state
-    const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+  if (!projectPath) {
+    throw new Error('Project path is required');
+  }
 
-    const workspace = new Workspace({
-      id: 'mastra-code-workspace',
-      name: 'Mastra Code Workspace',
-      filesystem: new LocalFilesystem({
-        basePath: projectPath,
-        allowedPaths: skillPaths,
-      }),
-      sandbox: new LocalSandbox({
-        workingDirectory: projectPath,
-        env: process.env,
-      }),
-      // Disable workspace tools — built-in tools are used instead.
-      // Workspace tools use different output formats (e.g. → separator, offset/limit params)
-      // that the TUI renderers don't fully support yet.
-      // We will update to use workspace tools very soon - just disabling until then
-      tools: { enabled: false },
-      ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
-      ...(lspConfig !== undefined && lspConfig !== false ? { lsp: lspConfig } : {}),
-    });
-
-    workspace.filesystem.setAllowedPaths([...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))]);
-
-    return workspace;
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
+  const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+  const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const isPlanMode = modeId === 'plan';
+  const planModeTools = {
+    mastra_workspace_write_file: { enabled: false },
+    mastra_workspace_edit_file: { enabled: false },
+    mastra_workspace_ast_edit: { enabled: false },
   };
-}
 
-export const getDynamicWorkspace = createWorkspaceProvider(true);
+  // Reuse existing workspace if already registered (preserves ProcessManager state)
+  let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
+  try {
+    existing = mastra?.getWorkspaceById(workspaceId) as Workspace<LocalFilesystem, LocalSandbox>;
+  } catch {
+    // Not registered yet
+  }
+
+  if (existing) {
+    existing.filesystem.setAllowedPaths(allowedPaths);
+    existing.setToolsConfig(isPlanMode ? planModeTools : undefined);
+    return existing;
+  }
+
+  const lspConfig = loadSettings().lsp ?? true;
+
+  // First call for this project — create the workspace
+  return new Workspace({
+    id: workspaceId,
+    name: 'Mastra Code Workspace',
+    filesystem: new LocalFilesystem({
+      basePath: projectPath,
+      allowedPaths,
+    }),
+    sandbox: new LocalSandbox({
+      workingDirectory: projectPath,
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1',
+        CLICOLOR_FORCE: '1',
+        TERM: process.env.TERM || 'xterm-256color',
+        CI: 'true',
+        NONINTERACTIVE: '1',
+        DEBIAN_FRONTEND: 'noninteractive',
+      },
+    }),
+    ...(isPlanMode ? { tools: planModeTools } : {}),
+    ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
+    ...(lspConfig !== undefined && lspConfig !== false ? { lsp: lspConfig } : {}),
+  });
+}
 
 if (skillPaths.length > 0) {
   console.info(`Skills loaded from:`);
