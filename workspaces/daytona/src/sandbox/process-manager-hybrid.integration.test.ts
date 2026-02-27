@@ -20,8 +20,8 @@
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { DaytonaSandbox } from './index';
 import { DaytonaHybridProcessManager } from './process-manager-hybrid';
+import { DaytonaSandbox } from './index';
 
 /**
  * Conformance suite with hybrid process manager.
@@ -92,75 +92,67 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaHybridProcessManager — P
     }
   });
 
-  it(
-    'discovers externally-spawned PTY sessions via list()',
-    async () => {
-      await sandbox._start();
-      const instance = sandbox.instance;
+  it('discovers externally-spawned PTY sessions via list()', async () => {
+    await sandbox._start();
+    const instance = sandbox.instance;
 
-      // Spawn an external PTY session (not through the manager)
-      const externalPty = await instance.process.createPty({
-        id: `external-pty-${Date.now()}`,
-        cwd: '/',
-        onData: () => {},
-      });
-      await externalPty.waitForConnection();
+    // Spawn an external PTY session (not through the manager)
+    const externalPty = await instance.process.createPty({
+      id: `external-pty-${Date.now()}`,
+      cwd: '/',
+      onData: () => {},
+    });
+    await externalPty.waitForConnection();
 
-      try {
-        // list() should discover the external session
-        const procs = await sandbox.processes!.list();
-        const external = procs.find(p => p.command?.includes('[pty:'));
-        expect(external).toBeDefined();
-        expect(external!.running).toBe(true);
-      } finally {
-        await externalPty.kill().catch(() => {});
-      }
-    },
-    120000,
-  );
+    try {
+      // list() should discover the external session
+      const procs = await sandbox.processes!.list();
+      const external = procs.find(p => p.command?.includes('[pty:'));
+      expect(external).toBeDefined();
+      expect(external!.running).toBe(true);
+    } finally {
+      await externalPty.kill().catch(() => {});
+    }
+  }, 120000);
 
-  it(
-    'reconnects to external PTY session via get() with unknown PID',
-    async () => {
-      await sandbox._start();
-      const instance = sandbox.instance;
+  it('reconnects to external PTY session via get() with unknown PID', async () => {
+    await sandbox._start();
+    const instance = sandbox.instance;
 
-      // Spawn an external PTY session
-      const externalPty = await instance.process.createPty({
-        id: `external-reconnect-${Date.now()}`,
-        cwd: '/',
-        onData: () => {},
-      });
-      await externalPty.waitForConnection();
+    // Spawn an external PTY session
+    const externalPty = await instance.process.createPty({
+      id: `external-reconnect-${Date.now()}`,
+      cwd: '/',
+      onData: () => {},
+    });
+    await externalPty.waitForConnection();
 
-      // Send a command to the external PTY
-      await externalPty.sendInput('echo reconnected-output\n');
-      // Give it a moment to process
-      await new Promise(r => setTimeout(r, 1000));
+    // Send a command to the external PTY
+    await externalPty.sendInput('echo reconnected-output\n');
+    // Give it a moment to process
+    await new Promise(r => setTimeout(r, 1000));
 
-      try {
-        // list() first to see the external session and get its synthetic PID
-        const procs = await sandbox.processes!.list();
-        const external = procs.find(p => p.command?.includes('[pty:'));
+    try {
+      // list() first to see the external session and get its synthetic PID
+      const procs = await sandbox.processes!.list();
+      const external = procs.find(p => p.command?.includes('[pty:'));
 
-        if (external) {
-          // get() with the synthetic PID should reconnect
-          // Note: The synthetic PID from list() is ephemeral, so we use get()
-          // with an unknown PID to trigger the fallback
-          const handle = await sandbox.processes!.get(99998);
+      if (external) {
+        // get() with the synthetic PID should reconnect
+        // Note: The synthetic PID from list() is ephemeral, so we use get()
+        // with an unknown PID to trigger the fallback
+        const handle = await sandbox.processes!.get(99998);
 
-          if (handle) {
-            // Handle should be connected and accumulating output
-            expect(handle.pid).toBeGreaterThan(0);
+        if (handle) {
+          // Handle should be connected and accumulating output
+          expect(handle.pid).toBeGreaterThan(0);
 
-            // Clean up
-            await handle.kill();
-          }
+          // Clean up
+          await handle.kill();
         }
-      } finally {
-        await externalPty.kill().catch(() => {});
       }
-    },
-    120000,
-  );
+    } finally {
+      await externalPty.kill().catch(() => {});
+    }
+  }, 120000);
 });

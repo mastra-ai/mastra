@@ -22,8 +22,8 @@
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { describe } from 'vitest';
 
-import { DaytonaSandbox } from './index';
 import { DaytonaPtyProcessManager } from './process-manager-pty';
+import { DaytonaSandbox } from './index';
 
 /**
  * Conformance suite with PTY process manager.
