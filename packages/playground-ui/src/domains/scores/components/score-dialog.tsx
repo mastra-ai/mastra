@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { KeyValueList } from '@/ds/components/KeyValueList';
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons/Icon';
 import {
   HashIcon,
   GaugeIcon,
@@ -10,12 +13,14 @@ import {
   EyeIcon,
   ChevronsLeftRightEllipsisIcon,
   CalculatorIcon,
+  SaveIcon,
 } from 'lucide-react';
 
 import type { ScoreRowData } from '@mastra/core/evals';
 import { useLinkComponent } from '@/lib/framework';
 import { Sections } from '@/index';
 import { format } from 'date-fns/format';
+import { ScoreAsItemDialog } from './score-as-item-dialog';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {
   if (!score) return false;
@@ -49,10 +54,12 @@ export function ScoreDialog({
   dialogLevel = 1,
   usageContext = 'scorerPage',
 }: ScoreDialogProps) {
+  const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const { Link } = useLinkComponent();
   const isCodeBased = isCodeBasedScorer(score);
 
   return (
+    <>
     <SideDialog
       dialogTitle="Scorer Score"
       dialogDescription="View and analyze score details"
@@ -89,6 +96,11 @@ export function ScoreDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
+        |
+        <Button variant="outline" size="sm" onClick={() => setDatasetDialogOpen(true)}>
+          <Icon><SaveIcon /></Icon>
+          Save as Dataset Item
+        </Button>
       </SideDialog.Top>
 
       <SideDialog.Content>
@@ -209,5 +221,13 @@ export function ScoreDialog({
         </Sections>
       </SideDialog.Content>
     </SideDialog>
+
+    <ScoreAsItemDialog
+      score={score}
+      isOpen={datasetDialogOpen}
+      onClose={() => setDatasetDialogOpen(false)}
+      level={(dialogLevel + 1) as SideDialogRootProps['level']}
+    />
+    </>
   );
 }
