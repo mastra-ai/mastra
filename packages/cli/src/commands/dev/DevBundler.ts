@@ -62,12 +62,15 @@ export class DevBundler extends Bundler {
     const publicDir = join(mastraDir, 'public');
     try {
       await stat(publicDir);
-    } catch {
-      return;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
+      throw err;
     }
     devLogger.debug(`Copying public files from ${publicDir}`);
     await super.copyPublic(mastraDir, outputDirectory);
-    devLogger.info('Public files copied to output (e.g., worker scripts)');
+    devLogger.info('Public files copied to output');
   }
 
   async watch(
@@ -96,8 +99,7 @@ export class DevBundler extends Bundler {
 
     await this.writePackageJson(outputDir, new Map(), {});
 
-    // Capture instance for use inside Rollup plugin callbacks where `this` is the plugin context
-    const bundlerSelf = this;
+    const bundlerSelf = this; // `this` inside Rollup plugin hooks is the plugin context
     const mastraDir = this.mastraDir ?? dirname(entryFile);
 
     const watcher = await createWatcher(
@@ -127,8 +129,7 @@ export class DevBundler extends Bundler {
           {
             name: 'public-files-copier',
             buildStart() {
-              // Watch the public directory so changes to worker files trigger rebuilds.
-              // Only add the watch if the directory exists to avoid ENOENT warnings from chokidar.
+              // Guard with existsSync to avoid chokidar ENOENT warnings.
               const publicDir = join(mastraDir, 'public');
               if (existsSync(publicDir)) {
                 this.addWatchFile(publicDir);

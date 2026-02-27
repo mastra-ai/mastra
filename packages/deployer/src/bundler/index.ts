@@ -137,13 +137,6 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
-  /**
-   * Copies files from `{mastraDir}/public/` to the bundled output directory.
-   *
-   * Use `src/mastra/public/` for static files that must be available at runtime
-   * but should not be processed by the bundler — e.g., Worker thread scripts,
-   * WASM binaries, or other assets referenced via `import.meta.url`.
-   */
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
     const publicDir = join(mastraDir, 'public');
 
