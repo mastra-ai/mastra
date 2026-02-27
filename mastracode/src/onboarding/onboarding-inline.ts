@@ -16,6 +16,7 @@ import { Box, Container, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { ANTHROPIC_OAUTH_PROVIDER_ID, CLAUDE_MAX_OAUTH_WARNING_MESSAGE } from '../auth/claude-max-warning.js';
+import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
 import { theme, getSelectListTheme, mastra } from '../tui/theme.js';
 import type { ModePack, OMPack } from './packs.js';
 
@@ -79,6 +80,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
   private currentStep: StepId = 'welcome';
   private stepBox!: Box;
   private selectList?: SelectList;
+  private activeInlineQuestion?: AskQuestionInlineComponent;
   private _finished = false;
 
   // Collected choices
@@ -337,11 +339,11 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private renderModePack(): void {
     const packs = this.options.modePacks;
+    const box = this.makeBox();
 
-    // No API keys and no OAuth logins — can't proceed
+    // No API keys and no OAuth logins — show warning but allow the user to continue
     if (!this.options.hasProviderAccess) {
-      const box = this.makeBox();
-      box.addChild(new Text(theme.bold(theme.fg('error', 'No model providers configured')), 0, 0));
+      box.addChild(new Text(theme.bold(theme.fg('warning', 'No model providers configured')), 0, 0));
       box.addChild(new Spacer(1));
       box.addChild(new Text(theme.fg('text', 'To use Mastra Code you need at least one API key or OAuth login'), 0, 0));
       box.addChild(new Text(theme.fg('text', 'for Anthropic, OpenAI, or another supported provider.'), 0, 0));
@@ -353,13 +355,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       box.addChild(
         new Text(theme.fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0),
       );
-      this._finished = true;
-      // Give the TUI time to render the message before exiting
-      setTimeout(() => process.exit(1), 3000);
-      return;
+      box.addChild(new Spacer(1));
     }
 
-    const box = this.makeBox();
     box.addChild(new Text(theme.bold(theme.fg('accent', 'Model Packs')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', 'Choose default models for each mode (build / plan / fast):'), 0, 0));
@@ -431,10 +429,47 @@ export class OnboardingInlineComponent extends Container implements Focusable {
   // Custom pack flow — sequential model selection for each mode
   // ---------------------------------------------------------------------------
 
+  private async promptCustomPackName(): Promise<string | null> {
+    return new Promise(resolve => {
+      const question = new AskQuestionInlineComponent(
+        {
+          question: 'Name this custom pack',
+          formatResult: answer => `Custom pack: ${answer}`,
+          onSubmit: answer => {
+            this.activeInlineQuestion = undefined;
+            const trimmed = answer.trim();
+            resolve(trimmed.length > 0 ? trimmed : null);
+          },
+          onCancel: () => {
+            this.activeInlineQuestion = undefined;
+            resolve(null);
+          },
+        },
+        this.tui,
+      );
+
+      this.activeInlineQuestion = question;
+      this.stepBox.addChild(new Spacer(1));
+      this.stepBox.addChild(question);
+      this.tui.requestRender();
+    });
+  }
+
   private async runCustomPackFlow(): Promise<void> {
     // Clear the pack selector so it doesn't capture input while overlays are shown
     this.selectList = undefined;
-    this.collapseStep('Model pack → Custom');
+
+    const packName = await this.promptCustomPackName();
+    if (!packName) {
+      const fallback = this.options.modePacks.find(p => p.id !== 'custom') ?? this.options.modePacks[0]!;
+      this.selectedModePack = fallback;
+      this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)} (cancelled custom)`);
+      this.renderStep('omPack');
+      this.tui.requestRender();
+      return;
+    }
+
+    this.collapseStep(`Model pack → Custom (${packName})`);
 
     const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; color: string }> = [
       { id: 'plan', label: 'plan', color: mastra.blue },
@@ -462,14 +497,14 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     }
 
     this.selectedModePack = {
-      id: 'custom',
-      name: 'Custom',
-      description: 'User-selected models',
+      id: `custom:${packName}`,
+      name: packName,
+      description: 'Saved custom pack',
       models: { build: models.build!, plan: models.plan!, fast: models.fast! },
     };
 
     this.collapseStep(
-      `Model pack → ${theme.bold('Custom')}  ` +
+      `Model pack → ${theme.bold(packName)}  ` +
         `${chalk.hex(mastra.blue)('plan')} ${models.plan}  ` +
         `${chalk.hex(mastra.purple)('build')} ${models.build}  ` +
         `${chalk.hex(mastra.green)('fast')} ${models.fast}`,
@@ -642,6 +677,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     this.stepBox.setBgFn((text: string) => theme.bg('toolSuccessBg', text));
     this.stepBox.addChild(new Text(`${theme.fg('success', '✓')} ${theme.fg('text', summary)}`, 0, 0));
     this.selectList = undefined;
+    this.activeInlineQuestion = undefined;
   }
 
   // ---------------------------------------------------------------------------
@@ -650,6 +686,11 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   handleInput(data: string): void {
     if (this._finished) return;
+
+    if (this.activeInlineQuestion) {
+      this.activeInlineQuestion.handleInput(data);
+      return;
+    }
 
     if (this.selectList) {
       this.selectList.handleInput(data);

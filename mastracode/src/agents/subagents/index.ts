@@ -9,7 +9,7 @@ import {
   createGlobTool,
   createWriteFileTool,
   createSubagentTool,
-  stringReplaceLspTool,
+  createStringReplaceLspTool,
 } from '../../tools/index.js';
 import { resolveModel } from '../model.js';
 import { auditTestsSubagent } from './audit-tests.js';
@@ -48,6 +48,7 @@ export function getSubagentTools(projectPath: string) {
   const grepTool = createGrepTool(projectPath);
   const globTool = createGlobTool(projectPath);
   const writeFileTool = createWriteFileTool(projectPath);
+  const stringReplaceLspTool = createStringReplaceLspTool(projectPath);
 
   // The subagent tool needs tools and resolveModel to spawn subagents.
   // We pass all tools that subagents might need based on their type.
