@@ -3,6 +3,7 @@ import type { HarnessMessage } from '@mastra/core/harness';
 import { ThreadLockError } from '../../utils/thread-lock.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
+import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
 
 function extractTextContent(message: HarnessMessage): string {
@@ -41,20 +42,13 @@ export function showThreadLockPrompt(
         ctx.state.activeInlineQuestion = undefined;
         if (answer === 'Clone thread' && lockedThreadId) {
           try {
-            const clonedThread = await ctx.state.harness.cloneThread({ sourceThreadId: lockedThreadId });
+            const customTitle = await askCloneName(ctx.state);
+            const clonedThread = await ctx.state.harness.cloneThread({
+              sourceThreadId: lockedThreadId,
+              ...(customTitle ? { title: customTitle } : {}),
+            });
             ctx.state.pendingNewThread = false;
-            ctx.state.chatContainer.clear();
-            ctx.state.pendingTools.clear();
-            ctx.state.allToolComponents = [];
-            ctx.state.harness.getDisplayState().modifiedFiles.clear();
-            if (ctx.state.taskProgress) {
-              ctx.state.taskProgress.updateTasks([]);
-            }
-            ctx.state.taskWriteInsertIndex = -1;
-            ctx.updateStatusLine();
-            await ctx.renderExistingMessages();
-            ctx.state.ui.requestRender();
-            ctx.showInfo(`Cloned thread: ${clonedThread.title || clonedThread.id}`);
+            await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
           } catch (error) {
             ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
           }
@@ -138,21 +132,18 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       },
       onClone: async thread => {
         state.ui.hideOverlay();
+        if (!(await confirmClone(state, thread.title || thread.id))) {
+          resolve();
+          return;
+        }
         try {
-          const clonedThread = await state.harness.cloneThread({ sourceThreadId: thread.id });
+          const customTitle = await askCloneName(state);
+          const clonedThread = await state.harness.cloneThread({
+            sourceThreadId: thread.id,
+            ...(customTitle ? { title: customTitle } : {}),
+          });
           state.pendingNewThread = false;
-          state.chatContainer.clear();
-          state.pendingTools.clear();
-          state.allToolComponents = [];
-          state.harness.getDisplayState().modifiedFiles.clear();
-          if (state.taskProgress) {
-            state.taskProgress.updateTasks([]);
-          }
-          state.taskWriteInsertIndex = -1;
-          ctx.updateStatusLine();
-          await ctx.renderExistingMessages();
-          state.ui.requestRender();
-          ctx.showInfo(`Cloned thread: ${clonedThread.title || clonedThread.id}`);
+          await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
         } catch (error) {
           ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
         }

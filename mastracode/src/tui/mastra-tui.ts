@@ -20,6 +20,7 @@ import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../o
 import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+import { askCloneName, resetUIAfterClone } from './commands/clone.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
@@ -480,20 +481,21 @@ export class MastraTUI {
           this.state.activeInlineQuestion = undefined;
           if (answer === 'Clone thread' && lockedThreadId) {
             try {
-              const clonedThread = await this.state.harness.cloneThread({ sourceThreadId: lockedThreadId });
+              const customTitle = await askCloneName(this.state);
+              const clonedThread = await this.state.harness.cloneThread({
+                sourceThreadId: lockedThreadId,
+                ...(customTitle ? { title: customTitle } : {}),
+              });
               this.state.pendingNewThread = false;
-              this.state.chatContainer.clear();
-              this.state.pendingTools.clear();
-              this.state.allToolComponents = [];
-              this.state.harness.getDisplayState().modifiedFiles.clear();
-              if (this.state.taskProgress) {
-                this.state.taskProgress.updateTasks([]);
-              }
-              this.state.taskWriteInsertIndex = -1;
-              updateStatusLine(this.state);
-              await renderExistingMessages(this.state);
-              this.state.ui.requestRender();
-              showInfo(this.state, `Cloned thread: ${clonedThread.title || clonedThread.id}`);
+              await resetUIAfterClone(
+                {
+                  state: this.state,
+                  updateStatusLine: () => updateStatusLine(this.state),
+                  renderExistingMessages: () => renderExistingMessages(this.state),
+                  showInfo: msg => showInfo(this.state, msg),
+                },
+                clonedThread.title || clonedThread.id,
+              );
             } catch (error) {
               showError(
                 this.state,
