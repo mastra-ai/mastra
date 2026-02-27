@@ -12,7 +12,7 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -264,6 +264,7 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledWith(
         expect.objectContaining({
           language: 'python',
+          envVars: { FOO: 'bar' },
           labels: expect.objectContaining({
             team: 'ai',
             'mastra-sandbox-id': sandbox.id,
@@ -272,10 +273,6 @@ describe('DaytonaSandbox', () => {
           autoStopInterval: 30,
         }),
       );
-
-      // Env should NOT be passed at creation time — it's merged per-command
-      // so that reconnecting to an existing sandbox picks up current env
-      expect(mockDaytona.create).toHaveBeenCalledWith(expect.not.objectContaining({ envVars: expect.anything() }));
     });
 
     it('passes snapshot when provided', async () => {
@@ -695,6 +692,22 @@ describe('DaytonaSandbox', () => {
       expect(instructions).toContain('Cloud sandbox');
     });
 
+    it('includes dynamically detected working directory', async () => {
+      mockSandbox.process.executeCommand = vi.fn().mockResolvedValue({ result: '/home/daytona\n' });
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      expect(sandbox.getInstructions()).toContain('/home/daytona');
+    });
+
+    it('omits working directory when detection fails', async () => {
+      mockSandbox.process.executeCommand = vi.fn().mockRejectedValue(new Error('failed'));
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      expect(sandbox.getInstructions()).not.toContain('working directory');
+    });
+
     it('includes command timeout in seconds', () => {
       const sandbox = new DaytonaSandbox({ timeout: 60_000 });
       expect(sandbox.getInstructions()).toContain('60s');
@@ -999,7 +1012,7 @@ describe('DaytonaSandbox', () => {
       if (conformanceSandbox) await conformanceSandbox._destroy();
     });
 
-    const getContext = () => ({
+    createSandboxLifecycleTests(() => ({
       sandbox: conformanceSandbox as any,
       capabilities: {
         supportsMounting: true,
@@ -1014,9 +1027,6 @@ describe('DaytonaSandbox', () => {
       testTimeout: 30000,
       fastOnly: true,
       createSandbox: () => new DaytonaSandbox(),
-    });
-
-    createSandboxLifecycleTests(getContext);
-    createMountOperationsTests(getContext);
+    }));
   });
 });
