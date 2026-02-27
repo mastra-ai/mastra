@@ -234,8 +234,7 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'threads', description: 'Switch between threads' },
-    { name: 'models', description: 'Configure model (global/thread/mode)' },
-    { name: 'models:pack', description: 'Switch model pack' },
+    { name: 'models', description: 'Switch model pack' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },

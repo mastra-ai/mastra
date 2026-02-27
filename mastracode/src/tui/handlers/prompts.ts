@@ -4,6 +4,7 @@
  */
 import { Spacer } from '@mariozechner/pi-tui';
 
+import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -193,6 +194,12 @@ export async function handlePlanApproval(
               approvedAt: new Date().toISOString(),
             },
           });
+          // Persist plan to disk (fire-and-forget, best-effort)
+          savePlanToDisk({
+            title,
+            plan,
+            resourceId: state.harness.getResourceId(),
+          }).catch(() => {});
           // Wait for plan approval to complete (switches mode, aborts stream)
           await state.harness.respondToPlanApproval({
             planId,

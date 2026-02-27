@@ -4,8 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
-    paths-ignore:
-      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -28,6 +26,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
 
       - name: Setup custom action
         continue-on-error: true

@@ -58,7 +58,9 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
     if (
       !isVercelTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+      (input.autoResumeSuspendedTools ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-') ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('workflow-'))
     ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {

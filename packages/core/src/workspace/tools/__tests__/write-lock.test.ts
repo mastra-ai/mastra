@@ -32,9 +32,9 @@ describe('write-lock integration', () => {
 
     // Fire three concurrent edits — each targets a different unique string
     const [r1, r2, r3] = await Promise.all([
-      editFile.execute({ path: '/test.txt', old_string: 'AAA_MARKER', new_string: 'AAA_REPLACED' }),
-      editFile.execute({ path: '/test.txt', old_string: 'BBB_MARKER', new_string: 'BBB_REPLACED' }),
-      editFile.execute({ path: '/test.txt', old_string: 'CCC_MARKER', new_string: 'CCC_REPLACED' }),
+      editFile.execute({ path: '/test.txt', old_string: 'AAA_MARKER', new_string: 'AAA_REPLACED' }, { workspace }),
+      editFile.execute({ path: '/test.txt', old_string: 'BBB_MARKER', new_string: 'BBB_REPLACED' }, { workspace }),
+      editFile.execute({ path: '/test.txt', old_string: 'CCC_MARKER', new_string: 'CCC_REPLACED' }, { workspace }),
     ]);
 
     // All three should report success
@@ -63,8 +63,8 @@ describe('write-lock integration', () => {
     const editFile = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
     const [r1, r2] = await Promise.all([
-      editFile.execute({ path: '/a.txt', old_string: 'hello_a', new_string: 'goodbye_a' }),
-      editFile.execute({ path: '/b.txt', old_string: 'hello_b', new_string: 'goodbye_b' }),
+      editFile.execute({ path: '/a.txt', old_string: 'hello_a', new_string: 'goodbye_a' }, { workspace }),
+      editFile.execute({ path: '/b.txt', old_string: 'hello_b', new_string: 'goodbye_b' }, { workspace }),
     ]);
 
     expect(r1).toContain('Replaced 1 occurrence');
@@ -85,9 +85,9 @@ describe('write-lock integration', () => {
 
     // Fire three concurrent writes — last one in the queue should win
     await Promise.all([
-      writeFile.execute({ path: '/test.txt', content: 'write-1' }),
-      writeFile.execute({ path: '/test.txt', content: 'write-2' }),
-      writeFile.execute({ path: '/test.txt', content: 'write-3' }),
+      writeFile.execute({ path: '/test.txt', content: 'write-1' }, { workspace }),
+      writeFile.execute({ path: '/test.txt', content: 'write-2' }, { workspace }),
+      writeFile.execute({ path: '/test.txt', content: 'write-3' }, { workspace }),
     ]);
 
     const final = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');

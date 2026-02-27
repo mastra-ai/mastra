@@ -14,7 +14,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DaytonaSandbox } from './index';
 
 /**
- * Basic Daytona integration tests.
+ * Provider-specific Daytona integration tests.
+ * Generic sandbox contract tests (command execution, env vars, timeout, etc.)
+ * are covered by the conformance suite below.
  */
 describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Integration', () => {
   let sandbox: DaytonaSandbox;
@@ -36,61 +38,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Integration', () =
       }
     }
   });
-
-  it('can start and execute commands', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('echo', ['Hello Daytona']);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('Hello Daytona');
-  }, 120000);
-
-  it('passes environment variables', async () => {
-    const envSandbox = new DaytonaSandbox({
-      id: `test-env-${Date.now()}`,
-      env: { TEST_VAR: 'hello-from-env' },
-    });
-
-    try {
-      await envSandbox._start();
-      const result = await envSandbox.executeCommand('printenv', ['TEST_VAR']);
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toContain('hello-from-env');
-    } finally {
-      await envSandbox._destroy();
-    }
-  }, 120000);
-
-  it('supports working directory option', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('/tmp');
-  }, 120000);
-
-  it('handles command timeout', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('sleep', ['30'], { timeout: 2000 });
-
-    // Should fail due to timeout
-    expect(result.success).toBe(false);
-  }, 120000);
-
-  it('reports correct sandbox info', async () => {
-    await sandbox._start();
-
-    const info = await sandbox.getInfo();
-
-    expect(info.provider).toBe('daytona');
-    expect(info.name).toBe('DaytonaSandbox');
-    expect(info.status).toBe('running');
-    expect(info.createdAt).toBeInstanceOf(Date);
-  }, 120000);
 
   it('provides access to underlying sandbox instance', async () => {
     await sandbox._start();
