@@ -464,6 +464,12 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
+  /** Optional token budget for observer context optimization */
+  contextTokenBudget?: number;
+  /** Include pending buffered reflection context in observer calls */
+  includeBufferedReflection: boolean;
+  /** Minimum token savings required before using optimized observer context */
+  minContextTokenSavings?: number;
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
 }
@@ -1157,6 +1163,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      contextTokenBudget: config.observation?.contextTokenBudget,
+      includeBufferedReflection: config.observation?.includeBufferedReflection ?? false,
+      minContextTokenSavings: config.observation?.minContextTokenSavings,
       instruction: config.observation?.instruction,
     };
 
@@ -1371,6 +1380,29 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       if (!this.observationConfig.bufferTokens) {
         throw new Error(
           `observation.blockAfter requires observation.bufferTokens to be set (blockAfter only applies when async buffering is enabled)`,
+        );
+      }
+    }
+
+    // Validate observer context optimization options
+    if (this.observationConfig.contextTokenBudget !== undefined) {
+      if (
+        !Number.isFinite(this.observationConfig.contextTokenBudget) ||
+        this.observationConfig.contextTokenBudget <= 0
+      ) {
+        throw new Error(
+          `observation.contextTokenBudget must be a finite number > 0, got ${this.observationConfig.contextTokenBudget}`,
+        );
+      }
+    }
+
+    if (this.observationConfig.minContextTokenSavings !== undefined) {
+      if (
+        !Number.isFinite(this.observationConfig.minContextTokenSavings) ||
+        this.observationConfig.minContextTokenSavings < 0
+      ) {
+        throw new Error(
+          `observation.minContextTokenSavings must be a finite number >= 0, got ${this.observationConfig.minContextTokenSavings}`,
         );
       }
     }
@@ -2174,6 +2206,88 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     return result;
+  }
+
+  /**
+   * Prepare optimized observer context by applying truncation, buffered-reflection
+   * inclusion, and token-savings gating.
+   *
+   * Returns the (possibly optimized) observations string to pass as "Previous Observations"
+   * to the observer prompt. When no optimization options are set, returns the input unchanged.
+   */
+  private prepareObserverContext(
+    existingObservations: string | undefined,
+    record?: ObservationalMemoryRecord | null,
+  ): string | undefined {
+    const { contextTokenBudget, includeBufferedReflection, minContextTokenSavings } = this.observationConfig;
+
+    // Fast path: no optimization options configured — preserve legacy behavior
+    if (!contextTokenBudget && !includeBufferedReflection && minContextTokenSavings === undefined) {
+      return existingObservations;
+    }
+
+    if (!existingObservations) {
+      return existingObservations;
+    }
+
+    // Start with the baseline (full observations)
+    let optimized = existingObservations;
+
+    // 1. Optionally append buffered reflection content
+    if (includeBufferedReflection && record?.bufferedReflection) {
+      optimized = `${optimized}\n\n--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`;
+    }
+
+    // 2. Apply tail truncation to contextTokenBudget (keep most recent observations)
+    if (contextTokenBudget) {
+      const currentTokens = this.tokenCounter.countObservations(optimized);
+      if (currentTokens > contextTokenBudget) {
+        optimized = this.truncateObservationsToTokenBudget(optimized, contextTokenBudget);
+      }
+    }
+
+    // 3. Apply token-savings gating
+    if (minContextTokenSavings !== undefined) {
+      const baselineTokens = this.tokenCounter.countObservations(existingObservations);
+      const optimizedTokens = this.tokenCounter.countObservations(optimized);
+      const savings = baselineTokens - optimizedTokens;
+      if (savings < minContextTokenSavings) {
+        // Savings too small — fall back to baseline
+        return existingObservations;
+      }
+    }
+
+    return optimized;
+  }
+
+  /**
+   * Truncate observations to fit within a token budget by removing the oldest lines first
+   * (keeping the most recent observations at the end).
+   */
+  private truncateObservationsToTokenBudget(observations: string, budget: number): string {
+    const lines = observations.split('\n');
+
+    // Binary search for the starting line that fits within budget
+    let lo = 0;
+    let hi = lines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      const candidate = lines.slice(mid).join('\n');
+      const tokens = this.tokenCounter.countObservations(candidate);
+      if (tokens > budget) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+
+    // lo is the first line index whose slice fits within budget
+    if (lo >= lines.length) {
+      // Even a single line exceeds budget — return the last line truncated
+      return lines[lines.length - 1] ?? '';
+    }
+
+    return lines.slice(lo).join('\n');
   }
 
   /**
@@ -4214,12 +4328,11 @@ ${formattedMessages}
         }
       }
 
-      const result = await this.callObserver(
+      const observerContext = this.prepareObserverContext(
         freshRecord?.activeObservations ?? record.activeObservations,
-        messagesToObserve,
-        abortSignal,
-        { requestContext },
+        freshRecord ?? record,
       );
+      const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, { requestContext });
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
@@ -4600,11 +4713,14 @@ ${formattedMessages}
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
-    // Call observer with combined context
+    // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
+    const observerContext = this.prepareObserverContext(combinedObservations, record);
+
+    // Call observer with optimized context
     // Allow the observer to produce suggestedResponse/currentTask so they survive
     // activation and maintain continuity when the context window shrinks
     const result = await this.callObserver(
-      combinedObservations,
+      observerContext,
       messagesToBuffer,
       undefined, // No abort signal for background ops
       { requestContext },
@@ -5332,9 +5448,13 @@ ${formattedMessages}
         }
       }
 
-      const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const rawExistingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
-      // ═════════════════════════════════════════���══════════════════
+      // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
+      const existingObservations =
+        this.prepareObserverContext(rawExistingObservations, freshRecord ?? record) ?? rawExistingObservations;
+
+      // ════════════════════════════════════════════════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
       // This is much more efficient than calling the Observer for each thread individually
       // ════════════════════════════════════════════════════════════

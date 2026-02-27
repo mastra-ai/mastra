@@ -7673,3 +7673,277 @@ describe('threadId validation in thread scope', () => {
     expect(record.resourceId).toBe('resource-1');
   });
 });
+
+// =============================================================================
+// Observer Context Optimization (contextTokenBudget, includeBufferedReflection, minContextTokenSavings)
+// =============================================================================
+
+describe('Observer Context Optimization', () => {
+  function createOM(observationOverrides: Record<string, unknown> = {}) {
+    return new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000, bufferTokens: false, ...observationOverrides },
+      reflection: { observationTokens: 40000 },
+    });
+  }
+
+  // Helper to call the private method
+  function prepareObserverContext(
+    om: ObservationalMemory,
+    existingObservations: string | undefined,
+    record?: Record<string, unknown> | null,
+  ): string | undefined {
+    return (om as any).prepareObserverContext(existingObservations, record);
+  }
+
+  describe('config validation', () => {
+    it('should throw if contextTokenBudget is not a positive number', () => {
+      expect(() => createOM({ contextTokenBudget: 0 })).toThrow('contextTokenBudget must be a finite number > 0');
+      expect(() => createOM({ contextTokenBudget: -100 })).toThrow('contextTokenBudget must be a finite number > 0');
+      expect(() => createOM({ contextTokenBudget: Infinity })).toThrow(
+        'contextTokenBudget must be a finite number > 0',
+      );
+      expect(() => createOM({ contextTokenBudget: NaN })).toThrow('contextTokenBudget must be a finite number > 0');
+    });
+
+    it('should accept valid contextTokenBudget', () => {
+      expect(() => createOM({ contextTokenBudget: 1 })).not.toThrow();
+      expect(() => createOM({ contextTokenBudget: 5000 })).not.toThrow();
+    });
+
+    it('should throw if minContextTokenSavings is negative', () => {
+      expect(() => createOM({ minContextTokenSavings: -1 })).toThrow(
+        'minContextTokenSavings must be a finite number >= 0',
+      );
+      expect(() => createOM({ minContextTokenSavings: Infinity })).toThrow(
+        'minContextTokenSavings must be a finite number >= 0',
+      );
+      expect(() => createOM({ minContextTokenSavings: NaN })).toThrow(
+        'minContextTokenSavings must be a finite number >= 0',
+      );
+    });
+
+    it('should accept zero minContextTokenSavings', () => {
+      expect(() => createOM({ minContextTokenSavings: 0 })).not.toThrow();
+    });
+
+    it('should accept valid minContextTokenSavings', () => {
+      expect(() => createOM({ minContextTokenSavings: 100 })).not.toThrow();
+    });
+  });
+
+  describe('prepareObserverContext - default behavior', () => {
+    it('should return existingObservations unchanged when no optimization options are set', () => {
+      const om = createOM();
+      const observations = '- User likes TypeScript\n- User prefers dark mode\n- User uses React';
+      expect(prepareObserverContext(om, observations)).toBe(observations);
+    });
+
+    it('should return undefined when existingObservations is undefined', () => {
+      const om = createOM({ contextTokenBudget: 100 });
+      expect(prepareObserverContext(om, undefined)).toBeUndefined();
+    });
+  });
+
+  describe('prepareObserverContext - contextTokenBudget truncation', () => {
+    it('should truncate observations from the start to fit within token budget', () => {
+      const om = createOM({ contextTokenBudget: 20 });
+      const tc = new TokenCounter();
+
+      // Build observations large enough to exceed budget
+      const lines = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+
+      // Verify it exceeds budget
+      expect(tc.countObservations(observations)).toBeGreaterThan(20);
+
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBeDefined();
+
+      // Result should fit within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
+
+      // Result should contain the most recent lines (tail)
+      expect(result!).toContain('Observation line 20');
+      // Should NOT contain the oldest lines (use exact match with leading marker)
+      expect(result!).not.toContain('- Observation line 1\n');
+    });
+
+    it('should return observations unchanged when within budget', () => {
+      const om = createOM({ contextTokenBudget: 100_000 });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      expect(prepareObserverContext(om, observations)).toBe(observations);
+    });
+
+    it('should handle single line exceeding budget by returning last line', () => {
+      const om = createOM({ contextTokenBudget: 1 });
+      const observations = 'Line one\nLine two\nLine three';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe('Line three');
+    });
+  });
+
+  describe('prepareObserverContext - includeBufferedReflection', () => {
+    it('should NOT include buffered reflection when disabled (default)', () => {
+      const om = createOM({ includeBufferedReflection: false });
+      const observations = '- User likes TypeScript';
+      const record = { bufferedReflection: '- Condensed reflection content' };
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBe(observations);
+    });
+
+    it('should include buffered reflection when enabled and present', () => {
+      const om = createOM({ includeBufferedReflection: true });
+      const observations = '- User likes TypeScript';
+      const record = { bufferedReflection: '- Condensed reflection content' };
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toContain('- User likes TypeScript');
+      expect(result).toContain('--- BUFFERED REFLECTION (pending activation) ---');
+      expect(result).toContain('- Condensed reflection content');
+    });
+
+    it('should not append anything when enabled but no buffered reflection exists', () => {
+      const om = createOM({ includeBufferedReflection: true });
+      const observations = '- User likes TypeScript';
+      // No bufferedReflection in record
+      const record = {};
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBe(observations);
+    });
+
+    it('should not append anything when enabled but record is null', () => {
+      const om = createOM({ includeBufferedReflection: true });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContext(om, observations, null);
+      expect(result).toBe(observations);
+    });
+  });
+
+  describe('prepareObserverContext - minContextTokenSavings gating', () => {
+    it('should fall back to baseline when savings are below threshold', () => {
+      // Set a large savings threshold that won't be met without truncation
+      const om = createOM({ minContextTokenSavings: 10_000, includeBufferedReflection: true });
+      const observations = '- Short observations';
+      const record = { bufferedReflection: '- Some reflection' };
+      // With includeBufferedReflection, optimized is LARGER, so savings are negative
+      const result = prepareObserverContext(om, observations, record);
+      // Should fall back to baseline since savings < threshold
+      expect(result).toBe(observations);
+    });
+
+    it('should use optimized context when savings meet threshold', () => {
+      const tc = new TokenCounter();
+      // Build large observations that will be significantly truncated
+      const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+      const totalTokens = tc.countObservations(observations);
+
+      // Set budget to roughly half the tokens
+      const budget = Math.floor(totalTokens / 2);
+      // Set savings threshold lower than actual savings
+      const om = createOM({ contextTokenBudget: budget, minContextTokenSavings: 10 });
+      const result = prepareObserverContext(om, observations);
+
+      // Should be truncated (not the full original)
+      expect(result).not.toBe(observations);
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+
+    it('should accept minContextTokenSavings of 0 (always use optimized when optimization applied)', () => {
+      const tc = new TokenCounter();
+      const lines = Array.from({ length: 30 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+
+      // Small budget to force truncation
+      const om = createOM({ contextTokenBudget: 20, minContextTokenSavings: 0 });
+      const result = prepareObserverContext(om, observations);
+      expect(result).not.toBe(observations);
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
+    });
+
+    it('should fall back when only includeBufferedReflection is enabled and it increases token count', () => {
+      const om = createOM({ includeBufferedReflection: true, minContextTokenSavings: 0 });
+      const observations = '- User likes TypeScript';
+      const record = { bufferedReflection: '- Condensed reflection' };
+      // The optimized version is larger (adds reflection), savings are negative
+      const result = prepareObserverContext(om, observations, record);
+      // savings = baselineTokens - optimizedTokens, which is negative, < 0
+      expect(result).toBe(observations);
+    });
+  });
+
+  describe('prepareObserverContext - combined optimizations', () => {
+    it('should include buffered reflection then truncate within budget', () => {
+      const tc = new TokenCounter();
+      const lines = Array.from({ length: 40 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+      const reflectionContent = '- Condensed user preferences and history';
+
+      // Budget smaller than observations alone, so truncation will happen
+      const budget = 50;
+      const om = createOM({ contextTokenBudget: budget, includeBufferedReflection: true });
+      const record = { bufferedReflection: reflectionContent };
+
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBeDefined();
+      // Result should fit within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      // Most recent observations should be preserved (tail truncation)
+      expect(result!).toContain('Observation line 40');
+    });
+
+    it('should apply all three: reflection inclusion + truncation + gating', () => {
+      const tc = new TokenCounter();
+      const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+      const totalTokens = tc.countObservations(observations);
+
+      const budget = Math.floor(totalTokens / 3);
+      const om = createOM({
+        contextTokenBudget: budget,
+        includeBufferedReflection: true,
+        minContextTokenSavings: 10,
+      });
+      const record = { bufferedReflection: '- Reflection summary' };
+
+      const result = prepareObserverContext(om, observations, record);
+      // With truncation, savings should exceed 10 tokens
+      expect(result).not.toBe(observations);
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+  });
+
+  describe('truncateObservationsToTokenBudget', () => {
+    function truncate(om: ObservationalMemory, observations: string, budget: number): string {
+      return (om as any).truncateObservationsToTokenBudget(observations, budget);
+    }
+
+    it('should preserve recent lines and drop oldest', () => {
+      const om = createOM();
+      const tc = new TokenCounter();
+      const lines = ['Line A', 'Line B', 'Line C', 'Line D', 'Line E'];
+      const observations = lines.join('\n');
+      // Budget that fits ~2 lines
+      const twoLineTokens = tc.countObservations('Line D\nLine E');
+      const result = truncate(om, observations, twoLineTokens);
+      expect(result).toContain('Line E');
+      expect(result).not.toContain('Line A');
+    });
+
+    it('should return last line when budget is very small', () => {
+      const om = createOM();
+      const observations = 'First line\nSecond line\nThird line';
+      const result = truncate(om, observations, 1);
+      expect(result).toBe('Third line');
+    });
+
+    it('should return full observations when budget exceeds total tokens', () => {
+      const om = createOM();
+      const observations = 'Short obs';
+      const result = truncate(om, observations, 100_000);
+      expect(result).toBe(observations);
+    });
+  });
+});

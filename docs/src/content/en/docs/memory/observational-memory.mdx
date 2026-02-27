@@ -242,6 +242,68 @@ Async buffering is not supported with `scope: 'resource'`. It is automatically d
 
 :::
 
+## Observer Context Optimization
+
+By default, the Observer receives the full observation history as context when processing new messages. For long-running conversations where observations grow large, you can opt into context optimization to reduce Observer input costs.
+
+All three settings are opt-in and disabled by default — existing behavior is preserved unless you explicitly enable them.
+
+### Token budget truncation
+
+Set `contextTokenBudget` to limit how many tokens of previous observations are sent to the Observer. Observations are tail-truncated, keeping the most recent entries:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        contextTokenBudget: 10_000, // keep only ~10k tokens of recent observations
+      },
+    },
+  },
+})
+```
+
+### Buffered reflection in observer context
+
+When async reflection is buffering in the background, the Observer normally doesn't see it. Enable `includeBufferedReflection` to give the Observer access to pending reflection content:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        includeBufferedReflection: true,
+      },
+    },
+  },
+})
+```
+
+This is useful when combined with `contextTokenBudget` — the truncated context can be supplemented with the richer reflection summary.
+
+### Token-savings gating
+
+Use `minContextTokenSavings` to prevent optimization from kicking in when the savings would be too small to matter. If the optimized context doesn't save at least this many tokens compared to the baseline, the full context is used instead:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        contextTokenBudget: 10_000,
+        minContextTokenSavings: 2_000, // only optimize when saving 2k+ tokens
+      },
+    },
+  },
+})
+```
+
+Set `minContextTokenSavings: 0` to always use the optimized context whenever any optimization is applied. The threshold is fully customizable — there is no enforced minimum.
+
 ## Migrating existing threads
 
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
