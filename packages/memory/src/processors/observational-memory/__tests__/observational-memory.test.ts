@@ -53,6 +53,49 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db });
 }
 
+function createStreamCapableMockModel(config: Record<string, any>) {
+  if (config.doGenerate && !config.doStream) {
+    const originalDoGenerate = config.doGenerate;
+    return new MockLanguageModelV2({
+      ...config,
+      // Replace doGenerate so any accidental generate-path call fails fast
+      doGenerate: async () => {
+        throw new Error('Unexpected doGenerate call — OM should use the stream path');
+      },
+      doStream: async (options: any) => {
+        const generated = await originalDoGenerate(options);
+        const text = generated.content?.find((part: any) => part?.type === 'text')?.text ?? generated.text ?? '';
+        const usage = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: generated.warnings ?? [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'mock-response',
+              modelId: 'mock-model',
+              timestamp: new Date(),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({ type: 'finish', finishReason: generated.finishReason ?? 'stop', usage });
+            controller.close();
+          },
+        });
+
+        return {
+          stream,
+          rawCall: generated.rawCall ?? { rawPrompt: null, rawSettings: {} },
+          warnings: generated.warnings ?? [],
+        };
+      },
+    });
+  }
+
+  return new MockLanguageModelV2(config);
+}
+
 // =============================================================================
 // Unit Tests: Storage Operations
 // =============================================================================
@@ -2235,7 +2278,7 @@ describe('Instruction property integration', () => {
     const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
 
     let capturedPrompt: any = null;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async options => {
         capturedPrompt = options.prompt;
         return {
@@ -2305,7 +2348,7 @@ Ask about favorite vegetarian dishes
     const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
 
     let capturedPrompt: any = null;
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2328,7 +2371,7 @@ Ask about favorite pizza toppings
       }),
     });
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async options => {
         capturedPrompt = options.prompt;
         return {
@@ -2495,7 +2538,7 @@ describe('Thread Attribution Helpers', () => {
     storage = createInMemoryStorage();
     om = new ObservationalMemory({
       storage,
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100 },
       reflection: { observationTokens: 1000 },
       scope: 'resource',
@@ -2617,7 +2660,7 @@ describe('Resource Scope Observation Flow', () => {
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2692,7 +2735,7 @@ Ask about preferred brewing method
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2750,7 +2793,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let reflectorCalled = false;
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => {
         reflectorCalled = true;
         return {
@@ -2772,7 +2815,7 @@ describe('Locking Behavior', () => {
       },
     });
 
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2845,7 +2888,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let _observerCalled = false;
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => {
         _observerCalled = true;
         return {
@@ -2933,7 +2976,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should create a new record after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3012,7 +3055,7 @@ describe('Reflection with Thread Attribution', () => {
     const storage = createInMemoryStorage();
 
     // Reflector that maintains thread attribution
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3094,7 +3137,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should update lastObservedAt cursor after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3267,7 +3310,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     expect(setupRecord?.activeObservations).toContain('favorite color is blue');
 
     // Create OM with resource scope
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -4048,7 +4091,7 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
@@ -4063,7 +4106,7 @@ describe('Model Requirement', () => {
           scope: 'thread',
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
@@ -4079,7 +4122,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: {
             observationTokens: 20000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
         }),
     ).not.toThrow();
@@ -4104,14 +4147,42 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
     ).toThrow('Cannot set both');
+  });
+});
+
+describe('Model Settings Defaults', () => {
+  it('should default maxOutputTokens when using model: "default"', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'default',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+  });
+
+  it('should not default maxOutputTokens for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
   });
 });
 
@@ -4122,7 +4193,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: {
             messageTokens: 50000,
@@ -4142,7 +4213,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
@@ -4154,7 +4225,7 @@ describe('Async Buffering Config Validation', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       shareTokenBudget: true,
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
@@ -4169,7 +4240,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4189,7 +4260,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4209,7 +4280,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4229,7 +4300,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4250,7 +4321,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4270,7 +4341,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 10000,
             bufferTokens: 15000,
@@ -4290,7 +4361,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4310,7 +4381,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4330,7 +4401,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4354,7 +4425,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4367,7 +4438,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4391,7 +4462,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
     });
@@ -4413,7 +4484,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'resource',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4428,7 +4499,7 @@ describe('Async Buffering Defaults & Disabling', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'resource',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4442,7 +4513,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: 5000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4456,7 +4527,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferActivation: 0.7 },
       reflection: { observationTokens: 20000, bufferActivation: 0.3 },
     });
@@ -4472,7 +4543,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100000, bufferTokens: 0.1 },
       reflection: { observationTokens: 20000 },
     });
@@ -4493,7 +4564,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4544,7 +4615,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4567,7 +4638,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4629,7 +4700,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4642,7 +4713,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4655,7 +4726,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4673,7 +4744,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4686,7 +4757,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4701,7 +4772,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4714,7 +4785,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4726,7 +4797,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4738,7 +4809,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4757,7 +4828,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4769,7 +4840,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4789,7 +4860,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4807,7 +4878,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4835,7 +4906,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4864,7 +4935,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 40000,
           bufferTokens: 4000,
@@ -4904,7 +4975,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 40000,
           bufferTokens: 4000,
@@ -4931,7 +5002,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4943,7 +5014,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4966,7 +5037,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4986,7 +5057,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5007,7 +5078,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5038,7 +5109,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5050,7 +5121,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5065,7 +5136,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5092,7 +5163,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5111,7 +5182,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5140,7 +5211,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5310,7 +5381,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5336,7 +5407,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5378,7 +5449,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 30000,
           bufferTokens: 6000,
@@ -5444,7 +5515,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5527,7 +5598,7 @@ describe('Full Async Buffering Flow', () => {
     const observerCalls: { input: string }[] = [];
     const reflectorCalls: { input: string }[] = [];
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async ({ prompt }) => {
         const promptText = JSON.stringify(prompt);
 
@@ -5970,7 +6041,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5989,7 +6060,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -6003,7 +6074,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -6019,7 +6090,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 0.25,
@@ -6035,7 +6106,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 5000,
@@ -6512,7 +6583,7 @@ describe('Full Async Buffering Flow', () => {
       });
 
       let _reflectorCallCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = createStreamCapableMockModel({
         doGenerate: async ({ prompt }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
