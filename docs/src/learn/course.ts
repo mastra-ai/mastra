@@ -3,8 +3,15 @@ import type { Course } from './types'
 export const course: Course = {
   courseId: 'mastra-101',
   title: 'Build Your First AI Agent with Mastra',
-  description:
-    "2026 is the decade of agents. They're already in the tools engineers use every day, and teams are asking who can actually build one. Guil Hernandez, with over a decade of experience building and teaching software, walks you through how to build and ship AI agents with Mastra.\n\nYou'll build a Theme Park Companion agent that looks up parks, pulls live wait times, factors in weather, and connects to an MCP server for park hours and crowd data to make better recommendations. By the end you'll have covered agents, tools, workflows, and memory, and have an agent ready to deploy and call from your app.",
+  description: `This course is your roadmap to becoming an AI Engineer.
+
+In 90 minutes, you'll build and deploy your first agent with Mastra. Along the way, you'll learn how the agent loop works under the hood, how tools let an agent reach into external systems, how MCP opens the door to external resources, and how context engineering and memory shape behavior across a conversation.                
+
+By the end, you'll have shipped your first agent - and more importantly, you'll know how to build the next one on your own. The patterns you implement here carry directly into whatever you choose to build next.                                                                              
+
+AI agents are the next platform shift. Understanding how to build them is now a core skill for engineers, and there's real opportunity for those who get there early. If you’re excited about what’s possible and want a clear, practical path to get there, this course is for you.
+
+Head to Module 1 to start building with Guil.`,
   lessons: [
     // Module 1: Getting Started
     {
