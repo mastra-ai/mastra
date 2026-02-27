@@ -872,14 +872,17 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const output = this.getFormattedOutput();
     if (output) {
-      const lines = output.split('\n');
-      const fileCount = lines.filter(l => l.trim() && !l.includes('└') && !l.includes('├') && !l.includes('│')).length;
       const listStatus = this.getStatusIndicator();
+
+      // Extract summary line (e.g. "5 directories, 9 files") from tree output for the header
+      const lines = output.split('\n');
+      const lastLine = lines[lines.length - 1]?.trim() || '';
+      const summaryMatch = lastLine.match(/\d+\s+director|file/);
+      const summaryDisplay = summaryMatch ? ' ' + theme.fg('muted', lastLine) : '';
 
       this.collapsible = new CollapsibleComponent(
         {
-          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${listStatus}`,
-          summary: `${fileCount} items`,
+          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${summaryDisplay}${listStatus}`,
           expanded: this.expanded,
           collapsedLines: 15,
           expandedLines: 100,
