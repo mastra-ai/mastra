@@ -509,6 +509,7 @@ export function buildMultiThreadObserverPrompt(
   priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
 
   let prompt = '';
 
@@ -540,7 +541,12 @@ export function buildMultiThreadObserverPrompt(
     .join('\n');
 
   if (threadMetadataLines) {
-    prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n---\n\n`;
+    prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use each thread's prior current-task and suggested-response as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
@@ -654,6 +660,7 @@ export function buildObserverPrompt(
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
 
   let prompt = '';
 
@@ -674,7 +681,12 @@ export function buildObserverPrompt(
   }
 
   if (priorMetadataLines.length > 0) {
-    prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n---\n\n`;
+    prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use the prior current-task and suggested-response as continuity hints, then update them based on the new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;

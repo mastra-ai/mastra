@@ -2251,37 +2251,108 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Truncate observations to fit within a token budget by removing the oldest lines first
-   * (keeping the most recent observations at the end).
+   * Truncate observations to fit within a token budget.
+   *
+   * Strategy:
+   * 1. Keep a raw tail of recent observations (end of block).
+   * 2. Add a truncation marker: [X hidden observations], placed at the hidden gap.
+   * 3. Try to preserve important observations (🔴) from older context, newest-first.
+   * 4. Enforce that at least 50% of kept observations remain raw tail observations.
    */
   private truncateObservationsToTokenBudget(observations: string, budget: number): string {
     if (budget === 0) {
       return '';
     }
 
-    const lines = observations.split('\n');
+    if (this.tokenCounter.countObservations(observations) <= budget) {
+      return observations;
+    }
 
-    // Binary search for the starting line that fits within budget
-    let lo = 0;
-    let hi = lines.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      const candidate = lines.slice(mid).join('\n');
-      const tokens = this.tokenCounter.countObservations(candidate);
-      if (tokens > budget) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
+    const lines = observations.split('\n');
+    const totalCount = lines.length;
+
+    const buildCandidate = (tailStart: number, importantFromHeadCount: number) => {
+      const headImportantIndexes: number[] = [];
+      for (let i = 0; i < tailStart; i++) {
+        if (lines[i]?.includes('🔴')) {
+          headImportantIndexes.push(i);
+        }
+      }
+
+      const selectedImportantIndexes =
+        importantFromHeadCount > 0
+          ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - importantFromHeadCount))
+          : [];
+
+      const keptIndexes = [
+        ...selectedImportantIndexes,
+        ...Array.from({ length: lines.length - tailStart }, (_, i) => tailStart + i),
+      ].sort((a, b) => a - b);
+
+      if (keptIndexes.length === 0) {
+        return `[${totalCount} hidden observations]`;
+      }
+
+      const outputLines: string[] = [];
+      let previousKeptIndex = -1;
+
+      for (const keptIndex of keptIndexes) {
+        const hiddenCount = keptIndex - previousKeptIndex - 1;
+        if (hiddenCount > 0) {
+          outputLines.push(`[${hiddenCount} hidden observations]`);
+        }
+
+        outputLines.push(lines[keptIndex]!);
+        previousKeptIndex = keptIndex;
+      }
+
+      const trailingHiddenCount = lines.length - previousKeptIndex - 1;
+      if (trailingHiddenCount > 0) {
+        outputLines.push(`[${trailingHiddenCount} hidden observations]`);
+      }
+
+      return outputLines.join('\n');
+    };
+
+    // Evaluate possible raw tails and choose one that preserves important observations best,
+    // while still keeping at least 50% raw-tail observations.
+    let bestCandidate: string | undefined;
+    let bestImportantCount = -1;
+    let bestRawTailLength = -1;
+
+    for (let tailStart = 1; tailStart < lines.length; tailStart++) {
+      const rawTailLength = lines.length - tailStart;
+      const headImportantCount = lines.slice(0, tailStart).filter(line => line.includes('🔴')).length;
+      const maxImportantByRatio = rawTailLength;
+
+      let importantToKeep = Math.min(headImportantCount, maxImportantByRatio);
+      let candidate = buildCandidate(tailStart, importantToKeep);
+
+      // If over budget, drop important observations from the beginning (oldest first).
+      while (importantToKeep > 0 && this.tokenCounter.countObservations(candidate) > budget) {
+        importantToKeep -= 1;
+        candidate = buildCandidate(tailStart, importantToKeep);
+      }
+
+      if (this.tokenCounter.countObservations(candidate) > budget) {
+        continue;
+      }
+
+      if (
+        importantToKeep > bestImportantCount ||
+        (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
+      ) {
+        bestCandidate = candidate;
+        bestImportantCount = importantToKeep;
+        bestRawTailLength = rawTailLength;
       }
     }
 
-    // lo is the first line index whose slice fits within budget
-    if (lo >= lines.length) {
-      // Even a single line exceeds budget — return the last line truncated
-      return lines[lines.length - 1] ?? '';
+    if (!bestCandidate) {
+      return `[${totalCount} hidden observations]`;
     }
 
-    return lines.slice(lo).join('\n');
+    return bestCandidate;
   }
 
   private isObserverDebugEnabled(): boolean {

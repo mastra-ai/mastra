@@ -7999,23 +7999,65 @@ describe('Observer Context Optimization', () => {
       const om = createOM({ previousObservationTokens: 20 });
       const tc = new TokenCounter();
 
-      // Build observations large enough to exceed budget
       const lines = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`);
       const observations = lines.join('\n');
-
-      // Verify it exceeds budget
       expect(tc.countObservations(observations)).toBeGreaterThan(20);
 
       const result = prepareObserverContext(om, observations);
       expect(result).toBeDefined();
-
-      // Result should fit within budget
       expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
-
-      // Result should contain the most recent lines (tail)
+      expect(result!).toMatch(/\[\d+ hidden observations\]/);
       expect(result!).toContain('Observation line 20');
-      // Should NOT contain the oldest lines (use exact match with leading marker)
       expect(result!).not.toContain('- Observation line 1\n');
+    });
+
+    it('should preserve important observations around truncation when budget allows', () => {
+      const tc = new TokenCounter();
+      const observations = [
+        '- 🔴 Critical early item 1',
+        '- Detail early 2',
+        '- 🔴 Critical early item 3',
+        ...Array.from({ length: 16 }, (_, i) => `- Observation line ${i + 4}`),
+      ].join('\n');
+      const desired = [
+        '- 🔴 Critical early item 3',
+        '[10 hidden observations]',
+        '- Observation line 12',
+        '- Observation line 13',
+        '- Observation line 14',
+        '- Observation line 15',
+        '- Observation line 16',
+        '- Observation line 17',
+        '- Observation line 18',
+        '- Observation line 19',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObservationTokens: budget });
+
+      const result = prepareObserverContext(om, observations)!;
+      const lines = result.split('\n').filter(Boolean);
+      const kept = lines.filter(line => !/^\[\d+ hidden observations\]$/.test(line));
+      const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
+
+      expect(result).toMatch(/\[\d+ hidden observations\]/);
+      expect(result).toContain('🔴 Critical early item 3');
+      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
+    });
+
+    it('should drop oldest important observations first when still over budget', () => {
+      const om = createOM({ previousObservationTokens: 25 });
+      const observations = [
+        '- 🔴 Very old critical 1',
+        '- 🔴 Very old critical 2',
+        '- 🔴 Newer critical 3',
+        ...Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`),
+      ].join('\n');
+
+      const result = prepareObserverContext(om, observations)!;
+      expect(result).toMatch(/\[\d+ hidden observations\]/);
+      expect(result).toContain('🔴 Newer critical 3');
+      expect(result).not.toContain('🔴 Very old critical 1');
     });
 
     it('should return observations unchanged when within budget', () => {
@@ -8024,11 +8066,11 @@ describe('Observer Context Optimization', () => {
       expect(prepareObserverContext(om, observations)).toBe(observations);
     });
 
-    it('should handle single line exceeding budget by returning last line', () => {
+    it('should return truncation marker when budget is too small', () => {
       const om = createOM({ previousObservationTokens: 1 });
       const observations = 'Line one\nLine two\nLine three';
       const result = prepareObserverContext(om, observations);
-      expect(result).toBe('Line three');
+      expect(result).toBe('[3 hidden observations]');
     });
 
     it('should fully truncate context when observer.previousObservationTokens is 0', () => {
@@ -8174,23 +8216,23 @@ describe('Observer Context Optimization', () => {
       return (om as any).truncateObservationsToTokenBudget(observations, budget);
     }
 
-    it('should preserve recent lines and drop oldest', () => {
+    it('should preserve recent lines, drop oldest, and include truncation marker', () => {
       const om = createOM();
       const tc = new TokenCounter();
       const lines = ['Line A', 'Line B', 'Line C', 'Line D', 'Line E'];
       const observations = lines.join('\n');
-      // Budget that fits ~2 lines
-      const twoLineTokens = tc.countObservations('Line D\nLine E');
-      const result = truncate(om, observations, twoLineTokens);
+      const budget = tc.countObservations(observations) - 1;
+      const result = truncate(om, observations, budget);
+      expect(result).toMatch(/\[\d+ hidden observations\]/);
       expect(result).toContain('Line E');
       expect(result).not.toContain('Line A');
     });
 
-    it('should return last line when budget is very small', () => {
+    it('should return truncation marker when budget is very small', () => {
       const om = createOM();
       const observations = 'First line\nSecond line\nThird line';
       const result = truncate(om, observations, 1);
-      expect(result).toBe('Third line');
+      expect(result).toBe('[3 hidden observations]');
     });
 
     it('should return full observations when budget exceeds total tokens', () => {
