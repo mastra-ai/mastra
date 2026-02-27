@@ -26,9 +26,9 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
-import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
   addUserMessage,
