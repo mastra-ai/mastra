@@ -15,6 +15,7 @@ import { ItemListVersionCell } from './item-list-version-cell';
 import { ItemListIdCell } from './item-list-id-cell';
 import { ItemListDateCell } from './item-list-date-cell';
 import { ItemListLinkCell } from './item-list-link-cell';
+import { ItemListLabelCell } from './item-list-label-cell';
 
 export const ItemList = Object.assign(ItemListRoot, {
   Header: ItemListHeader,
@@ -33,4 +34,5 @@ export const ItemList = Object.assign(ItemListRoot, {
   IdCell: ItemListIdCell,
   DateCell: ItemListDateCell,
   LinkCell: ItemListLinkCell,
+  LabelCell: ItemListLabelCell,
 });

@@ -69,6 +69,10 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
 
+    // Load user preferences
+    const savedSettings = loadSettings();
+    this.state.quietMode = savedSettings.preferences.quietMode;
+
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
@@ -339,13 +343,22 @@ export class MastraTUI {
       if (hasEnv(provider)) return 'apikey';
       return false;
     };
-    return {
+    const access: ProviderAccess = {
       anthropic: accessLevel('anthropic', 'anthropic'),
       openai: accessLevel('openai', 'openai-codex'),
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     };
+    // Include all other providers that have API keys configured
+    const seen = new Set(Object.keys(access));
+    for (const m of models) {
+      if (!seen.has(m.provider) && m.hasApiKey) {
+        access[m.provider] = 'apikey';
+        seen.add(m.provider);
+      }
+    }
+    return access;
   }
 
   private async syncThreadActivePackMetadata(thread?: {

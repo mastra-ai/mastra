@@ -26,6 +26,7 @@ const DEFAULT_CAPABILITIES: Required<SandboxCapabilities> = {
   supportsTimeout: true,
   defaultCommandTimeout: 30000,
   supportsStreaming: true,
+  supportsStdin: true,
 };
 
 /**

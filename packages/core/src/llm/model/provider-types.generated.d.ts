@@ -2667,6 +2667,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3-pro-image-preview',
     'gemini/gemini-3-pro-preview',
+    'gemini/gemini-3.1-flash-image-preview',
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-flash-latest',
     'gemini/gemini-flash-lite-latest',

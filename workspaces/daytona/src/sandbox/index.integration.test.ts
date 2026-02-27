@@ -31,7 +31,9 @@ function getS3TestConfig() {
 }
 
 /**
- * Basic Daytona integration tests.
+ * Provider-specific Daytona integration tests.
+ * Generic sandbox contract tests (command execution, env vars, timeout, etc.)
+ * are covered by the conformance suite below.
  */
 describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Integration', () => {
   let sandbox: DaytonaSandbox;
