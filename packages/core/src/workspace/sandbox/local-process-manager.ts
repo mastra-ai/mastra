@@ -39,6 +39,9 @@ class LocalProcessHandle extends ProcessHandle {
     this.startTime = startTime;
 
     let timedOut = false;
+    let aborted = false;
+    const abortSignal = options?.abortSignal;
+
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
@@ -51,10 +54,32 @@ class LocalProcessHandle extends ProcessHandle {
         }, options.timeout)
       : undefined;
 
+    // Set up abort signal listener
+    const onAbort = () => {
+      aborted = true;
+      try {
+        process.kill(-this.pid, 'SIGTERM');
+      } catch {
+        proc.kill('SIGTERM');
+      }
+    };
+    if (abortSignal?.aborted) {
+      // Already aborted — kill immediately
+      aborted = true;
+      proc.kill('SIGTERM');
+    } else {
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+    }
+
     this.waitPromise = new Promise<CommandResult>(resolve => {
       proc.on('close', (code, signal) => {
         if (timeoutId) clearTimeout(timeoutId);
-        if (timedOut) {
+        abortSignal?.removeEventListener('abort', onAbort);
+        if (aborted) {
+          const abortMsg = `\nProcess aborted`;
+          this.emitStderr(abortMsg);
+          this.exitCode = 130;
+        } else if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
           this.exitCode = 124;
@@ -74,6 +99,7 @@ class LocalProcessHandle extends ProcessHandle {
 
       proc.on('error', err => {
         if (timeoutId) clearTimeout(timeoutId);
+        abortSignal?.removeEventListener('abort', onAbort);
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({

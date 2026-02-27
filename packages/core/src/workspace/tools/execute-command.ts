@@ -103,6 +103,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
+      abortSignal: context?.abortSignal,
       onStdout: async (data: string) => {
         stdout += data;
         await context?.writer?.custom({
