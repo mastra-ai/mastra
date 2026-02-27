@@ -1130,7 +1130,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
-    const newThreadId = providedThreadId || crypto.randomUUID();
+    const newThreadId = providedThreadId || randomUUID();
 
     const existingThread = await this.getThreadById({ threadId: newThreadId });
     if (existingThread) {
@@ -1217,7 +1217,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (sourceMessages.length > 0) {
         const messageDocs: any[] = [];
         for (const sourceMsg of sourceMessages) {
-          const newMessageId = crypto.randomUUID();
+          const newMessageId = randomUUID();
           messageIdMap[sourceMsg.id] = newMessageId;
 
           let parsedContent = sourceMsg.content;

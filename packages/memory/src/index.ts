@@ -1389,7 +1389,13 @@ Notes:
     // Thread-scoped: always clone since each thread has its own OM.
     // Resource-scoped: only clone when the resourceId changes (same resourceId shares OM naturally).
     if (memoryStore.supportsObservationalMemory && sourceResourceId) {
-      await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
+      try {
+        await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
+      } catch (error) {
+        // Rollback the already-persisted clone to avoid orphaned threads
+        await memoryStore.deleteThread({ threadId: result.thread.id });
+        throw error;
+      }
     }
 
     return result;
@@ -1423,32 +1429,21 @@ Notes:
 
     // Build source → clone message ID map
     const messageIdMap = result.messageIdMap ?? {};
-
-    // Also fetch source OM history to clone all generations
-    const history = await memoryStore.getObservationalMemoryHistory(
-      sourceOM.scope === 'thread' ? sourceThreadId : null,
-      sourceResourceId,
-    );
-    // history is newest-first; include the current record if not in history
-    const allRecords = history.length > 0 ? history : [sourceOM];
-
-    const now = new Date();
     const hasher = await this.hasher;
 
-    for (const record of allRecords) {
-      const cloned = this.remapObservationalMemoryRecord(record, {
-        newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
-        newResourceId: clonedResourceId,
-        messageIdMap,
-        sourceThreadId: resourceChanged ? sourceThreadId : undefined,
-        clonedThreadId: resourceChanged ? clonedThreadId : undefined,
-        hasher: resourceChanged ? hasher : undefined,
-      });
-      cloned.id = crypto.randomUUID();
-      cloned.createdAt = now;
-      cloned.updatedAt = now;
-      await memoryStore.insertObservationalMemoryRecord(cloned);
-    }
+    const cloned = this.remapObservationalMemoryRecord(sourceOM, {
+      newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
+      newResourceId: clonedResourceId,
+      messageIdMap,
+      sourceThreadId: resourceChanged ? sourceThreadId : undefined,
+      clonedThreadId: resourceChanged ? clonedThreadId : undefined,
+      hasher: resourceChanged ? hasher : undefined,
+    });
+    const now = new Date();
+    cloned.id = crypto.randomUUID();
+    cloned.createdAt = now;
+    cloned.updatedAt = now;
+    await memoryStore.insertObservationalMemoryRecord(cloned);
   }
 
   /**

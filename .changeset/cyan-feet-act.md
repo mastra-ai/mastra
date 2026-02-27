@@ -8,7 +8,7 @@
 'mastracode': patch
 ---
 
-**Memory**: Added Observational Memory cloning when forking threads. Thread-scoped OM is cloned with remapped message IDs. Resource-scoped OM is shared when the resourceId stays the same, and cloned with remapped thread tags when the resourceId changes. Multi-generation OM history (including reflections) is preserved during cloning.
+**Memory**: Added Observational Memory cloning when forking threads. Thread-scoped OM is cloned with remapped message IDs. Resource-scoped OM is shared when the resourceId stays the same, and cloned with remapped thread tags when the resourceId changes. Only the current OM generation is cloned (older history generations are not copied). If OM cloning fails, the already-persisted thread clone is rolled back.
 
 **Core**: `Harness.cloneThread()` now resolves dynamic memory factories before cloning, fixing "cloneThread is not a function" errors when memory is provided as a factory function. `HarnessConfig.memory` type widened to `DynamicArgument<MastraMemory>`.
 

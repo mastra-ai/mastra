@@ -115,8 +115,6 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
-  /** When multiple directory threads exist, defer showing the thread selector until TUI is ready */
-  pendingThreadChoice: boolean;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
@@ -213,7 +211,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
-    pendingThreadChoice: false,
 
     // Inline interaction
     lastClearedText: '',

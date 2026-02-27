@@ -434,9 +434,24 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
     }
   }
 
-  // Multiple threads for this directory — defer to the thread selector
+  // Multiple threads — try each in order until one is unlocked
+  for (const thread of sortedThreads) {
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
+      return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        continue; // Try the next one
+      }
+      throw error;
+    }
+  }
+
+  // All directory threads are locked — silently start a new thread
   state.pendingNewThread = true;
-  state.pendingThreadChoice = true;
 }
 
 // =============================================================================

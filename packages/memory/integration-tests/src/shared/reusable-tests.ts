@@ -1302,7 +1302,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         await memoryStore.insertObservationalMemoryRecord(omRecord);
 
         // Clone the thread
-        const { thread: clonedThread } = await memory.cloneThread({
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
@@ -1340,7 +1340,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         expect(clonedMessages.some(m => m.id === clonedOM!.observedMessageIds![0])).toBe(true);
       });
 
-      it('should clone OM history (multiple generations) to the new thread', async () => {
+      it('should clone only the current OM generation (not old history)', async () => {
         const store = await memory.storage.getStore('memory');
         if (!store?.supportsObservationalMemory) return;
 
@@ -1380,35 +1380,22 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         gen1.updatedAt = new Date(Date.now() - 1000);
         await memoryStore.insertObservationalMemoryRecord(gen1);
 
-        // Clone the thread
+        // Clone the thread — only the current (most recent) generation should be cloned
         const { thread: clonedThread } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
-        // Get the cloned OM (should be the latest generation)
+        // Get the cloned OM (should be the latest generation only)
         const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
         expect(clonedOM).toBeDefined();
         expect(clonedOM!.activeObservations).toBe('Reflected observations from gen 1');
         expect(clonedOM!.generationCount).toBe(1);
+        expect(clonedOM!.threadId).toBe(clonedThread.id);
+        expect(clonedOM!.id).not.toBe(gen1.id);
 
-        // Get the cloned OM history
+        // Old generations are NOT cloned — only the current record
         const clonedHistory = await memoryStore.getObservationalMemoryHistory(clonedThread.id, clonedThread.resourceId);
-        expect(clonedHistory.length).toBe(2);
-
-        // History is newest-first
-        expect(clonedHistory[0]!.generationCount).toBe(1);
-        expect(clonedHistory[0]!.activeObservations).toBe('Reflected observations from gen 1');
-        expect(clonedHistory[1]!.generationCount).toBe(0);
-        expect(clonedHistory[1]!.activeObservations).toBe('Generation 0 observations');
-
-        // All cloned records should point to the new thread
-        for (const rec of clonedHistory) {
-          expect(rec.threadId).toBe(clonedThread.id);
-          expect(rec.resourceId).toBe(clonedThread.resourceId);
-          // IDs should differ from source
-          expect(rec.id).not.toBe(gen0.id);
-          expect(rec.id).not.toBe(gen1.id);
-        }
+        expect(clonedHistory).toHaveLength(1);
       });
 
       it('should not fail when cloning a thread that has no OM', async () => {

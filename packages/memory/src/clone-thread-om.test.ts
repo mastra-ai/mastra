@@ -253,7 +253,7 @@ describe('cloneThread – Observational Memory', () => {
   });
 
   describe('multi-generation OM history', () => {
-    it('should clone all OM generations (initial + reflection)', async () => {
+    it('should clone only the current OM generation (not old history)', async () => {
       await seedThread('src-thread-gen', 4);
       const memoryStore = await getMemoryStore(memory);
 
@@ -277,33 +277,23 @@ describe('cloneThread – Observational Memory', () => {
       const historyBefore = await memoryStore.getObservationalMemoryHistory('src-thread-gen', resourceId);
       expect(historyBefore).toHaveLength(2);
 
-      // Clone
+      // Clone — only the current (most recent) generation should be cloned
       const { thread: clonedThread } = await memory.cloneThread({
         sourceThreadId: 'src-thread-gen',
       });
 
-      // Verify cloned OM has both generations
+      // Verify cloned OM has only the current generation
+      const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+      expect(clonedOM).not.toBeNull();
+      expect(clonedOM!.originType).toBe('reflection');
+      expect(clonedOM!.generationCount).toBe(1);
+      expect(clonedOM!.activeObservations).toBe('* Reflected observations from gen 0');
+      expect(clonedOM!.threadId).toBe(clonedThread.id);
+      expect(clonedOM!.id).not.toBe(historyBefore[0]!.id);
+
+      // Old generations are NOT cloned
       const clonedHistory = await memoryStore.getObservationalMemoryHistory(clonedThread.id, clonedThread.resourceId);
-      expect(clonedHistory).toHaveLength(2);
-
-      // Newest-first order: generation 1 (reflection) then generation 0 (initial)
-      const clonedGen1 = clonedHistory[0]!;
-      expect(clonedGen1.originType).toBe('reflection');
-      expect(clonedGen1.generationCount).toBe(1);
-      expect(clonedGen1.activeObservations).toBe('* Reflected observations from gen 0');
-      expect(clonedGen1.threadId).toBe(clonedThread.id);
-
-      const clonedGen0 = clonedHistory[1]!;
-      expect(clonedGen0.originType).toBe('initial');
-      expect(clonedGen0.generationCount).toBe(0);
-      expect(clonedGen0.activeObservations).toBe('* Generation 0 observations');
-      expect(clonedGen0.threadId).toBe(clonedThread.id);
-
-      // All cloned record IDs should be unique (not from source)
-      const sourceIds = historyBefore.map(r => r.id);
-      for (const clonedRecord of clonedHistory) {
-        expect(sourceIds).not.toContain(clonedRecord.id);
-      }
+      expect(clonedHistory).toHaveLength(1);
     });
   });
 

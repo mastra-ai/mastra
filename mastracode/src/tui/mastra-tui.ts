@@ -20,7 +20,7 @@ import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../o
 import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
-import { handleThreadsCommand } from './commands/threads.js';
+
 import type { SlashCommandContext } from './commands/types.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -291,12 +291,7 @@ export class MastraTUI {
     // One-time Claude Max OAuth warning at startup
     await this.checkClaudeMaxOAuthWarning();
 
-    // Show deferred thread selector (must happen after TUI is started)
-    if (this.state.pendingThreadChoice) {
-      this.state.pendingThreadChoice = false;
-      await handleThreadsCommand(this.buildCommandContext());
-      // Skip onboarding when there's a thread choice — it'll run on next clean startup
-    } else if (this.shouldShowOnboarding()) {
+    if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
   }
@@ -466,8 +461,6 @@ export class MastraTUI {
       };
     });
   }
-
-
 
   /**
    * One-time startup check: if the user has Anthropic OAuth credentials and

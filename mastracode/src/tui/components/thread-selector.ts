@@ -135,7 +135,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
         if (!aLocal && bLocal) return 1;
       }
       // Within the same resource, threads tagged with the current directory first
-      if (projPath) {
+      if (projPath && a.resourceId === b.resourceId) {
         const aDir = typeof a.metadata?.projectPath === 'string' && a.metadata.projectPath === projPath;
         const bDir = typeof b.metadata?.projectPath === 'string' && b.metadata.projectPath === projPath;
         if (aDir && !bDir) return -1;

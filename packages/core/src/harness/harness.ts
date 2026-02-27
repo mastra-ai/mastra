@@ -659,11 +659,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const oldThreadId = this.currentThreadId;
     if (this.config.threadLock) {
       try {
-        this.config.threadLock.acquire(clonedThread.id);
+        await this.config.threadLock.acquire(clonedThread.id);
       } catch (err) {
         if (oldThreadId) {
           try {
-            this.config.threadLock.acquire(oldThreadId);
+            await this.config.threadLock.acquire(oldThreadId);
           } catch {
             // Best-effort re-acquire; original error is more important
           }
@@ -671,7 +671,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         throw err;
       }
       if (oldThreadId) {
-        this.config.threadLock.release(oldThreadId);
+        await this.config.threadLock.release(oldThreadId);
       }
     }
 
