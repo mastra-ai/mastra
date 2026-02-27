@@ -13,7 +13,7 @@ import { dirname, join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { getLanguageId } from './language';
-import type { LSPServerDef } from './types';
+import type { LSPConfig, LSPServerDef } from './types';
 
 /** Check if a binary exists on PATH. */
 function whichSync(binary: string): boolean {
@@ -45,6 +45,30 @@ function resolveRequire(root: string, moduleId: string): { require: NodeRequire;
   } catch {
     return null;
   }
+}
+
+/**
+ * Extend resolveRequire to also search additional directories after root and cwd.
+ * Each entry in modulePaths should be a directory whose node_modules contains the module.
+ */
+function resolveRequireFromPaths(
+  root: string,
+  moduleId: string,
+  modulePaths?: string[],
+): { require: NodeRequire; resolved: string } | null {
+  const fromBase = resolveRequire(root, moduleId);
+  if (fromBase) return fromBase;
+
+  for (const modulePath of modulePaths ?? []) {
+    try {
+      const req = createRequire(pathToFileURL(join(modulePath, 'package.json')));
+      return { require: req, resolved: req.resolve(moduleId) };
+    } catch {
+      // try next
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -221,14 +245,90 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
 /**
  * Get all server definitions that can handle the given file.
  * Filters by language ID match only — the manager resolves the root and checks command availability.
+ * Pass `defs` to use config-aware server definitions from `buildServerDefs()`.
  */
-export function getServersForFile(filePath: string, disabledServers?: string[]): LSPServerDef[] {
+export function getServersForFile(
+  filePath: string,
+  disabledServers?: string[],
+  defs?: Record<string, LSPServerDef>,
+): LSPServerDef[] {
   const languageId = getLanguageId(filePath);
   if (!languageId) return [];
 
   const disabled = new Set(disabledServers ?? []);
+  const servers = defs ?? BUILTIN_SERVERS;
 
-  return Object.values(BUILTIN_SERVERS).filter(
-    server => !disabled.has(server.id) && server.languageIds.includes(languageId),
-  );
+  return Object.values(servers).filter(server => !disabled.has(server.id) && server.languageIds.includes(languageId));
+}
+
+/** NPX fallback commands keyed by server ID. Only populated for servers that can be bootstrapped via npx. */
+const NPX_COMMANDS: Record<string, string> = {
+  typescript: 'npx --yes typescript-language-server --stdio',
+  eslint: 'npx --yes vscode-eslint-language-server --stdio',
+  python: 'npx --yes pyright-langserver --stdio',
+};
+
+/**
+ * Build a set of server definitions that incorporate LSP config overrides.
+ *
+ * Resolution order per server:
+ *  1. `config.serverPaths[id]` — explicit binary override
+ *  2. Project `node_modules/.bin/` (existing behaviour)
+ *  3. `process.cwd()` `node_modules/.bin/` (existing behaviour)
+ *  4. PATH lookup (for system-installed servers like gopls, rust-analyzer)
+ *  5. `config.allowNpxFallback` — npx last resort (off by default)
+ *
+ * `config.modulePaths` extends module resolution for the TypeScript server
+ * (used to locate typescript/lib/tsserver.js when it lives outside the project).
+ */
+export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
+  const serverPaths = config?.serverPaths;
+  const modulePaths = config?.modulePaths;
+  const allowNpxFallback = config?.allowNpxFallback ?? false;
+
+  /** Wrap a command function with serverPaths override and npx fallback. */
+  function wrapCommand(
+    id: string,
+    baseCommand: (root: string) => string | undefined,
+  ): (root: string) => string | undefined {
+    return (root: string): string | undefined => {
+      if (serverPaths?.[id]) return serverPaths[id];
+      const cmd = baseCommand(root);
+      if (cmd !== undefined) return cmd;
+      if (allowNpxFallback && NPX_COMMANDS[id]) return NPX_COMMANDS[id];
+      return undefined;
+    };
+  }
+
+  const result: Record<string, LSPServerDef> = {};
+
+  for (const [id, def] of Object.entries(BUILTIN_SERVERS)) {
+    if (id === 'typescript') {
+      // TypeScript needs module path overrides for both command and initialization
+      const resolveTs = (root: string) => resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths);
+
+      const tsBaseCommand = (root: string): string | undefined => {
+        if (!resolveTs(root)) return undefined;
+        const localBin = join(root, 'node_modules', '.bin', 'typescript-language-server');
+        const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server');
+        if (existsSync(localBin)) return `${localBin} --stdio`;
+        if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
+        return undefined;
+      };
+
+      result[id] = {
+        ...def,
+        command: wrapCommand(id, tsBaseCommand),
+        initialization: (root: string) => {
+          const ts = resolveTs(root);
+          if (!ts) return undefined;
+          return { tsserver: { path: ts.resolved, logVerbosity: 'off' } };
+        },
+      };
+    } else {
+      result[id] = { ...def, command: wrapCommand(id, def.command) };
+    }
+  }
+
+  return result;
 }

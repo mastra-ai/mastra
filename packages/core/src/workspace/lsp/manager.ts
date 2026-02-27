@@ -15,7 +15,7 @@ import path from 'node:path';
 import type { SandboxProcessManager } from '../sandbox/process-manager';
 import { LSPClient } from './client';
 import { getLanguageId } from './language';
-import { getServersForFile, walkUp, walkUpAsync } from './servers';
+import { buildServerDefs, getServersForFile, walkUp, walkUpAsync } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic, LSPServerDef } from './types';
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
@@ -41,6 +41,7 @@ export class LSPManager {
   private processManager: SandboxProcessManager;
   private _root: string;
   private config: LSPConfig;
+  private serverDefs: Record<string, LSPServerDef>;
   private filesystem?: {
     exists(path: string): Promise<boolean>;
   };
@@ -56,6 +57,7 @@ export class LSPManager {
     this.processManager = processManager;
     this._root = root;
     this.config = config;
+    this.serverDefs = buildServerDefs(config);
     this.filesystem = filesystem;
   }
 
@@ -150,7 +152,7 @@ export class LSPManager {
    * Returns null if no server is available.
    */
   async getClient(filePath: string): Promise<LSPClient | null> {
-    const servers = getServersForFile(filePath, this.config.disableServers);
+    const servers = getServersForFile(filePath, this.config.disableServers, this.serverDefs);
     if (servers.length === 0) return null;
 
     // Prefer well-known language servers
@@ -230,7 +232,7 @@ export class LSPManager {
    * Individual server failures don't block other servers.
    */
   async getDiagnosticsMulti(filePath: string, content: string): Promise<LSPDiagnostic[]> {
-    const servers = getServersForFile(filePath, this.config.disableServers);
+    const servers = getServersForFile(filePath, this.config.disableServers, this.serverDefs);
     if (servers.length === 0) return [];
 
     const release = await this.acquireFileLock(filePath);

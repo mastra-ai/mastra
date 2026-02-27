@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import type { LSPConfig } from '@mastra/core/workspace';
 import type { stateSchema } from '../schema';
 
 // =============================================================================
@@ -76,41 +77,51 @@ const skillPaths = collectSkillPaths([
   claudeGlobalSkillsPath,
 ]);
 
-export function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
-  const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
-  const state = ctx?.getState?.();
-  const projectPath = state?.projectPath;
+/**
+ * Create a workspace provider function with the given LSP config.
+ * Pass `true` to enable LSP with defaults, a config object for custom settings,
+ * or `false`/`undefined` to disable LSP.
+ */
+export function createWorkspaceProvider(lspConfig?: boolean | LSPConfig) {
+  return function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
+    const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
+    const state = ctx?.getState?.();
+    const projectPath = state?.projectPath;
 
-  if (!projectPath) {
-    throw new Error('Project path is required');
-  }
+    if (!projectPath) {
+      throw new Error('Project path is required');
+    }
 
-  // Sync filesystem's allowedPaths with sandbox-granted paths from harness state
-  const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+    // Sync filesystem's allowedPaths with sandbox-granted paths from harness state
+    const sandboxPaths = state?.sandboxAllowedPaths ?? [];
 
-  const workspace = new Workspace({
-    id: 'mastra-code-workspace',
-    name: 'Mastra Code Workspace',
-    filesystem: new LocalFilesystem({
-      basePath: projectPath,
-      allowedPaths: skillPaths,
-    }),
-    sandbox: new LocalSandbox({
-      workingDirectory: projectPath,
-      env: process.env,
-    }),
-    // Disable workspace tools — built-in tools are used instead.
-    // Workspace tools use different output formats (e.g. → separator, offset/limit params)
-    // that the TUI renderers don't fully support yet.
-    // We will update to use workspace tools very soon - just disabling until then
-    tools: { enabled: false },
-    ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
-  });
+    const workspace = new Workspace({
+      id: 'mastra-code-workspace',
+      name: 'Mastra Code Workspace',
+      filesystem: new LocalFilesystem({
+        basePath: projectPath,
+        allowedPaths: skillPaths,
+      }),
+      sandbox: new LocalSandbox({
+        workingDirectory: projectPath,
+        env: process.env,
+      }),
+      // Disable workspace tools — built-in tools are used instead.
+      // Workspace tools use different output formats (e.g. → separator, offset/limit params)
+      // that the TUI renderers don't fully support yet.
+      // We will update to use workspace tools very soon - just disabling until then
+      tools: { enabled: false },
+      ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
+      ...(lspConfig !== undefined && lspConfig !== false ? { lsp: lspConfig } : {}),
+    });
 
-  workspace.filesystem.setAllowedPaths([...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))]);
+    workspace.filesystem.setAllowedPaths([...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))]);
 
-  return workspace;
+    return workspace;
+  };
 }
+
+export const getDynamicWorkspace = createWorkspaceProvider(true);
 
 if (skillPaths.length > 0) {
   console.info(`Skills loaded from:`);

@@ -10,7 +10,7 @@ import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
 import { createDynamicTools } from './agents/tools.js';
 
-import { getDynamicWorkspace } from './agents/workspace.js';
+import { createWorkspaceProvider } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
@@ -256,7 +256,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...globalInitialState,
       ...config?.initialState,
     },
-    workspace: getDynamicWorkspace,
+    workspace: createWorkspaceProvider(globalSettings.lsp ?? true),
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {

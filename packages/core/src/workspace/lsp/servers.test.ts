@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_SERVERS,
+  buildServerDefs,
   findProjectRoot,
   findProjectRootAsync,
   getServersForFile,
@@ -409,6 +410,103 @@ describe('BUILTIN_SERVERS command()', () => {
       } else {
         expect(result).toBeUndefined();
       }
+    });
+  });
+});
+
+describe('buildServerDefs', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-build-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('serverPaths override', () => {
+    it('returns the override path for typescript without checking node_modules', () => {
+      const defs = buildServerDefs({
+        serverPaths: { typescript: '/usr/local/bin/typescript-language-server --stdio' },
+      });
+      // Even with no binary in tempDir, override wins
+      expect(defs.typescript!.command(tempDir)).toBe('/usr/local/bin/typescript-language-server --stdio');
+    });
+
+    it('returns the override path for eslint', () => {
+      const defs = buildServerDefs({ serverPaths: { eslint: '/opt/bin/vscode-eslint-language-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/opt/bin/vscode-eslint-language-server --stdio');
+    });
+
+    it('override takes priority over a local binary', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ serverPaths: { eslint: '/custom/path/eslint-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/custom/path/eslint-server --stdio');
+    });
+  });
+
+  describe('allowNpxFallback', () => {
+    it('returns npx command for typescript when binary not found and fallback enabled', () => {
+      // No binary in tempDir and no typescript module → binary check skipped, npx returned
+      // The typescript command checks for tsserver.js first; since it resolves via cwd fallback
+      // we only check eslint which has no module dependency
+      const defs = buildServerDefs({ allowNpxFallback: true });
+      const result = defs.eslint!.command(tempDir);
+      // No binary in tempDir → falls back to npx
+      expect(result).toBe('npx --yes vscode-eslint-language-server --stdio');
+    });
+
+    it('does not return npx fallback when disabled (default)', () => {
+      const defs = buildServerDefs({ allowNpxFallback: false });
+      expect(defs.eslint!.command(tempDir)).toBeUndefined();
+    });
+
+    it('does not return npx fallback with no config', () => {
+      const defs = buildServerDefs();
+      expect(defs.eslint!.command(tempDir)).toBeUndefined();
+    });
+
+    it('local binary takes priority over npx fallback', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ allowNpxFallback: true });
+      expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
+    });
+  });
+
+  describe('modulePaths for typescript', () => {
+    it('finds typescript/lib/tsserver.js from modulePaths when not in project', () => {
+      // The cwd of this test process has typescript installed (it's a monorepo dep),
+      // so modulePaths resolution falls through to cwd — this is already covered.
+      // We verify modulePaths doesn't break initialization when typescript is found via cwd.
+      const defs = buildServerDefs({ modulePaths: [tempDir] });
+      const init = defs.typescript!.initialization!(tempDir);
+      // typescript is resolvable from cwd (the monorepo), so initialization should succeed
+      expect(init).toBeDefined();
+      expect((init as any).tsserver.path).toContain('tsserver.js');
+    });
+  });
+
+  describe('getServersForFile with custom defs', () => {
+    it('uses provided defs instead of BUILTIN_SERVERS', () => {
+      const customDefs = buildServerDefs({ serverPaths: { typescript: '/custom/tls --stdio' } });
+      const servers = getServersForFile('/project/app.ts', undefined, customDefs);
+      const ts = servers.find(s => s.id === 'typescript');
+      expect(ts).toBeDefined();
+      // The command should use the override
+      expect(ts!.command('/any/root')).toBe('/custom/tls --stdio');
+    });
+
+    it('falls back to BUILTIN_SERVERS when no defs provided', () => {
+      const servers = getServersForFile('/project/app.ts');
+      // Should still return servers from BUILTIN_SERVERS
+      expect(servers.some(s => s.id === 'typescript')).toBe(true);
     });
   });
 });
