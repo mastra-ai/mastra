@@ -931,10 +931,84 @@ export class DaytonaSandbox extends MastraSandbox {
 
     if (state !== SandboxState.STARTED) {
       this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-      await this._daytona!.start(sandbox);
+      await this.waitForStableStateAndStart(sandbox);
     }
 
     return sandbox;
+  }
+
+  /**
+   * Transitional states where the Daytona API will reject start() with
+   * "State change in progress". We poll until the sandbox reaches a stable
+   * state before attempting start().
+   */
+  private static readonly TRANSITIONAL_STATES: SandboxState[] = [
+    SandboxState.STARTING,
+    SandboxState.STOPPING,
+    SandboxState.CREATING,
+    SandboxState.RESTORING,
+    SandboxState.ARCHIVING,
+    SandboxState.RESIZING,
+    SandboxState.PULLING_SNAPSHOT,
+    SandboxState.BUILDING_SNAPSHOT,
+  ];
+
+  /**
+   * Wait for the sandbox to leave a transitional state, then start it if needed.
+   * Polls every 2s for up to 120s. If the sandbox reaches STARTED on its own
+   * (e.g. it was STARTING), we skip the start() call. If start() still fails
+   * with "State change in progress", we retry with backoff.
+   */
+  private async waitForStableStateAndStart(sandbox: Sandbox): Promise<void> {
+    const MAX_WAIT_MS = 120_000;
+    const POLL_INTERVAL_MS = 2_000;
+    const deadline = Date.now() + MAX_WAIT_MS;
+
+    let current = sandbox;
+
+    // Phase 1: Poll until the reported state is no longer transitional
+    while (
+      current.state &&
+      DaytonaSandbox.TRANSITIONAL_STATES.includes(current.state) &&
+      Date.now() < deadline
+    ) {
+      this.logger.debug(
+        `${LOG_PREFIX} Sandbox ${current.id} is in transitional state (${current.state}), waiting...`,
+      );
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+      current = await this._daytona!.get(current.id);
+    }
+
+    if (current.state === SandboxState.STARTED) {
+      // Reached STARTED on its own — update the reference and return
+      Object.assign(sandbox, current);
+      return;
+    }
+
+    // Phase 2: Attempt start() with retries for "State change in progress"
+    while (Date.now() < deadline) {
+      try {
+        await this._daytona!.start(current);
+        return;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('State change in progress') && Date.now() < deadline) {
+          this.logger.debug(`${LOG_PREFIX} start() returned "State change in progress", retrying...`);
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+          current = await this._daytona!.get(current.id);
+          // If it reached STARTED while we waited, we're done
+          if (current.state === SandboxState.STARTED) {
+            Object.assign(sandbox, current);
+            return;
+          }
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Last-ditch attempt after deadline
+    await this._daytona!.start(current);
   }
 
   /**
