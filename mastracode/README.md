@@ -8,6 +8,7 @@ A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi
 - 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
 - 🛠️ **Coding tools**: View files, edit code, run shell commands
+- 📋 **Plan persistence**: Approved plans are saved as markdown files for future reference
 - 📊 **Token tracking**: Monitor usage with persistent token counts per thread
 - 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
 
@@ -132,6 +133,22 @@ The SQLite database is stored in your system's application data directory:
 ### Authentication
 
 OAuth credentials are stored alongside the database in `auth.json`.
+
+### Plan persistence
+
+When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
+
+- **macOS**: `~/Library/Application Support/mastracode/plans/<resourceId>/`
+- **Linux**: `~/.local/share/mastracode/plans/<resourceId>/`
+- **Windows**: `%APPDATA%/mastracode/plans/<resourceId>/`
+
+Files are named `<timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
+
+To save plans to a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+
+```bash
+export MASTRA_PLANS_DIR=.mastracode/plans
+```
 
 ## Architecture
 

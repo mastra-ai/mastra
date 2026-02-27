@@ -19,8 +19,6 @@ export interface DatasetVersionsPanelProps {
   activeVersion?: number | null;
 }
 
-const versionsListColumns = [{ name: 'version', label: 'Dataset Version History', size: '1fr' }];
-
 /**
  * Panel showing dataset version history with optional compare selection.
  */
@@ -111,10 +109,8 @@ export function DatasetVersionsPanel({
           <DatasetVersionsListSkeleton />
         ) : (
           <ItemList>
-            <ItemList.Header columns={versionsListColumns}>
-              {versionsListColumns.map(col => (
-                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-              ))}
+            <ItemList.Header>
+              <ItemList.HeaderCol>Dataset Version History</ItemList.HeaderCol>
             </ItemList.Header>
 
             <ItemList.Scroller>
@@ -130,7 +126,7 @@ export function DatasetVersionsPanel({
                   return (
                     <ItemList.Row key={String(item.version)} isSelected={isSelectionActive && selectedKeys.has(key)}>
                       {isSelectionActive && (
-                        <ItemList.Cell className={cn('w-12 pl-2 ')}>
+                        <ItemList.LabelCell>
                           <Checkbox
                             checked={selectedKeys.has(key)}
                             onCheckedChange={() => {}}
@@ -144,12 +140,12 @@ export function DatasetVersionsPanel({
                                 : `v${item.version}`
                             }`}
                           />
-                        </ItemList.Cell>
+                        </ItemList.LabelCell>
                       )}
                       <ItemList.RowButton
                         item={item}
                         isFeatured={isVersionSelected(item)}
-                        columns={versionsListColumns}
+                        columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}
                         onClick={() => handleVersionClick(item)}
                         className="py-2"
                       >
@@ -181,16 +177,14 @@ export function DatasetVersionsPanel({
 function DatasetVersionsListSkeleton() {
   return (
     <ItemList>
-      <ItemList.Header columns={versionsListColumns} />
+      <ItemList.Header>
+        <ItemList.HeaderCol>Dataset Version History</ItemList.HeaderCol>
+      </ItemList.Header>
       <ItemList.Items>
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
-            <ItemList.RowButton columns={versionsListColumns}>
-              {versionsListColumns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
+            <ItemList.RowButton columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}>
+              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}
