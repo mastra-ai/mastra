@@ -737,11 +737,19 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               resourceId: memory?.resourceId,
             });
 
+            // Tag historical messages as 'memory' so output processors don't re-persist them.
+            const flushOriginalInputCount =
+              processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
+            const flushNonSystemTotal = params.prompt.filter(m => m.role !== 'system').length;
+            const flushMemoryCount = flushNonSystemTotal - flushOriginalInputCount;
+
+            let flushNonSystemIndex = 0;
             for (const msg of params.prompt) {
               if (msg.role === 'system') {
                 messageList.addSystem(msg.content);
               } else {
-                messageList.add(msg, 'input');
+                messageList.add(msg, flushNonSystemIndex < flushMemoryCount ? 'memory' : 'input');
+                flushNonSystemIndex++;
               }
             }
 
