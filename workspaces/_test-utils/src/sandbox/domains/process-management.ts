@@ -244,11 +244,13 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'captures partial output before abort',
         async () => {
           const controller = new AbortController();
-          setTimeout(() => controller.abort(), 150);
 
           const handle = await processes.spawn(
             `node -e "process.stdout.write('before abort\\n'); setTimeout(() => {}, 30000)"`,
-            { abortSignal: controller.signal },
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
           );
           const result = await handle.wait();
 

@@ -254,12 +254,14 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         'captures partial output before abort',
         async () => {
           const controller = new AbortController();
-          setTimeout(() => controller.abort(), 150);
 
           const result = await executeCommand(
             'node',
             ['-e', 'process.stdout.write("before abort\\n"); setTimeout(() => {}, 30000)'],
-            { abortSignal: controller.signal },
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
           );
 
           expect(result.success).toBe(false);
