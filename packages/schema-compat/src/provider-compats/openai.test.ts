@@ -863,7 +863,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     expect(layer.shouldApply()).toBe(true);
   });
 
-  it('should not apply for OpenAI models with structured outputs', () => {
+  it('should apply for OpenAI models with structured outputs', () => {
     const modelInfo: ModelInformation = {
       provider: 'openai',
       modelId: 'gpt-4o',
@@ -871,7 +871,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     };
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(false);
+    expect(layer.shouldApply()).toBe(true);
   });
 
   it('should not apply for non-OpenAI models', () => {

@@ -11,6 +11,7 @@ import type {
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
@@ -417,10 +418,10 @@ export class MCPServer extends MCPServerBase {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
+            inputSchema: this.convertSchema(tool.parameters),
           };
           if (tool.outputSchema) {
-            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
           }
           // Include MCP tool annotations if present
           if (tool.mcp?.annotations) {
@@ -1816,6 +1817,13 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private convertSchema(schema: any) {
+    if (isStandardSchemaWithJSON(schema)) {
+      return standardSchemaToJSONSchema(schema);
+    }
+    return schema?.jsonSchema || schema;
+  }
+
   /**
    * Gets a list of all tools provided by this MCP server with their schemas.
    *
@@ -1842,8 +1850,8 @@ export class MCPServer extends MCPServerBase {
         id: toolId,
         name: tool.id || toolId,
         description: tool.description,
-        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-        outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+        inputSchema: this.convertSchema(tool.parameters),
+        outputSchema: this.convertSchema(tool.parameters),
         toolType: tool.mcp?.toolType,
       })),
     };
@@ -1879,8 +1887,8 @@ export class MCPServer extends MCPServerBase {
     return {
       name: tool.id || toolId,
       description: tool.description,
-      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-      outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+      inputSchema: this.convertSchema(tool.parameters),
+      outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
     };
   }

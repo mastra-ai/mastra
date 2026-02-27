@@ -5,7 +5,6 @@ import type {
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
 } from '@internal/ai-sdk-v4';
-import type { JSONSchema7, Schema } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -16,6 +15,7 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { JSONSchema7, Schema } from '@mastra/schema-compat';
 import type { ZodSchema, z } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
@@ -23,7 +23,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema, isStandardSchemaWithJSON } from '../../schema';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
 import { isZodArray, getZodDef } from '../../utils/zod-utils';
@@ -170,11 +170,14 @@ export class MastraLLMV1 extends MastraBase {
     if (tools && Object.keys(tools).length > 0) {
       for (const tool of Object.values(tools)) {
         if (tool.parameters) {
-          tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters.jsonSchema));
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
         }
-        // if ('outputSchema' in tool && tool.outputSchema) {
-        //   tool.outputSchema = jsonSchema(tool.outputSchema);
-        // }
       }
     }
 
@@ -516,11 +519,14 @@ export class MastraLLMV1 extends MastraBase {
     if (tools && Object.keys(tools).length > 0) {
       for (const tool of Object.values(tools)) {
         if (tool.parameters) {
-          tool.parameters = jsonSchema(tool.parameters);
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
         }
-        // if ('outputSchema' in tool && tool.outputSchema) {
-        //   tool.outputSchema = jsonSchema(tool.outputSchema);
-        // }
       }
     }
 

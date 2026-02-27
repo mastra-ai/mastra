@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
@@ -115,5 +116,14 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
+  }
+
+  postProcessJSONNode(schema: JSONSchema7): void {
+    super.postProcessJSONNode(schema);
+
+    // force additionalProperties to be false for object schemas
+    if (schema.type === 'object') {
+      schema.additionalProperties = false;
+    }
   }
 }

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
-import { jsonSchema } from '@internal/ai-sdk-v4';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -995,17 +994,6 @@ export class AgentLegacyHandler {
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
-
-    // override json schema to ai-sdk schema
-    if (llmOptions.tools) {
-      Object.keys(llmOptions.tools).forEach((toolName: keyof typeof llmOptions.tools) => {
-        // @ts-expect-error it does match
-        if (llmOptions.tools[toolName]?.parameters) {
-          // @ts-expect-error it does match
-          llmOptions.tools[toolName]!.parameters = jsonSchema(llmOptions.tools[toolName].parameters);
-        }
-      });
-    }
 
     if (!output || experimental_output) {
       const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({

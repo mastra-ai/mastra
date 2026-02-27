@@ -1164,7 +1164,7 @@ describe('CoreToolBuilder Output Schema', () => {
         description: 'A sub-agent tool',
         inputSchema: z.object({
           prompt: z.string().describe('The prompt for the agent'),
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')

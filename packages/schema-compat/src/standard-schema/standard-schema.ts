@@ -17,7 +17,7 @@ import type { StandardSchemaWithJSON } from './standard-schema.types';
 function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): undefined {
   const zodSchema = ctx.zodSchema as { type?: string; _zod?: { def?: { type?: string } }; optional?: () => unknown };
 
-  if (ctx.jsonSchema.type === 'object') {
+  if (ctx.jsonSchema.type === 'object' && !ctx.jsonSchema.additionalProperties) {
     ctx.jsonSchema.additionalProperties = false;
   }
 
