@@ -903,6 +903,10 @@ export class BlaxelSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
+    // Accumulate output so partial stdout/stderr is available when abort/timeout wins the race
+    let capturedStdout = '';
+    let capturedStderr = '';
+
     try {
       // Merge sandbox default env with per-command env (per-command overrides)
       // Filter out undefined values to get Record<string, string>
@@ -923,12 +927,14 @@ export class BlaxelSandbox extends MastraSandbox {
         env: envRecord,
         waitForCompletion: true,
         ...(apiTimeout && { timeout: apiTimeout }),
-        ...(options.onStdout || options.onStderr
-          ? {
-              onStdout: options.onStdout,
-              onStderr: options.onStderr,
-            }
-          : {}),
+        onStdout: (data: string) => {
+          capturedStdout += data;
+          options.onStdout?.(data);
+        },
+        onStderr: (data: string) => {
+          capturedStderr += data;
+          options.onStderr?.(data);
+        },
       });
 
       // Build race competitors: timeout and abort signal
@@ -982,8 +988,8 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
       const exitCode = result.exitCode ?? 0;
-      const stdout = result.stdout ?? '';
-      const stderr = result.stderr ?? '';
+      const stdout = capturedStdout || result.stdout || '';
+      const stderr = capturedStderr || result.stderr || '';
 
       this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms)`);
       if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
@@ -1012,15 +1018,11 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      const stderr = errorToString(error);
-
-      this.logger.debug(`${LOG_PREFIX} Execution error (${executionTimeMs}ms): ${stderr}`);
-
       return {
         success: false,
         exitCode: 1,
-        stdout: '',
-        stderr,
+        stdout: capturedStdout,
+        stderr: capturedStderr || errorToString(error),
         executionTimeMs,
         command,
         args,
