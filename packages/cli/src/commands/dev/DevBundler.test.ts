@@ -230,7 +230,7 @@ describe('DevBundler', () => {
       await expect((devBundler as any).copyPublic('/some/mastra', '/tmp/output')).rejects.toThrow('Permission denied');
     });
 
-    it('should call super.copyPublic when public directory exists', async () => {
+    it('should resolve when public directory exists', async () => {
       const tmpDir = '.test-copy-tmp';
       const mastraDir = join(tmpDir, 'src', 'mastra');
       const publicDir = join(mastraDir, 'public');
@@ -241,7 +241,6 @@ describe('DevBundler', () => {
 
         const devBundler = new DevBundler(undefined, mastraDir);
 
-        // copyPublic should complete without error when the dir exists
         await expect((devBundler as any).copyPublic(mastraDir, tmpDir)).resolves.toBeUndefined();
       } finally {
         await remove(tmpDir);
