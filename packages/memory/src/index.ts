@@ -1471,16 +1471,20 @@ Notes:
     cloned.threadId = newThreadId;
     cloned.resourceId = newResourceId;
 
-    // Remap observedMessageIds
+    // Remap observedMessageIds — drop any IDs not present in the clone's message set
     if (Array.isArray(cloned.observedMessageIds)) {
-      cloned.observedMessageIds = cloned.observedMessageIds.map(id => messageIdMap[id] ?? id);
+      cloned.observedMessageIds = cloned.observedMessageIds
+        .map(id => messageIdMap[id])
+        .filter((id): id is string => Boolean(id));
     } else {
       cloned.observedMessageIds = undefined;
     }
 
     // Remap deprecated bufferedMessageIds
     if (Array.isArray(cloned.bufferedMessageIds)) {
-      cloned.bufferedMessageIds = cloned.bufferedMessageIds.map(id => messageIdMap[id] ?? id);
+      cloned.bufferedMessageIds = cloned.bufferedMessageIds
+        .map(id => messageIdMap[id])
+        .filter((id): id is string => Boolean(id));
     } else {
       cloned.bufferedMessageIds = undefined;
     }
@@ -1491,7 +1495,7 @@ Notes:
         (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
           ...chunk,
           messageIds: Array.isArray(chunk.messageIds)
-            ? chunk.messageIds.map((id: string) => messageIdMap[id] ?? id)
+            ? chunk.messageIds.map((id: string) => messageIdMap[id]).filter((id): id is string => Boolean(id))
             : [],
         }),
       );

@@ -127,19 +127,19 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       // Current thread first
       if (a.id === currentThreadId) return -1;
       if (b.id === currentThreadId) return 1;
-      // Threads tagged with the current directory before others
-      if (projPath) {
-        const aDir = (a.metadata?.projectPath as string) === projPath;
-        const bDir = (b.metadata?.projectPath as string) === projPath;
-        if (aDir && !bDir) return -1;
-        if (!aDir && bDir) return 1;
-      }
       // Current resource threads before other resources
       if (resId) {
         const aLocal = a.resourceId === resId;
         const bLocal = b.resourceId === resId;
         if (aLocal && !bLocal) return -1;
         if (!aLocal && bLocal) return 1;
+      }
+      // Within the same resource, threads tagged with the current directory first
+      if (projPath) {
+        const aDir = typeof a.metadata?.projectPath === 'string' && a.metadata.projectPath === projPath;
+        const bDir = typeof b.metadata?.projectPath === 'string' && b.metadata.projectPath === projPath;
+        if (aDir && !bDir) return -1;
+        if (!aDir && bDir) return 1;
       }
       // Then by most recently updated
       return b.updatedAt.getTime() - a.updatedAt.getTime();
@@ -152,7 +152,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       ? fuzzyFilter(
           this.allThreads,
           query,
-          t => `${t.title ?? ''} ${t.resourceId} ${t.id} ${(t.metadata?.projectPath as string) ?? ''}`,
+          t =>
+            `${t.title ?? ''} ${t.resourceId} ${t.id} ${typeof t.metadata?.projectPath === 'string' ? t.metadata.projectPath : ''}`,
         )
       : this.allThreads;
 

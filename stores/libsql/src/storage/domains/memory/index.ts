@@ -1585,8 +1585,8 @@ export class MemoryLibSQL extends MemoryStorage {
           "reflectedObservationLineCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
           "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          "observedTimezone", metadata, "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           record.id,
           lookupKey,
@@ -1606,9 +1606,9 @@ export class MemoryLibSQL extends MemoryStorage {
           record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
           record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
           record.bufferedReflection || null,
-          record.bufferedReflectionTokens || null,
-          record.bufferedReflectionInputTokens || null,
-          record.reflectedObservationLineCount || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
           record.isObserving || false,
           record.isReflecting || false,
           record.isBufferingObservation || false,
@@ -1616,6 +1616,7 @@ export class MemoryLibSQL extends MemoryStorage {
           record.lastBufferedAtTokens || 0,
           record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null,
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           record.createdAt.toISOString(),
           record.updatedAt.toISOString(),
         ],

@@ -1250,7 +1250,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             resourceId: targetResourceId,
           });
         }
-        await messagesCollection.insertMany(messageDocs);
+        try {
+          await messagesCollection.insertMany(messageDocs);
+        } catch (msgError) {
+          // Compensating rollback: remove the already-inserted thread
+          try {
+            await threadsCollection.deleteOne({ id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
+          throw msgError;
+        }
       }
 
       return {
@@ -1469,9 +1479,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observedMessageIds: record.observedMessageIds || null,
         bufferedObservationChunks: record.bufferedObservationChunks || null,
         bufferedReflection: record.bufferedReflection || null,
-        bufferedReflectionTokens: record.bufferedReflectionTokens || null,
-        bufferedReflectionInputTokens: record.bufferedReflectionInputTokens || null,
-        reflectedObservationLineCount: record.reflectedObservationLineCount || null,
+        bufferedReflectionTokens: record.bufferedReflectionTokens ?? null,
+        bufferedReflectionInputTokens: record.bufferedReflectionInputTokens ?? null,
+        reflectedObservationLineCount: record.reflectedObservationLineCount ?? null,
         isObserving: record.isObserving || false,
         isReflecting: record.isReflecting || false,
         isBufferingObservation: record.isBufferingObservation || false,
@@ -1479,6 +1489,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         lastBufferedAtTokens: record.lastBufferedAtTokens || 0,
         lastBufferedAtTime: record.lastBufferedAtTime || null,
         observedTimezone: record.observedTimezone || null,
+        metadata: record.metadata || null,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       });

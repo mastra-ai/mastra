@@ -1863,8 +1863,8 @@ export class MemoryPG extends MemoryStorage {
           "reflectedObservationLineCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
           "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
         [
           record.id,
           lookupKey,
@@ -1886,9 +1886,9 @@ export class MemoryPG extends MemoryStorage {
           record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
           record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
           record.bufferedReflection || null,
-          record.bufferedReflectionTokens || null,
-          record.bufferedReflectionInputTokens || null,
-          record.reflectedObservationLineCount || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
           record.isObserving || false,
           record.isReflecting || false,
           record.isBufferingObservation || false,
@@ -1896,6 +1896,7 @@ export class MemoryPG extends MemoryStorage {
           record.lastBufferedAtTokens || 0,
           lastBufferedAtTimeStr,
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           record.createdAt.toISOString(),
           record.createdAt.toISOString(),
           record.updatedAt.toISOString(),

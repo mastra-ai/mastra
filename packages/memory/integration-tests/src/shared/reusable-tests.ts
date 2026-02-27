@@ -1112,12 +1112,13 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         } catch {
           // ignore
         }
-        try {
-          await memoryStore.clearObservationalMemory(null, omResourceId);
-        } catch {
-          // ignore
-        }
         await memory.deleteThread(t.id);
+      }
+      // Clear resource-scoped OM once after all threads are deleted
+      try {
+        await memoryStore.clearObservationalMemory(null, omResourceId);
+      } catch {
+        // ignore
       }
     };
 
@@ -1185,7 +1186,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         // Create source thread and messages
         const sourceThread = createTestThread('OM Source Thread');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg1 = createTestMessage(sourceThread.id, 'Hello from source', 'user');
         msg1.resourceId = omResourceId;
@@ -1211,7 +1212,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         expect(sourceOM!.activeObservations).toBe('User greeted the assistant. Assistant responded warmly.');
 
         // Clone the thread
-        const { thread: clonedThread } = await memory.cloneThread({
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
@@ -1258,7 +1259,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const sourceThread = createTestThread('OM Buffered Chunks Source');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg1 = createTestMessage(sourceThread.id, 'Message one', 'user');
         msg1.resourceId = omResourceId;
@@ -1345,7 +1346,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const sourceThread = createTestThread('OM History Source');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg1 = createTestMessage(sourceThread.id, 'Gen 0 msg', 'user');
         msg1.resourceId = omResourceId;
@@ -1416,7 +1417,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const sourceThread = createTestThread('No OM Thread');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg = createTestMessage(sourceThread.id, 'Hello no OM', 'user');
         msg.resourceId = omResourceId;
@@ -1442,7 +1443,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const sourceThread = createTestThread('Resource OM Source');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg = createTestMessage(sourceThread.id, 'Resource msg', 'user');
         msg.resourceId = omResourceId;
@@ -1484,7 +1485,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const sourceThread = createTestThread('Resource OM Clone Source');
         sourceThread.resourceId = omResourceId;
-        await memory.saveThread(sourceThread);
+        await memory.saveThread({ thread: sourceThread });
 
         const msg1 = createTestMessage(sourceThread.id, 'Resource msg 1', 'user');
         msg1.resourceId = omResourceId;

@@ -87,11 +87,11 @@ describe('cloneThread – Observational Memory', () => {
 
   describe('thread-scoped OM', () => {
     it('should clone OM with remapped observedMessageIds', async () => {
-      const { messages } = await seedThread('src-thread-1', 4);
+      await seedThread('src-thread-1', 4);
       const memoryStore = await getMemoryStore(memory);
 
       // Seed OM with some observed message IDs
-      await seedThreadScopedOM(memoryStore, 'src-thread-1', {
+      const seededOM = await seedThreadScopedOM(memoryStore, 'src-thread-1', {
         activeObservations: '* User asked about weather\n* Assistant provided forecast',
         observationTokenCount: 20,
         totalTokensObserved: 100,
@@ -100,20 +100,14 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       // Clone the thread
-      const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+      const { thread: clonedThread, messageIdMap } = await memory.cloneThread({
         sourceThreadId: 'src-thread-1',
       });
-
-      // Build expected message ID map
-      const msgMap: Record<string, string> = {};
-      for (let i = 0; i < messages.length; i++) {
-        msgMap[messages[i]!.id] = clonedMessages[i]!.id;
-      }
 
       // Verify cloned OM exists on the new thread
       const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
       expect(clonedOM).not.toBeNull();
-      expect(clonedOM!.id).not.toBe('src-thread-1'); // New ID
+      expect(clonedOM!.id).not.toBe(seededOM.id); // New ID
       expect(clonedOM!.threadId).toBe(clonedThread.id);
       expect(clonedOM!.resourceId).toBe(resourceId);
       expect(clonedOM!.scope).toBe('thread');
@@ -127,11 +121,12 @@ describe('cloneThread – Observational Memory', () => {
         // None of the IDs should be source IDs
         expect(id).not.toMatch(/^msg-src-thread-1-/);
       }
-      // Each remapped ID should match a cloned message ID
+      // Each remapped ID should match via the returned messageIdMap
+      expect(messageIdMap).toBeDefined();
       expect(clonedOM!.observedMessageIds).toEqual([
-        msgMap['msg-src-thread-1-0'],
-        msgMap['msg-src-thread-1-1'],
-        msgMap['msg-src-thread-1-2'],
+        messageIdMap!['msg-src-thread-1-0'],
+        messageIdMap!['msg-src-thread-1-1'],
+        messageIdMap!['msg-src-thread-1-2'],
       ]);
 
       // Source OM should still exist unmodified
@@ -141,7 +136,7 @@ describe('cloneThread – Observational Memory', () => {
     });
 
     it('should clone OM with remapped bufferedObservationChunks messageIds', async () => {
-      const { messages } = await seedThread('src-thread-2', 4);
+      await seedThread('src-thread-2', 4);
       const memoryStore = await getMemoryStore(memory);
 
       const chunks: BufferedObservationChunk[] = [
@@ -173,29 +168,30 @@ describe('cloneThread – Observational Memory', () => {
         observedMessageIds: ['msg-src-thread-2-0', 'msg-src-thread-2-1'],
       });
 
-      const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+      const { thread: clonedThread, messageIdMap } = await memory.cloneThread({
         sourceThreadId: 'src-thread-2',
       });
-
-      // Build expected message ID map
-      const msgMap: Record<string, string> = {};
-      for (let i = 0; i < messages.length; i++) {
-        msgMap[messages[i]!.id] = clonedMessages[i]!.id;
-      }
 
       const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
       expect(clonedOM).not.toBeNull();
 
       // Verify chunks are present and messageIds are remapped
       expect(clonedOM!.bufferedObservationChunks).toHaveLength(2);
+      expect(messageIdMap).toBeDefined();
 
       const clonedChunk1 = clonedOM!.bufferedObservationChunks![0]!;
       expect(clonedChunk1.observations).toBe('* Chunk 1 observation');
-      expect(clonedChunk1.messageIds).toEqual([msgMap['msg-src-thread-2-0'], msgMap['msg-src-thread-2-1']]);
+      expect(clonedChunk1.messageIds).toEqual([
+        messageIdMap!['msg-src-thread-2-0'],
+        messageIdMap!['msg-src-thread-2-1'],
+      ]);
 
       const clonedChunk2 = clonedOM!.bufferedObservationChunks![1]!;
       expect(clonedChunk2.observations).toBe('* Chunk 2 observation');
-      expect(clonedChunk2.messageIds).toEqual([msgMap['msg-src-thread-2-2'], msgMap['msg-src-thread-2-3']]);
+      expect(clonedChunk2.messageIds).toEqual([
+        messageIdMap!['msg-src-thread-2-2'],
+        messageIdMap!['msg-src-thread-2-3'],
+      ]);
     });
 
     it('should reset transient state flags on cloned OM', async () => {
@@ -357,7 +353,7 @@ describe('cloneThread – Observational Memory', () => {
 
   describe('resource-scoped OM – different resourceId', () => {
     it('should clone resource-scoped OM with remapped thread tags when resourceId changes', async () => {
-      const { messages } = await seedThread('src-thread-res-diff', 3);
+      await seedThread('src-thread-res-diff', 3);
       const memoryStore = await getMemoryStore(memory);
 
       // Seed resource-scoped OM with thread tags using raw thread IDs
@@ -369,16 +365,10 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       const newResourceId = 'new-om-test-resource';
-      const { clonedMessages } = await memory.cloneThread({
+      const { messageIdMap } = await memory.cloneThread({
         sourceThreadId: 'src-thread-res-diff',
         resourceId: newResourceId,
       });
-
-      // Build expected message ID map
-      const msgMap: Record<string, string> = {};
-      for (let i = 0; i < messages.length; i++) {
-        msgMap[messages[i]!.id] = clonedMessages[i]!.id;
-      }
 
       // Verify a new resource-scoped OM was created for the new resource
       const clonedOM = await memoryStore.getObservationalMemory(null, newResourceId);
@@ -388,9 +378,10 @@ describe('cloneThread – Observational Memory', () => {
       expect(clonedOM!.threadId).toBeNull();
 
       // Verify observedMessageIds are remapped
+      expect(messageIdMap).toBeDefined();
       expect(clonedOM!.observedMessageIds).toEqual([
-        msgMap['msg-src-thread-res-diff-0'],
-        msgMap['msg-src-thread-res-diff-1'],
+        messageIdMap!['msg-src-thread-res-diff-0'],
+        messageIdMap!['msg-src-thread-res-diff-1'],
       ]);
 
       // Source OM should be unmodified
