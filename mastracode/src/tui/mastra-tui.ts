@@ -71,7 +71,7 @@ export class MastraTUI {
 
     // Load user preferences
     const savedSettings = loadSettings();
-    this.state.collapseSubagents = savedSettings.preferences.collapseSubagents;
+    this.state.quietMode = savedSettings.preferences.quietMode;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);

@@ -13,7 +13,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
     currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
-    collapseSubagents: globalSettings.preferences.collapseSubagents,
+    quietMode: globalSettings.preferences.quietMode,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -36,11 +36,11 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         await ctx.state.harness.setState({ escapeAsCancel: enabled });
         await ctx.state.harness.setThreadSetting({ key: 'escapeAsCancel', value: enabled });
       },
-      onCollapseSubagentsChange: enabled => {
+      onQuietModeChange: enabled => {
         const current = loadSettings();
-        current.preferences.collapseSubagents = enabled;
+        current.preferences.quietMode = enabled;
         saveSettings(current);
-        ctx.state.collapseSubagents = enabled;
+        ctx.state.quietMode = enabled;
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

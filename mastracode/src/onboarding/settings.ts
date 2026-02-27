@@ -86,8 +86,8 @@ export interface GlobalSettings {
   preferences: {
     yolo: boolean | null;
     theme: 'auto' | 'dark' | 'light';
-    /** When true, subagent output collapses to a single summary line on completion. */
-    collapseSubagents: boolean;
+    /** When true, components like subagent output collapse to compact summaries on completion. */
+    quietMode: boolean;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -122,7 +122,7 @@ const DEFAULTS: GlobalSettings = {
   preferences: {
     yolo: null,
     theme: 'auto',
-    collapseSubagents: false,
+    quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],

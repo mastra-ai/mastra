@@ -22,7 +22,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
-  collapseSubagents: boolean;
+  quietMode: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -33,7 +33,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
-  onCollapseSubagentsChange: (enabled: boolean) => void;
+  onQuietModeChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onClose: () => void;
 }
@@ -324,10 +324,10 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
       {
-        id: 'collapseSubagents',
-        label: 'Collapse subagents',
-        description: 'Auto-collapse subagent output to a single summary line on completion.',
-        currentValue: config.collapseSubagents ? 'On' : 'Off',
+        id: 'quietMode',
+        label: 'Quiet mode',
+        description: 'Auto-collapse tool and subagent output to compact summaries on completion.',
+        currentValue: config.quietMode ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
             [
@@ -342,11 +342,11 @@ export class SettingsComponent extends Box implements Focusable {
                 description: 'Keep full output visible when done',
               },
             ],
-            config.collapseSubagents ? 'on' : 'off',
+            config.quietMode ? 'on' : 'off',
             value => {
-              config.collapseSubagents = value === 'on';
-              callbacks.onCollapseSubagentsChange(config.collapseSubagents);
-              done(config.collapseSubagents ? 'On' : 'Off');
+              config.quietMode = value === 'on';
+              callbacks.onQuietModeChange(config.quietMode);
+              done(config.quietMode ? 'On' : 'Off');
             },
             () => done(),
           ),
