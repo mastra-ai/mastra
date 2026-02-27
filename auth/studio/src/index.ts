@@ -133,6 +133,8 @@ export class MastraAuthStudio
       product: 'deploy',
       redirect_uri: redirectUri,
       post_login_redirect: postLoginRedirect,
+      // Force re-authentication so AuthKit always shows the account picker
+      prompt: 'login',
       ...(this.organizationId ? { organization_id: this.organizationId } : {}),
     });
 
