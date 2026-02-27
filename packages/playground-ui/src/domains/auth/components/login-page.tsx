@@ -16,6 +16,8 @@ export type LoginPageProps = {
   onSuccess?: () => void;
   /** Initial mode - 'signin' or 'signup' */
   initialMode?: 'signin' | 'signup';
+  /** Error message to display (e.g. from a failed OAuth redirect) */
+  errorMessage?: string | null;
 };
 
 /**
@@ -40,7 +42,7 @@ export type LoginPageProps = {
  * }
  * ```
  */
-export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: LoginPageProps) {
+export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', errorMessage }: LoginPageProps) {
   const { data: capabilities, isLoading: isLoadingCapabilities } = useAuthCapabilities();
   const { mutate: credentialsLogin, isPending: isLoginPending, error: loginError } = useCredentialsLogin();
   const { mutate: credentialsSignUp, isPending: isSignUpPending, error: signUpError } = useCredentialsSignUp();
@@ -121,6 +123,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
             {isSignIn ? 'Sign in to Mastra Studio' : 'Create your account'}
           </h1>
         </div>
+
+        {errorMessage && (
+          <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
+        )}
 
         {hasCredentials && (
           <form onSubmit={handleCredentialsSubmit} className="space-y-4">
