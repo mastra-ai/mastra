@@ -29,6 +29,12 @@ export interface WorkspaceToolConfig {
    * Prevents accidental overwrites when the agent hasn't seen the current content.
    */
   requireReadBeforeWrite?: boolean;
+
+  /**
+   * Maximum tokens for tool output (default: 3000).
+   * Output exceeding this limit is truncated. Uses tiktoken for accurate counting.
+   */
+  maxOutputTokens?: number;
 }
 
 /**

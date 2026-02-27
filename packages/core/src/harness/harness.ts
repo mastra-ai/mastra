@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
@@ -92,6 +93,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
     this.id = config.id;
@@ -134,8 +136,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Must be called before using the harness.
    */
   async init(): Promise<void> {
+    // Create an internal Mastra instance so agents have access to storage
+    // (required for tool approval snapshot persistence/resume).
+    // We init storage through Mastra's proxied storage so augmentWithInit
+    // tracks it and won't double-init.
     if (this.config.storage) {
-      await this.config.storage.init();
+      this.#internalMastra = new Mastra({ logger: false, storage: this.config.storage });
+      await this.#internalMastra.getStorage()!.init();
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
@@ -165,17 +172,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    // Propagate harness-level memory and workspace to mode agents (after workspace init)
+    // Propagate harness-level Mastra, memory, and workspace to mode agents (after workspace init)
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
+
+      const alreadyHasMastra = !!agent.getMastraInstance();
 
       if (this.config.memory && !agent.hasOwnMemory()) {
         agent.__setMemory(this.config.memory);
       }
       if (workspaceForAgents && !agent.hasOwnWorkspace()) {
         agent.__setWorkspace(workspaceForAgents);
+      }
+
+      if (this.#internalMastra && !alreadyHasMastra) {
+        this.#internalMastra.addAgent(agent);
       }
     }
 
@@ -388,6 +401,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     if (scope === 'thread') {
       await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
+    }
+
+    try {
+      await Promise.resolve(this.config.modelUseCountTracker?.(modelId));
+    } catch (error) {
+      console.error('Failed to track model usage count', error);
     }
 
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
@@ -1291,6 +1310,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const textContentById = new Map<string, { index: number; text: string }>();
     const thinkingContentById = new Map<string, { index: number; text: string }>();
+    const abortForOmFailure = ({
+      operationType,
+      stage,
+      error,
+    }: {
+      operationType: string;
+      stage: string;
+      error: string;
+    }) => {
+      this.emit({
+        type: 'error',
+        error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      });
+      this.abort();
+    };
 
     for await (const chunk of response.fullStream) {
       if ('runId' in chunk && chunk.runId) {
@@ -1566,21 +1600,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'data-om-observation-failed': {
           const payload = (chunk as any).data as Record<string, any> | undefined;
           if (payload) {
-            if (payload.operationType === 'reflection') {
+            const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
+            const error = payload.error ?? 'Unknown error';
+
+            if (operationType === 'reflection') {
               this.emit({
                 type: 'om_reflection_failed',
                 cycleId: payload.cycleId ?? 'unknown',
-                error: payload.error ?? 'Unknown error',
+                error,
                 durationMs: payload.durationMs ?? 0,
               });
             } else {
               this.emit({
                 type: 'om_observation_failed',
                 cycleId: payload.cycleId ?? 'unknown',
-                error: payload.error ?? 'Unknown error',
+                error,
                 durationMs: payload.durationMs ?? 0,
               });
             }
+
+            abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: currentMessage };
           }
           break;
         }
@@ -1613,13 +1653,19 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         }
         case 'data-om-buffering-failed': {
           const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
+          if (payload) {
+            const operationType = payload.operationType ?? 'observation';
+            const error = payload.error ?? 'Unknown error';
+
             this.emit({
               type: 'om_buffering_failed',
               cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              error: payload.error ?? 'Unknown error',
+              operationType,
+              error,
             });
+
+            abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: currentMessage };
           }
           break;
         }
@@ -1823,6 +1869,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     const agent = this.getCurrentAgent();
+
     if (!this.abortController) {
       this.abortController = new AbortController();
     }

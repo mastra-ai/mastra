@@ -1,5 +1,8 @@
 import { Spacer } from '@mariozechner/pi-tui';
+import { ANTHROPIC_OAUTH_PROVIDER_ID } from '../../auth/claude-max-warning.js';
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { showClaudeMaxOAuthWarning } from '../claude-max-warning.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import type { SlashCommandContext } from './types.js';
@@ -11,6 +14,17 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
   if (!ctx.authStorage) {
     ctx.showError('Auth storage not configured');
     return;
+  }
+
+  // Show Claude Max OAuth warning every time the user attempts Anthropic login
+  if (providerId === ANTHROPIC_OAUTH_PROVIDER_ID) {
+    const warningResult = await showClaudeMaxOAuthWarning(ctx.state, 'login');
+    if (warningResult !== 'continue') {
+      return; // cancel — caller returns to provider selection
+    }
+    const settings = loadSettings();
+    settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+    saveSettings(settings);
   }
 
   return new Promise(resolve => {

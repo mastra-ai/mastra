@@ -92,6 +92,198 @@ isOptional: true,
 description: "Conditions for stopping execution (e.g., step count, token limit).",
 },
 {
+name: "onIterationComplete",
+type: "(context: IterationCompleteContext) => { continue?: boolean; feedback?: string } | void | Promise<{ continue?: boolean; feedback?: string } | void>",
+isOptional: true,
+description:
+"Callback function called after each iteration completes. Use this to monitor progress, provide feedback to guide the agent, or stop execution early. The callback receives context about the iteration including the current text, tool calls, and finish reason.",
+properties: [
+{
+parameters: [
+{
+name: "context.iteration",
+type: "number",
+description: "Current iteration number (1-based).",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.maxIterations",
+type: "number | undefined",
+description: "Maximum iterations allowed (if set).",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.text",
+type: "string",
+description: "The text response from this iteration.",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.isFinal",
+type: "boolean",
+description: "Whether this is the final iteration.",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.finishReason",
+type: "string",
+description: "Reason why this iteration finished (e.g., 'stop', 'length', 'tool-calls').",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.toolCalls",
+type: "ToolCall[]",
+description: "Tool calls made in this iteration.",
+},
+],
+},
+{
+parameters: [
+{
+name: "context.messages",
+type: "MastraDBMessage[]",
+description: "All messages accumulated so far.",
+},
+],
+},
+{
+parameters: [
+{
+name: "return.continue",
+type: "boolean",
+isOptional: true,
+description: "Set to false to stop execution early.",
+},
+],
+},
+{
+parameters: [
+{
+name: "return.feedback",
+type: "string",
+isOptional: true,
+description: "Feedback message to guide the agent's next iteration.",
+},
+],
+},
+],
+},
+{
+name: "isTaskComplete",
+type: "IsTaskCompleteConfig",
+isOptional: true,
+description:
+"Task completion scoring configuration that validates whether the task is complete. Uses Mastra's evaluation scorers to automatically check if the agent's response satisfies the completion criteria.",
+properties: [
+{
+parameters: [
+{
+name: "scorers",
+type: "MastraScorer[]",
+description: "Array of scorers that evaluate task completion. Each scorer returns 0 (failed) or 1 (passed).",
+},
+],
+},
+{
+parameters: [
+{
+name: "strategy",
+type: "'all' | 'any'",
+isOptional: true,
+defaultValue: "'all'",
+description: "Strategy for combining scorer results. 'all' requires all scorers to pass, 'any' requires at least one.",
+},
+],
+},
+{
+parameters: [
+{
+name: "onComplete",
+type: "(result: IsTaskCompleteRunResult) => void | Promise<void>",
+isOptional: true,
+description: "Callback called when the task completion check finishes. Receives the result with individual scorer scores.",
+},
+],
+},
+{
+parameters: [
+{
+name: "parallel",
+type: "boolean",
+isOptional: true,
+defaultValue: "true",
+description: "Whether to run scorers in parallel.",
+},
+],
+},
+{
+parameters: [
+{
+name: "timeout",
+type: "number",
+isOptional: true,
+defaultValue: "600000",
+description: "Maximum time in milliseconds to wait for all scorers to complete.",
+},
+],
+},
+],
+},
+{
+name: "delegation",
+type: "DelegationConfig",
+isOptional: true,
+description:
+"Configuration for subagent delegation. Use this to control and monitor when the agent delegates tasks to other agents, including the ability to modify, reject delegations, and provide feedback to guide the supervisor.",
+properties: [
+{
+parameters: [
+{
+name: "onDelegationStart",
+type: "(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>",
+isOptional: true,
+description: "Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.",
+},
+],
+},
+{
+parameters: [
+{
+name: "onDelegationComplete",
+type: "(context: DelegationCompleteContext) => { feedback?: string } | void | Promise<{ feedback?: string } | void>",
+isOptional: true,
+description: "Called after a subagent delegation completes. The context includes a `bail()` method to stop further execution, and you can return `{ feedback }` to guide the supervisor's next action. Feedback is saved to supervisor memory as an assistant message.",
+},
+],
+},
+{
+parameters: [
+{
+name: "messageFilter",
+type: "(context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>",
+isOptional: true,
+description: "Callback function called before delegating to a subagent. Use this to filter the messages that are passed to the subagent.",
+},
+],
+},
+],
+},
+{
 name: "scorers",
 type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
 isOptional: true,
@@ -945,3 +1137,9 @@ description:
 },
 ]}
 />
+
+## Related
+
+- [Agent Networks](/docs/agents/networks) - Using the supervisor pattern for multi-agent coordination
+- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
+- [Guide: Research Coordinator](/guides/guide/research-coordinator)
