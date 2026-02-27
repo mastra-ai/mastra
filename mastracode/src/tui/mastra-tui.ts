@@ -17,6 +17,13 @@ import {
   saveSettings,
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
+import {
+  detectPackageManager,
+  fetchLatestVersion,
+  getInstallCommand,
+  isNewerVersion,
+  runUpdate,
+} from '../utils/update-check.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -49,13 +56,6 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import {
-  detectPackageManager,
-  fetchLatestVersion,
-  getInstallCommand,
-  isNewerVersion,
-  runUpdate,
-} from '../utils/update-check.js';
 
 // =============================================================================
 // Types
