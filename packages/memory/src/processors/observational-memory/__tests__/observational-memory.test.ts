@@ -6067,7 +6067,10 @@ describe('Full Async Buffering Flow', () => {
           threadId,
           resourceId,
           role: 'user',
-          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'New message to trigger observation' }] },
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'New message to trigger observation' }],
+          },
           type: 'text',
           createdAt: new Date('2025-01-01T12:30:00Z'),
         },
