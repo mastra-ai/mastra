@@ -10,22 +10,22 @@
  * after the process exits. As a result, onStderr callbacks fire once as
  * a batch after exit, not as streaming chunks.
  *
- * Command wrapping strategy:
+ * ## PTY output structure (observed from @daytonaio/sdk@0.143.0)
+ *
+ * The raw PTY stream for a command like `echo hello` looks like:
  * ```
- * exec bash -c 'TERM=dumb; export K=V; cd /cwd;
- *   (user_command) 2>/tmp/mastra-stderr-{id};
- *   EXIT_CODE=$?;
- *   echo "";
- *   echo "MASTRA_EXIT_a7f3:${EXIT_CODE}";
- *   exit ${EXIT_CODE}'
+ * <echo of sendInput text>\r\n          ← PTY echoes back what we typed
+ * <shell prompt / ANSI noise>           ← zsh prompt, bracketed paste start
+ * <line-wrapped echo of command>        ← shell re-renders the long command
+ * \u001b[?2004l\r\r\n                   ← END of bracketed paste (output boundary)
+ * hello\r\n                             ← ACTUAL command output starts here
+ * \r\n                                  ← blank echo line
+ * MASTRA_EXIT_a7f3:0\r\n               ← exit sentinel
  * ```
  *
- * - `exec` replaces the PTY shell — no prompt noise, clean exit
- * - `TERM=dumb` suppresses ANSI escape sequences
- * - `(command)` subshell isolates `exit N`
- * - stderr redirected to a temp file (read back after exit)
- * - `MASTRA_EXIT_a7f3:N` sentinel parsed from tail of output stream
- * - Blank `echo ""` ensures sentinel starts on a new line
+ * We extract clean output by finding the bracketed paste end marker
+ * (`\u001b[?2004l\r\r\n`) and the exit sentinel, then taking everything
+ * between them. PTY line endings (\r\n) are normalized to \n.
  *
  * @internal Prototype — not exported from package index
  */
@@ -43,6 +43,13 @@ const EXIT_SENTINEL_PREFIX = 'MASTRA_EXIT_a7f3:';
 /** Regex to extract exit code from sentinel line. */
 const EXIT_SENTINEL_RE = /MASTRA_EXIT_a7f3:(\d+)/;
 
+/**
+ * Marker that signals the end of shell echo/prompt noise and the start
+ * of real command output. This is the "bracketed paste mode off" sequence
+ * that zsh emits after accepting the input line.
+ */
+const OUTPUT_BOUNDARY_MARKER = '\u001b[?2004l\r\r\n';
+
 // =============================================================================
 // PTY Process Handle
 // =============================================================================
@@ -50,8 +57,12 @@ const EXIT_SENTINEL_RE = /MASTRA_EXIT_a7f3:(\d+)/;
 /**
  * Wraps a Daytona PTY session to conform to Mastra's ProcessHandle.
  *
- * All PTY output flows through onData → _rawBuffer → emitStdout().
- * After exit, stderr is read from a temp file and emitted via emitStderr().
+ * Raw PTY data accumulates in _rawBuffer. We do NOT call emitStdout()
+ * with raw PTY data because it contains shell noise. Instead, clean
+ * output is extracted after the process exits and emitted then.
+ *
+ * For streaming onStdout callbacks: we detect the output boundary marker
+ * and start streaming real output as it arrives.
  */
 class DaytonaPtyProcessHandle extends ProcessHandle {
   readonly pid: number;
@@ -63,8 +74,15 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
   private readonly _startTime: number;
   private readonly _timeout?: number;
 
-  /** Accumulates all raw PTY output for sentinel parsing. */
+  /** Accumulates ALL raw PTY output (including shell noise). */
   private _rawBuffer = '';
+
+  /** Whether we've seen the output boundary marker and started streaming. */
+  private _outputStarted = false;
+
+  /** Leftover data that might contain a partial sentinel at the boundary. */
+  private _pendingChunk = '';
+
   private _exitCode: number | undefined;
   private _waitPromise: Promise<CommandResult> | null = null;
   private _killed = false;
@@ -105,12 +123,72 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
 
   /**
    * Called by the process manager's onData callback.
-   * Accumulates raw output and emits stdout (sentinel is stripped in wait()).
+   * Accumulates raw output. Streams clean output after the boundary marker.
    */
   appendOutput(data: string): void {
     this._rawBuffer += data;
-    // Emit everything as stdout — sentinel will be stripped during wait()
-    this.emitStdout(data);
+
+    if (!this._outputStarted) {
+      // Check if the boundary marker has appeared in the raw buffer
+      const markerIdx = this._rawBuffer.indexOf(OUTPUT_BOUNDARY_MARKER);
+      if (markerIdx !== -1) {
+        this._outputStarted = true;
+        // Everything after the marker is real output — start streaming
+        const outputStart = markerIdx + OUTPUT_BOUNDARY_MARKER.length;
+        const realOutput = this._rawBuffer.slice(outputStart);
+        if (realOutput.length > 0) {
+          this._streamCleanChunk(realOutput);
+        }
+      }
+      return;
+    }
+
+    // Already streaming — emit new data (will be filtered for sentinel later)
+    this._streamCleanChunk(data);
+  }
+
+  /**
+   * Stream a chunk of real output, holding back potential sentinel lines.
+   * Normalizes \r\n to \n.
+   */
+  private _streamCleanChunk(raw: string): void {
+    // Prepend any pending data from previous chunk
+    const combined = this._pendingChunk + raw;
+    this._pendingChunk = '';
+
+    // Normalize \r\n → \n
+    const normalized = combined.replace(/\r\n/g, '\n');
+
+    // Check if this chunk contains the sentinel
+    const sentinelIdx = normalized.indexOf(EXIT_SENTINEL_PREFIX);
+    if (sentinelIdx !== -1) {
+      // Emit everything before the sentinel (minus trailing blank line)
+      let output = normalized.slice(0, sentinelIdx);
+      // Strip trailing blank line from the `echo ""` before sentinel
+      if (output.endsWith('\n\n')) {
+        output = output.slice(0, -1);
+      }
+      if (output.length > 0) {
+        this.emitStdout(output);
+      }
+      // Don't emit the sentinel itself
+      return;
+    }
+
+    // Hold back the last line in case it's a partial sentinel
+    const lastNewline = normalized.lastIndexOf('\n');
+    if (lastNewline === -1) {
+      // No complete line — hold everything
+      this._pendingChunk = normalized;
+      return;
+    }
+
+    const toEmit = normalized.slice(0, lastNewline + 1);
+    this._pendingChunk = normalized.slice(lastNewline + 1);
+
+    if (toEmit.length > 0) {
+      this.emitStdout(toEmit);
+    }
   }
 
   async wait(): Promise<CommandResult> {
@@ -136,7 +214,7 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
           return {
             success: false,
             exitCode: 124,
-            stdout: this._getCleanStdout(),
+            stdout: this.stdout,
             stderr: this.stderr || error.message,
             executionTimeMs: Date.now() - this._startTime,
           };
@@ -153,7 +231,7 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
       return {
         success: false,
         exitCode: this._exitCode ?? 137,
-        stdout: this._getCleanStdout(),
+        stdout: this.stdout,
         stderr: this.stderr,
         executionTimeMs: Date.now() - this._startTime,
       };
@@ -161,6 +239,12 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
 
     // Parse exit code from sentinel if not already set
     this._parseExitSentinel();
+
+    // Flush any remaining pending chunk that wasn't a sentinel
+    if (this._pendingChunk.length > 0 && !this._pendingChunk.includes(EXIT_SENTINEL_PREFIX)) {
+      this.emitStdout(this._pendingChunk);
+      this._pendingChunk = '';
+    }
 
     // Read stderr from temp file
     await this._readStderrFile();
@@ -171,7 +255,7 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
     return {
       success: this._exitCode === 0,
       exitCode: this._exitCode ?? 1,
-      stdout: this._getCleanStdout(),
+      stdout: this.stdout,
       stderr: this.stderr,
       executionTimeMs: Date.now() - this._startTime,
     };
@@ -231,33 +315,6 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
     }
   }
 
-  /**
-   * Get stdout with the sentinel line stripped.
-   * Also strips the blank line before the sentinel and any trailing newline.
-   */
-  private _getCleanStdout(): string {
-    const idx = this._rawBuffer.indexOf(EXIT_SENTINEL_PREFIX);
-    if (idx === -1) return this.stdout;
-
-    // Find the start of the sentinel line (look for newline before it)
-    let lineStart = idx;
-    while (lineStart > 0 && this._rawBuffer[lineStart - 1] !== '\n') {
-      lineStart--;
-    }
-
-    // Also strip the blank echo line before the sentinel (if present)
-    let cleanEnd = lineStart;
-    if (cleanEnd > 0 && this._rawBuffer[cleanEnd - 1] === '\n') {
-      cleanEnd--; // strip the newline
-      // If there's another newline (from the blank echo), strip it too
-      if (cleanEnd > 0 && this._rawBuffer[cleanEnd - 1] === '\n') {
-        cleanEnd--;
-      }
-    }
-
-    return this._rawBuffer.slice(0, cleanEnd) + '\n';
-  }
-
   /** Read stderr from the temp file and emit it. */
   private async _readStderrFile(): Promise<void> {
     try {
@@ -276,9 +333,7 @@ class DaytonaPtyProcessHandle extends ProcessHandle {
   private _cleanupStderrFile(): void {
     try {
       const sandbox = this._sandbox.instance;
-      sandbox.process
-        .executeCommand(`rm -f ${shellQuote(this._stderrFile)}`)
-        .catch(() => {});
+      sandbox.process.executeCommand(`rm -f ${shellQuote(this._stderrFile)}`).catch(() => {});
     } catch {
       // Best-effort
     }
