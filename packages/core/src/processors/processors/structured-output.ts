@@ -1,5 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
+import { TripWire } from '../../agent/trip-wire';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -36,6 +37,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
+  private maxRetries?: number;
   private jsonPromptInjection?: boolean;
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
@@ -61,6 +63,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+    this.maxRetries = options.maxRetries;
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
@@ -114,13 +117,20 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
+      // Build structuredOutput options respecting the FallbackFields union type
+      const structuredOutputOpts = {
+        schema: this.schema!,
+        jsonPromptInjection: this.jsonPromptInjection,
+        ...(this.errorStrategy === 'fallback'
+          ? { errorStrategy: 'fallback' as const, fallbackValue: this.fallbackValue! }
+          : { errorStrategy: this.errorStrategy }),
+      };
+
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        structuredOutput: {
-          schema: this.schema!,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput: structuredOutputOpts,
         providerOptions: this.providerOptions,
+        ...(this.maxRetries !== undefined ? { modelSettings: { maxRetries: this.maxRetries } } : {}),
         ...observabilityContext,
       });
 
@@ -171,6 +181,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         controller.enqueue(newChunk);
       }
     } catch (error) {
+      if (error instanceof TripWire) throw error;
       this.handleError(
         'Structured output processing failed',
         error instanceof Error ? error.message : 'Unknown error',

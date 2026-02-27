@@ -3,6 +3,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
 import type { Agent } from '../../agent';
+import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { StructuredOutputProcessor } from './structured-output';
@@ -450,6 +451,315 @@ describe('StructuredOutputProcessor', () => {
       expect(prompt).toContain('I need to analyze the color and intensity');
       expect(prompt).toContain('# Assistant Response');
       expect(prompt).toContain('The answer is blue and bright');
+    });
+  });
+
+  describe('errorStrategy/fallbackValue forwarding', () => {
+    it('should forward strict errorStrategy to inner structuring agent', async () => {
+      const strictProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamSpy = vi.spyOn(strictProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await strictProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      const streamOptions = streamSpy.mock.calls[0]![1];
+      expect(streamOptions.structuredOutput).toMatchObject({
+        schema: testSchema,
+        errorStrategy: 'strict',
+      });
+      expect(streamOptions.structuredOutput).not.toHaveProperty('fallbackValue');
+    });
+
+    it('should forward fallback errorStrategy and fallbackValue to inner structuring agent', async () => {
+      const fallbackValue = { color: 'default', intensity: 'medium' };
+      const fallbackProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'fallback',
+        fallbackValue,
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamSpy = vi.spyOn(fallbackProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await fallbackProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      const streamOptions = streamSpy.mock.calls[0]![1];
+      expect(streamOptions.structuredOutput).toMatchObject({
+        schema: testSchema,
+        errorStrategy: 'fallback',
+        fallbackValue,
+      });
+    });
+
+    it('should forward warn errorStrategy to inner structuring agent', async () => {
+      const warnProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'warn',
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamSpy = vi.spyOn(warnProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await warnProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      const streamOptions = streamSpy.mock.calls[0]![1];
+      expect(streamOptions.structuredOutput).toMatchObject({
+        schema: testSchema,
+        errorStrategy: 'warn',
+      });
+      expect(streamOptions.structuredOutput).not.toHaveProperty('fallbackValue');
+    });
+  });
+
+  describe('TripWire guard in strict mode', () => {
+    it('should not double-log errors when strict mode abort throws TripWire', async () => {
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      };
+      const strictProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        logger: mockLogger as any,
+      });
+
+      const { controller } = createMockController();
+      // Use a TripWire-throwing abort, matching real behavior
+      const abort = vi.fn((reason?: string) => {
+        throw new TripWire(reason || 'Aborted');
+      }) as any;
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: new Error('Structuring failed') },
+          },
+        ]),
+      };
+
+      vi.spyOn(strictProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await expect(
+        strictProcessor.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort,
+        }),
+      ).rejects.toBeInstanceOf(TripWire);
+
+      // handleError should only be called once (from the error chunk), not again from the catch
+      expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('maxRetries forwarding', () => {
+    it('should forward maxRetries via modelSettings when set', async () => {
+      const retryProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        maxRetries: 5,
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamSpy = vi.spyOn(retryProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await retryProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      const streamOptions = streamSpy.mock.calls[0]![1];
+      expect(streamOptions.modelSettings).toEqual({ maxRetries: 5 });
+    });
+
+    it('should omit modelSettings when maxRetries is not set', async () => {
+      const noRetryProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamSpy = vi.spyOn(noRetryProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await noRetryProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      const streamOptions = streamSpy.mock.calls[0]![1];
+      expect(streamOptions).not.toHaveProperty('modelSettings');
     });
   });
 });

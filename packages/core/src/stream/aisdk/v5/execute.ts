@@ -161,6 +161,12 @@ export function execute<OUTPUT = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            onFailedAttempt(error) {
+              const totalAttempts = (modelSettings?.maxRetries ?? 2) + 1;
+              console.warn(
+                `[Mastra] LLM call to ${model.modelId} failed (attempt ${error.attemptNumber}/${totalAttempts}): ${error.message}`,
+              );
+            },
             shouldRetry(context) {
               if (APICallError.isInstance(context.error)) {
                 return context.error.isRetryable;
