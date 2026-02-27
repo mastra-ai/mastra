@@ -71,10 +71,18 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         const hasAllOf = 'allOf' in propSchema;
 
         if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
-          return [
-            key,
-            { ...propSchema, type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'], items: {} },
-          ];
+          // Keep this typeless fallback Gemini-safe: Google rejects `items` unless type is strictly ARRAY.
+          // We intentionally omit `array` here because this path is primarily for z.any()-style fields
+          // (e.g. resumeData) that serialize without type information.
+          const fallbackSchema = {
+            ...propSchema,
+            type: ['string', 'number', 'integer', 'boolean', 'object', 'null'],
+          } as Record<string, unknown>;
+
+          // If we just assigned a non-array type, `items` is always invalid for Gemini.
+          delete fallbackSchema.items;
+
+          return [key, fallbackSchema];
         }
         // Recurse into nested object schemas
         return [key, fixTypelessProperties(propSchema)];
