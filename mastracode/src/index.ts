@@ -209,10 +209,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
     for (const [provider, config] of Object.entries(registry)) {
-      if (startupAccess[provider] !== undefined) continue; // Already checked above
+      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
       const envVars = config?.apiKeyEnvVar;
-      const envVar = Array.isArray(envVars) ? envVars[0] : envVars;
-      if (envVar && process.env[envVar]) {
+      const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
+      if (envVarList.some(envVar => process.env[envVar])) {
         startupAccess[provider] = 'apikey';
       }
     }
