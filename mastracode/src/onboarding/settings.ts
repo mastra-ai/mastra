@@ -93,6 +93,8 @@ export interface GlobalSettings {
   customModelPacks: CustomPack[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // Version the user dismissed the update prompt for (skip until they manually update past this)
+  updateDismissedVersion: string | null;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -124,6 +126,7 @@ const DEFAULTS: GlobalSettings = {
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   modelUseCounts: {},
+  updateDismissedVersion: null,
 };
 
 export function getSettingsPath(): string {
@@ -167,6 +170,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        updateDismissedVersion: raw.updateDismissedVersion ?? null,
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -234,6 +238,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      updateDismissedVersion: raw.updateDismissedVersion ?? null,
     };
 
     // Migrate legacy omModelId → omModelOverride

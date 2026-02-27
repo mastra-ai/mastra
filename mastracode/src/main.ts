@@ -9,6 +9,7 @@ import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode } from './tui/theme.js';
+import { getCurrentVersion } from './utils/update-check.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
@@ -86,7 +87,7 @@ async function main() {
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
-    version: '0.1.0',
+    version: getCurrentVersion(),
     inlineQuestions: true,
   });
 
