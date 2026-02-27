@@ -464,12 +464,13 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
-  /** Optional token budget for observer context optimization */
-  contextTokenBudget?: number;
-  /** Include pending buffered reflection context in observer calls */
-  includeBufferedReflection: boolean;
-  /** Minimum token savings required before using optimized observer context */
-  minContextTokenSavings?: number;
+  /** Observer-specific context options */
+  observer: {
+    /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
+    previousObservationTokens?: number | false;
+    /** Include pending buffered reflection context in observer calls */
+    useBufferedReflection: boolean;
+  };
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
 }
@@ -1163,9 +1164,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
-      contextTokenBudget: config.observation?.contextTokenBudget,
-      includeBufferedReflection: config.observation?.includeBufferedReflection ?? false,
-      minContextTokenSavings: config.observation?.minContextTokenSavings,
+      observer: {
+        previousObservationTokens: config.observation?.observer?.previousObservationTokens,
+        useBufferedReflection: config.observation?.observer?.useBufferedReflection ?? false,
+      },
       instruction: config.observation?.instruction,
     };
 
@@ -1385,24 +1387,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     // Validate observer context optimization options
-    if (this.observationConfig.contextTokenBudget !== undefined) {
+    if (
+      this.observationConfig.observer.previousObservationTokens !== undefined &&
+      this.observationConfig.observer.previousObservationTokens !== false
+    ) {
       if (
-        !Number.isFinite(this.observationConfig.contextTokenBudget) ||
-        this.observationConfig.contextTokenBudget <= 0
+        !Number.isFinite(this.observationConfig.observer.previousObservationTokens) ||
+        this.observationConfig.observer.previousObservationTokens < 0
       ) {
         throw new Error(
-          `observation.contextTokenBudget must be a finite number > 0, got ${this.observationConfig.contextTokenBudget}`,
-        );
-      }
-    }
-
-    if (this.observationConfig.minContextTokenSavings !== undefined) {
-      if (
-        !Number.isFinite(this.observationConfig.minContextTokenSavings) ||
-        this.observationConfig.minContextTokenSavings < 0
-      ) {
-        throw new Error(
-          `observation.minContextTokenSavings must be a finite number >= 0, got ${this.observationConfig.minContextTokenSavings}`,
+          `observation.observer.previousObservationTokens must be false or a finite number >= 0, got ${this.observationConfig.observer.previousObservationTokens}`,
         );
       }
     }
@@ -2209,8 +2203,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Prepare optimized observer context by applying truncation, buffered-reflection
-   * inclusion, and token-savings gating.
+   * Prepare optimized observer context by applying truncation and buffered-reflection inclusion.
    *
    * Returns the (possibly optimized) observations string to pass as "Previous Observations"
    * to the observer prompt. When no optimization options are set, returns the input unchanged.
@@ -2219,10 +2212,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     record?: ObservationalMemoryRecord | null,
   ): string | undefined {
-    const { contextTokenBudget, includeBufferedReflection, minContextTokenSavings } = this.observationConfig;
+    const { previousObservationTokens, useBufferedReflection } = this.observationConfig.observer;
+    const tokenBudget =
+      previousObservationTokens === undefined || previousObservationTokens === false
+        ? undefined
+        : previousObservationTokens;
 
     // Fast path: no optimization options configured — preserve legacy behavior
-    if (!contextTokenBudget && !includeBufferedReflection && minContextTokenSavings === undefined) {
+    if (tokenBudget === undefined && !useBufferedReflection) {
       return existingObservations;
     }
 
@@ -2234,26 +2231,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let optimized = existingObservations;
 
     // 1. Optionally append buffered reflection content
-    if (includeBufferedReflection && record?.bufferedReflection) {
+    if (useBufferedReflection && record?.bufferedReflection) {
       optimized = `${optimized}\n\n--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`;
     }
 
-    // 2. Apply tail truncation to contextTokenBudget (keep most recent observations)
-    if (contextTokenBudget) {
-      const currentTokens = this.tokenCounter.countObservations(optimized);
-      if (currentTokens > contextTokenBudget) {
-        optimized = this.truncateObservationsToTokenBudget(optimized, contextTokenBudget);
+    // 2. Apply tail truncation to previousObservationTokens (keep most recent observations)
+    if (tokenBudget !== undefined) {
+      if (tokenBudget === 0) {
+        return '';
       }
-    }
 
-    // 3. Apply token-savings gating
-    if (minContextTokenSavings !== undefined) {
-      const baselineTokens = this.tokenCounter.countObservations(existingObservations);
-      const optimizedTokens = this.tokenCounter.countObservations(optimized);
-      const savings = baselineTokens - optimizedTokens;
-      if (savings < minContextTokenSavings) {
-        // Savings too small — fall back to baseline
-        return existingObservations;
+      const currentTokens = this.tokenCounter.countObservations(optimized);
+      if (currentTokens > tokenBudget) {
+        optimized = this.truncateObservationsToTokenBudget(optimized, tokenBudget);
       }
     }
 
@@ -2265,6 +2255,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * (keeping the most recent observations at the end).
    */
   private truncateObservationsToTokenBudget(observations: string, budget: number): string {
+    if (budget === 0) {
+      return '';
+    }
+
     const lines = observations.split('\n');
 
     // Binary search for the starting line that fits within budget
@@ -2297,7 +2291,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
+    options?: {
+      skipContinuationHints?: boolean;
+      requestContext?: RequestContext;
+      priorCurrentTask?: string;
+      priorSuggestedResponse?: string;
+    },
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -2306,7 +2305,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }> {
     const agent = this.getObserverAgent();
 
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
+    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, {
+      skipContinuationHints: options?.skipContinuationHints,
+      priorCurrentTask: options?.priorCurrentTask,
+      priorSuggestedResponse: options?.priorSuggestedResponse,
+    });
 
     const doGenerate = async () => {
       const result = await this.withAbortCheck(
@@ -2365,6 +2368,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
   ): Promise<{
@@ -2386,7 +2390,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
     });
 
-    const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);
+    const prompt = buildMultiThreadObserverPrompt(
+      existingObservations,
+      messagesByThread,
+      threadOrder,
+      priorMetadataByThread,
+    );
 
     // Flatten all messages for context dump
     const allMessages: MastraDBMessage[] = [];
@@ -4332,7 +4341,13 @@ ${formattedMessages}
         freshRecord?.activeObservations ?? record.activeObservations,
         freshRecord ?? record,
       );
-      const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, { requestContext });
+      const thread = await this.storage.getThreadById({ threadId });
+      const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+      const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, {
+        requestContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+      });
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
@@ -4719,11 +4734,18 @@ ${formattedMessages}
     // Call observer with optimized context
     // Allow the observer to produce suggestedResponse/currentTask so they survive
     // activation and maintain continuity when the context window shrinks
+    const thread = await this.storage.getThreadById({ threadId });
+    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+
     const result = await this.callObserver(
       observerContext,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { requestContext },
+      {
+        requestContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+      },
     );
 
     // If the observer returned empty observations, skip buffering
@@ -5304,11 +5326,18 @@ ${formattedMessages}
 
     // First, get all threads for this resource to access their per-thread lastObservedAt
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
-    const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+    const threadMetadataMap = new Map<
+      string,
+      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string }
+    >();
 
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
-      threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
+      threadMetadataMap.set(thread.id, {
+        lastObservedAt: omMetadata?.lastObservedAt,
+        currentTask: omMetadata?.currentTask,
+        suggestedResponse: omMetadata?.suggestedResponse,
+      });
     }
 
     // Load messages per-thread using each thread's own cursor
@@ -5554,10 +5583,22 @@ ${formattedMessages}
 
       // Process batches in parallel
       const batchPromises = batches.map(async batch => {
+        const batchPriorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>();
+        for (const threadId of batch.threadIds) {
+          const metadata = threadMetadataMap.get(threadId);
+          if (metadata?.currentTask || metadata?.suggestedResponse) {
+            batchPriorMetadata.set(threadId, {
+              currentTask: metadata.currentTask,
+              suggestedResponse: metadata.suggestedResponse,
+            });
+          }
+        }
+
         const batchResult = await this.callMultiThreadObserver(
           existingObservations,
           batch.threadMap,
           batch.threadIds,
+          batchPriorMetadata,
           abortSignal,
           requestContext,
         );

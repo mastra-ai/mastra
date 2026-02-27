@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
+  buildMultiThreadObserverPrompt,
   buildObserverSystemPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
@@ -622,6 +623,51 @@ describe('Observer Agent Helpers', () => {
       const prompt = buildObserverPrompt(undefined, messages);
 
       expect(prompt).not.toContain('Previous Observations');
+    });
+
+    it('should include prior current-task and suggested-response metadata when provided', () => {
+      const messages = [createTestMessage('Please continue', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages, {
+        priorCurrentTask: 'Implement observer prompt improvements',
+        priorSuggestedResponse: 'I will update the observer prompt next.',
+      });
+
+      expect(prompt).toContain('Prior Thread Metadata');
+      expect(prompt).toContain('prior current-task: Implement observer prompt improvements');
+      expect(prompt).toContain('prior suggested-response: I will update the observer prompt next.');
+    });
+
+    it('should omit prior metadata section when not provided', () => {
+      const messages = [createTestMessage('Please continue', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages, {});
+
+      expect(prompt).not.toContain('Prior Thread Metadata');
+    });
+  });
+
+  describe('buildMultiThreadObserverPrompt', () => {
+    it('should include per-thread prior metadata when provided', () => {
+      const messagesByThread = new Map<string, MastraDBMessage[]>([
+        ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
+        ['thread-2', [createTestMessage('Thread 2 message', 'user')]],
+      ]);
+
+      const priorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>([
+        ['thread-1', { currentTask: 'Handle billing issue', suggestedResponse: 'Ask for invoice id.' }],
+      ]);
+
+      const prompt = buildMultiThreadObserverPrompt(
+        undefined,
+        messagesByThread,
+        ['thread-1', 'thread-2'],
+        priorMetadata,
+      );
+
+      expect(prompt).toContain('Prior Thread Metadata');
+      expect(prompt).toContain('thread thread-1');
+      expect(prompt).toContain('prior current-task: Handle billing issue');
+      expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
+      expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
     });
   });
 
@@ -2300,6 +2346,83 @@ Ask about favorite vegetarian dishes
     expect(systemMessage.content).toContain('<current-task>');
   });
 
+  it('should include prior current-task and suggested-response in observer user prompt during synchronous observation', async () => {
+    const storage = createInMemoryStorage();
+
+    let capturedPrompt: any = null;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\n- User asked to continue implementation\n</observations>\n<current-task>Continue implementation</current-task>\n<suggested-response>I will continue.</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100000,
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Implement observer context optimization',
+              suggestedResponse: 'I will update the observer prompt context next.',
+            },
+          },
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: [createTestMessage('Please continue', 'user', 'msg-1')],
+    });
+
+    expect(capturedPrompt).not.toBeNull();
+    const userMessage = capturedPrompt.find((msg: any) => msg.role === 'user');
+    expect(userMessage).toBeDefined();
+    const userPromptText = Array.isArray(userMessage.content)
+      ? userMessage.content
+          .map((part: any) => (part?.type === 'text' ? part.text : ''))
+          .filter(Boolean)
+          .join('\n')
+      : String(userMessage.content ?? '');
+    expect(userPromptText).toContain('Prior Thread Metadata');
+    expect(userPromptText).toContain('prior current-task: Implement observer context optimization');
+    expect(userPromptText).toContain('prior suggested-response: I will update the observer prompt context next.');
+  });
+
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
     const storage = createInMemoryStorage();
     const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
@@ -2677,6 +2800,138 @@ Ask about preferred brewing method
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
+  it('should include per-thread prior metadata in multi-thread observer prompt during resource-scoped observation', async () => {
+    const storage = createInMemoryStorage();
+
+    let capturedPrompt: any = null;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+<thread id="thread-1">
+- User asked for plan update
+</thread>
+<thread id="thread-2">
+- User asked about deployment timing
+</thread>
+</observations>
+<thread id="thread-1">
+<current-task>Update implementation plan</current-task>
+<suggested-response>I will share the updated plan.</suggested-response>
+</thread>
+<thread id="thread-2">
+<current-task>Confirm release window</current-task>
+<suggested-response>I will confirm deployment timing.</suggested-response>
+</thread>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const now = new Date();
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Thread 1',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Handle billing follow-up',
+              suggestedResponse: 'Ask for the invoice number.',
+            },
+          },
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: 'thread-2',
+        resourceId: 'resource-1',
+        title: 'Thread 2',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Track rollout readiness',
+              suggestedResponse: 'Confirm deployment checklist status.',
+            },
+          },
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          ...createTestMessage('Can you update me on billing?', 'user', 't1-msg-1'),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+        },
+        {
+          ...createTestMessage('Any update on rollout?', 'user', 't2-msg-1'),
+          threadId: 'thread-2',
+          resourceId: 'resource-1',
+        },
+      ],
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100000,
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'resource',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    await (om as any).doResourceScopedObservation({
+      record: await storage.getObservationalMemory(null, 'resource-1'),
+      currentThreadId: 'thread-1',
+      resourceId: 'resource-1',
+      currentThreadMessages: [],
+    });
+
+    expect(capturedPrompt).not.toBeNull();
+    const userMessage = capturedPrompt.find((msg: any) => msg.role === 'user');
+    expect(userMessage).toBeDefined();
+    const userPromptText = Array.isArray(userMessage.content)
+      ? userMessage.content
+          .map((part: any) => (part?.type === 'text' ? part.text : ''))
+          .filter(Boolean)
+          .join('\n')
+      : String(userMessage.content ?? '');
+
+    expect(userPromptText).toContain('Prior Thread Metadata');
+    expect(userPromptText).toContain('thread thread-1');
+    expect(userPromptText).toContain('prior current-task: Handle billing follow-up');
+    expect(userPromptText).toContain('prior suggested-response: Ask for the invoice number.');
+    expect(userPromptText).toContain('thread thread-2');
+    expect(userPromptText).toContain('prior current-task: Track rollout readiness');
+    expect(userPromptText).toContain('prior suggested-response: Confirm deployment checklist status.');
+  });
+
   it('should NOT use thread tags in thread scope mode', async () => {
     const storage = createInMemoryStorage();
 
@@ -2715,7 +2970,7 @@ Ask about preferred brewing method
     const om = new ObservationalMemory({
       storage,
       observation: {
-        messageTokens: 10,
+        messageTokens: 100000,
         model: mockModel as any,
       },
       reflection: { observationTokens: 10000 },
@@ -7675,16 +7930,20 @@ describe('threadId validation in thread scope', () => {
 });
 
 // =============================================================================
-// Observer Context Optimization (contextTokenBudget, includeBufferedReflection, minContextTokenSavings)
+// Observer Context Optimization (observer.previousObservationTokens, observer.useBufferedReflection)
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
-  function createOM(observationOverrides: Record<string, unknown> = {}) {
+  function createOM(observerOverrides: Record<string, unknown> = {}) {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
       model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-      observation: { messageTokens: 50000, bufferTokens: false, ...observationOverrides },
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: false,
+        observer: { ...observerOverrides },
+      },
       reflection: { observationTokens: 40000 },
     });
   }
@@ -7699,38 +7958,23 @@ describe('Observer Context Optimization', () => {
   }
 
   describe('config validation', () => {
-    it('should throw if contextTokenBudget is not a positive number', () => {
-      expect(() => createOM({ contextTokenBudget: 0 })).toThrow('contextTokenBudget must be a finite number > 0');
-      expect(() => createOM({ contextTokenBudget: -100 })).toThrow('contextTokenBudget must be a finite number > 0');
-      expect(() => createOM({ contextTokenBudget: Infinity })).toThrow(
-        'contextTokenBudget must be a finite number > 0',
+    it('should throw if observer.previousObservationTokens is invalid', () => {
+      expect(() => createOM({ previousObservationTokens: -100 })).toThrow(
+        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
       );
-      expect(() => createOM({ contextTokenBudget: NaN })).toThrow('contextTokenBudget must be a finite number > 0');
-    });
-
-    it('should accept valid contextTokenBudget', () => {
-      expect(() => createOM({ contextTokenBudget: 1 })).not.toThrow();
-      expect(() => createOM({ contextTokenBudget: 5000 })).not.toThrow();
-    });
-
-    it('should throw if minContextTokenSavings is negative', () => {
-      expect(() => createOM({ minContextTokenSavings: -1 })).toThrow(
-        'minContextTokenSavings must be a finite number >= 0',
+      expect(() => createOM({ previousObservationTokens: Infinity })).toThrow(
+        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
       );
-      expect(() => createOM({ minContextTokenSavings: Infinity })).toThrow(
-        'minContextTokenSavings must be a finite number >= 0',
-      );
-      expect(() => createOM({ minContextTokenSavings: NaN })).toThrow(
-        'minContextTokenSavings must be a finite number >= 0',
+      expect(() => createOM({ previousObservationTokens: NaN })).toThrow(
+        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
       );
     });
 
-    it('should accept zero minContextTokenSavings', () => {
-      expect(() => createOM({ minContextTokenSavings: 0 })).not.toThrow();
-    });
-
-    it('should accept valid minContextTokenSavings', () => {
-      expect(() => createOM({ minContextTokenSavings: 100 })).not.toThrow();
+    it('should accept valid observer.previousObservationTokens including 0 and false', () => {
+      expect(() => createOM({ previousObservationTokens: false })).not.toThrow();
+      expect(() => createOM({ previousObservationTokens: 0 })).not.toThrow();
+      expect(() => createOM({ previousObservationTokens: 1 })).not.toThrow();
+      expect(() => createOM({ previousObservationTokens: 5000 })).not.toThrow();
     });
   });
 
@@ -7742,14 +7986,14 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should return undefined when existingObservations is undefined', () => {
-      const om = createOM({ contextTokenBudget: 100 });
+      const om = createOM({ previousObservationTokens: 100 });
       expect(prepareObserverContext(om, undefined)).toBeUndefined();
     });
   });
 
-  describe('prepareObserverContext - contextTokenBudget truncation', () => {
+  describe('prepareObserverContext - observer.previousObservationTokens truncation', () => {
     it('should truncate observations from the start to fit within token budget', () => {
-      const om = createOM({ contextTokenBudget: 20 });
+      const om = createOM({ previousObservationTokens: 20 });
       const tc = new TokenCounter();
 
       // Build observations large enough to exceed budget
@@ -7772,22 +8016,36 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should return observations unchanged when within budget', () => {
-      const om = createOM({ contextTokenBudget: 100_000 });
+      const om = createOM({ previousObservationTokens: 100_000 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       expect(prepareObserverContext(om, observations)).toBe(observations);
     });
 
     it('should handle single line exceeding budget by returning last line', () => {
-      const om = createOM({ contextTokenBudget: 1 });
+      const om = createOM({ previousObservationTokens: 1 });
       const observations = 'Line one\nLine two\nLine three';
       const result = prepareObserverContext(om, observations);
       expect(result).toBe('Line three');
     });
+
+    it('should fully truncate context when observer.previousObservationTokens is 0', () => {
+      const om = createOM({ previousObservationTokens: 0 });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe('');
+    });
+
+    it('should disable truncation when observer.previousObservationTokens is false', () => {
+      const om = createOM({ previousObservationTokens: false });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe(observations);
+    });
   });
 
-  describe('prepareObserverContext - includeBufferedReflection', () => {
+  describe('prepareObserverContext - observer.useBufferedReflection', () => {
     it('should NOT include buffered reflection when disabled (default)', () => {
-      const om = createOM({ includeBufferedReflection: false });
+      const om = createOM({ useBufferedReflection: false });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
@@ -7795,7 +8053,7 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should include buffered reflection when enabled and present', () => {
-      const om = createOM({ includeBufferedReflection: true });
+      const om = createOM({ useBufferedReflection: true });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
@@ -7805,7 +8063,7 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should not append anything when enabled but no buffered reflection exists', () => {
-      const om = createOM({ includeBufferedReflection: true });
+      const om = createOM({ useBufferedReflection: true });
       const observations = '- User likes TypeScript';
       // No bufferedReflection in record
       const record = {};
@@ -7814,62 +8072,9 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should not append anything when enabled but record is null', () => {
-      const om = createOM({ includeBufferedReflection: true });
+      const om = createOM({ useBufferedReflection: true });
       const observations = '- User likes TypeScript';
       const result = prepareObserverContext(om, observations, null);
-      expect(result).toBe(observations);
-    });
-  });
-
-  describe('prepareObserverContext - minContextTokenSavings gating', () => {
-    it('should fall back to baseline when savings are below threshold', () => {
-      // Set a large savings threshold that won't be met without truncation
-      const om = createOM({ minContextTokenSavings: 10_000, includeBufferedReflection: true });
-      const observations = '- Short observations';
-      const record = { bufferedReflection: '- Some reflection' };
-      // With includeBufferedReflection, optimized is LARGER, so savings are negative
-      const result = prepareObserverContext(om, observations, record);
-      // Should fall back to baseline since savings < threshold
-      expect(result).toBe(observations);
-    });
-
-    it('should use optimized context when savings meet threshold', () => {
-      const tc = new TokenCounter();
-      // Build large observations that will be significantly truncated
-      const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
-      const observations = lines.join('\n');
-      const totalTokens = tc.countObservations(observations);
-
-      // Set budget to roughly half the tokens
-      const budget = Math.floor(totalTokens / 2);
-      // Set savings threshold lower than actual savings
-      const om = createOM({ contextTokenBudget: budget, minContextTokenSavings: 10 });
-      const result = prepareObserverContext(om, observations);
-
-      // Should be truncated (not the full original)
-      expect(result).not.toBe(observations);
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
-    });
-
-    it('should accept minContextTokenSavings of 0 (always use optimized when optimization applied)', () => {
-      const tc = new TokenCounter();
-      const lines = Array.from({ length: 30 }, (_, i) => `- Observation line ${i + 1}`);
-      const observations = lines.join('\n');
-
-      // Small budget to force truncation
-      const om = createOM({ contextTokenBudget: 20, minContextTokenSavings: 0 });
-      const result = prepareObserverContext(om, observations);
-      expect(result).not.toBe(observations);
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
-    });
-
-    it('should fall back when only includeBufferedReflection is enabled and it increases token count', () => {
-      const om = createOM({ includeBufferedReflection: true, minContextTokenSavings: 0 });
-      const observations = '- User likes TypeScript';
-      const record = { bufferedReflection: '- Condensed reflection' };
-      // The optimized version is larger (adds reflection), savings are negative
-      const result = prepareObserverContext(om, observations, record);
-      // savings = baselineTokens - optimizedTokens, which is negative, < 0
       expect(result).toBe(observations);
     });
   });
@@ -7883,7 +8088,7 @@ describe('Observer Context Optimization', () => {
 
       // Budget smaller than observations alone, so truncation will happen
       const budget = 50;
-      const om = createOM({ contextTokenBudget: budget, includeBufferedReflection: true });
+      const om = createOM({ previousObservationTokens: budget, useBufferedReflection: true });
       const record = { bufferedReflection: reflectionContent };
 
       const result = prepareObserverContext(om, observations, record);
@@ -7894,7 +8099,7 @@ describe('Observer Context Optimization', () => {
       expect(result!).toContain('Observation line 40');
     });
 
-    it('should apply all three: reflection inclusion + truncation + gating', () => {
+    it('should apply both: reflection inclusion + truncation', () => {
       const tc = new TokenCounter();
       const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
       const observations = lines.join('\n');
@@ -7902,14 +8107,12 @@ describe('Observer Context Optimization', () => {
 
       const budget = Math.floor(totalTokens / 3);
       const om = createOM({
-        contextTokenBudget: budget,
-        includeBufferedReflection: true,
-        minContextTokenSavings: 10,
+        previousObservationTokens: budget,
+        useBufferedReflection: true,
       });
       const record = { bufferedReflection: '- Reflection summary' };
 
       const result = prepareObserverContext(om, observations, record);
-      // With truncation, savings should exceed 10 tokens
       expect(result).not.toBe(observations);
       expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });

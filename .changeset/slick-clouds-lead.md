@@ -3,13 +3,12 @@
 '@mastra/core': patch
 ---
 
-Added opt-in observer context optimization for Observational Memory. Three new fields on the observation config reduce Observer input token costs for long-running conversations:
+Added opt-in observer context optimization for Observational Memory. Two new fields under `observation.observer` reduce Observer input token costs for long-running conversations:
 
-- **contextTokenBudget**: Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations
-- **includeBufferedReflection**: Includes pending buffered reflection content in the Observer's context
-- **minContextTokenSavings**: Gating threshold — only applies optimization when token savings exceed this value. Set to `0` to always optimize. Fully customizable, no enforced minimum.
+- **previousObservationTokens**: Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations. Supports `0` for full truncation and `false` to disable truncation explicitly.
+- **useBufferedReflection**: Includes pending buffered reflection content in the Observer's context while reflection is still buffered.
 
-All three are disabled by default. Existing behavior is unchanged unless you opt in.
+Both are disabled by default. Existing behavior is unchanged unless you opt in.
 
 ```typescript
 const memory = new Memory({
@@ -17,9 +16,10 @@ const memory = new Memory({
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
       observation: {
-        contextTokenBudget: 10_000,
-        includeBufferedReflection: true,
-        minContextTokenSavings: 2_000,
+        observer: {
+          previousObservationTokens: 10_000,
+          useBufferedReflection: true,
+        },
       },
     },
   },

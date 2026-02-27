@@ -145,21 +145,21 @@ export interface ObservationConfig {
   blockAfter?: number;
 
   /**
-   * Optional token budget for observer context.
-   * When set, "Previous Observations" is tail-truncated to preserve the most recent entries.
+   * Observer-specific context options.
    */
-  contextTokenBudget?: number;
+  observer?: {
+    /**
+     * Optional token budget for observer context.
+     * When set, "Previous Observations" is tail-truncated to preserve the most recent entries.
+     * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+     */
+    previousObservationTokens?: number | false;
 
-  /**
-   * Include pending buffered reflection content in observer context before activation.
-   */
-  includeBufferedReflection?: boolean;
-
-  /**
-   * Minimum token savings required before using optimized observer context.
-   * Set to `0` to always use the optimized context when optimization is enabled.
-   */
-  minContextTokenSavings?: number;
+    /**
+     * Include pending buffered reflection content in observer context before activation.
+     */
+    useBufferedReflection?: boolean;
+  };
 
   /**
    * Custom instructions to append to the Observer's system prompt.
