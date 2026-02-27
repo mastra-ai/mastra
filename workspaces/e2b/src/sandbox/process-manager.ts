@@ -83,7 +83,7 @@ class E2BProcessHandle extends ProcessHandle {
     if (this.exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
     }
-    await this._sandbox.commands.sendStdin(this.pid as number, data);
+    await this._sandbox.commands.sendStdin(this._e2bHandle.pid, data);
   }
 }
 
@@ -150,11 +150,14 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     const tracked = this._tracked.get(pid);
     if (tracked) return tracked;
 
-    // Fall back to connect() for unknown PIDs (e.g., pre-existing processes)
+    // Fall back to connect() for unknown PIDs (e.g., pre-existing processes).
+    // E2B only supports numeric PIDs — string PIDs from other providers won't match.
+    if (typeof pid !== 'number') return undefined;
+
     const e2b = this.sandbox.e2b;
     let handle: E2BProcessHandle;
     try {
-      const e2bHandle = await e2b.commands.connect(pid as number, {
+      const e2bHandle = await e2b.commands.connect(pid, {
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
       });

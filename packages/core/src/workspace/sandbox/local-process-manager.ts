@@ -44,7 +44,7 @@ class LocalProcessHandle extends ProcessHandle {
           timedOut = true;
           // Kill the process group so child processes are also terminated
           try {
-            process.kill(-(this.pid as number), 'SIGTERM');
+            process.kill(-proc.pid!, 'SIGTERM');
           } catch {
             proc.kill('SIGTERM');
           }
@@ -105,7 +105,7 @@ class LocalProcessHandle extends ProcessHandle {
     // spawned by the shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
     try {
-      process.kill(-(this.pid as number), 'SIGKILL');
+      process.kill(-this.proc.pid!, 'SIGKILL');
       return true;
     } catch {
       // Fallback to direct kill if process group kill fails
