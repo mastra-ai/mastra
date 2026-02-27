@@ -12,8 +12,8 @@ import {
   createWebSearchTool,
   createWebExtractTool,
   hasTavilyKey,
-  stringReplaceLspTool,
-  astSmartEditTool,
+  createStringReplaceLspTool,
+  createAstSmartEditTool,
   requestSandboxAccessTool,
 } from '../tools';
 
@@ -33,6 +33,8 @@ export function createDynamicTools(mcpManager?: McpManager) {
     const globTool = createGlobTool(projectPath);
     const executeCommandTool = createExecuteCommandTool(projectPath);
     const writeFileTool = createWriteFileTool(projectPath);
+    const stringReplaceLspTool = createStringReplaceLspTool(projectPath);
+    const astSmartEditTool = createAstSmartEditTool(projectPath);
 
     // NOTE: Tool names "grep" and "glob" are reserved by Anthropic's OAuth
     // validation (they match Claude Code's internal tools). We use

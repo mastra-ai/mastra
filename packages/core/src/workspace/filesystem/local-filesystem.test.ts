@@ -443,6 +443,15 @@ describe('LocalFilesystem', () => {
   // Contained Mode (path restrictions)
   // ===========================================================================
   describe('contained mode', () => {
+    it('should expose contained getter as true by default', () => {
+      expect(localFs.contained).toBe(true);
+    });
+
+    it('should expose contained getter as false when set', () => {
+      const uncontainedFs = new LocalFilesystem({ basePath: tempDir, contained: false });
+      expect(uncontainedFs.contained).toBe(false);
+    });
+
     it('should block path traversal by default', async () => {
       await expect(localFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
     });
