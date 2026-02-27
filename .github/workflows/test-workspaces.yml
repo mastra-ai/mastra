@@ -22,6 +22,10 @@ jobs:
       - id: set-packages
         run: |
           PACKAGES=$(ls -d workspaces/*/ | grep -v '_test-utils' | xargs -I{} basename {} | jq -R -s -c 'split("\n")[:-1]')
+          if [ "$PACKAGES" = "[]" ]; then
+            echo "::error::No workspace packages found"
+            exit 1
+          fi
           echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
 
   test-unit:
