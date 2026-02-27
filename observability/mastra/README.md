@@ -49,6 +49,28 @@ export const mastra = new Mastra({
 - `PROCESSOR_RUN` - Processor execution
 - `GENERIC` - Custom operations
 
+## Metrics Labels
+
+All metrics (both auto-extracted and user-emitted) use a consistent set of 8 labels:
+
+| Label         | Description                                                                 | Cardinality                 |
+| ------------- | --------------------------------------------------------------------------- | --------------------------- |
+| `entity_type` | What is being measured (e.g., `agent`, `tool`, `workflow_run`)              | Small enum (~9 values)      |
+| `entity_name` | Name of the entity (e.g., `researcher`, `search`)                           | Bounded by defined entities |
+| `parent_type` | Entity type of the nearest parent                                           | Same small enum             |
+| `parent_name` | Name of the nearest parent entity                                           | Bounded by defined entities |
+| `root_type`   | Entity type of the outermost ancestor (only set when different from parent) | Same small enum             |
+| `root_name`   | Name of the outermost ancestor entity                                       | Bounded by defined entities |
+| `model`       | LLM model ID (only on model generation spans)                               | Bounded by LLM providers    |
+| `provider`    | LLM provider (only on model generation spans)                               | Bounded by LLM providers    |
+
+### Common query patterns
+
+- **Which agent is expensive?** → group by `entity_name` where `entity_type=agent`
+- **Why is this tool slow only sometimes?** → group by `parent_name`
+- **What's the total cost of this user-facing flow?** → group by `root_name`
+- **Which model is cheapest for this agent?** → group by `model` where `entity_name=X`
+
 ## Documentation
 
 For configuration options, exporters, sampling strategies, and more, see the [full documentation](https://mastra.ai/docs/v1/observability/overview).
