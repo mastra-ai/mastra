@@ -198,11 +198,11 @@ export class LSPManager {
    * Returns an empty array on any failure (non-blocking).
    * Uses a per-file lock to serialize concurrent calls for the same file.
    */
-  async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[]> {
+  async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[] | null> {
     const release = await this.acquireFileLock(filePath);
     try {
       const client = await this.getClient(filePath);
-      if (!client) return [];
+      if (!client) return null;
 
       const languageId = getLanguageId(filePath);
       if (!languageId) return [];
