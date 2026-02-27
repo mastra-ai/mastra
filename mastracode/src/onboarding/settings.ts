@@ -130,6 +130,7 @@ const DEFAULTS: GlobalSettings = {
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   modelUseCounts: {},
+  lsp: {},
 };
 
 export function getSettingsPath(): string {

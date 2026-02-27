@@ -1,6 +1,8 @@
 import fs from 'node:fs';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { join } from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -80,6 +82,18 @@ const skillPaths = collectSkillPaths([
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
+/**
+ * Detect the project's package runner from lock files.
+ * Used as a fallback packageRunner for LSP when no binary is found locally or on PATH.
+ */
+function detectPackageRunner(projectPath: string): string | undefined {
+  if (existsSync(join(projectPath, 'pnpm-lock.yaml'))) return 'pnpm dlx';
+  if (existsSync(join(projectPath, 'bun.lockb')) || existsSync(join(projectPath, 'bun.lock'))) return 'bunx';
+  if (existsSync(join(projectPath, 'yarn.lock'))) return 'yarn dlx';
+  if (existsSync(join(projectPath, 'package-lock.json'))) return 'npx --yes';
+  return undefined;
+}
+
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
   const state = ctx?.getState?.();
@@ -114,8 +128,12 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     return existing;
   }
 
-  const lspConfig = loadSettings().lsp ?? true;
-
+  const userLsp = loadSettings().lsp ?? {};
+  const detectedRunner = detectPackageRunner(projectPath);
+  // Detected runner is the fallback — user's packageRunner always wins
+  const lspConfig = detectedRunner
+    ? { packageRunner: detectedRunner, ...userLsp }
+    : userLsp;
 
   // First call for this project — create the workspace
   return new Workspace({
@@ -139,7 +157,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     }),
     ...(isPlanMode ? { tools: planModeTools } : {}),
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
-    ...(lspConfig !== undefined && lspConfig !== false ? { lsp: lspConfig } : {}),
+    lsp: lspConfig,
   });
 }
 
