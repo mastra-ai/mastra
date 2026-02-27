@@ -104,7 +104,7 @@ export function DatasetItemsList({
       <ItemList.Scroller>
         <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
           {isSelectionActive && !maxSelection && (
-            <ItemList.LabelCell className="">
+            <ItemList.LabelCell>
               <Checkbox
                 checked={isIndeterminate ? 'indeterminate' : isAllSelected}
                 onCheckedChange={handleSelectAllToggle}
@@ -174,27 +174,6 @@ export function DatasetItemsList({
           hasMore={hasNextPage}
         />
       </ItemList.Scroller>
-    </ItemList>
-  );
-}
-
-function DatasetItemListSkeleton({ columns = [] }: { columns?: { name: string; label: string; size: string }[] }) {
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns} />
-      <ItemList.Items>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={columns}>
-              {columns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
     </ItemList>
   );
 }

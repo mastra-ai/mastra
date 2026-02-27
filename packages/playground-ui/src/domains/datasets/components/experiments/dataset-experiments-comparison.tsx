@@ -38,7 +38,6 @@ export function DatasetExperimentsComparison({
   const { data, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
   const comparison = data as CompareExperimentsResponse | undefined;
 
-
   const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
   const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
 

@@ -12,8 +12,6 @@ interface ScoreDeltaProps {
  * Shows arrow direction and delta value in neutral color.
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
-  console.log('Rendering ScoreDelta with delta:', delta);
-
   const arrow =
     delta > 0 ? (
       <Chip size="small" color="green" intensity="muted">

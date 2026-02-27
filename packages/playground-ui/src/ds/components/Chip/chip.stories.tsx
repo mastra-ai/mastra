@@ -87,19 +87,27 @@ export const Intensity: Story = {
     <div className="grid gap-3">
       <div className="flex items-center gap-2">
         <Chip color="purple">Bright</Chip>
-        <Chip color="purple" intensity="muted">Muted</Chip>
+        <Chip color="purple" intensity="muted">
+          Muted
+        </Chip>
       </div>
       <div className="flex items-center gap-2">
         <Chip color="cyan">Bright</Chip>
-        <Chip color="cyan" intensity="muted">Muted</Chip>
+        <Chip color="cyan" intensity="muted">
+          Muted
+        </Chip>
       </div>
       <div className="flex items-center gap-2">
         <Chip color="green">Bright</Chip>
-        <Chip color="green" intensity="muted">Muted</Chip>
+        <Chip color="green" intensity="muted">
+          Muted
+        </Chip>
       </div>
       <div className="flex items-center gap-2">
         <Chip color="red">Bright</Chip>
-        <Chip color="red" intensity="muted">Muted</Chip>
+        <Chip color="red" intensity="muted">
+          Muted
+        </Chip>
       </div>
     </div>
   ),
