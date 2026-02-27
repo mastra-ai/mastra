@@ -27,15 +27,13 @@ export CEREBRAS_API_KEY=...
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
-For Anthropic models, the API key is the **primary** authentication method. If `ANTHROPIC_API_KEY` is set, Mastra Code uses it directly with the Anthropic API. This is the recommended path for most users. Claude Max OAuth is only used as a fallback when no API key is available.
-
 ### OAuth login (optional)
 
 If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
-| **Anthropic** | Claude Max subscription | Access to Claude models via your subscription (used only when no API key is set) |
+| **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
@@ -44,11 +42,11 @@ OAuth credentials are stored in `auth.json` alongside the database in the app da
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
 
-1. `ANTHROPIC_API_KEY` environment variable
-1. Stored API key credential (set via the TUI)
-1. Claude Max OAuth (fallback)
+1. Claude Max OAuth (if logged in via `/login`)
+1. `ANTHROPIC_API_KEY` environment variable or stored API key credential
+1. OAuth login prompt (if nothing else is configured)
 
-If you have both an API key and OAuth credentials, the API key is used. To use Claude Max OAuth instead, unset the `ANTHROPIC_API_KEY` environment variable.
+To switch from OAuth to API key usage, log out with `/logout` and set your `ANTHROPIC_API_KEY` environment variable.
 
 ### Anthropic OAuth warning
 
