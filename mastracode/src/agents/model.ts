@@ -1,9 +1,11 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
+import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { opencodeClaudeMaxProvider } from '../providers/claude-max.js';
+import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import type { stateSchema } from '../schema.js';
@@ -46,10 +48,40 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
 }
 
 /**
+ * Resolve the Anthropic API key from environment or stored credentials.
+ * Returns the key if available, undefined otherwise.
+ */
+export function getAnthropicApiKey(): string | undefined {
+  // Environment variable takes priority
+  if (process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_API_KEY;
+  }
+  // Check stored API key credential (set via /apikey or TUI prompt)
+  const storedCred = authStorage.get('anthropic');
+  if (storedCred?.type === 'api_key') {
+    return storedCred.key;
+  }
+  return undefined;
+}
+
+/**
+ * Create an Anthropic model using a direct API key (no OAuth).
+ * Applies prompt caching but NOT the Claude Code identity middleware
+ * (which is only required for Claude Max OAuth).
+ */
+function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
+  const anthropic = createAnthropic({ apiKey });
+  return wrapLanguageModel({
+    model: anthropic(modelId),
+    middleware: [promptCacheMiddleware],
+  });
+}
+
+/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
- * - For anthropic/* models: Uses Claude Max OAuth provider (opencode auth)
+ * - For anthropic/* models: Prefers Claude Max OAuth, falls back to direct API key
  * - For openai/* models with OAuth: Uses OpenAI Codex OAuth provider
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
@@ -73,7 +105,18 @@ export function resolveModel(
       name: 'moonshotai.anthropicv1',
     })(modelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
-    return opencodeClaudeMaxProvider(modelId.substring(`anthropic/`.length));
+    const bareModelId = modelId.substring('anthropic/'.length);
+    // Primary path: Claude Max OAuth
+    if (authStorage.isLoggedIn('anthropic')) {
+      return opencodeClaudeMaxProvider(bareModelId);
+    }
+    // Fallback: direct API key (env var or stored credential)
+    const apiKey = getAnthropicApiKey();
+    if (apiKey) {
+      return anthropicApiKeyProvider(bareModelId, apiKey);
+    }
+    // No auth configured — attempt OAuth provider which will prompt login
+    return opencodeClaudeMaxProvider(bareModelId);
   } else if (isOpenAIModel && authStorage.isLoggedIn('openai-codex')) {
     const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
     return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
