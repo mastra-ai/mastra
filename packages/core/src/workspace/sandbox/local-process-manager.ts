@@ -39,7 +39,6 @@ class LocalProcessHandle extends ProcessHandle {
     this.startTime = startTime;
 
     let timedOut = false;
-
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
