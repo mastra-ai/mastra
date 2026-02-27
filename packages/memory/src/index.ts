@@ -46,7 +46,6 @@ import type {
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
-  CreateObservationalMemoryInput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -1473,23 +1472,31 @@ Notes:
     cloned.resourceId = newResourceId;
 
     // Remap observedMessageIds
-    if (cloned.observedMessageIds) {
+    if (Array.isArray(cloned.observedMessageIds)) {
       cloned.observedMessageIds = cloned.observedMessageIds.map(id => messageIdMap[id] ?? id);
+    } else {
+      cloned.observedMessageIds = undefined;
     }
 
     // Remap deprecated bufferedMessageIds
-    if (cloned.bufferedMessageIds) {
+    if (Array.isArray(cloned.bufferedMessageIds)) {
       cloned.bufferedMessageIds = cloned.bufferedMessageIds.map(id => messageIdMap[id] ?? id);
+    } else {
+      cloned.bufferedMessageIds = undefined;
     }
 
     // Remap bufferedObservationChunks
-    if (cloned.bufferedObservationChunks) {
+    if (Array.isArray(cloned.bufferedObservationChunks)) {
       cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
         (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
           ...chunk,
-          messageIds: chunk.messageIds?.map((id: string) => messageIdMap[id] ?? id),
+          messageIds: Array.isArray(chunk.messageIds)
+            ? chunk.messageIds.map((id: string) => messageIdMap[id] ?? id)
+            : [],
         }),
       );
+    } else {
+      cloned.bufferedObservationChunks = undefined;
     }
 
     // For resource-scoped OM cloned to a new resource, remap thread tags in text fields

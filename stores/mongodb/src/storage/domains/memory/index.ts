@@ -1151,15 +1151,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       if (options?.messageFilter?.startDate) {
         filter.createdAt = filter.createdAt || {};
-        filter.createdAt.$gte = options.messageFilter.startDate instanceof Date
-          ? options.messageFilter.startDate
-          : new Date(options.messageFilter.startDate);
+        filter.createdAt.$gte =
+          options.messageFilter.startDate instanceof Date
+            ? options.messageFilter.startDate
+            : new Date(options.messageFilter.startDate);
       }
       if (options?.messageFilter?.endDate) {
         filter.createdAt = filter.createdAt || {};
-        filter.createdAt.$lte = options.messageFilter.endDate instanceof Date
-          ? options.messageFilter.endDate
-          : new Date(options.messageFilter.endDate);
+        filter.createdAt.$lte =
+          options.messageFilter.endDate instanceof Date
+            ? options.messageFilter.endDate
+            : new Date(options.messageFilter.endDate);
       }
       if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
         filter.id = { $in: options.messageFilter.messageIds };
@@ -1184,8 +1186,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const now = new Date();
       const targetResourceId = resourceId || sourceThread.resourceId;
 
-      const lastMessageId =
-        sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+      const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
 
       const cloneMetadata: ThreadCloneMetadata = {
         sourceThreadId,

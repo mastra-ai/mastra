@@ -1102,24 +1102,29 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
           page,
           perPage: 100,
         });
-        allThreads.push(...threads)
+        allThreads.push(...threads);
         if (!hasMore || threads.length === 0) break;
         page++;
       }
       for (const t of allThreads) {
         try {
           await memoryStore.clearObservationalMemory(t.id, omResourceId);
-        } catch (_) {}
+        } catch {
+          // ignore
+        }
         try {
           await memoryStore.clearObservationalMemory(null, omResourceId);
-        } catch (_) {}
+        } catch {
+          // ignore
+        }
         await memory.deleteThread(t.id);
       }
     };
 
     /** Create a minimal OM record for testing */
     const createOMRecord = (
-      overrides: Partial<ObservationalMemoryRecord> & Pick<ObservationalMemoryRecord, 'scope' | 'threadId' | 'resourceId'>,
+      overrides: Partial<ObservationalMemoryRecord> &
+        Pick<ObservationalMemoryRecord, 'scope' | 'threadId' | 'resourceId'>,
     ): ObservationalMemoryRecord => {
       const now = new Date();
       return {
@@ -1206,7 +1211,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         expect(sourceOM!.activeObservations).toBe('User greeted the assistant. Assistant responded warmly.');
 
         // Clone the thread
-        const { thread: clonedThread, clonedMessages, messageIdMap } = await memory.cloneThread({
+        const { thread: clonedThread } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
@@ -1225,7 +1230,6 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         expect(clonedOM!.originType).toBe('initial');
 
         // Verify observedMessageIds are remapped to cloned message IDs (no source IDs remain)
-        const idMap = messageIdMap ?? {};
         expect(clonedOM!.observedMessageIds).toBeDefined();
         expect(clonedOM!.observedMessageIds!.length).toBe(2);
         for (const clonedMsgId of clonedOM!.observedMessageIds!) {
@@ -1297,11 +1301,10 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         await memoryStore.insertObservationalMemoryRecord(omRecord);
 
         // Clone the thread
-        const { thread: clonedThread, clonedMessages, messageIdMap } = await memory.cloneThread({
+        const { thread: clonedThread } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
-        const idMap = messageIdMap ?? {};
         const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
         expect(clonedOM).toBeDefined();
 
@@ -1377,7 +1380,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         await memoryStore.insertObservationalMemoryRecord(gen1);
 
         // Clone the thread
-        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+        const { thread: clonedThread } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
         });
 
@@ -1500,7 +1503,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         await memoryStore.insertObservationalMemoryRecord(omRecord);
 
         // Clone with a DIFFERENT resourceId
-        const { thread: clonedThread, clonedMessages, messageIdMap } = await memory.cloneThread({
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
           sourceThreadId: sourceThread.id,
           resourceId: newResourceId,
         });
@@ -1533,11 +1536,11 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         // Clean up new resource OM
         try {
           await memoryStore.clearObservationalMemory(null, newResourceId);
-        } catch (_) {}
+        } catch {}
         // Clean up cloned thread
         try {
           await memory.deleteThread(clonedThread.id);
-        } catch (_) {}
+        } catch {}
       });
     });
   });

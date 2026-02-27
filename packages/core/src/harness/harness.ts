@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
@@ -636,7 +637,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       throw new Error('Memory is not configured on this Harness');
     }
 
-    const result = await this.config.memory.cloneThread({
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
       sourceThreadId: sourceId,
       resourceId: resourceId ?? this.resourceId,
       title,
@@ -2465,6 +2468,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================

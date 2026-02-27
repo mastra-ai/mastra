@@ -289,7 +289,11 @@ export class MastraTUI {
 
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.state.pendingLockConflict) {
-      this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid, this.state.pendingLockConflict.threadId);
+      this.showThreadLockPrompt(
+        this.state.pendingLockConflict.threadTitle,
+        this.state.pendingLockConflict.ownerPid,
+        this.state.pendingLockConflict.threadId,
+      );
       this.state.pendingLockConflict = null;
       // Skip onboarding when there's a lock conflict — it'll run on next clean startup
     } else if (this.shouldShowOnboarding()) {
@@ -491,7 +495,10 @@ export class MastraTUI {
               this.state.ui.requestRender();
               showInfo(this.state, `Cloned thread: ${clonedThread.title || clonedThread.id}`);
             } catch (error) {
-              showError(this.state, `Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+              showError(
+                this.state,
+                `Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
           } else if (answer === 'New thread') {
             // pendingNewThread is already true — thread will be

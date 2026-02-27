@@ -94,7 +94,9 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Select Thread')), 0, 0));
     this.addChild(new Spacer(1));
     const cloneHint = this.onCloneCallback ? ' • c clone' : '';
-    this.addChild(new Text(theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0));
+    this.addChild(
+      new Text(theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0),
+    );
     this.addChild(new Spacer(1));
 
     this.searchInput = new Input();

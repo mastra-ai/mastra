@@ -1,7 +1,9 @@
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { Harness } from '@mastra/core/harness';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
 /**
@@ -72,10 +74,7 @@ describe('cloneThread – Observational Memory', () => {
   /**
    * Helper: seed a resource-scoped OM record with data.
    */
-  async function seedResourceScopedOM(
-    memoryStore: MemoryStorage,
-    overrides: Partial<ObservationalMemoryRecord> = {},
-  ) {
+  async function seedResourceScopedOM(memoryStore: MemoryStorage, overrides: Partial<ObservationalMemoryRecord> = {}) {
     const record = await memoryStore.initializeObservationalMemory({
       threadId: null,
       resourceId,
@@ -138,11 +137,7 @@ describe('cloneThread – Observational Memory', () => {
       // Source OM should still exist unmodified
       const sourceOM = await memoryStore.getObservationalMemory('src-thread-1', resourceId);
       expect(sourceOM).not.toBeNull();
-      expect(sourceOM!.observedMessageIds).toEqual([
-        'msg-src-thread-1-0',
-        'msg-src-thread-1-1',
-        'msg-src-thread-1-2',
-      ]);
+      expect(sourceOM!.observedMessageIds).toEqual(['msg-src-thread-1-0', 'msg-src-thread-1-1', 'msg-src-thread-1-2']);
     });
 
     it('should clone OM with remapped bufferedObservationChunks messageIds', async () => {
@@ -196,17 +191,11 @@ describe('cloneThread – Observational Memory', () => {
 
       const clonedChunk1 = clonedOM!.bufferedObservationChunks![0]!;
       expect(clonedChunk1.observations).toBe('* Chunk 1 observation');
-      expect(clonedChunk1.messageIds).toEqual([
-        msgMap['msg-src-thread-2-0'],
-        msgMap['msg-src-thread-2-1'],
-      ]);
+      expect(clonedChunk1.messageIds).toEqual([msgMap['msg-src-thread-2-0'], msgMap['msg-src-thread-2-1']]);
 
       const clonedChunk2 = clonedOM!.bufferedObservationChunks![1]!;
       expect(clonedChunk2.observations).toBe('* Chunk 2 observation');
-      expect(clonedChunk2.messageIds).toEqual([
-        msgMap['msg-src-thread-2-2'],
-        msgMap['msg-src-thread-2-3'],
-      ]);
+      expect(clonedChunk2.messageIds).toEqual([msgMap['msg-src-thread-2-2'], msgMap['msg-src-thread-2-3']]);
     });
 
     it('should reset transient state flags on cloned OM', async () => {
@@ -231,6 +220,39 @@ describe('cloneThread – Observational Memory', () => {
       expect(clonedOM!.isReflecting).toBe(false);
       expect(clonedOM!.isBufferingObservation).toBe(false);
       expect(clonedOM!.isBufferingReflection).toBe(false);
+    });
+
+    it('should handle malformed observedMessageIds without throwing', async () => {
+      await seedThread('src-thread-3b', 2);
+      const memoryStore = await getMemoryStore(memory);
+
+      await seedThreadScopedOM(memoryStore, 'src-thread-3b', {
+        activeObservations: '* Some observation',
+        observedMessageIds: 'msg-src-thread-3b-0' as any,
+        bufferedMessageIds: { bad: true } as any,
+        bufferedObservationChunks: [
+          {
+            id: 'chunk-malformed',
+            cycleId: 'cycle-malformed',
+            observations: '* malformed chunk',
+            tokenCount: 1,
+            messageIds: 'msg-src-thread-3b-1' as any,
+            messageTokens: 1,
+            lastObservedAt: new Date('2024-01-01T10:01:00Z'),
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+        ] as any,
+      });
+
+      const { thread: clonedThread } = await memory.cloneThread({
+        sourceThreadId: 'src-thread-3b',
+      });
+
+      const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+      expect(clonedOM).not.toBeNull();
+      expect(clonedOM!.observedMessageIds).toBeUndefined();
+      expect(clonedOM!.bufferedMessageIds).toBeUndefined();
+      expect(clonedOM!.bufferedObservationChunks?.[0]?.messageIds).toEqual([]);
     });
   });
 
@@ -347,7 +369,7 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       const newResourceId = 'new-om-test-resource';
-      const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+      const { clonedMessages } = await memory.cloneThread({
         sourceThreadId: 'src-thread-res-diff',
         resourceId: newResourceId,
       });
@@ -374,10 +396,7 @@ describe('cloneThread – Observational Memory', () => {
       // Source OM should be unmodified
       const sourceOM = await memoryStore.getObservationalMemory(null, resourceId);
       expect(sourceOM).not.toBeNull();
-      expect(sourceOM!.observedMessageIds).toEqual([
-        'msg-src-thread-res-diff-0',
-        'msg-src-thread-res-diff-1',
-      ]);
+      expect(sourceOM!.observedMessageIds).toEqual(['msg-src-thread-res-diff-0', 'msg-src-thread-res-diff-1']);
     });
 
     it('should remap xxhash-obscured thread tags in activeObservations', async () => {
@@ -468,12 +487,58 @@ describe('cloneThread – Observational Memory', () => {
 
       // bufferedObservationChunks observations remapped
       expect(clonedOM!.bufferedObservationChunks).toHaveLength(1);
-      expect(clonedOM!.bufferedObservationChunks![0]!.observations).toContain(
-        `<thread id="${clonedObscured}">`,
-      );
-      expect(clonedOM!.bufferedObservationChunks![0]!.observations).not.toContain(
-        `<thread id="${sourceObscured}">`,
-      );
+      expect(clonedOM!.bufferedObservationChunks![0]!.observations).toContain(`<thread id="${clonedObscured}">`);
+      expect(clonedOM!.bufferedObservationChunks![0]!.observations).not.toContain(`<thread id="${sourceObscured}">`);
+    });
+  });
+
+  describe('harness dynamic memory factory', () => {
+    it('clones OM records with observedMessageIds via Harness.cloneThread', async () => {
+      await seedThread('src-thread-harness-dynamic', 3);
+      const memoryStore = await getMemoryStore(memory);
+
+      await seedThreadScopedOM(memoryStore, 'src-thread-harness-dynamic', {
+        activeObservations: '* Harness dynamic clone path observation',
+        observedMessageIds: [
+          'msg-src-thread-harness-dynamic-0',
+          'msg-src-thread-harness-dynamic-1',
+          'msg-src-thread-harness-dynamic-2',
+        ],
+      });
+
+      const memoryFactory = vi.fn().mockResolvedValue(memory);
+      const harness = new Harness({
+        id: 'clone-thread-dynamic-memory-test',
+        resourceId,
+        memory: memoryFactory,
+        modes: [
+          {
+            id: 'default',
+            name: 'Default',
+            default: true,
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'test-agent',
+              instructions: 'You are a test agent.',
+              model: 'openai/gpt-4o',
+            }),
+          },
+        ],
+      });
+
+      await harness.init();
+      const clonedThread = await harness.cloneThread({ sourceThreadId: 'src-thread-harness-dynamic' });
+
+      expect(memoryFactory).toHaveBeenCalledTimes(1);
+
+      const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+      expect(clonedOM).not.toBeNull();
+      expect(Array.isArray(clonedOM!.observedMessageIds)).toBe(true);
+      expect(clonedOM!.observedMessageIds).toHaveLength(3);
+
+      const clonedMessages = await memoryStore.listMessages({ threadId: clonedThread.id });
+      const clonedMessageIds = clonedMessages.messages.map(m => m.id);
+      expect(clonedOM!.observedMessageIds!.every(id => clonedMessageIds.includes(id))).toBe(true);
     });
   });
 });
