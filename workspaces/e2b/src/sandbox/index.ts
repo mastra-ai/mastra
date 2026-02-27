@@ -52,7 +52,7 @@ const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
 /**
  * E2B sandbox provider configuration.
  */
-export interface E2BSandboxOptions extends MastraSandboxOptions {
+export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**

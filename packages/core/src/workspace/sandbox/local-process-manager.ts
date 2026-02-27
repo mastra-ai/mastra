@@ -52,9 +52,6 @@ class LocalProcessHandle extends ProcessHandle {
         }, options.timeout)
       : undefined;
 
-    // Abort signal is handled by the base class SandboxProcessManager.spawn() wrapper
-    // which calls handle.kill() when the signal fires. No need to handle it here.
-
     this.waitPromise = new Promise<CommandResult>(resolve => {
       proc.on('close', (code, signal) => {
         if (timeoutId) clearTimeout(timeoutId);

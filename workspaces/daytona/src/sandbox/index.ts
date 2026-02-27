@@ -85,7 +85,7 @@ const SANDBOX_DEAD_PATTERNS: RegExp[] = [
 /**
  * Daytona sandbox provider configuration.
  */
-export interface DaytonaSandboxOptions extends MastraSandboxOptions {
+export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** API key for authentication. Falls back to DAYTONA_API_KEY env var. */

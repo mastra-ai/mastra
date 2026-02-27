@@ -66,7 +66,7 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * Blaxel sandbox provider configuration.
  */
-export interface BlaxelSandboxOptions extends MastraSandboxOptions {
+export interface BlaxelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**

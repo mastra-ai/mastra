@@ -1,6 +1,8 @@
 ---
 '@mastra/core': minor
 '@mastra/blaxel': patch
+'@mastra/e2b': patch
+'@mastra/daytona': patch
 ---
 
 feat(workspace): abort signal and background process callbacks
@@ -10,4 +12,4 @@ feat(workspace): abort signal and background process callbacks
 - Add abort signal support to Blaxel's `executeCommand` override
 - Add `BackgroundProcessConfig` with `onStdout`, `onStderr`, `onExit` callbacks for background processes spawned via `execute_command(background: true)`
 - Add `ExecuteCommandToolConfig` type extending `WorkspaceToolConfig` with `backgroundProcesses` config
-- Fix `LocalSandboxOptions` to properly omit inherited `processes` option
+- Fix sandbox provider options to omit inherited `processes` from constructor options (E2B, Daytona, Blaxel, Local)
