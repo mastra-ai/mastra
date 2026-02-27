@@ -32,6 +32,11 @@ export interface SubagentToolCall {
 const MAX_ACTIVITY_LINES = 15;
 const COLLAPSED_LINES = 15;
 
+export interface SubagentExecutionOptions {
+  /** When true, auto-collapse to a single summary line on completion. Default false. */
+  collapseOnComplete?: boolean;
+}
+
 export class SubagentExecutionComponent extends Container implements IToolExecutionComponent {
   private ui: TUI;
 
@@ -46,13 +51,15 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
   private durationMs = 0;
   private finalResult?: string;
   private expanded = false;
+  private collapseOnComplete: boolean;
 
-  constructor(agentType: string, task: string, ui: TUI, modelId?: string) {
+  constructor(agentType: string, task: string, ui: TUI, modelId?: string, options?: SubagentExecutionOptions) {
     super();
     this.agentType = agentType;
     this.task = task;
     this.modelId = modelId;
     this.ui = ui;
+    this.collapseOnComplete = options?.collapseOnComplete ?? false;
 
     this.rebuild();
   }
@@ -81,7 +88,9 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.isError = isError;
     this.durationMs = durationMs;
     this.finalResult = result;
-    this.expanded = false;
+    if (this.collapseOnComplete) {
+      this.expanded = false;
+    }
     this.rebuild();
   }
 
@@ -120,8 +129,8 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
     const footerText = `${theme.bold(theme.fg('toolTitle', 'subagent'))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
-    // When done and collapsed, render only the single-line footer summary
-    if (this.done && !this.expanded) {
+    // When collapse-on-complete is enabled, render only the single-line footer summary
+    if (this.collapseOnComplete && this.done && !this.expanded) {
       this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
       this.invalidate();
       this.ui.requestRender();

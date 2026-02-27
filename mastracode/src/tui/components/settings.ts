@@ -22,6 +22,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
+  collapseSubagents: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -32,6 +33,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onCollapseSubagentsChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onClose: () => void;
 }
@@ -317,6 +319,34 @@ export class SettingsComponent extends Box implements Focusable {
               config.escapeAsCancel = value === 'on';
               callbacks.onEscapeAsCancelChange(config.escapeAsCancel);
               done(config.escapeAsCancel ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'collapseSubagents',
+        label: 'Collapse subagents',
+        description: 'Auto-collapse subagent output to a single summary line on completion.',
+        currentValue: config.collapseSubagents ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Collapse to summary line when done',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Keep full output visible when done',
+              },
+            ],
+            config.collapseSubagents ? 'on' : 'off',
+            value => {
+              config.collapseSubagents = value === 'on';
+              callbacks.onCollapseSubagentsChange(config.collapseSubagents);
+              done(config.collapseSubagents ? 'On' : 'Off');
             },
             () => done(),
           ),

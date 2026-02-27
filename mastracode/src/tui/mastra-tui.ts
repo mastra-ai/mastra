@@ -69,6 +69,10 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
 
+    // Load user preferences
+    const savedSettings = loadSettings();
+    this.state.collapseSubagents = savedSettings.preferences.collapseSubagents;
+
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {

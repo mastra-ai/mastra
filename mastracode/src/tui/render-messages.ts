@@ -225,6 +225,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
+              { collapseOnComplete: state.collapseSubagents },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
