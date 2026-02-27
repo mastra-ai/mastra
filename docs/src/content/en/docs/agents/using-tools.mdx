@@ -58,7 +58,7 @@ export const weatherTool = createTool({
       location,
       temperature: data.current_condition[0].temp_F,
       condition: data.current_condition[0].weatherDesc[0].value,
-      radarImageUrl: data.current_condition[0].weatherIconUrl[0].value,
+      weatherImageUrl: data.current_condition[0].weatherIconUrl[0].value,
       source: data,
     }
   },
@@ -70,7 +70,7 @@ export const weatherTool = createTool({
           type: 'text',
           text: `${output.location}: ${output.temperature}F and ${output.condition}`,
         },
-        { type: 'image-url', url: output.radarImageUrl },
+        { type: 'image-url', url: output.weatherImageUrl },
       ],
     }
   },

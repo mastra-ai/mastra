@@ -150,9 +150,9 @@ isOptional: true,
 },
 {
 name: "toModelOutput",
-type: "(output: TSchemaOut) => ToolResultOutput",
+type: "(output: TSchemaOut) => unknown",
 description:
-"Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content` (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code.",
+"Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content`-shaped outputs (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code.",
 isOptional: true,
 },
 {
