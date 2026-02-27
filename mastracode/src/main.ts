@@ -5,8 +5,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { isStreamDestroyedError } from './error-classification.js';
 import { loadSettings } from './onboarding/settings.js';
+import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
+import { applyThemeMode } from './tui/theme.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
@@ -18,9 +21,13 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
+  // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
+  // during shutdown, cancelled LLM requests, or LSP/subprocess exits (#13548, #13549)
+  if (isStreamDestroyedError(error)) return;
   handleFatalError(error);
 });
 process.on('unhandledRejection', reason => {
+  if (isStreamDestroyedError(reason)) return;
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
@@ -64,6 +71,19 @@ async function main() {
   console.warn = (...args: unknown[]) => {
     logStream.write(`[WARN] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
   };
+
+  // Detect and apply terminal theme
+  // MASTRA_THEME env var is the highest-priority override
+  const envTheme = process.env.MASTRA_THEME?.toLowerCase();
+  let themeMode: 'dark' | 'light';
+  if (envTheme === 'dark' || envTheme === 'light') {
+    themeMode = envTheme;
+  } else {
+    const settings = loadSettings();
+    const themePref = settings.preferences.theme;
+    themeMode = themePref === 'dark' || themePref === 'light' ? themePref : await detectTerminalTheme();
+  }
+  applyThemeMode(themeMode);
 
   const tui = new MastraTUI({
     harness,

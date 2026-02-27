@@ -36,6 +36,7 @@ import type {
 import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
+import type { FilesystemMountConfig } from './mount';
 
 /**
  * Local filesystem provider configuration.
@@ -99,6 +100,24 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
 }
 
 /**
+ * Mount configuration for local filesystems.
+ *
+ * When a `LocalFilesystem` is used as a mount in a Workspace with `LocalSandbox`,
+ * the sandbox creates a symlink from `<workingDir>/<mountPath>` → `basePath`.
+ * No FUSE tools are needed for local mounts.
+ *
+ * **`contained: false` caveat:** `CompositeFilesystem` strips mount prefixes and
+ * produces absolute virtual paths (e.g. `/file.txt`). A non-contained
+ * `LocalFilesystem` interprets these as real host paths instead of paths relative
+ * to `basePath`, causing incorrect path resolution. Workspace warns at construction
+ * time if this combination is detected.
+ */
+export interface LocalMountConfig extends FilesystemMountConfig {
+  type: 'local';
+  basePath: string;
+}
+
+/**
  * Local filesystem implementation.
  *
  * Stores files in a folder on the user's machine.
@@ -138,6 +157,22 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   /**
+   * Whether file operations are restricted to stay within basePath.
+   *
+   * When `true` (default), absolute paths that don't fall within basePath are
+   * treated as virtual paths (resolved relative to basePath). When `false`,
+   * absolute paths are treated as real filesystem paths.
+   *
+   * **Important:** `contained: false` is incompatible with CompositeFilesystem
+   * mounts because CompositeFilesystem strips mount prefixes and produces
+   * absolute paths (e.g. `/file.txt`), which a non-contained filesystem
+   * interprets as the real host path instead of `basePath/file.txt`.
+   */
+  get contained(): boolean {
+    return this._contained;
+  }
+
+  /**
    * Current set of additional allowed paths (absolute, resolved).
    * These paths are permitted beyond basePath when containment is enabled.
    */
@@ -171,6 +206,14 @@ export class LocalFilesystem extends MastraFilesystem {
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
     this._instructionsOverride = options.instructions;
+  }
+
+  /**
+   * Return mount config for sandbox integration.
+   * LocalSandbox uses this to create a symlink from the mount path to basePath.
+   */
+  getMountConfig(): LocalMountConfig {
+    return { type: 'local', basePath: this._basePath };
   }
 
   private generateId(): string {
@@ -711,7 +754,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up files on destroy by default
+    // LocalFilesystem doesn't delete files on destroy
   }
 
   getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths?: string[] }> {

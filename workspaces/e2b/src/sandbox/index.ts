@@ -306,6 +306,7 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
+
     // Note: processPending is called by base class after start completes
   }
 
@@ -404,7 +405,7 @@ export class E2BSandbox extends MastraSandbox {
   private _getDefaultInstructions(): string {
     const mountCount = this.mounts.entries.size;
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
-    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+    return `Cloud sandbox.${mountInfo}`;
   }
 
   // ---------------------------------------------------------------------------
