@@ -15,6 +15,14 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** A saved custom provider for OpenAI-compatible endpoints. */
+export interface CustomProviderSetting {
+  name: string;
+  url: string;
+  apiKey?: string;
+  models: string[];
+}
+
 /** Storage backend type. */
 export type StorageBackend = 'libsql' | 'pg';
 
@@ -91,6 +99,8 @@ export interface GlobalSettings {
   storage: StorageSettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
+  // User-created custom providers with custom models
+  customProviders: CustomProviderSetting[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
 }
@@ -123,11 +133,57 @@ const DEFAULTS: GlobalSettings = {
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
+  customProviders: [],
   modelUseCounts: {},
 };
 
 export function getSettingsPath(): string {
   return join(getAppDataDir(), 'settings.json');
+}
+
+export function getCustomProviderId(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'provider';
+}
+
+export function toCustomProviderModelId(providerName: string, modelName: string): string {
+  return `${getCustomProviderId(providerName)}/${modelName}`;
+}
+
+export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
+  if (!Array.isArray(rawProviders)) return [];
+
+  const parsedProviders: CustomProviderSetting[] = [];
+  for (const rawProvider of rawProviders) {
+    if (!rawProvider || typeof rawProvider !== 'object') continue;
+
+    const candidate = rawProvider as Record<string, unknown>;
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!name || !url) continue;
+
+    const models = Array.isArray(candidate.models)
+      ? [...new Set(candidate.models.filter((model): model is string => typeof model === 'string').map(model => model.trim()))].filter(
+          model => model.length > 0,
+        )
+      : [];
+
+    const apiKey =
+      typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
+
+    parsedProviders.push({
+      name,
+      url,
+      apiKey,
+      models,
+    });
+  }
+
+  return parsedProviders;
 }
 
 /**
@@ -166,6 +222,7 @@ function migrateFromAuth(settingsPath: string): boolean {
           pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
         },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+        customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       };
     } catch {
@@ -276,6 +333,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
       },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+      customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
     };
 

@@ -3,6 +3,7 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { AuthStorage } from '../auth/storage.js';
+import { getCustomProviderId, loadSettings, toCustomProviderModelId } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -59,6 +60,30 @@ export function resolveModel(
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean },
 ): ResolvedModel {
   authStorage.reload();
+  const [providerId, modelName] = modelId.split('/', 2);
+  const settings = loadSettings();
+  const customProvider =
+    providerId && modelName
+      ? settings.customProviders.find(provider => {
+          const normalizedProviderId = getCustomProviderId(provider.name);
+          const legacyProviderId = `custom-${normalizedProviderId}`;
+          if (providerId !== normalizedProviderId && providerId !== legacyProviderId) return false;
+          return provider.models.some(model => {
+            const normalizedModelId = toCustomProviderModelId(provider.name, model);
+            const legacyModelId = `${legacyProviderId}/${model}`;
+            return modelId === normalizedModelId || modelId === legacyModelId;
+          });
+        })
+      : undefined;
+
+  if (customProvider) {
+    return new ModelRouterLanguageModel({
+      id: modelId,
+      url: customProvider.url,
+      apiKey: customProvider.apiKey,
+    });
+  }
+
   const isAnthropicModel = modelId.startsWith('anthropic/');
   const isOpenAIModel = modelId.startsWith(OPENAI_PREFIX);
   const isMoonshotModel = modelId.startsWith('moonshotai/');

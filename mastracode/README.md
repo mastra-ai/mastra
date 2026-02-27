@@ -79,6 +79,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/new`            | Start a new conversation thread              |
 | `/threads`        | List and switch between threads              |
 | `/models`         | Switch/manage model packs (built-in/custom)  |
+| `/custom-providers` | Manage custom OpenAI-compatible providers/models |
 | `/mode`           | Switch agent mode                            |
 | `/subagents`      | Configure subagent model defaults            |
 | `/om`             | Configure Observational Memory models        |
@@ -133,6 +134,19 @@ The SQLite database is stored in your system's application data directory:
 ### Authentication
 
 OAuth credentials are stored alongside the database in `auth.json`.
+
+### Custom providers and models
+
+Use `/custom-providers` to manage OpenAI-compatible providers with:
+
+- provider `name`
+- provider `url`
+- optional provider `apiKey`
+- one or more custom model IDs per provider
+
+Once saved, provider models appear in existing selectors like `/models` and `/subagents` and can be selected like built-in models.
+
+Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
 
 ### Plan persistence
 

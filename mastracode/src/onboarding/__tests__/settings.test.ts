@@ -1,6 +1,17 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { migrateLegacyVariedPack, parseThreadSettings, resolveThreadActiveModelPackId } from '../settings.js';
+import {
+  getCustomProviderId,
+  loadSettings,
+  migrateLegacyVariedPack,
+  parseCustomProviders,
+  parseThreadSettings,
+  resolveThreadActiveModelPackId,
+  saveSettings,
+} from '../settings.js';
 import type { GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
@@ -23,6 +34,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     preferences: { yolo: null, theme: 'auto' },
     storage,
+    customProviders: [],
     customModelPacks: [
       {
         name: 'My Pack',
@@ -57,6 +69,116 @@ const builtinPacks = [
     },
   },
 ];
+
+function withTempSettingsFile(run: (filePath: string) => void): void {
+  const dir = mkdtempSync(join(tmpdir(), 'mastracode-settings-'));
+  const filePath = join(dir, 'settings.json');
+  try {
+    run(filePath);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('customProviders parsing/persistence', () => {
+  it('returns defaults with empty customProviders when missing from settings file', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.customProviders).toEqual([]);
+    });
+  });
+
+  it('parses and sanitizes custom provider entries', () => {
+    const providers = parseCustomProviders([
+      {
+        name: '  Local OpenAI ',
+        url: ' https://localhost:1234/v1  ',
+        apiKey: '  sk-local  ',
+        models: [' foo/bar ', 'foo/bar', ' baz/qux ', '', 123],
+      },
+      {
+        name: 'No Key Provider',
+        url: 'https://models.example.com/v1',
+        apiKey: '   ',
+        models: ['one/model'],
+      },
+      {
+        name: '',
+        url: 'https://invalid.example.com/v1',
+        models: ['should/not/appear'],
+      },
+      {
+        name: 'Missing URL',
+        url: ' ',
+        models: ['should/not/appear'],
+      },
+      'not-an-object',
+    ]);
+
+    expect(providers).toEqual([
+      {
+        name: 'Local OpenAI',
+        url: 'https://localhost:1234/v1',
+        apiKey: 'sk-local',
+        models: ['foo/bar', 'baz/qux'],
+      },
+      {
+        name: 'No Key Provider',
+        url: 'https://models.example.com/v1',
+        models: ['one/model'],
+      },
+    ]);
+  });
+
+  it('creates custom provider ids without custom- prefix', () => {
+    expect(getCustomProviderId('Acme Provider')).toBe('acme-provider');
+    expect(getCustomProviderId('  !!!  ')).toBe('provider');
+  });
+
+  it('round-trips optional api keys without forcing apiKey field', () => {
+    withTempSettingsFile(filePath => {
+      const initialSettings = createSettings({
+        customProviders: [
+          {
+            name: 'No-Key',
+            url: 'https://no-key.example.com/v1',
+            models: ['no-key/model-1'],
+          },
+          {
+            name: 'With-Key',
+            url: 'https://with-key.example.com/v1',
+            apiKey: 'secret-token',
+            models: ['with-key/model-1', 'with-key/model-2'],
+          },
+        ],
+      });
+
+      saveSettings(initialSettings, filePath);
+
+      const raw = JSON.parse(readFileSync(filePath, 'utf-8')) as { customProviders: Array<Record<string, unknown>> };
+      expect(raw.customProviders[0]).not.toHaveProperty('apiKey');
+      expect(raw.customProviders[1]?.apiKey).toBe('secret-token');
+
+      const loaded = loadSettings(filePath);
+      expect(loaded.customProviders).toEqual([
+        {
+          name: 'No-Key',
+          url: 'https://no-key.example.com/v1',
+          models: ['no-key/model-1'],
+        },
+        {
+          name: 'With-Key',
+          url: 'https://with-key.example.com/v1',
+          apiKey: 'secret-token',
+          models: ['with-key/model-1', 'with-key/model-2'],
+        },
+      ]);
+    });
+  });
+});
 
 describe('parseThreadSettings', () => {
   it('extracts active pack and mode model ids from metadata', () => {
