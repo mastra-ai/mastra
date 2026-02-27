@@ -9,6 +9,8 @@ describe('buildHelpText', () => {
     expect(text).toContain('/new');
     expect(text).toContain('/threads');
     expect(text).toContain('/settings');
+    expect(text).toContain('/models');
+    expect(text).not.toContain('/models:pack');
     expect(text).toContain('/help');
   });
 
@@ -44,7 +46,7 @@ describe('buildHelpText', () => {
   it('shows custom slash commands', () => {
     const text = buildHelpText({
       ...baseOpts,
-      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod' }],
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' }],
     });
     expect(text).toContain('//deploy');
     expect(text).toContain('Deploy to prod');

@@ -11,7 +11,7 @@ import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, executeWithContextSync } from '../../../observability';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -490,7 +490,7 @@ function executeStreamWithFallbackModels<T>(
 export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
-  messageId,
+  messageId: messageIdPassed,
   runId,
   tools,
   toolChoice,
@@ -520,11 +520,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
+  let currentIteration = 0;
+
   return createStep({
     id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      currentIteration++;
+
+      const messageId = inputData.isTaskCompleteCheckFailed
+        ? `${messageIdPassed}-${currentIteration}`
+        : messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -603,7 +610,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext: stepTracingContext,
+              ...createObservabilityContext(stepTracingContext),
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -1046,7 +1053,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext: outputStepTracingContext,
+            ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
             writer: processorWriter,

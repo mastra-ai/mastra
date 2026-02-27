@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import { createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
@@ -120,13 +121,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
           });
 

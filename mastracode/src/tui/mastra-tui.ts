@@ -6,6 +6,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
+import { ANTHROPIC_OAUTH_PROVIDER_ID } from '../auth/claude-max-warning.js';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
   OnboardingInlineComponent,
@@ -16,6 +17,8 @@ import {
   saveSettings,
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
+import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -160,6 +163,11 @@ export class MastraTUI {
           continue;
         }
 
+        const allowed = await this.runUserPromptHook(userInput);
+        if (!allowed) {
+          continue;
+        }
+
         // Collect any pending images from clipboard paste
         const images = this.state.pendingImages.length > 0 ? [...this.state.pendingImages] : undefined;
         this.state.pendingImages = [];
@@ -276,6 +284,9 @@ export class MastraTUI {
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
+    // One-time Claude Max OAuth warning at startup
+    await this.checkClaudeMaxOAuthWarning();
+
     // Show deferred thread lock prompt (must happen after TUI is started)
     if (this.state.pendingLockConflict) {
       this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
@@ -307,6 +318,105 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     await dispatchEvent(event, this.getEventContext(), this.state);
+
+    if (event.type === 'thread_created') {
+      await this.syncThreadActivePackMetadata(event.thread);
+    } else if (event.type === 'thread_changed') {
+      await this.syncThreadActivePackMetadata();
+    }
+
+    if (event.type === 'agent_end') {
+      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+      await this.runStopHook(stopReason);
+    }
+  }
+
+  private async buildProviderAccess(): Promise<ProviderAccess> {
+    const models = await this.state.harness.listAvailableModels();
+    const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
+    const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
+      if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
+      if (hasEnv(provider)) return 'apikey';
+      return false;
+    };
+    return {
+      anthropic: accessLevel('anthropic', 'anthropic'),
+      openai: accessLevel('openai', 'openai-codex'),
+      cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
+      google: hasEnv('google') ? ('apikey' as const) : false,
+      deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+    };
+  }
+
+  private async syncThreadActivePackMetadata(thread?: {
+    id: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const settings = loadSettings();
+    const currentThreadId = this.state.harness.getCurrentThreadId();
+    if (!currentThreadId) return;
+
+    const resolvedThread =
+      thread?.id === currentThreadId
+        ? thread
+        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+    const access = await this.buildProviderAccess();
+    const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
+    const resolvedPackId = resolveThreadActiveModelPackId(
+      settings,
+      packs,
+      resolvedThread?.metadata as Record<string, unknown> | undefined,
+    );
+
+    if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
+      // Re-read settings to avoid overwriting concurrent changes
+      const fresh = loadSettings();
+      if (fresh.models.activeModelPackId !== resolvedPackId) {
+        fresh.models.activeModelPackId = resolvedPackId;
+        saveSettings(fresh);
+      }
+    }
+  }
+
+  private showHookWarnings(event: string, warnings: string[]): void {
+    for (const warning of warnings) {
+      showInfo(this.state, `[${event}] ${warning}`);
+    }
+  }
+
+  private async runStopHook(stopReason: 'complete' | 'aborted' | 'error'): Promise<void> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+
+    try {
+      const result = await hookMgr.runStop(undefined, stopReason);
+      this.showHookWarnings('Stop', result.warnings);
+      if (!result.allowed && result.blockReason) {
+        showError(this.state, `Stop hook blocked: ${result.blockReason}`);
+      }
+    } catch (error) {
+      showError(this.state, `Stop hook failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async runUserPromptHook(userInput: string): Promise<boolean> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return true;
+
+    try {
+      const result = await hookMgr.runUserPromptSubmit(userInput);
+      this.showHookWarnings('UserPromptSubmit', result.warnings);
+
+      if (!result.allowed) {
+        showError(this.state, result.blockReason || 'Blocked by UserPromptSubmit hook');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      showError(this.state, `UserPromptSubmit hook failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   // ===========================================================================
@@ -382,6 +492,31 @@ export class MastraTUI {
     this.state.chatContainer.addChild(new Spacer(1));
     this.state.ui.requestRender();
     this.state.chatContainer.invalidate();
+  }
+
+  /**
+   * One-time startup check: if the user has Anthropic OAuth credentials and
+   * hasn't yet acknowledged the Claude Max ToS warning, show it now.
+   */
+  private async checkClaudeMaxOAuthWarning(): Promise<void> {
+    const authStorage = this.state.authStorage;
+    if (!authStorage || !authStorage.isLoggedIn(ANTHROPIC_OAUTH_PROVIDER_ID)) return;
+
+    const settings = loadSettings();
+    if (settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt) return;
+
+    const result = await showClaudeMaxOAuthWarning(this.state, 'startup');
+
+    if (result === 'continue') {
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+    } else if (result === 'remove') {
+      authStorage.logout(ANTHROPIC_OAUTH_PROVIDER_ID);
+      settings.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+      saveSettings(settings);
+      await this.refreshModelAuthStatus();
+    }
+    // 'cancel' (Esc) — leave settings unchanged, will show again next startup
   }
 
   /**
@@ -527,24 +662,8 @@ export class MastraTUI {
       loggedIn: this.state.authStorage?.isLoggedIn(p.id) ?? false,
     }));
 
-    const buildAccess = async (): Promise<ProviderAccess> => {
-      const models = await this.state.harness.listAvailableModels();
-      const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-      const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
-        if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
-        if (hasEnv(provider)) return 'apikey';
-        return false;
-      };
-      return {
-        anthropic: accessLevel('anthropic', 'anthropic'),
-        openai: accessLevel('openai', 'openai-codex'),
-        cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
-        google: hasEnv('google') ? ('apikey' as const) : false,
-        deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
-      };
-    };
-
-    const access = await buildAccess();
+    const access = await this.buildProviderAccess();
+    const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
@@ -568,6 +687,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
@@ -585,11 +705,25 @@ export class MastraTUI {
           resolve();
         },
         onLogin: (providerId: string, done: () => void) => {
+          // Persist Claude Max OAuth warning acknowledgement when proceeding
+          // through onboarding (the warning step already showed in the wizard).
+          if (providerId === ANTHROPIC_OAUTH_PROVIDER_ID) {
+            const s = loadSettings();
+            s.onboarding.claudeMaxOAuthWarningAcknowledgedAt = new Date().toISOString();
+            saveSettings(s);
+          }
           this.performLogin(providerId).then(async () => {
-            const updatedAccess = await buildAccess();
-            component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-            component.updateOmPacks(getAvailableOmPacks(updatedAccess));
-            done();
+            try {
+              const updatedAccess = await this.buildProviderAccess();
+              const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
+              component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
+              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              component.updateHasProviderAccess(updatedHasAccess);
+            } catch (err) {
+              console.error('Failed to refresh provider access after login:', err);
+            } finally {
+              done();
+            }
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
@@ -670,7 +804,6 @@ export class MastraTUI {
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.modePackId = modePack.id;
     settings.onboarding.omPackId = omPack.id;
 
     const modeDefaults: Record<string, string> = {};
@@ -679,22 +812,27 @@ export class MastraTUI {
       if (modelId) modeDefaults[mode.id] = modelId;
     }
 
-    if (modePack.id === 'custom') {
-      const idx = settings.customModelPacks.findIndex(p => p.name === 'Setup');
-      const entry = { name: 'Setup', models: modeDefaults, createdAt: new Date().toISOString() };
+    let activeModePackId = modePack.id;
+    if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
+      const customName =
+        modePack.id === 'custom' ? modePack.name?.trim() || 'Custom' : modePack.id.slice('custom:'.length) || 'Custom';
+      activeModePackId = `custom:${customName}`;
+      const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
+      const idx = settings.customModelPacks.findIndex(p => p.name === customName);
       if (idx >= 0) {
         settings.customModelPacks[idx] = entry;
       } else {
         settings.customModelPacks.push(entry);
       }
-      settings.models.activeModelPackId = 'custom:Setup';
-      settings.models.modeDefaults = modeDefaults;
-    } else if (modePack.id.startsWith('custom:')) {
-      settings.models.activeModelPackId = modePack.id;
       settings.models.modeDefaults = modeDefaults;
     } else {
-      settings.models.activeModelPackId = modePack.id;
       settings.models.modeDefaults = {};
+    }
+
+    settings.onboarding.modePackId = activeModePackId;
+    settings.models.activeModelPackId = activeModePackId;
+    if (harness.getCurrentThreadId()) {
+      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;
