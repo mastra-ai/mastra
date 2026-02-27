@@ -1,6 +1,6 @@
 # Mastra Observability
 
-Tracing and monitoring for AI operations in Mastra.
+Tracing, metrics, and structured logging for AI operations in Mastra.
 
 ## Installation
 
@@ -38,6 +38,33 @@ export const mastra = new Mastra({
 - **Span Processors** - Transform or filter span data before export
 - **OpenTelemetry Compatible** - Standard trace/span ID formats for integration
 
+## Architecture
+
+### ObservabilityBus
+
+Central event router that dispatches tracing, metric, and log events to registered exporters. All handler promises are tracked for reliable flush and shutdown — no events are silently dropped.
+
+Exporters register via `registerExporter()` and can optionally implement `onLogEvent` and `onMetricEvent` handlers alongside the existing `exportTracingEvent`.
+
+### Auto-extracted metrics
+
+Metrics are automatically extracted from span lifecycle events. When a span ends, the `SpanMetricsExtractor` emits:
+
+- `mastra_agent_runs_started` / `_ended` / `_duration_ms`
+- `mastra_tool_calls_started` / `_ended` / `_duration_ms`
+- `mastra_model_generations_started` / `_ended` / `_duration_ms`
+- `mastra_model_input_tokens` / `_output_tokens` / `_total_tokens`
+- `mastra_workflow_runs_started` / `_ended` / `_duration_ms`
+- `mastra_workflow_steps_started` / `_ended` / `_duration_ms`
+
+### Structured logging
+
+`LoggerContextImpl` emits log events with automatic trace correlation (traceId, spanId), inherited tags, and entity metadata. Supports minimum log level filtering (debug/info/warn/error/fatal).
+
+### Metrics context
+
+`MetricsContextImpl` provides counter, gauge, and histogram instruments. All labels pass through a `CardinalityFilter` that blocks high-cardinality keys (trace_id, user_id, etc.) to protect metric backends.
+
 ## Span Types
 
 - `WORKFLOW_RUN` - Workflow execution
@@ -51,18 +78,20 @@ export const mastra = new Mastra({
 
 ## Metrics Labels
 
-All metrics (both auto-extracted and user-emitted) use a consistent set of 8 labels:
+All metrics (both auto-extracted and user-emitted) use a consistent set of labels:
 
-| Label         | Description                                                                 | Cardinality                 |
-| ------------- | --------------------------------------------------------------------------- | --------------------------- |
-| `entity_type` | What is being measured (e.g., `agent`, `tool`, `workflow_run`)              | Small enum (~9 values)      |
-| `entity_name` | Name of the entity (e.g., `researcher`, `search`)                           | Bounded by defined entities |
-| `parent_type` | Entity type of the nearest parent                                           | Same small enum             |
-| `parent_name` | Name of the nearest parent entity                                           | Bounded by defined entities |
-| `root_type`   | Entity type of the outermost ancestor (only set when different from parent) | Same small enum             |
-| `root_name`   | Name of the outermost ancestor entity                                       | Bounded by defined entities |
-| `model`       | LLM model ID (only on model generation spans)                               | Bounded by LLM providers    |
-| `provider`    | LLM provider (only on model generation spans)                               | Bounded by LLM providers    |
+| Label          | Description                                                                 | Cardinality                 |
+| -------------- | --------------------------------------------------------------------------- | --------------------------- |
+| `entity_type`  | What is being measured (e.g., `agent`, `tool`, `workflow_run`)              | Small enum (~9 values)      |
+| `entity_name`  | Name of the entity (e.g., `researcher`, `search`)                           | Bounded by defined entities |
+| `parent_type`  | Entity type of the nearest parent                                           | Same small enum             |
+| `parent_name`  | Name of the nearest parent entity                                           | Bounded by defined entities |
+| `root_type`    | Entity type of the outermost ancestor (only set when different from parent) | Same small enum             |
+| `root_name`    | Name of the outermost ancestor entity                                       | Bounded by defined entities |
+| `model`        | LLM model ID (only on model generation spans)                               | Bounded by LLM providers    |
+| `provider`     | LLM provider (only on model generation spans)                               | Bounded by LLM providers    |
+| `service_name` | Service name from observability config                                      | Single value per deployment |
+| `status`       | Outcome of the operation (`ok` or `error`), on `_ended` metrics only        | 2 values                    |
 
 ### Common query patterns
 
