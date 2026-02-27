@@ -74,7 +74,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
-  const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.maxOutputTokens;
+  const toolConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+  const tokenLimit = toolConfig?.maxOutputTokens;
   const tokenFrom = 'sandwich' as const;
 
   // Background mode: spawn via process manager and return immediately
@@ -83,7 +84,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       throw new SandboxFeatureNotSupportedError('processes');
     }
 
-    const bgConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.backgroundProcesses;
+    const bgConfig = toolConfig?.backgroundProcesses;
 
     // Resolve abort signal: undefined = use context signal, null/false = disabled
     const bgAbortSignal =
