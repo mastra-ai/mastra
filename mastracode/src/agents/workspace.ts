@@ -5,8 +5,8 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import type { stateSchema } from '../schema';
 import { loadSettings } from '../onboarding/settings.js';
+import type { stateSchema } from '../schema';
 
 // =============================================================================
 // Create Workspace with Skills
