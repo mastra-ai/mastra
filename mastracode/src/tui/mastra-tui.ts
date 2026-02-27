@@ -843,7 +843,7 @@ export class MastraTUI {
     const latestVersion = await fetchLatestVersion();
     if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) return;
 
-    const pm = detectPackageManager();
+    const pm = await detectPackageManager();
     const settings = loadSettings();
 
     // User previously dismissed this exact version — show passive banner note only
@@ -866,7 +866,7 @@ export class MastraTUI {
   private showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
-    pm: ReturnType<typeof detectPackageManager>,
+    pm: Awaited<ReturnType<typeof detectPackageManager>>,
   ): Promise<void> {
     return new Promise<void>(resolve => {
       const questionComponent = new AskQuestionInlineComponent(

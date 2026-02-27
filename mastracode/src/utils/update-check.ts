@@ -2,7 +2,7 @@
  * Check for newer versions of mastracode on npm.
  */
 
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
@@ -34,7 +34,7 @@ function matchPM(str: string): PackageManager | null {
  * 5. Shell-out to `pnpm list -g` to check if pnpm manages the package
  * 6. Falls back to 'npm'
  */
-export function detectPackageManager(): PackageManager {
+export async function detectPackageManager(): Promise<PackageManager> {
   // Tier 1: npm_config_user_agent (most reliable when available)
   const userAgent = process.env.npm_config_user_agent;
   if (userAgent) {
@@ -67,17 +67,13 @@ export function detectPackageManager(): PackageManager {
     // realpathSync can fail if argv[1] is missing/broken — fall through
   }
 
-  // Tier 5: Check if the package is in pnpm's global store
-  try {
-    const out = execFileSync('pnpm', ['list', '-g', '--depth=0', PACKAGE_NAME], {
-      timeout: 3_000,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+  // Tier 5: Check if the package is in pnpm's global store (non-blocking)
+  const pnpmResult = await new Promise<boolean>(resolve => {
+    execFile('pnpm', ['list', '-g', '--depth=0', PACKAGE_NAME], { timeout: 3_000 }, (error, stdout) => {
+      resolve(!error && stdout.includes(PACKAGE_NAME));
     });
-    if (out.includes(PACKAGE_NAME)) return 'pnpm';
-  } catch {
-    // pnpm not installed or command failed
-  }
+  });
+  if (pnpmResult) return 'pnpm';
 
   return 'npm';
 }
