@@ -151,18 +151,19 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     if (tracked) return tracked;
 
     // Fall back to connect() for unknown PIDs (e.g., pre-existing processes).
-    // E2B only supports numeric PIDs — string PIDs from other providers won't match.
-    if (typeof pid !== 'number') return undefined;
+    // E2B supports numeric PIDs; accept numeric strings as well.
+    const numericPid = typeof pid === 'number' ? pid : /^\d+$/.test(pid) ? Number(pid) : undefined;
+    if (numericPid === undefined) return undefined;
 
     const e2b = this.sandbox.e2b;
     let handle: E2BProcessHandle;
     try {
-      const e2bHandle = await e2b.commands.connect(pid, {
+      const e2bHandle = await e2b.commands.connect(numericPid, {
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
       });
       handle = new E2BProcessHandle(e2bHandle, e2b, Date.now());
-      this._tracked.set(this.pidKey(pid), handle);
+      this._tracked.set(this.pidKey(e2bHandle.pid), handle);
       return handle;
     } catch {
       return undefined;
