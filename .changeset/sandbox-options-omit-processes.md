@@ -7,4 +7,4 @@
 
 fix: omit `processes` from sandbox provider constructor options
 
-All sandbox providers (E2B, Daytona, Blaxel) were extending `MastraSandboxOptions` directly, exposing the internal `processes` field in their constructor options. Now uses `Omit<MastraSandboxOptions, 'processes'>` consistently, matching Local.
+All sandbox providers (E2B, Daytona, Blaxel) were extending `MastraSandboxOptions` directly, exposing the internal `processes` field in their constructor options. Now uses `Omit<MastraSandboxOptions, 'processes'>` consistently.
