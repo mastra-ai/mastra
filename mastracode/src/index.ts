@@ -73,6 +73,20 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
 
+  // Load user-entered API keys from auth.json into process.env
+  // (only sets env vars that aren't already present — env vars take precedence)
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    const providerEnvVars: Record<string, string | undefined> = {};
+    for (const [provider, cfg] of Object.entries(registry)) {
+      const envVars = cfg?.apiKeyEnvVar;
+      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+    }
+    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+  } catch {
+    // Non-fatal — provider registry may not be available
+  }
+
   // Project detection
   const project = detectProject(cwd);
 
@@ -279,6 +293,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     modelAuthChecker: provider => {
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
+        return true;
+      }
+      // Check for user-entered API keys stored in auth.json
+      if (authStorage.hasStoredApiKey(provider)) {
         return true;
       }
       return undefined;
