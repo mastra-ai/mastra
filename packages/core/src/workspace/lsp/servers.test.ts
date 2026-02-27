@@ -439,6 +439,16 @@ describe('buildServerDefs', () => {
       expect(defs.eslint!.command(tempDir)).toBe('/opt/bin/vscode-eslint-language-server --stdio');
     });
 
+    it('returns the override path for go', () => {
+      const defs = buildServerDefs({ serverPaths: { go: '/usr/local/bin/gopls serve' } });
+      expect(defs.go!.command()).toBe('/usr/local/bin/gopls serve');
+    });
+
+    it('returns the override path for rust', () => {
+      const defs = buildServerDefs({ serverPaths: { rust: '/usr/local/bin/rust-analyzer --stdio' } });
+      expect(defs.rust!.command()).toBe('/usr/local/bin/rust-analyzer --stdio');
+    });
+
     it('override takes priority over a local binary', () => {
       const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
       mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
@@ -450,14 +460,19 @@ describe('buildServerDefs', () => {
   });
 
   describe('allowNpxFallback', () => {
-    it('returns npx command for typescript when binary not found and fallback enabled', () => {
-      // No binary in tempDir and no typescript module → binary check skipped, npx returned
-      // The typescript command checks for tsserver.js first; since it resolves via cwd fallback
-      // we only check eslint which has no module dependency
+    it('returns npx command for eslint when binary not found and fallback enabled', () => {
       const defs = buildServerDefs({ allowNpxFallback: true });
-      const result = defs.eslint!.command(tempDir);
       // No binary in tempDir → falls back to npx
-      expect(result).toBe('npx --yes vscode-eslint-language-server --stdio');
+      expect(defs.eslint!.command(tempDir)).toBe('npx --yes vscode-eslint-language-server --stdio');
+    });
+
+    it('returns npx command for python after PATH check when fallback enabled', () => {
+      const defs = buildServerDefs({ allowNpxFallback: true });
+      const result = defs.python!.command(tempDir);
+      // Either pyright-langserver is on PATH (returns PATH command) or not (returns npx)
+      // Either way, npx should only appear if PATH lookup also failed
+      if (result === 'pyright-langserver --stdio') return; // on PATH, npx not needed
+      expect(result).toBe('npx --yes pyright-langserver --stdio');
     });
 
     it('does not return npx fallback when disabled (default)', () => {

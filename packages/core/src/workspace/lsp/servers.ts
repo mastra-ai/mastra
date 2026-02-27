@@ -71,6 +71,15 @@ function resolveRequireFromPaths(
   return null;
 }
 
+/** Find a binary in root/node_modules/.bin or cwd/node_modules/.bin. */
+function resolveNodeBin(root: string, binary: string): string | undefined {
+  const local = join(root, 'node_modules', '.bin', binary);
+  const cwd = join(process.cwd(), 'node_modules', '.bin', binary);
+  if (existsSync(local)) return local;
+  if (existsSync(cwd)) return cwd;
+  return undefined;
+}
+
 /**
  * Walk up from a starting directory looking for any of the given markers.
  * Returns the first directory that contains a marker, or null.
@@ -153,94 +162,109 @@ export async function findProjectRootAsync(
 }
 
 /**
- * Built-in LSP server definitions.
+ * Build a set of server definitions that incorporate LSP config overrides.
+ *
+ * Resolution order per server:
+ *  1. `config.serverPaths[id]` — explicit binary path override
+ *  2. Project `node_modules/.bin/` binary
+ *  3. `process.cwd()` `node_modules/.bin/` binary
+ *  4. PATH lookup (for system-installed servers like gopls, rust-analyzer)
+ *  5. `config.allowNpxFallback` — npx last resort (off by default)
+ *
+ * `config.modulePaths` extends TypeScript module resolution
+ * (used to locate typescript/lib/tsserver.js when it lives outside the project).
  */
-export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
-  typescript: {
-    id: 'typescript',
-    name: 'TypeScript Language Server',
-    languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
-    markers: ['tsconfig.json', 'package.json'],
-    command: (root: string) => {
-      const ts = resolveRequire(root, 'typescript/lib/tsserver.js');
-      if (!ts) return undefined;
+export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
+  const { serverPaths, modulePaths, allowNpxFallback = false } = config ?? {};
 
-      // Find typescript-language-server binary: root node_modules, then cwd node_modules
-      const localBin = join(root, 'node_modules', '.bin', 'typescript-language-server');
-      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server');
-      if (existsSync(localBin)) return `${localBin} --stdio`;
-      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
-      return undefined;
+  return {
+    typescript: {
+      id: 'typescript',
+      name: 'TypeScript Language Server',
+      languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
+      markers: ['tsconfig.json', 'package.json'],
+      command: (root: string): string | undefined => {
+        if (serverPaths?.typescript) return serverPaths.typescript;
+        if (!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths)) return undefined;
+        const bin = resolveNodeBin(root, 'typescript-language-server');
+        if (bin) return `${bin} --stdio`;
+        if (allowNpxFallback) return 'npx --yes typescript-language-server --stdio';
+        return undefined;
+      },
+      initialization: (root: string) => {
+        const ts = resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths);
+        if (!ts) return undefined;
+        return { tsserver: { path: ts.resolved, logVerbosity: 'off' } };
+      },
     },
-    initialization: (root: string) => {
-      const ts = resolveRequire(root, 'typescript/lib/tsserver.js');
-      if (!ts) return undefined;
-      return {
-        tsserver: {
-          path: ts.resolved,
-          logVerbosity: 'off',
-        },
-      };
-    },
-  },
 
-  eslint: {
-    id: 'eslint',
-    name: 'ESLint Language Server',
-    languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
-    markers: [
-      'package.json',
-      '.eslintrc.js',
-      '.eslintrc.json',
-      '.eslintrc.yml',
-      '.eslintrc.yaml',
-      'eslint.config.js',
-      'eslint.config.mjs',
-      'eslint.config.ts',
-    ],
-    command: (root: string) => {
-      const localBin = join(root, 'node_modules', '.bin', 'vscode-eslint-language-server');
-      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'vscode-eslint-language-server');
-      if (existsSync(localBin)) return `${localBin} --stdio`;
-      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
-      return undefined;
+    eslint: {
+      id: 'eslint',
+      name: 'ESLint Language Server',
+      languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
+      markers: [
+        'package.json',
+        '.eslintrc.js',
+        '.eslintrc.json',
+        '.eslintrc.yml',
+        '.eslintrc.yaml',
+        'eslint.config.js',
+        'eslint.config.mjs',
+        'eslint.config.ts',
+      ],
+      command: (root: string): string | undefined => {
+        if (serverPaths?.eslint) return serverPaths.eslint;
+        const bin = resolveNodeBin(root, 'vscode-eslint-language-server');
+        if (bin) return `${bin} --stdio`;
+        if (allowNpxFallback) return 'npx --yes vscode-eslint-language-server --stdio';
+        return undefined;
+      },
     },
-  },
 
-  python: {
-    id: 'python',
-    name: 'Python Language Server (Pyright)',
-    languageIds: ['python'],
-    markers: ['pyproject.toml', 'setup.py', 'requirements.txt', 'setup.cfg'],
-    command: (root: string) => {
-      const localBin = join(root, 'node_modules', '.bin', 'pyright-langserver');
-      const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'pyright-langserver');
-      if (existsSync(localBin)) return `${localBin} --stdio`;
-      if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
-      return whichSync('pyright-langserver') ? 'pyright-langserver --stdio' : undefined;
+    python: {
+      id: 'python',
+      name: 'Python Language Server (Pyright)',
+      languageIds: ['python'],
+      markers: ['pyproject.toml', 'setup.py', 'requirements.txt', 'setup.cfg'],
+      command: (root: string): string | undefined => {
+        if (serverPaths?.python) return serverPaths.python;
+        const bin = resolveNodeBin(root, 'pyright-langserver');
+        if (bin) return `${bin} --stdio`;
+        if (whichSync('pyright-langserver')) return 'pyright-langserver --stdio';
+        if (allowNpxFallback) return 'npx --yes pyright-langserver --stdio';
+        return undefined;
+      },
     },
-  },
 
-  go: {
-    id: 'go',
-    name: 'Go Language Server (gopls)',
-    languageIds: ['go'],
-    markers: ['go.mod'],
-    command: () => {
-      return whichSync('gopls') ? 'gopls serve' : undefined;
+    go: {
+      id: 'go',
+      name: 'Go Language Server (gopls)',
+      languageIds: ['go'],
+      markers: ['go.mod'],
+      command: (): string | undefined => {
+        if (serverPaths?.go) return serverPaths.go;
+        return whichSync('gopls') ? 'gopls serve' : undefined;
+      },
     },
-  },
 
-  rust: {
-    id: 'rust',
-    name: 'Rust Language Server (rust-analyzer)',
-    languageIds: ['rust'],
-    markers: ['Cargo.toml'],
-    command: () => {
-      return whichSync('rust-analyzer') ? 'rust-analyzer --stdio' : undefined;
+    rust: {
+      id: 'rust',
+      name: 'Rust Language Server (rust-analyzer)',
+      languageIds: ['rust'],
+      markers: ['Cargo.toml'],
+      command: (): string | undefined => {
+        if (serverPaths?.rust) return serverPaths.rust;
+        return whichSync('rust-analyzer') ? 'rust-analyzer --stdio' : undefined;
+      },
     },
-  },
-};
+  };
+}
+
+/**
+ * Built-in LSP server definitions with no config overrides.
+ * Use `buildServerDefs(config)` when you need serverPaths, modulePaths, or allowNpxFallback.
+ */
+export const BUILTIN_SERVERS: Record<string, LSPServerDef> = buildServerDefs();
 
 /**
  * Get all server definitions that can handle the given file.
@@ -259,76 +283,4 @@ export function getServersForFile(
   const servers = defs ?? BUILTIN_SERVERS;
 
   return Object.values(servers).filter(server => !disabled.has(server.id) && server.languageIds.includes(languageId));
-}
-
-/** NPX fallback commands keyed by server ID. Only populated for servers that can be bootstrapped via npx. */
-const NPX_COMMANDS: Record<string, string> = {
-  typescript: 'npx --yes typescript-language-server --stdio',
-  eslint: 'npx --yes vscode-eslint-language-server --stdio',
-  python: 'npx --yes pyright-langserver --stdio',
-};
-
-/**
- * Build a set of server definitions that incorporate LSP config overrides.
- *
- * Resolution order per server:
- *  1. `config.serverPaths[id]` — explicit binary override
- *  2. Project `node_modules/.bin/` (existing behaviour)
- *  3. `process.cwd()` `node_modules/.bin/` (existing behaviour)
- *  4. PATH lookup (for system-installed servers like gopls, rust-analyzer)
- *  5. `config.allowNpxFallback` — npx last resort (off by default)
- *
- * `config.modulePaths` extends module resolution for the TypeScript server
- * (used to locate typescript/lib/tsserver.js when it lives outside the project).
- */
-export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
-  const serverPaths = config?.serverPaths;
-  const modulePaths = config?.modulePaths;
-  const allowNpxFallback = config?.allowNpxFallback ?? false;
-
-  /** Wrap a command function with serverPaths override and npx fallback. */
-  function wrapCommand(
-    id: string,
-    baseCommand: (root: string) => string | undefined,
-  ): (root: string) => string | undefined {
-    return (root: string): string | undefined => {
-      if (serverPaths?.[id]) return serverPaths[id];
-      const cmd = baseCommand(root);
-      if (cmd !== undefined) return cmd;
-      if (allowNpxFallback && NPX_COMMANDS[id]) return NPX_COMMANDS[id];
-      return undefined;
-    };
-  }
-
-  const result: Record<string, LSPServerDef> = {};
-
-  for (const [id, def] of Object.entries(BUILTIN_SERVERS)) {
-    if (id === 'typescript') {
-      // TypeScript needs module path overrides for both command and initialization
-      const resolveTs = (root: string) => resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths);
-
-      const tsBaseCommand = (root: string): string | undefined => {
-        if (!resolveTs(root)) return undefined;
-        const localBin = join(root, 'node_modules', '.bin', 'typescript-language-server');
-        const cwdBin = join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server');
-        if (existsSync(localBin)) return `${localBin} --stdio`;
-        if (existsSync(cwdBin)) return `${cwdBin} --stdio`;
-        return undefined;
-      };
-
-      result[id] = {
-        ...def,
-        command: wrapCommand(id, tsBaseCommand),
-        initialization: (root: string) => {
-          const ts = resolveTs(root);
-          if (!ts) return undefined;
-          return { tsserver: { path: ts.resolved, logVerbosity: 'off' } };
-        },
-      };
-    } else {
-      result[id] = { ...def, command: wrapCommand(id, def.command) };
-    }
-  }
-
-  return result;
 }
