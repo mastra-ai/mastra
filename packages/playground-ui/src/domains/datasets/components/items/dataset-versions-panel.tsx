@@ -19,7 +19,6 @@ export interface DatasetVersionsPanelProps {
   activeVersion?: number | null;
 }
 
-
 /**
  * Panel showing dataset version history with optional compare selection.
  */

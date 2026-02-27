@@ -15,7 +15,6 @@ const experimentsListColumns = [
   { name: 'date', label: 'Created', size: '10rem' },
 ];
 
-
 /**
  * Truncate experiment ID to first 8 characters or until the first dash
  */
