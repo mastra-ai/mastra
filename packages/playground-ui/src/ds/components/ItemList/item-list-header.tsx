@@ -13,7 +13,7 @@ export function ItemListHeader({ columns, isSelectionActive, children }: ItemLis
   return (
     <div className={cn('sticky top-0 bg-surface3 z-10 rounded-lg px-4 mb-4')}>
       <div
-        className={cn('grid gap-6 text-left items-center uppercase  text-neutral3 tracking-widest text-ui-xs', {
+        className={cn('grid gap-4 text-left items-center uppercase  text-neutral3 tracking-widest text-ui-xs', {
           'pl-12 [&>label]:absolute [&>label]:left-0': isSelectionActive,
         })}
         style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}

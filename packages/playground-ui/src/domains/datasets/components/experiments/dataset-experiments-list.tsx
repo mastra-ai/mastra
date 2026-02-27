@@ -63,13 +63,13 @@ export function DatasetExperimentsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
-        {columns.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
+        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
+          {columns.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
         <ItemList.Items>
           {experiments.map(experiment => {
             const status = experiment.status;
@@ -89,7 +89,6 @@ export function DatasetExperimentsList({
                 )}
                 <ItemList.RowButton
                   item={entry}
-                  isFeatured={isSelected}
                   columns={experimentsListColumns}
                   onClick={() => onRowClick(experiment.id)}
                 >
@@ -97,7 +96,7 @@ export function DatasetExperimentsList({
                   <ItemList.StatusCell status={status} />
                   <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>
                   <ItemList.TextCell>{experiment.targetId}</ItemList.TextCell>
-                  <ItemList.Cell className={cn('flex')}>
+                  <ItemList.Cell>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="flex gap-1">
