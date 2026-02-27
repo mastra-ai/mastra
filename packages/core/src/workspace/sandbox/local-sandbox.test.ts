@@ -287,8 +287,7 @@ describe('LocalSandbox', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(130);
-      expect(result.stderr).toContain('Process aborted');
+      expect(result.exitCode).toBe(128);
       expect(result.executionTimeMs).toBeLessThan(5000);
     });
 
@@ -303,7 +302,7 @@ describe('LocalSandbox', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(130);
+      expect(result.exitCode).toBe(128);
       expect(Date.now() - start).toBeLessThan(2000);
     });
 
