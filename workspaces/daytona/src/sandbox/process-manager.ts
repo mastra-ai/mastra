@@ -12,7 +12,7 @@
  * - The session command finishes cleanly
  */
 
-import type { Sandbox } from '@daytonaio/sdk';
+import type { Sandbox, PtyHandle } from '@daytonaio/sdk';
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import { shellQuote } from '../utils/shell-quote';
@@ -168,6 +168,100 @@ class DaytonaProcessHandle extends ProcessHandle {
 }
 
 // =============================================================================
+// PTY Reconnect Handle (for externally-spawned processes)
+// =============================================================================
+
+/**
+ * Handle for processes discovered via PTY reconnection.
+ * All PTY output is routed to stdout (no stderr separation for reconnected processes).
+ */
+class DaytonaPtyReconnectHandle extends ProcessHandle {
+  readonly pid: number;
+
+  private readonly _ptyHandle: PtyHandle;
+  private readonly _ptySessionId: string;
+  private readonly _sandbox: Sandbox;
+  private readonly _startTime: number;
+
+  private _exitCode: number | undefined;
+  private _waitPromise: Promise<CommandResult> | null = null;
+  private _killed = false;
+
+  constructor(pid: number, ptyHandle: PtyHandle, ptySessionId: string, sandbox: Sandbox) {
+    super();
+    this.pid = pid;
+    this._ptyHandle = ptyHandle;
+    this._ptySessionId = ptySessionId;
+    this._sandbox = sandbox;
+    this._startTime = Date.now();
+  }
+
+  get exitCode(): number | undefined {
+    return this._exitCode;
+  }
+
+  async wait(): Promise<CommandResult> {
+    if (!this._waitPromise) {
+      this._waitPromise = this._doWait();
+    }
+    return this._waitPromise;
+  }
+
+  private async _doWait(): Promise<CommandResult> {
+    if (this._killed) {
+      return {
+        success: false,
+        exitCode: this._exitCode ?? 137,
+        stdout: this.stdout,
+        stderr: this.stderr,
+        executionTimeMs: Date.now() - this._startTime,
+      };
+    }
+
+    try {
+      const result = await this._ptyHandle.wait();
+      this._exitCode = result.exitCode ?? 0;
+    } catch {
+      if (this._exitCode === undefined) {
+        this._exitCode = 1;
+      }
+    }
+
+    return {
+      success: this._exitCode === 0,
+      exitCode: this._exitCode ?? 1,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      executionTimeMs: Date.now() - this._startTime,
+    };
+  }
+
+  async kill(): Promise<boolean> {
+    if (this._exitCode !== undefined) return false;
+    this._killed = true;
+    this._exitCode = 137;
+    try {
+      await this._sandbox.process.killPtySession(this._ptySessionId);
+    } catch {
+      // Session may already be gone
+    }
+    try {
+      await this._ptyHandle.disconnect();
+    } catch {
+      // Best-effort cleanup
+    }
+    return true;
+  }
+
+  async sendStdin(data: string): Promise<void> {
+    if (this._exitCode !== undefined) {
+      throw new Error(`Process ${this.pid} has already exited with code ${this._exitCode}`);
+    }
+    await this._ptyHandle.sendInput(data);
+  }
+}
+
+// =============================================================================
 // Daytona Process Manager
 // =============================================================================
 
@@ -184,6 +278,9 @@ export interface DaytonaProcessManagerOptions {
 export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox> {
   private _nextPid = 1;
   private readonly _defaultTimeout?: number;
+
+  /** Map from PTY session IDs to synthetic PIDs for reconnected sessions. */
+  private readonly _ptySessionToPid = new Map<string, number>();
 
   constructor(opts: DaytonaProcessManagerOptions = {}) {
     super({ env: opts.env });
@@ -250,11 +347,73 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
         exitCode: handle.exitCode,
       });
     }
+
+    // Discover external PTY sessions not managed by us
+    try {
+      const sandbox = this.sandbox.instance;
+      const ptySessions = await sandbox.process.listPtySessions();
+
+      for (const session of ptySessions) {
+        // Skip sessions we created (prefixed with 'mastra-proc-')
+        if (session.id.startsWith('mastra-proc-')) continue;
+        // Skip sessions already tracked via reconnection
+        if (this._ptySessionToPid.has(session.id)) continue;
+
+        // Assign a synthetic PID for display purposes
+        const syntheticPid = this._nextPid++;
+        result.push({
+          pid: syntheticPid,
+          command: `[pty:${session.id}]`,
+          running: session.active,
+        });
+      }
+    } catch {
+      // PTY listing is best-effort — don't fail the entire list
+    }
+
     return result;
   }
 
   async get(pid: number): Promise<ProcessHandle | undefined> {
-    return this._tracked.get(pid);
+    // Check tracked processes first
+    const tracked = this._tracked.get(pid);
+    if (tracked) return tracked;
+
+    // Check dismissed (already pruned)
+    if (this._dismissed.has(pid)) return undefined;
+
+    // PTY fallback: try to discover external PTY sessions
+    try {
+      const sandbox = this.sandbox.instance;
+      const ptySessions = await sandbox.process.listPtySessions();
+
+      for (const session of ptySessions) {
+        // Skip our own sessions
+        if (session.id.startsWith('mastra-proc-')) continue;
+        // Skip already-tracked PTY sessions
+        if (this._ptySessionToPid.has(session.id)) continue;
+
+        // Connect to the first untracked external session
+        const ptyHandle = await sandbox.process.connectPty(session.id, {
+          onData: (data: Uint8Array) => {
+            const text = new TextDecoder().decode(data);
+            reconnectHandle.emitStdout(text);
+          },
+        });
+
+        const syntheticPid = this._nextPid++;
+        const reconnectHandle = new DaytonaPtyReconnectHandle(syntheticPid, ptyHandle, session.id, sandbox);
+
+        this._ptySessionToPid.set(session.id, syntheticPid);
+        this._tracked.set(syntheticPid, reconnectHandle);
+
+        return reconnectHandle;
+      }
+    } catch {
+      // PTY fallback is best-effort
+    }
+
+    return undefined;
   }
 }
 
