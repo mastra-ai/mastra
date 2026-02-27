@@ -1,5 +1,6 @@
 ---
 '@mastra/core': minor
+'@mastra/blaxel': patch
 ---
 
 feat(workspace): abort signal and background process callbacks
