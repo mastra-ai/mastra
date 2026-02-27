@@ -2,4 +2,8 @@
 '@mastra/playground-ui': patch
 ---
 
-Refactor ItemList selection pattern across dataset views. Checkbox cells now use a dedicated `LabelCell` component placed outside `RowButton` as a sibling in `ItemList.Row`. Replaced `Badge` with `Chip` in experiments toolbar for consistency. Experiment comparison selection now keeps the first pick and replaces the most recent when selecting a third item.
+Improved dataset selection behavior in Playground UI.
+
+- Improved selection UX in dataset lists with clearer checkbox interaction.
+- Updated the experiments toolbar selection counter styling for consistency.
+- Updated compare selection behavior: when a third item is selected, the earliest selection is kept and the other selection is replaced.
