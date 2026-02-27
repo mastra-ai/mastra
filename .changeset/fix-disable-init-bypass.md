@@ -3,4 +3,4 @@
 '@mastra/deployer-cloud': patch
 ---
 
-Fixed `disableInit: true` being ignored on `mastra build`. The generated server entry point was unconditionally calling `storage.init()`, executing CREATE TABLE and ALTER TABLE statements on startup even when `disableInit` was set. The entry point now checks `storage.disableInit` before triggering initialization. ([#13570](https://github.com/mastra-ai/mastra/issues/13570))
+Fixed `mastra build` ignoring `disableInit: true` — the built server no longer runs CREATE TABLE / ALTER TABLE statements on startup when `disableInit` is set. ([#13570](https://github.com/mastra-ai/mastra/issues/13570))
