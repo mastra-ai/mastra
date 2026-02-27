@@ -1310,6 +1310,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const textContentById = new Map<string, { index: number; text: string }>();
     const thinkingContentById = new Map<string, { index: number; text: string }>();
+    const abortForOmFailure = ({
+      operationType,
+      stage,
+      error,
+    }: {
+      operationType: string;
+      stage: string;
+      error: string;
+    }) => {
+      this.emit({
+        type: 'error',
+        error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      });
+      this.abort();
+    };
 
     for await (const chunk of response.fullStream) {
       if ('runId' in chunk && chunk.runId) {
@@ -1585,21 +1600,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'data-om-observation-failed': {
           const payload = (chunk as any).data as Record<string, any> | undefined;
           if (payload) {
-            if (payload.operationType === 'reflection') {
+            const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
+            const error = payload.error ?? 'Unknown error';
+
+            if (operationType === 'reflection') {
               this.emit({
                 type: 'om_reflection_failed',
                 cycleId: payload.cycleId ?? 'unknown',
-                error: payload.error ?? 'Unknown error',
+                error,
                 durationMs: payload.durationMs ?? 0,
               });
             } else {
               this.emit({
                 type: 'om_observation_failed',
                 cycleId: payload.cycleId ?? 'unknown',
-                error: payload.error ?? 'Unknown error',
+                error,
                 durationMs: payload.durationMs ?? 0,
               });
             }
+
+            abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: currentMessage };
           }
           break;
         }
@@ -1632,13 +1653,19 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         }
         case 'data-om-buffering-failed': {
           const payload = (chunk as any).data as Record<string, any> | undefined;
-          if (payload && payload.cycleId) {
+          if (payload) {
+            const operationType = payload.operationType ?? 'observation';
+            const error = payload.error ?? 'Unknown error';
+
             this.emit({
               type: 'om_buffering_failed',
               cycleId: payload.cycleId,
-              operationType: payload.operationType ?? 'observation',
-              error: payload.error ?? 'Unknown error',
+              operationType,
+              error,
             });
+
+            abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: currentMessage };
           }
           break;
         }

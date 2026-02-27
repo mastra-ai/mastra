@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { applyTokenLimit } from './output-helpers';
 import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
@@ -46,7 +47,7 @@ Examples:
       ),
   }),
   execute: async ({ path = './', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
     const result = await formatAsTree(filesystem, path, {
@@ -58,6 +59,10 @@ Examples:
       pattern: pattern || undefined,
     });
 
-    return `${result.tree}\n\n${result.summary}`;
+    return await applyTokenLimit(
+      `${result.tree}\n\n${result.summary}`,
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens,
+      'end',
+    );
   },
 });
