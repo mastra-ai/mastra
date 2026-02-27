@@ -27,9 +27,8 @@ import type { DaytonaSandbox } from './index';
  * Not exported — internal to this module.
  */
 class DaytonaProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string;
 
-  private readonly _sessionId: string;
   private readonly _cmdId: string;
   private readonly _sandbox: Sandbox;
   private readonly _startTime: number;
@@ -41,7 +40,6 @@ class DaytonaProcessHandle extends ProcessHandle {
   private _killed = false;
 
   constructor(
-    pid: number,
     sessionId: string,
     cmdId: string,
     sandbox: Sandbox,
@@ -49,8 +47,7 @@ class DaytonaProcessHandle extends ProcessHandle {
     options?: SpawnProcessOptions,
   ) {
     super(options);
-    this.pid = pid;
-    this._sessionId = sessionId;
+    this.pid = sessionId;
     this._cmdId = cmdId;
     this._sandbox = sandbox;
     this._startTime = startTime;
@@ -73,7 +70,7 @@ class DaytonaProcessHandle extends ProcessHandle {
   private async _resolveExitCode(): Promise<void> {
     if (this._exitCode !== undefined) return;
     try {
-      const cmd = await this._sandbox.process.getSessionCommand(this._sessionId, this._cmdId);
+      const cmd = await this._sandbox.process.getSessionCommand(this.pid, this._cmdId);
       this._exitCode = cmd.exitCode ?? 0;
     } catch {
       if (this._exitCode === undefined) {
@@ -152,7 +149,7 @@ class DaytonaProcessHandle extends ProcessHandle {
     this._killed = true;
     this._exitCode = 137; // SIGKILL
     try {
-      await this._sandbox.process.deleteSession(this._sessionId);
+      await this._sandbox.process.deleteSession(this.pid);
     } catch {
       // Session may already be gone
     }
@@ -163,7 +160,7 @@ class DaytonaProcessHandle extends ProcessHandle {
     if (this._exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this._exitCode}`);
     }
-    await this._sandbox.process.sendSessionCommandInput(this._sessionId, this._cmdId, data);
+    await this._sandbox.process.sendSessionCommandInput(this.pid, this._cmdId, data);
   }
 }
 
@@ -182,7 +179,7 @@ export interface DaytonaProcessManagerOptions {
  * Uses the Daytona SDK's session API with one session per spawned process.
  */
 export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox> {
-  private _nextPid = 1;
+  private _spawnCounter = 0;
   private readonly _defaultTimeout?: number;
 
   constructor(opts: DaytonaProcessManagerOptions = {}) {
@@ -198,7 +195,6 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
     };
     return this.sandbox.retryOnDead(async () => {
       const sandbox = this.sandbox.instance;
-      const pid = this._nextPid++;
 
       // Merge default env with per-spawn env
       const mergedEnv = { ...this.env, ...effectiveOptions.env };
@@ -209,8 +205,8 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
       // Build command with baked-in env and cwd, wrapped in subshell
       const sessionCommand = buildSpawnCommand(command, effectiveOptions.cwd, envs);
 
-      // Unique session ID per spawn
-      const sessionId = `mastra-proc-${Date.now().toString(36)}-${pid}`;
+      // Unique session ID per spawn — used as the PID
+      const sessionId = `mastra-proc-${Date.now().toString(36)}-${++this._spawnCounter}`;
 
       await sandbox.process.createSession(sessionId);
 
@@ -219,7 +215,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
         runAsync: true,
       });
 
-      const handle = new DaytonaProcessHandle(pid, sessionId, cmdId, sandbox, Date.now(), effectiveOptions);
+      const handle = new DaytonaProcessHandle(sessionId, cmdId, sandbox, Date.now(), effectiveOptions);
 
       // Start streaming logs — route to handle's emitters
       const streamingPromise = sandbox.process
@@ -235,7 +231,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
 
       handle.streamingPromise = streamingPromise;
 
-      this._tracked.set(pid, handle);
+      this._tracked.set(handle.pid, handle);
       return handle;
     });
   }
@@ -253,7 +249,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
     return result;
   }
 
-  async get(pid: number): Promise<ProcessHandle | undefined> {
+  async get(pid: string | number): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
   }
 }

@@ -35,7 +35,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawns a process and returns a handle with pid',
         async () => {
           const handle = await processes.spawn('echo hello');
-          expect(handle.pid).toBeGreaterThan(0);
+          expect(handle.pid).toBeDefined();
           await handle.wait();
         },
         getContext().testTimeout,

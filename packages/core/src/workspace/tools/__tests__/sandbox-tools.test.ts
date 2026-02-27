@@ -20,7 +20,7 @@ import {
 
 /** Create a mock ProcessHandle with controllable state. */
 function createMockHandle(opts: {
-  pid: number;
+  pid: string | number;
   stdout?: string;
   stderr?: string;
   exitCode?: number;
@@ -56,8 +56,8 @@ function createMockSandbox(
     executeCommand?: (...args: any[]) => Promise<any>;
     processes?: {
       spawn?: (...args: any[]) => Promise<any>;
-      get?: (pid: number) => Promise<any>;
-      kill?: (pid: number) => Promise<boolean>;
+      get?: (pid: string | number) => Promise<any>;
+      kill?: (pid: string | number) => Promise<boolean>;
       list?: () => Promise<any[]>;
     };
   } = {},

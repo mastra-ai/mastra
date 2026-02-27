@@ -22,7 +22,7 @@ import type { E2BSandbox } from './index';
  * methods wire E2B's constructor-time callbacks to handle.emitStdout/emitStderr.
  */
 class E2BProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string | number;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -83,7 +83,7 @@ class E2BProcessHandle extends ProcessHandle {
     if (this.exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
     }
-    await this._sandbox.commands.sendStdin(this.pid, data);
+    await this._sandbox.commands.sendStdin(this.pid as number, data);
   }
 }
 
@@ -146,7 +146,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
    * Checks base class tracking first, then falls back to commands.connect()
    * for processes spawned externally or before reconnection.
    */
-  async get(pid: number): Promise<ProcessHandle | undefined> {
+  async get(pid: string | number): Promise<ProcessHandle | undefined> {
     const tracked = this._tracked.get(pid);
     if (tracked) return tracked;
 
@@ -154,7 +154,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     const e2b = this.sandbox.e2b;
     let handle: E2BProcessHandle;
     try {
-      const e2bHandle = await e2b.commands.connect(pid, {
+      const e2bHandle = await e2b.commands.connect(pid as number, {
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
       });

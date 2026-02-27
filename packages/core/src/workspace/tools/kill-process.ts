@@ -14,7 +14,7 @@ export const killProcessTool = createTool({
 Use this to stop a long-running background process that was started with execute_command (background: true). Returns the last ${KILL_TAIL_LINES} lines of output.`,
   toModelOutput: sandboxToModelOutput,
   inputSchema: z.object({
-    pid: z.number().describe('The process ID of the background process to kill'),
+    pid: z.union([z.number(), z.string()]).describe('The process ID of the background process to kill'),
   }),
   execute: async ({ pid }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
