@@ -12,6 +12,9 @@ const config: Config = {
   favicon: '/img/favicon.ico',
   url: 'https://mastra.ai',
   baseUrl: '/',
+  // hint: do NOT set trailingSlash to any value to avoid rendering issues on vercel
+  // see: https://github.com/slorber/trailing-slash-guide
+  // trailingSlash: false,
   onBrokenLinks: 'throw',
   markdown: {
     hooks: {
