@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
+import { createQuoremEnvironmentConfig } from './utils/quorem-env.js';
 import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { noopLogger } from '@mastra/core/logger';
 
@@ -280,6 +281,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       acquire: acquireThreadLock,
       release: releaseThreadLock,
     },
+    quorem: createQuoremEnvironmentConfig(),
   });
 
   // Sync hookManager session ID on thread changes

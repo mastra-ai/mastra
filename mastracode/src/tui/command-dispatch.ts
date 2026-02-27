@@ -29,6 +29,7 @@ import {
   handleReviewCommand as handleReviewCmd,
   handleSetupCommand,
   handleThemeCommand,
+  handleQuoremCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -142,6 +143,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);
+      return true;
+    case 'quorem':
+      await handleQuoremCommand(buildCtx(), args);
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

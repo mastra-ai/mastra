@@ -206,6 +206,13 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
     acquire: (threadId: string) => void;
     release: (threadId: string) => void;
   };
+
+  /**
+   * Quorem (parallel agent quorum) configuration.
+   * Provides environment management functions for creating isolated
+   * execution contexts for parallel quorem agents.
+   */
+  quorem?: QuoremEnvironmentConfig;
 }
 
 /**
@@ -222,6 +229,104 @@ export interface HarnessOMConfig {
   defaultObservationThreshold?: number;
   /** Default reflection threshold in tokens */
   defaultReflectionThreshold?: number;
+}
+
+// =============================================================================
+// Quorem (Parallel Agent Quorum)
+// =============================================================================
+
+/**
+ * Configuration for a single quorem agent within a quorem session.
+ */
+export interface QuoremAgentConfig {
+  /** Unique identifier for this quorem agent */
+  id: string;
+  /** Optional display label (defaults to id) */
+  label?: string;
+  /** Specific instructions or approach for this agent (appended to mode instructions) */
+  instructions?: string;
+  /** Model ID override for this agent */
+  modelId?: string;
+}
+
+/**
+ * Configuration for starting a quorem session.
+ */
+export interface QuoremSessionConfig {
+  /** The task description all agents will work on */
+  task: string;
+  /** The agents to spawn (each gets its own isolated environment + cloned thread) */
+  agents: QuoremAgentConfig[];
+  /** Optional criteria for evaluating results */
+  evaluationCriteria?: string;
+}
+
+/**
+ * Runtime state of a single quorem agent.
+ */
+export interface QuoremAgentState {
+  /** Unique identifier for this quorem agent */
+  id: string;
+  /** Display label */
+  label: string;
+  /** Current lifecycle status */
+  status: 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+  /** Thread ID assigned to this agent (cloned from main thread) */
+  threadId: string | null;
+  /** Path to the isolated environment for this agent */
+  environmentPath: string | null;
+  /** Reference identifier for the environment (e.g., branch name, container ID) */
+  environmentRef: string | null;
+  /** Summary of changes produced (populated on completion) */
+  summary: string | null;
+  /** Artifacts produced by this agent (e.g., modified files, generated outputs) */
+  artifacts: string[];
+  /** Error message if status is 'error' */
+  error: string | null;
+  /** Duration in milliseconds (populated on completion) */
+  durationMs: number | null;
+  /** Model ID used by this agent */
+  modelId: string | null;
+}
+
+/**
+ * Represents a full quorem session with multiple parallel agents.
+ */
+export interface QuoremSession {
+  /** Unique session identifier */
+  id: string;
+  /** The task all agents are working on */
+  task: string;
+  /** Optional evaluation criteria */
+  evaluationCriteria?: string;
+  /** State of each agent in the session */
+  agents: QuoremAgentState[];
+  /** Overall session status */
+  status: 'running' | 'reviewing' | 'merged' | 'cancelled';
+  /** ID of the winning agent (set after selection) */
+  winnerId: string | null;
+  /** Timestamp when the session started */
+  startedAt: Date;
+  /** Timestamp when the session ended (merged or cancelled) */
+  endedAt: Date | null;
+}
+
+/**
+ * Environment management functions injected by the app layer.
+ * The Harness uses these to create isolated execution environments for quorem agents.
+ * Implementations can back this with git worktrees, containers, temp dirs, etc.
+ */
+export interface QuoremEnvironmentConfig {
+  /** Create an isolated environment at the given path with a reference identifier */
+  createEnvironment: (opts: { path: string; ref: string }) => Promise<void>;
+  /** Remove an isolated environment */
+  removeEnvironment: (opts: { path: string }) => Promise<void>;
+  /** Merge results from an agent's environment into the main context */
+  mergeResults: (opts: { ref: string }) => Promise<void>;
+  /** Get the list of artifacts produced in an environment */
+  getArtifacts: (opts: { path: string }) => Promise<string[]>;
+  /** Get a diff/summary of changes in an environment */
+  getResultDiff: (opts: { path: string }) => Promise<string>;
 }
 
 // =============================================================================
@@ -501,6 +606,10 @@ export interface HarnessDisplayState {
     status: 'pending' | 'in_progress' | 'completed';
     activeForm: string;
   }>;
+
+  // ── Quorem ──────────────────────────────────────────────────────────
+  /** Active quorem session (null when no quorem is running) */
+  activeQuoremSession: QuoremSession | null;
 }
 
 /**
@@ -523,6 +632,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     modifiedFiles: new Map(),
     tasks: [],
     previousTasks: [],
+    activeQuoremSession: null,
   };
 }
 
@@ -722,7 +832,24 @@ export type HarnessEvent =
         activeForm: string;
       }>;
     }
-  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
+  | { type: 'display_state_changed'; displayState: HarnessDisplayState }
+  // ── Quorem events ─────────────────────────────────────────────────────
+  | { type: 'quorem_start'; sessionId: string; task: string; agents: Array<{ id: string; label?: string }> }
+  | { type: 'quorem_agent_start'; sessionId: string; agentId: string; threadId: string; environmentPath: string }
+  | { type: 'quorem_agent_progress'; sessionId: string; agentId: string; summary: string }
+  | {
+      type: 'quorem_agent_end';
+      sessionId: string;
+      agentId: string;
+      status: 'completed' | 'error';
+      summary: string | null;
+      artifacts: string[];
+      durationMs: number;
+      error?: string;
+    }
+  | { type: 'quorem_review_start'; sessionId: string }
+  | { type: 'quorem_merged'; sessionId: string; winnerId: string; environmentRef: string }
+  | { type: 'quorem_cancelled'; sessionId: string };
 
 /**
  * Listener function for harness events.
@@ -824,4 +951,10 @@ export interface HarnessRequestContext<TState extends HarnessStateSchema = Harne
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;
+
+  /** Start a quorem session with parallel agents (used by quorem tool) */
+  startQuoremSession?: (config: QuoremSessionConfig) => Promise<QuoremSession>;
+
+  /** Select a quorem winner and merge their changes (used by quorem_select tool) */
+  selectQuoremWinner?: (winnerId: string) => Promise<void>;
 }

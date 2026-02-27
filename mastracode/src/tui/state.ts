@@ -153,6 +153,10 @@ export interface TUIState {
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
+  // ── Quorem ────────────────────────────────────────────────────────────
+  /** When set, the TUI is viewing a specific quorem agent's thread */
+  viewingQuoremAgentId?: string;
+
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */

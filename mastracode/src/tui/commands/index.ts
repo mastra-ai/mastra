@@ -26,3 +26,4 @@ export { handleLoginCommand } from './login.js';
 export { handleReviewCommand } from './review.js';
 export { handleSetupCommand } from './setup.js';
 export { handleThemeCommand } from './theme.js';
+export { handleQuoremCommand } from './quorem.js';

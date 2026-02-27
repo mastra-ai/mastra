@@ -36,6 +36,13 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
+  handleQuoremStart,
+  handleQuoremAgentStart,
+  handleQuoremAgentProgress,
+  handleQuoremAgentEnd,
+  handleQuoremReviewStart,
+  handleQuoremMerged,
+  handleQuoremCancelled,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
@@ -305,6 +312,35 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'plan_approved':
       // Handled directly in onApprove callback to ensure proper sequencing
+      break;
+
+    // Quorem parallel agent session events
+    case 'quorem_start':
+      handleQuoremStart(ectx, event.sessionId, event.task, event.agents);
+      break;
+
+    case 'quorem_agent_start':
+      handleQuoremAgentStart(ectx, event.sessionId, event.agentId);
+      break;
+
+    case 'quorem_agent_progress':
+      handleQuoremAgentProgress(ectx, event.sessionId, event.agentId, event.summary);
+      break;
+
+    case 'quorem_agent_end':
+      handleQuoremAgentEnd(ectx, event.sessionId, event.agentId, event.status);
+      break;
+
+    case 'quorem_review_start':
+      handleQuoremReviewStart(ectx, event.sessionId);
+      break;
+
+    case 'quorem_merged':
+      handleQuoremMerged(ectx, event.sessionId, event.winnerId);
+      break;
+
+    case 'quorem_cancelled':
+      handleQuoremCancelled(ectx, event.sessionId);
       break;
 
     case 'display_state_changed':

@@ -5,7 +5,7 @@ import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createTool } from '../tools/tool';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessRequestContext, HarnessSubagent, QuoremAgentConfig, QuoremSessionConfig } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
@@ -563,4 +563,124 @@ export function parseSubagentMeta(content: string): {
     : [];
 
   return { text, modelId, durationMs, toolCalls };
+}
+
+// =============================================================================
+// Quorem Tools
+// =============================================================================
+
+/**
+ * Creates a `quorem` tool that allows the agent to spawn parallel quorem agents.
+ * Each quorem agent runs in its own isolated environment with a cloned thread.
+ */
+export function createQuoremTool() {
+  return createTool({
+    id: 'quorem',
+    description: `Spawn multiple parallel agents (a "quorum") to work on the same task with different approaches. Each agent gets its own isolated environment and a copy of the conversation thread. After all agents finish, you review their results and select a winner whose changes get merged.
+
+Use this when:
+- A task has multiple valid approaches and you want to explore them in parallel
+- You want to increase confidence by comparing different implementations
+- The task is complex enough to benefit from diverse strategies`,
+    inputSchema: z.object({
+      task: z.string().describe('The task all quorem agents should work on. Be specific and self-contained.'),
+      agents: z
+        .array(
+          z.object({
+            id: z.string().describe('Unique identifier for this agent (e.g., "approach-a", "conservative")'),
+            label: z.string().optional().describe('Human-readable label for display'),
+            instructions: z
+              .string()
+              .optional()
+              .describe('Specific approach or instructions for this agent. How should it differ from other agents?'),
+            modelId: z.string().optional().describe('Optional model ID override for this agent'),
+          }),
+        )
+        .min(2)
+        .max(5)
+        .describe('The agents to spawn. Each needs a unique id and ideally different instructions.'),
+      evaluationCriteria: z
+        .string()
+        .optional()
+        .describe(
+          'Optional criteria for evaluating results (e.g., "prefer minimal changes", "prioritize correctness")',
+        ),
+    }),
+    execute: async ({ task, agents, evaluationCriteria }, context) => {
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+
+      if (!harnessCtx?.startQuoremSession) {
+        return {
+          content: 'Quorem is not available in this environment.',
+          isError: true,
+        };
+      }
+
+      try {
+        const agentConfigs: QuoremAgentConfig[] = agents.map(a => ({
+          id: a.id,
+          label: a.label,
+          instructions: a.instructions,
+          modelId: a.modelId,
+        }));
+
+        const config: QuoremSessionConfig = {
+          task,
+          agents: agentConfigs,
+          evaluationCriteria,
+        };
+
+        const session = await harnessCtx.startQuoremSession(config);
+
+        return {
+          content: `Quorem session started (id: ${session.id}) with ${agents.length} agents: ${agents.map(a => a.label ?? a.id).join(', ')}. Agents are running in parallel. You'll be notified when they complete. Use the quorem_select tool to pick a winner after reviewing results.`,
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: `Failed to start quorem session: ${error instanceof Error ? error.message : String(error)}`,
+          isError: true,
+        };
+      }
+    },
+  });
+}
+
+/**
+ * Creates a `quorem_select` tool that allows the agent to select a winning quorem agent
+ * and merge their changes.
+ */
+export function createQuoremSelectTool() {
+  return createTool({
+    id: 'quorem_select',
+    description: `Select the winning agent from a completed quorem session and merge their changes. Use this after reviewing all quorem agent results to pick the best approach.`,
+    inputSchema: z.object({
+      winnerId: z.string().describe('The ID of the winning quorem agent whose changes should be merged.'),
+      reasoning: z.string().describe('Explain why this agent was selected over the others.'),
+    }),
+    execute: async ({ winnerId, reasoning }, context) => {
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+
+      if (!harnessCtx?.selectQuoremWinner) {
+        return {
+          content: 'Quorem is not available in this environment.',
+          isError: true,
+        };
+      }
+
+      try {
+        await harnessCtx.selectQuoremWinner(winnerId);
+
+        return {
+          content: `Quorem winner selected: "${winnerId}". Changes have been merged.\n\nReasoning: ${reasoning}`,
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: `Failed to select quorem winner: ${error instanceof Error ? error.message : String(error)}`,
+          isError: true,
+        };
+      }
+    },
+  });
 }

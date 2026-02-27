@@ -1,5 +1,13 @@
 export { Harness } from './harness';
-export { askUserTool, parseSubagentMeta, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+export {
+  askUserTool,
+  createQuoremSelectTool,
+  createQuoremTool,
+  parseSubagentMeta,
+  submitPlanTool,
+  taskCheckTool,
+  taskWriteTool,
+} from './tools';
 export type { TaskItem } from './tools';
 export { defaultDisplayState, defaultOMProgressState } from './types';
 export type {
@@ -28,6 +36,11 @@ export type {
   OMStatus,
   PermissionPolicy,
   PermissionRules,
+  QuoremAgentConfig,
+  QuoremAgentState,
+  QuoremSession,
+  QuoremSessionConfig,
+  QuoremEnvironmentConfig,
   ToolCategory,
   TokenUsage,
 } from './types';

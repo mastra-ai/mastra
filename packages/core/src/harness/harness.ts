@@ -9,7 +9,15 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+import {
+  askUserTool,
+  createQuoremSelectTool,
+  createQuoremTool,
+  createSubagentTool,
+  submitPlanTool,
+  taskCheckTool,
+  taskWriteTool,
+} from './tools';
 import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
@@ -28,6 +36,10 @@ import type {
   ModelAuthStatus,
   PermissionPolicy,
   PermissionRules,
+  QuoremAgentConfig,
+  QuoremAgentState,
+  QuoremSession,
+  QuoremSessionConfig,
   ToolCategory,
 } from './types';
 
@@ -92,6 +104,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  private quoremSession: QuoremSession | null = null;
 
   constructor(config: HarnessConfig<TState>) {
     this.id = config.id;
@@ -2278,6 +2291,85 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         break;
       }
 
+      // ── Quorem lifecycle ───────────────────────────────────────────────
+      case 'quorem_start': {
+        ds.activeQuoremSession = {
+          id: event.sessionId,
+          task: event.task,
+          status: 'running',
+          agents: event.agents.map(a => ({
+            id: a.id,
+            label: a.label ?? a.id,
+            status: 'pending' as const,
+            threadId: null,
+            environmentPath: null,
+            environmentRef: null,
+            summary: null,
+            artifacts: [],
+            error: null,
+            durationMs: null,
+            modelId: null,
+          })),
+          winnerId: null,
+          startedAt: new Date(),
+          endedAt: null,
+        };
+        break;
+      }
+
+      case 'quorem_agent_start': {
+        const qAgent = ds.activeQuoremSession?.agents.find(a => a.id === event.agentId);
+        if (qAgent) {
+          qAgent.status = 'running';
+          qAgent.threadId = event.threadId;
+          qAgent.environmentPath = event.environmentPath;
+        }
+        break;
+      }
+
+      case 'quorem_agent_progress': {
+        // Progress events can carry partial text or status updates
+        break;
+      }
+
+      case 'quorem_agent_end': {
+        const qAgent = ds.activeQuoremSession?.agents.find(a => a.id === event.agentId);
+        if (qAgent) {
+          qAgent.status = event.status;
+          qAgent.summary = event.summary;
+          qAgent.artifacts = event.artifacts;
+          qAgent.durationMs = event.durationMs;
+          if (event.error) {
+            qAgent.error = event.error;
+          }
+        }
+        break;
+      }
+
+      case 'quorem_review_start': {
+        if (ds.activeQuoremSession) {
+          ds.activeQuoremSession.status = 'reviewing';
+        }
+        break;
+      }
+
+      case 'quorem_merged': {
+        if (ds.activeQuoremSession) {
+          ds.activeQuoremSession.status = 'merged';
+          ds.activeQuoremSession.winnerId = event.winnerId;
+          ds.activeQuoremSession.endedAt = new Date();
+        }
+        break;
+      }
+
+      case 'quorem_cancelled': {
+        if (ds.activeQuoremSession) {
+          ds.activeQuoremSession.status = 'cancelled';
+          ds.activeQuoremSession.endedAt = new Date();
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -2321,6 +2413,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     }
 
+    // Auto-create quorem tools if quorem worktree config is present
+    if (this.config.quorem) {
+      builtInTools.quorem = createQuoremTool();
+      builtInTools.quorem_select = createQuoremSelectTool();
+    }
+
     if (resolvedHarnessTools) {
       return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
     }
@@ -2346,6 +2444,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       registerQuestion: params => this.registerQuestion(params),
       registerPlanApproval: params => this.registerPlanApproval(params),
       getSubagentModelId: params => this.getSubagentModelId(params),
+      startQuoremSession: config => this.startQuoremSession(config),
+      selectQuoremWinner: winnerId => this.selectQuoremWinner(winnerId),
     };
 
     const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
@@ -2521,6 +2621,317 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       currentModeId: this.currentModeId,
       threads: await this.listThreads(),
     };
+  }
+
+  // ===========================================================================
+  // Quorem (Parallel Agent Quorum)
+  // ===========================================================================
+
+  /**
+   * Start a quorem session: spawn N parallel agents, each in its own git
+   * worktree with a cloned thread, working on the same task.
+   */
+  async startQuoremSession(config: QuoremSessionConfig): Promise<QuoremSession> {
+    if (this.quoremSession?.status === 'running') {
+      throw new Error('A quorem session is already running. Cancel it first.');
+    }
+    if (!this.config.quorem) {
+      throw new Error('Quorem is not configured. Provide quorem worktree functions in HarnessConfig.');
+    }
+    if (!this.currentThreadId) {
+      throw new Error('No active thread. Start a conversation before launching quorem.');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is required for quorem (thread cloning).');
+    }
+
+    const sessionId = this.generateId();
+
+    // Build agent states
+    const agents: QuoremAgentState[] = config.agents.map(a => ({
+      id: a.id,
+      label: a.label ?? a.id,
+      status: 'pending' as const,
+      threadId: null,
+      environmentPath: null,
+      environmentRef: null,
+      summary: null,
+      artifacts: [],
+      error: null,
+      durationMs: null,
+      modelId: a.modelId ?? this.getCurrentModelId() ?? null,
+    }));
+
+    const session: QuoremSession = {
+      id: sessionId,
+      task: config.task,
+      evaluationCriteria: config.evaluationCriteria,
+      agents,
+      status: 'running',
+      winnerId: null,
+      startedAt: new Date(),
+      endedAt: null,
+    };
+
+    this.quoremSession = session;
+    this.emit({
+      type: 'quorem_start',
+      sessionId,
+      task: config.task,
+      agents: config.agents.map(a => ({ id: a.id, label: a.label })),
+    });
+
+    // Launch agents in parallel
+    const promises = config.agents.map(agentConfig => this.launchQuoremAgent(session, agentConfig));
+    // Don't await — agents run in background. The main thread continues.
+    void Promise.allSettled(promises).then(() => {
+      // When all agents finish, transition to review mode
+      if (this.quoremSession?.id === sessionId && this.quoremSession.status === 'running') {
+        this.quoremSession.status = 'reviewing';
+        this.emit({ type: 'quorem_review_start', sessionId });
+      }
+    });
+
+    return session;
+  }
+
+  /**
+   * Launch a single quorem agent in an isolated environment with a cloned thread.
+   */
+  private async launchQuoremAgent(session: QuoremSession, agentConfig: QuoremAgentConfig): Promise<void> {
+    const agentState = session.agents.find(a => a.id === agentConfig.id);
+    if (!agentState) return;
+
+    const startTime = Date.now();
+    const envRef = `quorem/${session.id}/${agentConfig.id}`;
+    const envPath = `.quorem-environments/${session.id}/${agentConfig.id}`;
+
+    try {
+      // 1. Create isolated environment
+      await this.config.quorem!.createEnvironment({ path: envPath, ref: envRef });
+      agentState.environmentPath = envPath;
+      agentState.environmentRef = envRef;
+
+      // 2. Clone thread
+      const cloneResult = await this.config.memory!.cloneThread({
+        sourceThreadId: this.currentThreadId!,
+        newThreadId: `quorem-${session.id}-${agentConfig.id}`,
+        resourceId: this.resourceId,
+        title: `Quorem: ${agentConfig.label ?? agentConfig.id} — ${session.task.slice(0, 50)}`,
+        metadata: {
+          quoremSessionId: session.id,
+          quoremAgentId: agentConfig.id,
+        },
+      });
+      agentState.threadId = cloneResult.thread.id;
+
+      // 3. Mark agent as running
+      agentState.status = 'running';
+      this.emit({
+        type: 'quorem_agent_start',
+        sessionId: session.id,
+        agentId: agentConfig.id,
+        threadId: cloneResult.thread.id,
+        environmentPath: envPath,
+      });
+
+      // 4. Create a fresh agent and run it
+      const currentMode = this.getCurrentMode();
+      const baseAgent = typeof currentMode.agent === 'function' ? currentMode.agent(this.state) : currentMode.agent;
+      const baseInstructions = baseAgent.getInstructions();
+
+      const quoremInstructions = [
+        baseInstructions,
+        `\n\n## Quorem Task\n\nYou are one of several parallel agents working on the same task. Your working directory is: ${envPath}\n\n${session.task}`,
+        agentConfig.instructions ? `\n\n## Approach\n${agentConfig.instructions}` : '',
+      ]
+        .filter(Boolean)
+        .join('');
+
+      const modelId = agentConfig.modelId ?? this.getCurrentModelId();
+      if (!modelId || !this.config.resolveModel) {
+        throw new Error('No model available for quorem agent');
+      }
+
+      const model = this.config.resolveModel(modelId);
+
+      // Import Agent locally to avoid circular deps at top level
+      const { Agent } = await import('../agent');
+
+      const requestContext = await this.buildRequestContext();
+
+      // Build tools for quorem agent (same tools as main agent)
+      const toolsets = await this.buildToolsets(requestContext);
+      const mergedTools: ToolsInput = {};
+      for (const [, tools] of Object.entries(toolsets)) {
+        Object.assign(mergedTools, tools);
+      }
+
+      const quoremAgent = new Agent({
+        id: `quorem-${agentConfig.id}`,
+        name: `Quorem Agent: ${agentConfig.label ?? agentConfig.id}`,
+        instructions: quoremInstructions,
+        model,
+        tools: mergedTools,
+      });
+
+      // 5. Run the agent
+      const response = await quoremAgent.stream(
+        `Complete this task in the environment at ${envPath}:\n\n${session.task}`,
+        {
+          memory: { thread: cloneResult.thread.id, resource: this.resourceId },
+          maxSteps: 1000,
+          requestContext,
+        } as any,
+      );
+
+      // Consume the stream
+      let partialText = '';
+      for await (const chunk of response.fullStream) {
+        if (chunk.type === 'text-delta') {
+          partialText += chunk.payload.text;
+        }
+      }
+
+      const fullOutput = await response.getFullOutput();
+      const resultText = fullOutput.text || partialText;
+
+      // 6. Collect results
+      const artifacts = await this.config.quorem!.getArtifacts({ path: envPath });
+      agentState.artifacts = artifacts;
+      agentState.summary = resultText.slice(0, 2000); // Truncate summary
+      agentState.status = 'completed';
+      agentState.durationMs = Date.now() - startTime;
+
+      this.emit({
+        type: 'quorem_agent_end',
+        sessionId: session.id,
+        agentId: agentConfig.id,
+        status: 'completed',
+        summary: agentState.summary,
+        artifacts,
+        durationMs: agentState.durationMs,
+      });
+    } catch (error) {
+      agentState.status = 'error';
+      agentState.error = error instanceof Error ? error.message : String(error);
+      agentState.durationMs = Date.now() - startTime;
+
+      this.emit({
+        type: 'quorem_agent_end',
+        sessionId: session.id,
+        agentId: agentConfig.id,
+        status: 'error',
+        summary: null,
+        artifacts: [],
+        durationMs: agentState.durationMs,
+        error: agentState.error,
+      });
+    }
+  }
+
+  /**
+   * Get review data for a quorem agent: its diff and artifacts.
+   */
+  async reviewQuoremAgent(agentId: string): Promise<{ diff: string; artifacts: string[] } | null> {
+    if (!this.quoremSession || !this.config.quorem) return null;
+
+    const agentState = this.quoremSession.agents.find(a => a.id === agentId);
+    if (!agentState?.environmentPath) return null;
+
+    const diff = await this.config.quorem.getResultDiff({ path: agentState.environmentPath });
+    const artifacts = await this.config.quorem.getArtifacts({ path: agentState.environmentPath });
+    return { diff, artifacts };
+  }
+
+  /**
+   * Select a quorem winner and merge their environment's results.
+   */
+  async selectQuoremWinner(winnerId: string): Promise<void> {
+    if (!this.quoremSession) {
+      throw new Error('No active quorem session.');
+    }
+    if (!this.config.quorem) {
+      throw new Error('Quorem environment config not available.');
+    }
+
+    const winner = this.quoremSession.agents.find(a => a.id === winnerId);
+    if (!winner) {
+      throw new Error(`Quorem agent not found: ${winnerId}`);
+    }
+    if (winner.status !== 'completed') {
+      throw new Error(`Cannot select agent "${winnerId}" — status is "${winner.status}", expected "completed".`);
+    }
+    if (!winner.environmentRef) {
+      throw new Error(`Agent "${winnerId}" has no environment reference.`);
+    }
+
+    // Merge the winner's results
+    await this.config.quorem.mergeResults({ ref: winner.environmentRef });
+
+    this.quoremSession.winnerId = winnerId;
+    this.quoremSession.status = 'merged';
+    this.quoremSession.endedAt = new Date();
+
+    this.emit({
+      type: 'quorem_merged',
+      sessionId: this.quoremSession.id,
+      winnerId,
+      environmentRef: winner.environmentRef,
+    });
+
+    // Clean up all environments
+    await this.cleanupQuoremEnvironments();
+    this.quoremSession = null;
+  }
+
+  /**
+   * Cancel the active quorem session and clean up environments.
+   */
+  async cancelQuoremSession(): Promise<void> {
+    if (!this.quoremSession) {
+      throw new Error('No active quorem session.');
+    }
+
+    const sessionId = this.quoremSession.id;
+
+    // Mark running agents as cancelled
+    for (const agent of this.quoremSession.agents) {
+      if (agent.status === 'running' || agent.status === 'pending') {
+        agent.status = 'cancelled';
+      }
+    }
+
+    this.quoremSession.status = 'cancelled';
+    this.quoremSession.endedAt = new Date();
+    this.emit({ type: 'quorem_cancelled', sessionId });
+
+    await this.cleanupQuoremEnvironments();
+    this.quoremSession = null;
+  }
+
+  /**
+   * Get the active quorem session (if any).
+   */
+  getQuoremSession(): QuoremSession | null {
+    return this.quoremSession;
+  }
+
+  /**
+   * Clean up all quorem environments for the current session.
+   */
+  private async cleanupQuoremEnvironments(): Promise<void> {
+    if (!this.quoremSession || !this.config.quorem) return;
+
+    for (const agent of this.quoremSession.agents) {
+      if (agent.environmentPath) {
+        try {
+          await this.config.quorem.removeEnvironment({ path: agent.environmentPath });
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+    }
   }
 
   // ===========================================================================
