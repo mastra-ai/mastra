@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { LOG_PREFIX } from '../index';
@@ -58,7 +60,8 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
   const hasCredentials = config.accessKeyId && config.secretAccessKey;
-  const credentialsPath = '/tmp/.passwd-s3fs';
+  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   if (!hasCredentials && config.endpoint) {
     throw new Error(

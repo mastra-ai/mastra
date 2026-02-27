@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { LOG_PREFIX } from '../index';
@@ -79,7 +81,8 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   let mountCmd: string;
 
   if (hasCredentials) {
-    const keyPath = '/tmp/gcs-key.json';
+    const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+    const keyPath = `/tmp/gcs-key-${mountHash}.json`;
     await run(`sudo rm -f ${keyPath}`);
     await writeFile(keyPath, config.serviceAccountKey!);
     await run(`chmod 600 ${keyPath}`);
