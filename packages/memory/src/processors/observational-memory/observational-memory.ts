@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -2284,6 +2284,55 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return lines.slice(lo).join('\n');
   }
 
+  private isObserverDebugEnabled(): boolean {
+    return process.env.OBSERVER_DEBUG === '1' || process.env.OBSERVER_DEBUG === 'true';
+  }
+
+  private writeObserverDebugArtifacts(params: {
+    mode: 'single' | 'multi-thread';
+    systemPrompt: string;
+    userPrompt: string;
+    output: string;
+    messages: unknown;
+    metadata?: Record<string, unknown>;
+  }): void {
+    if (!this.isObserverDebugEnabled()) return;
+
+    try {
+      const timestamp = new Date().toISOString().replace(/[.:]/g, '-');
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const debugDir = join(process.cwd(), '.mastra-observer-debug', `${timestamp}-${suffix}`);
+
+      mkdirSync(debugDir, { recursive: true });
+
+      writeFileSync(
+        join(debugDir, 'messages.json'),
+        `${JSON.stringify(
+          {
+            mode: params.mode,
+            metadata: params.metadata,
+            messages: params.messages,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      writeFileSync(join(debugDir, 'observation-system-prompt.md'), `${params.systemPrompt}\n`);
+
+      writeFileSync(
+        join(debugDir, 'observation-input.md'),
+        `# Observer Input\n\n## User Prompt\n\n${params.userPrompt}\n`,
+      );
+
+      writeFileSync(join(debugDir, 'observation-output.md'), `${params.output}\n`);
+    } catch (error) {
+      omDebug(
+        `[OM:OBSERVER_DEBUG] Failed to write observer debug artifacts: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   /**
    * Call the Observer agent to extract observations.
    */
@@ -2304,6 +2353,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
+    const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
 
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve, {
       skipContinuationHints: options?.skipContinuationHints,
@@ -2324,6 +2374,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           }),
         abortSignal,
       );
+
+      this.writeObserverDebugArtifacts({
+        mode: 'single',
+        systemPrompt,
+        userPrompt: prompt,
+        output: result.text,
+        messages: messagesToObserve,
+        metadata: {
+          existingObservations,
+          priorCurrentTask: options?.priorCurrentTask,
+          priorSuggestedResponse: options?.priorSuggestedResponse,
+          observerConfig: {
+            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
+            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
+          },
+        },
+      });
+
       return result;
     };
 
@@ -2383,11 +2451,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
+    const systemPrompt = buildObserverSystemPrompt(true, this.observationConfig.instruction);
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
+      instructions: systemPrompt,
     });
 
     const prompt = buildMultiThreadObserverPrompt(
@@ -2409,7 +2478,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(
+      const result = await this.withAbortCheck(
         () =>
           agent.generate(prompt, {
             modelSettings: {
@@ -2421,6 +2490,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           }),
         abortSignal,
       );
+
+      this.writeObserverDebugArtifacts({
+        mode: 'multi-thread',
+        systemPrompt,
+        userPrompt: prompt,
+        output: result.text,
+        messages: Object.fromEntries(Array.from(messagesByThread.entries())),
+        metadata: {
+          threadOrder,
+          existingObservations,
+          priorMetadataByThread: priorMetadataByThread
+            ? Object.fromEntries(Array.from(priorMetadataByThread.entries()))
+            : {},
+          observerConfig: {
+            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
+            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
+          },
+        },
+      });
+
+      return result;
     };
 
     let result = await doGenerate();

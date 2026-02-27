@@ -1,7 +1,10 @@
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
@@ -8115,6 +8118,54 @@ describe('Observer Context Optimization', () => {
       const result = prepareObserverContext(om, observations, record);
       expect(result).not.toBe(observations);
       expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+  });
+
+  describe('OBSERVER_DEBUG artifacts', () => {
+    it('should write observer input/output artifacts when OBSERVER_DEBUG is enabled', () => {
+      const om = createOM();
+      const oldEnv = process.env.OBSERVER_DEBUG;
+      const tempDir = mkdtempSync(join(tmpdir(), 'mastra-observer-debug-'));
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+
+      try {
+        process.env.OBSERVER_DEBUG = '1';
+
+        (om as any).writeObserverDebugArtifacts({
+          mode: 'single',
+          systemPrompt: 'system prompt text',
+          userPrompt: 'user prompt text',
+          output: '<observations>output</observations>',
+          messages: [{ id: 'msg-1', content: 'hello' }],
+          metadata: { existingObservations: '- prior observation' },
+        });
+
+        const rootDir = join(tempDir, '.mastra-observer-debug');
+        const timestampDirs = readdirSync(rootDir);
+        expect(timestampDirs.length).toBe(1);
+
+        const artifactDir = join(rootDir, timestampDirs[0]!);
+        const messagesJson = readFileSync(join(artifactDir, 'messages.json'), 'utf8');
+        const inputMd = readFileSync(join(artifactDir, 'observation-input.md'), 'utf8');
+        const systemPromptMd = readFileSync(join(artifactDir, 'observation-system-prompt.md'), 'utf8');
+        const outputMd = readFileSync(join(artifactDir, 'observation-output.md'), 'utf8');
+
+        expect(messagesJson).toContain('"mode": "single"');
+        expect(messagesJson).toContain('"existingObservations": "- prior observation"');
+        expect(inputMd).not.toContain('## System Prompt');
+        expect(inputMd).toContain('## User Prompt');
+        expect(inputMd).toContain('user prompt text');
+        expect(systemPromptMd).toContain('system prompt text');
+        expect(outputMd).toContain('<observations>output</observations>');
+      } finally {
+        cwdSpy.mockRestore();
+        if (oldEnv === undefined) {
+          delete process.env.OBSERVER_DEBUG;
+        } else {
+          process.env.OBSERVER_DEBUG = oldEnv;
+        }
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 

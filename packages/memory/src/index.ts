@@ -1715,6 +1715,12 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
+            observer: omConfig.observation.observer
+              ? {
+                  previousObservationTokens: omConfig.observation.observer.previousObservationTokens,
+                  useBufferedReflection: omConfig.observation.observer.useBufferedReflection,
+                }
+              : undefined,
             instruction: omConfig.observation.instruction,
           }
         : undefined,
