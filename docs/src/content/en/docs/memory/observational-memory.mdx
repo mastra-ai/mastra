@@ -191,6 +191,10 @@ const memory = new Memory({
 })
 ```
 
+### Token counting accuracy
+
+OM counts message tokens to decide when thresholds are reached. Each LLM step annotates the assistant message with a per-step usage entry (via `content.metadata.mastra.stepTokenCounts[]`), recording `outputTokens`, `inputTokens`, `reasoningTokens`, and other provider-reported counts. OM sums the `outputTokens` across all steps to get the exact provider count instead of estimating with tiktoken. User messages and other messages without provider counts fall back to a tiktoken-based estimator.
+
 ## Async Buffering
 
 Without async buffering, the Observer runs synchronously when the message threshold is reached — the agent pauses mid-conversation while the Observer LLM call completes. With async buffering (enabled by default), observations are pre-computed in the background as the conversation grows. When the threshold is hit, buffered observations activate instantly with no pause.

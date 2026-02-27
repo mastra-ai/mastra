@@ -766,6 +766,15 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "createdAt": 2024-01-01T00:00:00.001Z,
+                  "mastra": {
+                    "stepTokenCounts": [
+                      {
+                        "inputTokens": 3,
+                        "outputTokens": 10,
+                        "totalTokens": 13,
+                      },
+                    ],
+                  },
                 },
                 "parts": [
                   {
@@ -786,6 +795,17 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "content": {
                   "content": "Hello, world!",
                   "format": 2,
+                  "metadata": {
+                    "mastra": {
+                      "stepTokenCounts": [
+                        {
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "totalTokens": 13,
+                        },
+                      ],
+                    },
+                  },
                   "parts": [
                     {
                       "text": "Hello, world!",
@@ -827,6 +847,15 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "createdAt": 2024-01-01T00:00:00.001Z,
+                  "mastra": {
+                    "stepTokenCounts": [
+                      {
+                        "inputTokens": 3,
+                        "outputTokens": 10,
+                        "totalTokens": 13,
+                      },
+                    ],
+                  },
                 },
                 "parts": [
                   {

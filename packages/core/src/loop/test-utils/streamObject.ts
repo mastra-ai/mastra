@@ -529,6 +529,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: expect.any(String),
                 metadata: {
+                  mastra: {
+                    stepTokenCounts: [
+                      {
+                        inputTokens: 3,
+                        outputTokens: 10,
+                        totalTokens: 13,
+                      },
+                    ],
+                  },
                   structuredOutput: {
                     content: 'Hello, world!',
                   },
@@ -551,6 +560,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   content: '{"content": "Hello, world!"}',
                   format: 2,
                   metadata: {
+                    mastra: {
+                      stepTokenCounts: [
+                        {
+                          inputTokens: 3,
+                          outputTokens: 10,
+                          totalTokens: 13,
+                        },
+                      ],
+                    },
                     structuredOutput: {
                       content: 'Hello, world!',
                     },
@@ -867,6 +885,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "content": "{ "content": "Hello, world!" }",
                       "format": 2,
                       "metadata": {
+                        "mastra": {
+                          "stepTokenCounts": [
+                            {
+                              "inputTokens": 3,
+                              "outputTokens": 10,
+                              "totalTokens": 13,
+                            },
+                          ],
+                        },
                         "structuredOutput": {
                           "content": "Hello, world!",
                         },
@@ -908,6 +935,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "mastra": {
+                        "stepTokenCounts": [
+                          {
+                            "inputTokens": 3,
+                            "outputTokens": 10,
+                            "totalTokens": 13,
+                          },
+                        ],
+                      },
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
@@ -971,6 +1007,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "mastra": {
+                            "stepTokenCounts": [
+                              {
+                                "inputTokens": 3,
+                                "outputTokens": 10,
+                                "totalTokens": 13,
+                              },
+                            ],
+                          },
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
@@ -1110,6 +1155,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "content": {
                       "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
+                      "metadata": {
+                        "mastra": {
+                          "stepTokenCounts": [
+                            {
+                              "inputTokens": 3,
+                              "outputTokens": 10,
+                              "totalTokens": 13,
+                            },
+                          ],
+                        },
+                      },
                       "parts": [
                         {
                           "text": "{ "invalid": "Hello, world!" }",
@@ -1147,6 +1203,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "mastra": {
+                        "stepTokenCounts": [
+                          {
+                            "inputTokens": 3,
+                            "outputTokens": 10,
+                            "totalTokens": 13,
+                          },
+                        ],
+                      },
                     },
                     "parts": [
                       {
@@ -1203,6 +1268,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "mastra": {
+                            "stepTokenCounts": [
+                              {
+                                "inputTokens": 3,
+                                "outputTokens": 10,
+                                "totalTokens": 13,
+                              },
+                            ],
+                          },
                         },
                         "parts": [
                           {
@@ -1339,6 +1413,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "content": {
                       "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
+                      "metadata": {
+                        "mastra": {
+                          "stepTokenCounts": [
+                            {
+                              "inputTokens": 3,
+                              "outputTokens": 10,
+                              "totalTokens": 13,
+                            },
+                          ],
+                        },
+                      },
                       "parts": [
                         {
                           "text": "{ "invalid": "Hello, world!" }",
@@ -1376,6 +1461,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "mastra": {
+                        "stepTokenCounts": [
+                          {
+                            "inputTokens": 3,
+                            "outputTokens": 10,
+                            "totalTokens": 13,
+                          },
+                        ],
+                      },
                     },
                     "parts": [
                       {
@@ -1432,6 +1526,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "mastra": {
+                            "stepTokenCounts": [
+                              {
+                                "inputTokens": 3,
+                                "outputTokens": 10,
+                                "totalTokens": 13,
+                              },
+                            ],
+                          },
                         },
                         "parts": [
                           {

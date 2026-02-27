@@ -1206,6 +1206,146 @@ describe('Token Counter', () => {
       // data-* parts should be skipped, so counts should be equal
       expect(countWith).toBe(countWithout);
     });
+
+    it('should use message-level stepTokenCounts when available (single step)', () => {
+      const veryLargeText = 'word '.repeat(5000); // ~5000 tokens via tiktoken
+
+      const msgWithProvider: MastraDBMessage = {
+        id: 'msg-provider',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: veryLargeText }],
+          metadata: { mastra: { stepTokenCounts: [{ outputTokens: 42, inputTokens: 100 }] } },
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const msgWithout: MastraDBMessage = {
+        id: 'msg-no-provider',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: veryLargeText }],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const countWithProvider = counter.countMessage(msgWithProvider);
+      const countWithoutProvider = counter.countMessage(msgWithout);
+
+      // With provider metadata the count should be exactly 42 (no overhead added)
+      expect(countWithProvider).toBeLessThan(countWithoutProvider);
+      expect(countWithProvider).toBe(42);
+    });
+
+    it('should use input token deltas to capture tool result tokens across steps', () => {
+      // Scenario: 3-step agentic loop
+      // Step 0: inputTokens=500 (baseline prompt), outputTokens=100 (text + tool calls)
+      // Step 1: inputTokens=750 (500 + 100 output + 150 tool results), outputTokens=80
+      // Step 2: inputTokens=900 (750 + 80 output + 70 tool results), outputTokens=50 (final text)
+      //
+      // Total message footprint = last.inputTokens - first.inputTokens + last.outputTokens
+      //                         = 900 - 500 + 50 = 450
+      // This correctly includes tool result tokens (150 + 70 = 220) that outputTokens alone would miss.
+      const msgMultiStep: MastraDBMessage = {
+        id: 'msg-multi-step',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: 'hello' }],
+          metadata: {
+            mastra: {
+              stepTokenCounts: [
+                { inputTokens: 500, outputTokens: 100, reasoningTokens: 10 },
+                { inputTokens: 750, outputTokens: 80 },
+                { inputTokens: 900, outputTokens: 50 },
+              ],
+            },
+          },
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const count = counter.countMessage(msgMultiStep);
+      // 900 - 500 + 50 = 450
+      expect(count).toBe(450);
+    });
+
+    it('should fall back to summing outputTokens when inputTokens are missing', () => {
+      const msg: MastraDBMessage = {
+        id: 'msg-no-input',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: 'hello' }],
+          metadata: {
+            mastra: {
+              stepTokenCounts: [{ outputTokens: 100 }, { outputTokens: 200 }],
+            },
+          },
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const count = counter.countMessage(msg);
+      // No inputTokens available, falls back to summing outputTokens: 100 + 200 = 300
+      expect(count).toBe(300);
+    });
+
+    it('should fall back to tiktoken when no stepTokenCounts are set', () => {
+      const text = 'The quick brown fox jumps over the lazy dog';
+
+      const msg: MastraDBMessage = {
+        id: 'msg-fallback',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text }],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const count = counter.countMessage(msg);
+      // tiktoken estimate: role + text + overhead ≈ 14 tokens
+      expect(count).toBeGreaterThan(5);
+      expect(count).toBeLessThan(30);
+    });
+
+    it('should fall back to tiktoken when stepTokenCounts is empty', () => {
+      const text = 'Some text content';
+
+      const msgEmpty: MastraDBMessage = {
+        id: 'msg-empty-steps',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text }],
+          metadata: { mastra: { stepTokenCounts: [] } },
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const msgNoProvider: MastraDBMessage = {
+        id: 'msg-no-provider',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text }],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      // Empty array should fall back to tiktoken, same as no provider metadata
+      expect(counter.countMessage(msgEmpty)).toBe(counter.countMessage(msgNoProvider));
+    });
   });
 
   describe('countMessages', () => {

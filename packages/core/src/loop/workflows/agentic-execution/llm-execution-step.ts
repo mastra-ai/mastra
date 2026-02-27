@@ -1010,6 +1010,50 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.add(message, 'response');
       }
 
+      /**
+       * Annotate the response message with per-step token usage from the provider.
+       * Each LLM step appends an entry to `metadata.mastra.stepTokenCounts[]`
+       * so that downstream consumers (e.g. Observational Memory's TokenCounter)
+       * can sum accurate per-step deltas instead of relying on tiktoken estimates.
+       *
+       * This runs AFTER tool calls are added to the message list, so that even
+       * tool-call-only steps (no text output) have a message to annotate.
+       *
+       * The same `messageId` is reused across all iterations of the agentic loop,
+       * and `MessageMerger.merge()` operates on the existing message in-place,
+       * so the `stepTokenCounts` array correctly accumulates entries from each step.
+       *
+       * Note: if the message is sealed between iterations (by Observational Memory),
+       * a new message with a different ID is created and this annotation will land
+       * on the original sealed message rather than the new one. This is acceptable
+       * because the observer has already processed the sealed message's token count.
+       */
+      const stepUsage = outputStream._getImmediateUsage();
+      if (stepUsage && typeof stepUsage.outputTokens === 'number') {
+        const responseMsg = messageList.get.response.db().find(m => m.id === messageId);
+        if (responseMsg && responseMsg.content && typeof responseMsg.content === 'object') {
+          const mastra = ((responseMsg.content.metadata as Record<string, unknown> | undefined)?.mastra ??
+            {}) as Record<string, unknown>;
+          const existing = Array.isArray(mastra.stepTokenCounts) ? mastra.stepTokenCounts : [];
+
+          const entry: Record<string, number> = {
+            outputTokens: stepUsage.outputTokens,
+          };
+          if (typeof stepUsage.inputTokens === 'number') entry.inputTokens = stepUsage.inputTokens;
+          if (typeof stepUsage.reasoningTokens === 'number') entry.reasoningTokens = stepUsage.reasoningTokens;
+          if (typeof stepUsage.cachedInputTokens === 'number') entry.cachedInputTokens = stepUsage.cachedInputTokens;
+          if (typeof stepUsage.totalTokens === 'number') entry.totalTokens = stepUsage.totalTokens;
+
+          responseMsg.content.metadata = {
+            ...(responseMsg.content.metadata as Record<string, unknown> | undefined),
+            mastra: {
+              ...mastra,
+              stepTokenCounts: [...existing, entry],
+            },
+          };
+        }
+      }
+
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
       let processOutputStepTripwire: TripWire | null = null;

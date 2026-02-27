@@ -21,8 +21,10 @@ function getDefaultEncoder(): Tiktoken {
 
 /**
  * Token counting utility using tiktoken.
- * For POC we use o200k_base (GPT-4o encoding) as a reasonable default.
- * Production will add provider-aware counting.
+ * Uses o200k_base (GPT-4o encoding) as a reasonable default estimator.
+ * When a message carries provider-supplied step token counts at the message level
+ * (via `content.metadata.mastra.stepTokenCounts[]`), those exact values
+ * are summed instead of re-estimating with tiktoken.
  */
 export class TokenCounter {
   private encoder: Tiktoken;
@@ -48,9 +50,64 @@ export class TokenCounter {
   }
 
   /**
-   * Count tokens in a single message
+   * Extract a provider-supplied token count from a message's content-level metadata.
+   * Uses `stepTokenCounts[]` to compute the total context-window footprint of this message:
+   *   lastStep.inputTokens - firstStep.inputTokens + lastStep.outputTokens
+   *
+   * The first step's inputTokens is the baseline (prompt before this message).
+   * The delta between steps captures tool results added between steps.
+   * The last step's outputTokens captures the final model output.
+   *
+   * Falls back to summing outputTokens if inputTokens aren't available.
+   * Returns `undefined` when no provider counts are available.
+   */
+  private static getMessageTokenCount(message: MastraDBMessage): number | undefined {
+    if (message.content && typeof message.content === 'object') {
+      const mastra = (message.content as any).metadata?.mastra;
+      if (mastra && typeof mastra === 'object') {
+        if (Array.isArray(mastra.stepTokenCounts) && mastra.stepTokenCounts.length > 0) {
+          const steps = mastra.stepTokenCounts;
+          const first = steps[0];
+          const last = steps[steps.length - 1];
+
+          // Use input token deltas when available to capture tool results accurately
+          if (
+            first &&
+            typeof first.inputTokens === 'number' &&
+            last &&
+            typeof last.inputTokens === 'number' &&
+            typeof last.outputTokens === 'number'
+          ) {
+            return last.inputTokens - first.inputTokens + last.outputTokens;
+          }
+
+          // Fallback: sum outputTokens only (misses tool result tokens)
+          let total = 0;
+          for (const entry of steps) {
+            if (entry && typeof entry.outputTokens === 'number') {
+              total += entry.outputTokens;
+            }
+          }
+          return total;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Count tokens in a single message.
+   * If provider-supplied step token counts are available at the message level
+   * (via `content.metadata.mastra.stepTokenCounts[]`) the sum of
+   * outputTokens is used directly. Otherwise the message parts are estimated
+   * with tiktoken.
    */
   countMessage(message: MastraDBMessage): number {
+    const providerCount = TokenCounter.getMessageTokenCount(message);
+    if (providerCount !== undefined) {
+      return providerCount;
+    }
+
     let tokenString = message.role;
     let overhead = TokenCounter.TOKENS_PER_MESSAGE;
     let toolResultCount = 0;

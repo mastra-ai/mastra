@@ -2576,6 +2576,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 {
                   "content": {
                     "format": 2,
+                    "metadata": {
+                      "mastra": {
+                        "stepTokenCounts": [
+                          {
+                            "inputTokens": 3,
+                            "outputTokens": 10,
+                            "totalTokens": 13,
+                          },
+                        ],
+                      },
+                    },
                     "parts": [
                       {
                         "providerExecuted": undefined,
