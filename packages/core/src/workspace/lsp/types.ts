@@ -27,20 +27,21 @@ export interface LSPConfig {
   disableServers?: string[];
 
   /**
-   * Override the binary command for a specific server, bypassing the default node_modules lookup.
+   * Explicit command override for a specific server, bypassing all automatic lookup.
    * Keys are server IDs (e.g. 'typescript', 'eslint', 'python').
    * Values are the full command string including any flags (e.g. '/usr/local/bin/typescript-language-server --stdio').
-   * Useful when the binary is installed globally or in a non-standard location.
+   * Use this when you know exactly where a binary is. For flexible search, use searchPaths instead.
    */
-  serverPaths?: Record<string, string>;
+  binaryOverrides?: Record<string, string>;
 
   /**
-   * Additional directories to search when resolving Node.js modules (e.g. typescript/lib/tsserver.js).
-   * Searched after the project root and process.cwd(). Each entry should be a directory containing
-   * a node_modules folder with the required packages.
-   * Useful when the module is installed in a tool's own package directory rather than the user's project.
+   * Extra directories to search for both language server binaries and Node.js modules.
+   * Each entry should be a directory whose node_modules contains the required packages.
+   * Searched after project root and process.cwd() — for binaries in node_modules/.bin/,
+   * and for modules like typescript/lib/tsserver.js.
+   * Useful when binaries and modules are installed in a tool's own package rather than the user's project.
    */
-  modulePaths?: string[];
+  searchPaths?: string[];
 
   /**
    * Package runner to use as a last-resort fallback when no binary is found via node_modules or PATH.

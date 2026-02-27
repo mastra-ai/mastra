@@ -12,10 +12,10 @@ To configure binary paths (e.g. if using a global install):
 // ~/.mastracode/settings.json
 {
   "lsp": {
-    "serverPaths": {
+    "binaryOverrides": {
       "typescript": "/usr/local/bin/typescript-language-server --stdio"
     },
-    "modulePaths": ["/path/to/custom/node_modules"],
+    "searchPaths": ["/path/to/custom/node_modules"],
     "packageRunner": "npx --yes"
   }
 }

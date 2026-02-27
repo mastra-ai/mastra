@@ -141,8 +141,8 @@ export class LSPManager {
       timedOut = true;
       this.clients.delete(key);
       const command = serverDef.command(projectRoot);
-      const hint = this.config.serverPaths?.[serverDef.id]
-        ? ` (using serverPaths override: "${this.config.serverPaths[serverDef.id]}")`
+      const hint = this.config.binaryOverrides?.[serverDef.id]
+        ? ` (using binaryOverrides: "${this.config.binaryOverrides[serverDef.id]}")`
         : command
           ? ` (command: "${command}")`
           : '';

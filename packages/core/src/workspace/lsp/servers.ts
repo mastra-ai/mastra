@@ -49,19 +49,19 @@ function resolveRequire(root: string, moduleId: string): { require: NodeRequire;
 
 /**
  * Extend resolveRequire to also search additional directories after root and cwd.
- * Each entry in modulePaths should be a directory whose node_modules contains the module.
+ * Each entry in searchPaths should be a directory whose node_modules contains the module.
  */
 function resolveRequireFromPaths(
   root: string,
   moduleId: string,
-  modulePaths?: string[],
+  searchPaths?: string[],
 ): { require: NodeRequire; resolved: string } | null {
   const fromBase = resolveRequire(root, moduleId);
   if (fromBase) return fromBase;
 
-  for (const modulePath of modulePaths ?? []) {
+  for (const searchPath of searchPaths ?? []) {
     try {
-      const req = createRequire(pathToFileURL(join(modulePath, 'package.json')));
+      const req = createRequire(pathToFileURL(join(searchPath, 'package.json')));
       return { require: req, resolved: req.resolve(moduleId) };
     } catch {
       // try next
@@ -71,12 +71,16 @@ function resolveRequireFromPaths(
   return null;
 }
 
-/** Find a binary in root/node_modules/.bin or cwd/node_modules/.bin. */
-function resolveNodeBin(root: string, binary: string): string | undefined {
+/** Find a binary in node_modules/.bin, searching root, cwd, then any searchPaths. */
+function resolveNodeBin(root: string, binary: string, searchPaths?: string[]): string | undefined {
   const local = join(root, 'node_modules', '.bin', binary);
   const cwd = join(process.cwd(), 'node_modules', '.bin', binary);
   if (existsSync(local)) return local;
   if (existsSync(cwd)) return cwd;
+  for (const dir of searchPaths ?? []) {
+    const p = join(dir, 'node_modules', '.bin', binary);
+    if (existsSync(p)) return p;
+  }
   return undefined;
 }
 
@@ -165,7 +169,7 @@ export async function findProjectRootAsync(
  * Build a set of server definitions that incorporate LSP config overrides.
  *
  * Resolution order per server:
- *  1. `config.serverPaths[id]` — explicit binary path override
+ *  1. `config.binaryOverrides[id]` — explicit binary command override
  *  2. Project `node_modules/.bin/` binary
  *  3. `process.cwd()` `node_modules/.bin/` binary
  *  4. Global PATH lookup (system-installed binaries)
@@ -175,7 +179,7 @@ export async function findProjectRootAsync(
  * (used to locate typescript/lib/tsserver.js when it lives outside the project).
  */
 export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
-  const { serverPaths, modulePaths, packageRunner } = config ?? {};
+  const { binaryOverrides, searchPaths, packageRunner } = config ?? {};
 
   return {
     typescript: {
@@ -184,16 +188,16 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       languageIds: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
       markers: ['tsconfig.json', 'package.json'],
       command: (root: string): string | undefined => {
-        if (serverPaths?.typescript) return serverPaths.typescript;
-        if (!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths)) return undefined;
-        const bin = resolveNodeBin(root, 'typescript-language-server');
+        if (binaryOverrides?.typescript) return binaryOverrides.typescript;
+        if (!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', searchPaths)) return undefined;
+        const bin = resolveNodeBin(root, 'typescript-language-server', searchPaths);
         if (bin) return `${bin} --stdio`;
         if (whichSync('typescript-language-server')) return 'typescript-language-server --stdio';
         if (packageRunner) return `${packageRunner} typescript-language-server --stdio`;
         return undefined;
       },
       initialization: (root: string) => {
-        const ts = resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths);
+        const ts = resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', searchPaths);
         if (!ts) return undefined;
         return { tsserver: { path: ts.resolved, logVerbosity: 'off' } };
       },
@@ -214,8 +218,8 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         'eslint.config.ts',
       ],
       command: (root: string): string | undefined => {
-        if (serverPaths?.eslint) return serverPaths.eslint;
-        const bin = resolveNodeBin(root, 'vscode-eslint-language-server');
+        if (binaryOverrides?.eslint) return binaryOverrides.eslint;
+        const bin = resolveNodeBin(root, 'vscode-eslint-language-server', searchPaths);
         if (bin) return `${bin} --stdio`;
         if (whichSync('vscode-eslint-language-server')) return 'vscode-eslint-language-server --stdio';
         if (packageRunner) return `${packageRunner} vscode-eslint-language-server --stdio`;
@@ -229,8 +233,8 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       languageIds: ['python'],
       markers: ['pyproject.toml', 'setup.py', 'requirements.txt', 'setup.cfg'],
       command: (root: string): string | undefined => {
-        if (serverPaths?.python) return serverPaths.python;
-        const bin = resolveNodeBin(root, 'pyright-langserver');
+        if (binaryOverrides?.python) return binaryOverrides.python;
+        const bin = resolveNodeBin(root, 'pyright-langserver', searchPaths);
         if (bin) return `${bin} --stdio`;
         if (whichSync('pyright-langserver')) return 'pyright-langserver --stdio';
         if (packageRunner) return `${packageRunner} pyright-langserver --stdio`;
@@ -244,7 +248,7 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       languageIds: ['go'],
       markers: ['go.mod'],
       command: (): string | undefined => {
-        if (serverPaths?.go) return serverPaths.go;
+        if (binaryOverrides?.go) return binaryOverrides.go;
         return whichSync('gopls') ? 'gopls serve' : undefined;
       },
     },
@@ -255,7 +259,7 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
       languageIds: ['rust'],
       markers: ['Cargo.toml'],
       command: (): string | undefined => {
-        if (serverPaths?.rust) return serverPaths.rust;
+        if (binaryOverrides?.rust) return binaryOverrides.rust;
         return whichSync('rust-analyzer') ? 'rust-analyzer --stdio' : undefined;
       },
     },
@@ -264,7 +268,7 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
 
 /**
  * Built-in LSP server definitions with no config overrides.
- * Use `buildServerDefs(config)` when you need serverPaths, modulePaths, or allowNpxFallback.
+ * Use `buildServerDefs(config)` when you need binaryOverrides, searchPaths, or packageRunner.
  */
 export const BUILTIN_SERVERS: Record<string, LSPServerDef> = buildServerDefs();
 
