@@ -35,7 +35,6 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/om', description: 'Configure Observational Memory' },
     { key: '/review', description: 'Review a GitHub pull request' },
-    { key: '/fix-issue', description: 'Fix a mastracode GitHub issue' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
     { key: '/diff', description: 'Modified files or git diff' },

@@ -27,7 +27,6 @@ import {
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
-  handleFixIssueCommand as handleFixIssueCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleThemeCommand,
@@ -138,9 +137,6 @@ export async function dispatchSlashCommand(
       return true;
     case 'review':
       await handleReviewCmd(buildCtx(), args);
-      return true;
-    case 'fix-issue':
-      await handleFixIssueCmd(buildCtx(), args);
       return true;
     case 'report-issue':
       await handleReportIssueCmd(buildCtx(), args);
