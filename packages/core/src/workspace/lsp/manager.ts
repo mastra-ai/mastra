@@ -137,9 +137,16 @@ export class LSPManager {
         ),
       ]);
       return this.clients.get(key) || null;
-    } catch {
+    } catch (err) {
       timedOut = true;
       this.clients.delete(key);
+      const command = serverDef.command(projectRoot);
+      const hint = this.config.serverPaths?.[serverDef.id]
+        ? ` (using serverPaths override: "${this.config.serverPaths[serverDef.id]}")`
+        : command
+          ? ` (command: "${command}")`
+          : '';
+      console.warn(`[LSP] Failed to start ${serverDef.name}${hint}: ${err instanceof Error ? err.message : err}`);
       return null;
     } finally {
       this.initPromises.delete(key);

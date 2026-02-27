@@ -44,8 +44,12 @@ export interface LSPConfig {
 
   /**
    * Package runner to use as a last-resort fallback when no binary is found via node_modules or PATH.
-   * Pass the runner command including any flags (e.g. 'npx --yes', 'pnpm dlx', 'bunx').
    * Off by default — package runners can hang in monorepos with workspace links.
+   *
+   * Pass the runner command including any flags needed for non-interactive use:
+   * - `'npx --yes'` — `--yes` is required to skip the install confirmation prompt; `'npx'` alone will hang
+   * - `'pnpm dlx'` — no extra flags needed, pnpm auto-installs without prompting
+   * - `'bunx'` — no extra flags needed
    */
   packageRunner?: string;
 }
