@@ -3,10 +3,17 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import {
+  isAllOfSchema,
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isNull, isObj, isArr, isUnion, isString, isNumber } from '../zodTypes';
+import { isOptional, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
 export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -45,11 +52,17 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       // Google models support these properties but the model doesn't respect them, but it respects them when they're
       // added to the tool description
       return this.defaultZodNumberHandler(value);
+    } else if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
     }
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {

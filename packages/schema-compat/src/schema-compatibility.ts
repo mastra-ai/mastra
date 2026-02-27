@@ -157,6 +157,14 @@ export abstract class SchemaCompatLayer {
     }
   }
 
+  isIntersection(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any> {
+    if ('_zod' in v) {
+      return this.v4Layer.isIntersection(v as any);
+    } else {
+      return this.v3Layer.isIntersection(v as any);
+    }
+  }
+
   abstract shouldApply(): boolean;
   abstract getSchemaTarget(): Targets | undefined;
   abstract processZodType(value: ZodType): ZodType;
@@ -303,6 +311,16 @@ export abstract class SchemaCompatLayer {
         value as any,
         (handleTypes ?? v3.SUPPORTED_ZOD_TYPES) as typeof v3.SUPPORTED_ZOD_TYPES,
       );
+    }
+  }
+
+  public defaultZodIntersectionHandler(
+    value: zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any>,
+  ): zV3.ZodType | zV4.ZodType {
+    if ('_zod' in value) {
+      return this.v4Layer.defaultZodIntersectionHandler(value as any);
+    } else {
+      return this.v3Layer.defaultZodIntersectionHandler(value as any);
     }
   }
 
@@ -476,6 +494,36 @@ export abstract class SchemaCompatLayer {
   }
 
   /**
+   * Default handler for JSON Schema allOf (intersection) types.
+   * Flattens allOf sub-schemas by merging properties and required arrays into a single object schema.
+   */
+  protected defaultAllOfHandler(schema: JSONSchema7): JSONSchema7 {
+    if (!schema.allOf || !Array.isArray(schema.allOf)) return schema;
+
+    const mergedProperties: Record<string, JSONSchema7> = {};
+    const mergedRequired: string[] = [];
+
+    for (const subSchema of schema.allOf as JSONSchema7[]) {
+      if (subSchema.properties) {
+        Object.assign(mergedProperties, subSchema.properties);
+      }
+      if (Array.isArray(subSchema.required)) {
+        mergedRequired.push(...subSchema.required);
+      }
+    }
+
+    delete schema.allOf;
+    schema.type = 'object';
+    schema.properties = mergedProperties;
+    if (mergedRequired.length > 0) {
+      schema.required = [...new Set(mergedRequired)];
+    }
+    schema.additionalProperties = false;
+
+    return schema;
+  }
+
+  /**
    * Default handler for JSON Schema nullable types.
    * Ensures nullable types are represented correctly.
    */
@@ -542,6 +590,10 @@ export abstract class SchemaCompatLayer {
 
   protected isUnionSchema(schema: JSONSchema7): boolean {
     return jsonSchemaUtils.isUnionSchema(schema);
+  }
+
+  protected isAllOfSchema(schema: JSONSchema7): schema is JSONSchema7 & { allOf: JSONSchema7[] } {
+    return jsonSchemaUtils.isAllOfSchema(schema);
   }
 
   /**
