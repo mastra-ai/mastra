@@ -4,8 +4,6 @@
 
 Widened `ProcessHandle.pid` type from `number` to `string | number` to support sandbox providers that use non-numeric process identifiers.
 
-Providers like Blaxel return string PIDs from their API, and Daytona uses session IDs as process identifiers. This change removes the need for workarounds like `parseInt()` and synthetic numeric counters.
-
 **Before:**
 
 ```typescript

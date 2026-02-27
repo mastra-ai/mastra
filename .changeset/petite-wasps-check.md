@@ -2,4 +2,4 @@
 '@mastra/blaxel': patch
 ---
 
-Removed `parseInt()` workaround for PIDs — Blaxel string PIDs are now used directly as `ProcessHandle.pid`, removing the separate `_identifier` field.
+Improved Blaxel process handling to use provider-returned process IDs directly, removing the need for numeric conversion.

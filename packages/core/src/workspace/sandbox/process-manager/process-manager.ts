@@ -123,8 +123,8 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       await handle.wait().catch(() => {});
     }
     // Release tracked handle to free accumulated output buffers.
-    this._tracked.delete(pid);
-    this._dismissed.add(pid);
+    this._tracked.delete(handle.pid);
+    this._dismissed.add(handle.pid);
     return killed;
   }
 }

@@ -2,4 +2,4 @@
 '@mastra/daytona': patch
 ---
 
-Switched from synthetic numeric PIDs to using Daytona session IDs as `ProcessHandle.pid`, removing the `_nextPid` counter and `_sessionId` field.
+Improved Daytona process handling to use session IDs as process identifiers directly, enabling future reconnection support.
