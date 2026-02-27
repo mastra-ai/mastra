@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
+import path, { dirname } from 'node:path';
 import { join } from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, type LSPConfig } from '@mastra/core/workspace';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
+import { fileURLToPath } from 'node:url';
 
 // =============================================================================
 // Create Workspace with Skills
@@ -91,7 +92,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
   if (existsSync(join(projectPath, 'bun.lockb')) || existsSync(join(projectPath, 'bun.lock'))) return 'bunx';
   if (existsSync(join(projectPath, 'yarn.lock'))) return 'yarn dlx';
   if (existsSync(join(projectPath, 'package-lock.json'))) return 'npx --yes';
-  return undefined;
+  return 'npx --yes';
 }
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
@@ -129,11 +130,12 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   }
 
   const userLsp = loadSettings().lsp ?? {};
-  const detectedRunner = detectPackageRunner(projectPath);
-  // Detected runner is the fallback — user's packageRunner always wins
-  const lspConfig = detectedRunner
-    ? { packageRunner: detectedRunner, ...userLsp }
-    : userLsp;
+  const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const lspConfig: LSPConfig = {
+    ...userLsp,
+    packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
+    searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
+  };
 
   // First call for this project — create the workspace
   return new Workspace({
