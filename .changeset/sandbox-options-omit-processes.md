@@ -5,6 +5,6 @@
 '@mastra/daytona': patch
 ---
 
-fix: omit `processes` from sandbox provider constructor options
+fix: remove internal `processes` field from sandbox provider options
 
-All sandbox providers (E2B, Daytona, Blaxel) were extending `MastraSandboxOptions` directly, exposing the internal `processes` field in their constructor options. Now uses `Omit<MastraSandboxOptions, 'processes'>` consistently.
+The `processes` field is no longer exposed in constructor options for E2B, Daytona, and Blaxel sandbox providers. This field is managed internally and was not intended to be user-configurable.
