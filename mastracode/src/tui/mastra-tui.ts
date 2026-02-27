@@ -67,8 +67,12 @@ export type { MastraTUIOptions } from './state.js';
 // MastraTUI Class
 // =============================================================================
 
+/** How often to recheck for updates during a long-running session (ms). */
+const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
+
 export class MastraTUI {
   private state: TUIState;
+  private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -304,6 +308,11 @@ export class MastraTUI {
 
     // Check for updates (after onboarding so it doesn't interfere)
     await this.checkForUpdate();
+
+    // Periodically recheck for updates during long-running sessions (passive only)
+    this.updateCheckTimer = setInterval(() => {
+      void this.checkForUpdate(/* passive */ true);
+    }, UPDATE_RECHECK_INTERVAL_MS);
   }
 
   private async refreshModelAuthStatus(): Promise<void> {
@@ -835,8 +844,9 @@ export class MastraTUI {
    * Check npm for a newer version and prompt the user to update.
    * - If the user previously dismissed this version, show a passive note instead.
    * - If the fetch fails or we're already up-to-date, silently return.
+   * @param passive When true, only show an info message (used for periodic rechecks).
    */
-  private async checkForUpdate(): Promise<void> {
+  private async checkForUpdate(passive = false): Promise<void> {
     const currentVersion = this.state.options.version;
     if (!currentVersion) return;
 
@@ -844,6 +854,17 @@ export class MastraTUI {
     if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) return;
 
     const pm = await detectPackageManager();
+
+    // Passive mode or previously dismissed — show info message only
+    if (passive) {
+      const cmd = getInstallCommand(pm);
+      showInfo(
+        this.state,
+        `Update available: v${latestVersion} (current: v${currentVersion}). Run \`${cmd}\` to update.`,
+      );
+      return;
+    }
+
     const settings = loadSettings();
 
     // User previously dismissed this exact version — show passive banner note only
