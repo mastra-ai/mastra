@@ -1,9 +1,8 @@
 # Investigation: Inngest Workflows Don't Emit Span Events to User-Configured Exporters
 
 **Issue:** [#13388](https://github.com/mastra-ai/mastra/issues/13388)
-**Date:** 2026-02-26 (updated)
-**Status:** Root cause confirmed, solution designed — ready for implementation
-**Target branch for fix:** `claude/add-notion-folder-bpOd1`
+**Date:** 2026-02-27 (updated)
+**Status:** Observability-side fix landed; Inngest-side flush call still needed (separate PR)
 
 ---
 
@@ -17,6 +16,7 @@
 6. [Full Impact Matrix](#6-full-impact-matrix)
 7. [Recommended Fix](#7-recommended-fix)
 8. [Implementation Spec](#8-implementation-spec)
+9. [Current Fix Status](#9-current-fix-status)
 
 ---
 
@@ -812,16 +812,56 @@ Add a `_flush()` override that drains the LangSmith SDK's internal queue. The ex
 
 ---
 
-## Appendix: Code References (Bus Branch as of 2091425)
+## 9. Current Fix Status
 
-| File | Description |
-|---|---|
-| `observability/mastra/src/bus/base.ts` | `BaseObservabilityEventBus.emit()` — fire-and-forget subscriber dispatch; `flush()` — no-op |
-| `observability/mastra/src/bus/observability-bus.ts` | `ObservabilityBus.emit()` — routes to exporters + bridge + auto-metrics + subscribers; no `flush()` override |
-| `observability/mastra/src/bus/route-event.ts` | `routeToHandler()` — shared routing for exporters AND bridge; `catchAsyncResult()` — discards promises |
-| `observability/mastra/src/instances/base.ts` | `emitTracingEvent()` — now just calls `bus.emit()`; `flush()` — calls bus.flush() (no-op) + exporter/bridge flush in parallel |
-| `observability/otel-bridge/src/bridge.ts` | `_exportTracingEvent()` — async OTEL span handling; `flush()` — calls `provider.forceFlush()` |
-| `observability/langsmith/src/tracing.ts` | No `_flush()` override — LangSmith SDK queue never drained |
-| `observability/langfuse/src/tracing.ts` | `_flush()` — properly calls `flushAsync()` |
-| `workflows/inngest/src/execution-engine.ts` | `endStepSpan()` — `span.end()` inside `wrapDurableOperation` / `step.run()` |
-| `workflows/inngest/src/workflow.ts` | Finalize step — `span.end()` fire-and-forget inside `step.run()`; no flush after finalize |
+**As of 2026-02-27**, branch `claude/add-notion-folder-bpOd1` (commit `11fc1adbe`).
+
+### What's Done (on `claude/add-notion-folder-bpOd1` — `@mastra/observability` scope)
+
+| Fix | Commit | Details |
+|---|---|---|
+| `routeToHandler()` returns promises | `03f9643e0` | `route-event.ts` — returns `void \| Promise<void>` instead of discarding via `catchAsyncResult` |
+| `ObservabilityBus` promise tracking | `03f9643e0` | `pendingHandlers` set + `trackPromise()` method + two-phase `flush()` |
+| `BaseObservabilityEventBus` subscriber tracking | `03f9643e0` | `pendingSubscribers` set + real `flush()` (was a no-op) |
+| Two-phase `flush()` in `BaseObservabilityInstance` | `c0a3d67f9` | Delegates to `observabilityBus.flush()` which does Phase 1 (await handler delivery) then Phase 2 (drain exporter/bridge buffers) |
+| Tests for promise tracking + flush ordering | `03f9643e0` | Exporter flush, bridge flush, two-phase ordering (`handler-done` before `exporter-flush`), error handling, self-cleaning |
+
+### What's NOT Done (requires separate PRs — outside `@mastra/observability` scope)
+
+| Fix | Package | Priority | Details |
+|---|---|---|---|
+| **`observability.flush()` in Inngest workflow** | `@mastra/inngest` (`workflows/inngest/src/workflow.ts`) | **HIGH — required to complete the #13388 fix** | The observability bus now properly tracks promises and has a working two-phase `flush()`. But nobody calls `flush()` in the Inngest execution path. Without this, Inngest workflows still won't trigger the flush and exported spans will be lost. The fix is ~5 lines after the finalize `step.run()`, **outside** `step.run()` so it's not memoized. See [Section 8.5](#85--add-observabilityflush-to-inngest-workflow) for the exact code. |
+| **LangSmith `_flush()` override** | `@mastra/langsmith` (`observability/langsmith/src/tracing.ts`) | MEDIUM — separate bug | `_flush()` is not overridden — LangSmith SDK's internal batch queue is never drained. Affects serverless/durable environments independently of #13388. |
+| **Sentry stateful exporter in durable contexts** | `@mastra/sentry` | LOW — design limitation | `spanMap` requires `SPAN_STARTED` before `SPAN_ENDED`; Inngest replays clear in-memory state. Separate issue, not a fire-and-forget problem. |
+
+### End-to-End Fix Dependency Chain
+
+```
+1. @mastra/observability (bus branch)     ← DONE: promise tracking + two-phase flush
+       │
+       │  observabilityBus.flush() now actually works
+       │
+2. @mastra/inngest (separate PR)          ← TODO: call observability.flush() after finalize
+       │
+       │  ensures Inngest functions await export before completing
+       │
+3. Issue #13388 fully resolved            ← spans reach all exporters
+```
+
+The observability infrastructure is complete — `flush()` will reliably drain all in-flight handler promises and then flush exporter/bridge internal buffers. The remaining work is a consumer-side change: the Inngest workflow needs to call `flush()` at the right point in its lifecycle.
+
+---
+
+## Appendix: Code References (Bus Branch as of 11fc1adbe)
+
+| File | Status | Description |
+|---|---|---|
+| `observability/mastra/src/bus/base.ts` | **FIXED** | `BaseObservabilityEventBus.emit()` — now tracks subscriber promises in `pendingSubscribers`; `flush()` awaits them |
+| `observability/mastra/src/bus/observability-bus.ts` | **FIXED** | `ObservabilityBus.emit()` — tracks exporter+bridge promises via `trackPromise()`; two-phase `flush()` (handler delivery → buffer drain) |
+| `observability/mastra/src/bus/route-event.ts` | **FIXED** | `routeToHandler()` — now returns `void \| Promise<void>`; `catchAsyncResult()` returns the caught promise |
+| `observability/mastra/src/instances/base.ts` | **FIXED** | `flush()` delegates to `observabilityBus.flush()` (which now does the two-phase flush) |
+| `observability/otel-bridge/src/bridge.ts` | OK | `_exportTracingEvent()` — async OTEL span handling; `flush()` — calls `provider.forceFlush()` (works correctly once handler delivery is awaited) |
+| `observability/langsmith/src/tracing.ts` | **NOT FIXED** | No `_flush()` override — LangSmith SDK queue never drained (separate bug, separate package) |
+| `observability/langfuse/src/tracing.ts` | OK | `_flush()` — properly calls `flushAsync()` |
+| `workflows/inngest/src/execution-engine.ts` | **NOT FIXED** | `endStepSpan()` — `span.end()` inside `wrapDurableOperation` / `step.run()` (out of scope for observability branch) |
+| `workflows/inngest/src/workflow.ts` | **NOT FIXED** | Finalize step — `span.end()` inside `step.run()`; **no `flush()` call after finalize** (out of scope for observability branch — needs separate `@mastra/inngest` PR) |
