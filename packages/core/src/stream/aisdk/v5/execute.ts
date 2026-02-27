@@ -161,10 +161,10 @@ export function execute<OUTPUT = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
-            onFailedAttempt(error) {
+            onFailedAttempt({ error, attemptNumber }) {
               const totalAttempts = (modelSettings?.maxRetries ?? 2) + 1;
               console.warn(
-                `[Mastra] LLM call to ${model.modelId} failed (attempt ${error.attemptNumber}/${totalAttempts}): ${error.message}`,
+                `[Mastra] LLM call to ${model.modelId} failed (attempt ${attemptNumber}/${totalAttempts}): ${error.message}`,
               );
             },
             shouldRetry(context) {
