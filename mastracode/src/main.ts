@@ -9,9 +9,9 @@ import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode } from './tui/theme.js';
-import { getCurrentVersion } from './utils/update-check.js';
 import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
