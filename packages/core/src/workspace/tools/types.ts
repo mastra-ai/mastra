@@ -67,7 +67,7 @@ export interface BackgroundProcessConfig {
   onExit?: (meta: BackgroundProcessExitMeta) => void;
   /**
    * Abort signal for background processes.
-   * - `undefined` (default): uses the agent's abort signal from context (ctrl+C kills bg processes)
+   * - `undefined` (default): uses the agent's abort signal from context (processes are killed when the signal fires)
    * - `AbortSignal`: uses the provided signal
    * - `null` or `false`: disables abort signal (processes persist after disconnect).
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
