@@ -210,11 +210,14 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'aborts a spawned process when signal fires',
         async () => {
           const controller = new AbortController();
-          setTimeout(() => controller.abort(), 100);
 
-          const handle = await processes.spawn('sleep 60', {
-            abortSignal: controller.signal,
-          });
+          const handle = await processes.spawn(
+            `node -e "process.stdout.write('started\\n'); setTimeout(() => {}, 30000)"`,
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
           const result = await handle.wait();
 
           expect(result.success).toBe(false);

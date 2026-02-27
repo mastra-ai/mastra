@@ -221,11 +221,15 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         'aborts a running command when signal fires',
         async () => {
           const controller = new AbortController();
-          setTimeout(() => controller.abort(), 100);
 
-          const result = await executeCommand('sleep', ['10'], {
-            abortSignal: controller.signal,
-          });
+          const result = await executeCommand(
+            'node',
+            ['-e', 'process.stdout.write("started\\n"); setTimeout(() => {}, 30000)'],
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
 
           expect(result.success).toBe(false);
           expect(result.executionTimeMs).toBeLessThan(5000);
