@@ -277,7 +277,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         return provider === normalizedProviderId || provider === `custom-${normalizedProviderId}`;
       });
       if (customProvider) {
-        return Boolean(customProvider.apiKey?.trim());
+        return true;
       }
 
       return undefined;
@@ -302,7 +302,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             id: toCustomProviderModelId(provider.name, modelName),
             provider: providerId,
             modelName,
-            hasApiKey: Boolean(provider.apiKey?.trim()),
+            hasApiKey: true,
             apiKeyEnvVar: undefined,
           });
         }

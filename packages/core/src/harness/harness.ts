@@ -427,6 +427,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 

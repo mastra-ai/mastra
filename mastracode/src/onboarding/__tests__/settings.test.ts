@@ -167,13 +167,13 @@ describe('customProviders parsing/persistence', () => {
         {
           name: 'No-Key',
           url: 'https://no-key.example.com/v1',
-          models: ['no-key/model-1'],
+          models: ['model-1'],
         },
         {
           name: 'With-Key',
           url: 'https://with-key.example.com/v1',
           apiKey: 'secret-token',
-          models: ['with-key/model-1', 'with-key/model-2'],
+          models: ['model-1', 'model-2'],
         },
       ]);
     });

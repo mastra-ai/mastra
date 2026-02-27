@@ -3,7 +3,7 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings, toCustomProviderModelId } from '../onboarding/settings.js';
+import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -67,12 +67,7 @@ export function resolveModel(
       ? settings.customProviders.find(provider => {
           const normalizedProviderId = getCustomProviderId(provider.name);
           const legacyProviderId = `custom-${normalizedProviderId}`;
-          if (providerId !== normalizedProviderId && providerId !== legacyProviderId) return false;
-          return provider.models.some(model => {
-            const normalizedModelId = toCustomProviderModelId(provider.name, model);
-            const legacyModelId = `${legacyProviderId}/${model}`;
-            return modelId === normalizedModelId || modelId === legacyModelId;
-          });
+          return providerId === normalizedProviderId || providerId === legacyProviderId;
         })
       : undefined;
 

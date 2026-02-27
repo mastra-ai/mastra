@@ -151,7 +151,17 @@ export function getCustomProviderId(name: string): string {
 }
 
 export function toCustomProviderModelId(providerName: string, modelName: string): string {
-  return `${getCustomProviderId(providerName)}/${modelName}`;
+  const providerId = getCustomProviderId(providerName);
+  const trimmedModelName = modelName.trim();
+  const providerPrefix = `${providerId}/`;
+  if (trimmedModelName.startsWith(providerPrefix)) {
+    return trimmedModelName;
+  }
+  const legacyProviderPrefix = `custom-${providerId}/`;
+  if (trimmedModelName.startsWith(legacyProviderPrefix)) {
+    return `${providerId}/${trimmedModelName.slice(legacyProviderPrefix.length)}`;
+  }
+  return `${providerId}/${trimmedModelName}`;
 }
 
 export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
@@ -166,10 +176,26 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
     if (!name || !url) continue;
 
+    const providerId = getCustomProviderId(name);
     const models = Array.isArray(candidate.models)
-      ? [...new Set(candidate.models.filter((model): model is string => typeof model === 'string').map(model => model.trim()))].filter(
-          model => model.length > 0,
-        )
+      ? [
+          ...new Set(
+            candidate.models
+              .filter((model): model is string => typeof model === 'string')
+              .map(model => model.trim())
+              .map(model => {
+                const providerPrefix = `${providerId}/`;
+                if (model.startsWith(providerPrefix)) {
+                  return model.slice(providerPrefix.length);
+                }
+                const legacyProviderPrefix = `custom-${providerId}/`;
+                if (model.startsWith(legacyProviderPrefix)) {
+                  return model.slice(legacyProviderPrefix.length);
+                }
+                return model;
+              }),
+          ),
+        ].filter(model => model.length > 0)
       : [];
 
     const apiKey =
@@ -178,7 +204,7 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     parsedProviders.push({
       name,
       url,
-      apiKey,
+      ...(apiKey ? { apiKey } : {}),
       models,
     });
   }
