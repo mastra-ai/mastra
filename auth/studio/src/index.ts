@@ -1,12 +1,15 @@
 import type {
   EEUser,
+  IRBACProvider,
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  RoleMapping,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@mastra/core/auth';
+import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
@@ -23,6 +26,8 @@ export interface StudioUser extends EEUser {
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
   /** Base URL of the Mastra shared API (e.g., https://api.mastra.ai/v1) */
   sharedApiUrl?: string;
+  /** Organization ID that owns this deployed instance. Users not in this org are rejected. */
+  organizationId?: string;
 }
 
 const COOKIE_NAME = 'wos-session';
@@ -45,15 +50,23 @@ export class MastraAuthStudio
   readonly isMastraCloudAuth = true;
 
   private sharedApiUrl: string;
+  private organizationId: string | undefined;
+  private useProductionCookies: boolean;
 
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     this.sharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL || 'http://localhost:3010/v1';
+    this.organizationId = options?.organizationId || process.env.MASTRA_ORGANIZATION_ID;
 
     // Strip trailing slash
     if (this.sharedApiUrl.endsWith('/')) {
       this.sharedApiUrl = this.sharedApiUrl.slice(0, -1);
     }
+
+    // Use production cookie settings (Secure + Domain=.mastra.ai) only when
+    // the shared API is actually on .mastra.ai — NOT based on NODE_ENV which
+    // may be 'production' even in local dev (e.g. mastra dev sets it).
+    this.useProductionCookies = this.sharedApiUrl.includes('.mastra.ai');
 
     if (options) {
       this.registerOptions(options);
@@ -69,21 +82,29 @@ export class MastraAuthStudio
    * to the shared API's /auth/me endpoint, or a Bearer token to /auth/verify.
    */
   async authenticateToken(token: string, request: any): Promise<StudioUser | null> {
+    let user: StudioUser | null = null;
+
     // Try sealed session cookie first (browser flow)
-    const cookieHeader = request.header('Cookie');
+    const cookieHeader = request?.headers?.get('Cookie');
     const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
 
     if (sessionCookie) {
-      const user = await this.verifySessionCookie(sessionCookie);
-      if (user) return user;
+      user = await this.verifySessionCookie(sessionCookie);
     }
 
     // Fall back to Bearer token (CLI / API token flow)
-    if (token) {
-      return this.verifyBearerToken(token);
+    if (!user && token) {
+      user = await this.verifyBearerToken(token);
     }
 
-    return null;
+    if (!user) return null;
+
+    // Org-scoping: if this instance belongs to a specific org, reject users not in that org
+    if (this.organizationId && user.organizationId !== this.organizationId) {
+      return null;
+    }
+
+    return user;
   }
 
   authorizeUser(user: StudioUser): boolean {
@@ -112,6 +133,7 @@ export class MastraAuthStudio
       product: 'deploy',
       redirect_uri: redirectUri,
       post_login_redirect: postLoginRedirect,
+      ...(this.organizationId ? { organization_id: this.organizationId } : {}),
     });
 
     return `${this.sharedApiUrl}/auth/login?${params.toString()}`;
@@ -241,9 +263,8 @@ export class MastraAuthStudio
   }
 
   getSessionHeaders(session: Session): Record<string, string> {
-    const isProduction = process.env.NODE_ENV === 'production';
     const parts = [`${COOKIE_NAME}=${session.id}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=86400'];
-    if (isProduction) {
+    if (this.useProductionCookies) {
       parts.push('Secure');
       parts.push('Domain=.mastra.ai');
     }
@@ -251,9 +272,8 @@ export class MastraAuthStudio
   }
 
   getClearSessionHeaders(): Record<string, string> {
-    const isProduction = process.env.NODE_ENV === 'production';
     const parts = [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
-    if (isProduction) {
+    if (this.useProductionCookies) {
       parts.push('Secure');
       parts.push('Domain=.mastra.ai');
     }
@@ -383,4 +403,75 @@ function extractCookieValue(setCookieHeaders: string[], name: string): string | 
     if (match?.[1]) return match[1];
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// MastraRBACStudio — role-based permission provider for Studio auth
+// ---------------------------------------------------------------------------
+
+export interface MastraRBACStudioOptions {
+  /**
+   * Mapping from role names to permission arrays.
+   *
+   * @example
+   * ```typescript
+   * {
+   *   admin: ['*'],
+   *   member: ['agents:read', 'workflows:*'],
+   *   viewer: ['agents:read', 'workflows:read'],
+   *   _default: [],
+   * }
+   * ```
+   */
+  roleMapping: RoleMapping;
+}
+
+/**
+ * RBAC provider for Mastra Studio authentication.
+ *
+ * Maps user roles (from the shared API's /auth/me endpoint) to Mastra permissions
+ * using a configurable role mapping.
+ */
+export class MastraRBACStudio implements IRBACProvider<StudioUser> {
+  private options: MastraRBACStudioOptions;
+
+  get roleMapping(): RoleMapping {
+    return this.options.roleMapping;
+  }
+
+  constructor(options: MastraRBACStudioOptions) {
+    this.options = options;
+  }
+
+  async getRoles(user: StudioUser): Promise<string[]> {
+    return user.role ? [user.role] : [];
+  }
+
+  async hasRole(user: StudioUser, role: string): Promise<boolean> {
+    const roles = await this.getRoles(user);
+    return roles.includes(role);
+  }
+
+  async getPermissions(user: StudioUser): Promise<string[]> {
+    const roles = await this.getRoles(user);
+    if (roles.length === 0) {
+      return this.options.roleMapping['_default'] ?? [];
+    }
+    return resolvePermissionsFromMapping(roles, this.options.roleMapping);
+  }
+
+  async hasPermission(user: StudioUser, permission: string): Promise<boolean> {
+    const permissions = await this.getPermissions(user);
+    return permissions.some(p => matchesPermission(p, permission));
+  }
+
+  async hasAllPermissions(user: StudioUser, permissions: string[]): Promise<boolean> {
+    const userPermissions = await this.getPermissions(user);
+    return permissions.every(required => userPermissions.some(p => matchesPermission(p, required)));
+  }
+
+  async hasAnyPermission(user: StudioUser, permissions: string[]): Promise<boolean> {
+    const userPermissions = await this.getPermissions(user);
+    return permissions.some(required => userPermissions.some(p => matchesPermission(p, required)));
+  }
 }

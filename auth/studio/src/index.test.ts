@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MastraAuthStudio } from './index';
+import { MastraAuthStudio, MastraRBACStudio } from './index';
 import type { StudioUser } from './index';
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,8 @@ function mockRequest(opts: { cookie?: string; authorization?: string } = {}): an
   return req;
 }
 
-const SHARED_API = 'https://api.mastra.ai/v1';
+const SHARED_API = 'http://localhost:3010/v1';
+const SHARED_API_PROD = 'https://api.mastra.ai/v1';
 
 const mockMeResponse = {
   user: {
@@ -564,10 +565,7 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('getSessionHeaders', () => {
-    it('should return Set-Cookie header in development', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
-
+    it('should return Set-Cookie header without Secure/Domain for localhost', () => {
       const headers = auth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
@@ -578,15 +576,12 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toBe('wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400');
       expect(headers['Set-Cookie']).not.toContain('Secure');
       expect(headers['Set-Cookie']).not.toContain('Domain');
-
-      process.env.NODE_ENV = originalEnv;
     });
 
-    it('should include Secure and Domain in production', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+      const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
-      const headers = auth.getSessionHeaders({
+      const headers = prodAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -595,34 +590,24 @@ describe('MastraAuthStudio', () => {
 
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
-
-      process.env.NODE_ENV = originalEnv;
     });
   });
 
   describe('getClearSessionHeaders', () => {
-    it('should return Set-Cookie header with Max-Age=0', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
-
+    it('should return Set-Cookie header with Max-Age=0 without Secure/Domain for localhost', () => {
       const headers = auth.getClearSessionHeaders();
 
       expect(headers['Set-Cookie']).toBe('wos-session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
-
-      process.env.NODE_ENV = originalEnv;
     });
 
-    it('should include Secure and Domain in production', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+      const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
-      const headers = auth.getClearSessionHeaders();
+      const headers = prodAuth.getClearSessionHeaders();
 
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
-
-      process.env.NODE_ENV = originalEnv;
     });
   });
 
@@ -675,6 +660,158 @@ describe('MastraAuthStudio', () => {
     it('should return null (not supported)', async () => {
       const user = await auth.getUser('user-1');
       expect(user).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Org-scoping tests
+// ---------------------------------------------------------------------------
+
+describe('MastraAuthStudio org-scoping', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.fn();
+    global.fetch = fetchSpy as any;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.MASTRA_SHARED_API_URL;
+    delete process.env.MASTRA_ORGANIZATION_ID;
+  });
+
+  it('should reject users not in the configured org', async () => {
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    // mockMeResponse has organizationId: 'org-1', but instance is org-owner
+    const user = await auth.authenticateToken('', req);
+    expect(user).toBeNull();
+  });
+
+  it('should allow users in the configured org', async () => {
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-1' });
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    const user = await auth.authenticateToken('', req);
+    expect(user).not.toBeNull();
+    expect(user!.organizationId).toBe('org-1');
+  });
+
+  it('should skip org check when organizationId is not set', async () => {
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    const user = await auth.authenticateToken('', req);
+    expect(user).not.toBeNull();
+  });
+
+  it('should read MASTRA_ORGANIZATION_ID from env', async () => {
+    process.env.MASTRA_ORGANIZATION_ID = 'org-env';
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    // mockMeResponse has organizationId: 'org-1', env has 'org-env' → reject
+    const user = await auth.authenticateToken('', req);
+    expect(user).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MastraRBACStudio tests
+// ---------------------------------------------------------------------------
+
+describe('MastraRBACStudio', () => {
+  const roleMapping = {
+    admin: ['*' as const],
+    member: ['agents:read' as const, 'agents:execute' as const, 'workflows:read' as const],
+    viewer: ['agents:read' as const],
+    _default: [] as '*'[],
+  };
+
+  const rbac = new MastraRBACStudio({ roleMapping });
+
+  const adminUser: StudioUser = { id: 'u1', role: 'admin' };
+  const memberUser: StudioUser = { id: 'u2', role: 'member' };
+  const viewerUser: StudioUser = { id: 'u3', role: 'viewer' };
+  const noRoleUser: StudioUser = { id: 'u4' };
+
+  describe('getRoles', () => {
+    it('should return user role as array', async () => {
+      expect(await rbac.getRoles(adminUser)).toEqual(['admin']);
+    });
+    it('should return empty array when no role', async () => {
+      expect(await rbac.getRoles(noRoleUser)).toEqual([]);
+    });
+  });
+
+  describe('hasRole', () => {
+    it('should return true for matching role', async () => {
+      expect(await rbac.hasRole(adminUser, 'admin')).toBe(true);
+    });
+    it('should return false for non-matching role', async () => {
+      expect(await rbac.hasRole(memberUser, 'admin')).toBe(false);
+    });
+  });
+
+  describe('getPermissions', () => {
+    it('should return wildcard for admin', async () => {
+      expect(await rbac.getPermissions(adminUser)).toEqual(['*']);
+    });
+    it('should return mapped permissions for member', async () => {
+      expect(await rbac.getPermissions(memberUser)).toEqual(['agents:read', 'agents:execute', 'workflows:read']);
+    });
+    it('should return _default for user with no role', async () => {
+      expect(await rbac.getPermissions(noRoleUser)).toEqual([]);
+    });
+  });
+
+  describe('hasPermission', () => {
+    it('admin wildcard should match any permission', async () => {
+      expect(await rbac.hasPermission(adminUser, 'agents:write')).toBe(true);
+    });
+    it('member should have agents:read', async () => {
+      expect(await rbac.hasPermission(memberUser, 'agents:read')).toBe(true);
+    });
+    it('viewer should not have agents:execute', async () => {
+      expect(await rbac.hasPermission(viewerUser, 'agents:execute')).toBe(false);
+    });
+    it('no-role user should have no permissions', async () => {
+      expect(await rbac.hasPermission(noRoleUser, 'agents:read')).toBe(false);
+    });
+  });
+
+  describe('hasAllPermissions', () => {
+    it('should return true when user has all', async () => {
+      expect(await rbac.hasAllPermissions(memberUser, ['agents:read', 'workflows:read'])).toBe(true);
+    });
+    it('should return false when user is missing one', async () => {
+      expect(await rbac.hasAllPermissions(viewerUser, ['agents:read', 'agents:execute'])).toBe(false);
+    });
+  });
+
+  describe('hasAnyPermission', () => {
+    it('should return true when user has at least one', async () => {
+      expect(await rbac.hasAnyPermission(viewerUser, ['agents:read', 'agents:execute'])).toBe(true);
+    });
+    it('should return false when user has none', async () => {
+      expect(await rbac.hasAnyPermission(noRoleUser, ['agents:read'])).toBe(false);
+    });
+  });
+
+  describe('roleMapping getter', () => {
+    it('should expose roleMapping for middleware', () => {
+      expect(rbac.roleMapping).toBe(roleMapping);
     });
   });
 });
