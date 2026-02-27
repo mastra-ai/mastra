@@ -424,12 +424,10 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
       return;
     } catch (error) {
       if (error instanceof ThreadLockError) {
+        // Thread is locked by another process — silently start a new thread.
+        // The lock prompt only appears when the user intentionally picks a
+        // locked thread from the /threads selector.
         state.pendingNewThread = true;
-        state.pendingLockConflict = {
-          threadTitle: thread.title || thread.id,
-          ownerPid: error.ownerPid,
-          threadId: thread.id,
-        };
         return;
       }
       throw error;

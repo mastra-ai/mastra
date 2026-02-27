@@ -20,10 +20,8 @@ import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../o
 import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
-import { askCloneName, resetUIAfterClone } from './commands/clone.js';
 import { handleThreadsCommand } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
@@ -293,19 +291,11 @@ export class MastraTUI {
     // One-time Claude Max OAuth warning at startup
     await this.checkClaudeMaxOAuthWarning();
 
-    // Show deferred thread selection or lock prompt (must happen after TUI is started)
+    // Show deferred thread selector (must happen after TUI is started)
     if (this.state.pendingThreadChoice) {
       this.state.pendingThreadChoice = false;
       await handleThreadsCommand(this.buildCommandContext());
       // Skip onboarding when there's a thread choice — it'll run on next clean startup
-    } else if (this.state.pendingLockConflict) {
-      this.showThreadLockPrompt(
-        this.state.pendingLockConflict.threadTitle,
-        this.state.pendingLockConflict.ownerPid,
-        this.state.pendingLockConflict.threadId,
-      );
-      this.state.pendingLockConflict = null;
-      // Skip onboarding when there's a lock conflict — it'll run on next clean startup
     } else if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
@@ -477,77 +467,7 @@ export class MastraTUI {
     });
   }
 
-  /**
-   * Show an inline prompt when a thread is locked by another process.
-   * User can create a new thread (y) or exit (n).
-   */
-  private showThreadLockPrompt(threadTitle: string, ownerPid: number, lockedThreadId?: string): void {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
-        options: [
-          { label: 'Switch thread', description: 'Pick a different thread' },
-          { label: 'New thread', description: 'Start a fresh thread' },
-          ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
-          { label: 'Exit', description: 'Exit' },
-        ],
-        formatResult: answer => {
-          if (answer === 'Switch thread') return 'Opening thread selector...';
-          if (answer === 'Clone thread') return 'Cloning thread...';
-          if (answer === 'New thread') return 'Starting new thread.';
-          return 'Exiting.';
-        },
-        onSubmit: async answer => {
-          this.state.activeInlineQuestion = undefined;
-          if (answer === 'Switch thread') {
-            await handleThreadsCommand(this.buildCommandContext());
-          } else if (answer === 'Clone thread' && lockedThreadId) {
-            try {
-              const customTitle = await askCloneName(this.state);
-              const clonedThread = await this.state.harness.cloneThread({
-                sourceThreadId: lockedThreadId,
-                ...(customTitle ? { title: customTitle } : {}),
-              });
-              this.state.pendingNewThread = false;
-              await resetUIAfterClone(
-                {
-                  state: this.state,
-                  updateStatusLine: () => updateStatusLine(this.state),
-                  renderExistingMessages: () => renderExistingMessages(this.state),
-                  showInfo: msg => showInfo(this.state, msg),
-                },
-                clonedThread.title || clonedThread.id,
-              );
-            } catch (error) {
-              showError(
-                this.state,
-                `Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            }
-          } else if (answer === 'New thread') {
-            // pendingNewThread is already true — thread will be
-            // created lazily on first message
-            if (this.shouldShowOnboarding()) {
-              await this.showOnboarding();
-            }
-          } else {
-            process.exit(0);
-          }
-        },
-        onCancel: () => {
-          this.state.activeInlineQuestion = undefined;
-          process.exit(0);
-        },
-      },
-      this.state.ui,
-    );
 
-    this.state.activeInlineQuestion = questionComponent;
-    this.state.chatContainer.addChild(questionComponent);
-    this.state.chatContainer.addChild(new Spacer(1));
-    this.state.ui.requestRender();
-    this.state.chatContainer.invalidate();
-  }
 
   /**
    * One-time startup check: if the user has Anthropic OAuth credentials and

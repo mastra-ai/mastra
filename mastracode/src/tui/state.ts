@@ -115,7 +115,6 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
-  pendingLockConflict: { threadTitle: string; ownerPid: number; threadId?: string } | null;
   /** When multiple directory threads exist, defer showing the thread selector until TUI is ready */
   pendingThreadChoice: boolean;
 
@@ -214,7 +213,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
-    pendingLockConflict: null,
     pendingThreadChoice: false,
 
     // Inline interaction
