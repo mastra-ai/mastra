@@ -151,7 +151,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       detached: true,
     });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
-    this._tracked.set(handle.pid, handle);
+    this._tracked.set(this.pidKey(handle.pid), handle);
     return handle;
   }
 

@@ -2,4 +2,9 @@
 '@mastra/blaxel': patch
 ---
 
-Improved Blaxel process handling to use provider-returned process IDs directly, removing the need for numeric conversion.
+Added support for provider-native string process IDs in Blaxel process APIs.
+
+```typescript
+const handle = await sandbox.processes.spawn('node server.js');
+await sandbox.processes.get(handle.pid); // handle.pid can be a string
+```

@@ -122,7 +122,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       });
 
       handle = new E2BProcessHandle(e2bHandle, e2b, Date.now(), options);
-      this._tracked.set(handle.pid, handle);
+      this._tracked.set(this.pidKey(handle.pid), handle);
       return handle;
     });
   }
@@ -147,7 +147,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
    * for processes spawned externally or before reconnection.
    */
   async get(pid: string | number): Promise<ProcessHandle | undefined> {
-    const tracked = this._tracked.get(pid);
+    const tracked = this._tracked.get(this.pidKey(pid));
     if (tracked) return tracked;
 
     // Fall back to connect() for unknown PIDs (e.g., pre-existing processes).
@@ -162,7 +162,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
         onStderr: (data: string) => handle.emitStderr(data),
       });
       handle = new E2BProcessHandle(e2bHandle, e2b, Date.now());
-      this._tracked.set(pid, handle);
+      this._tracked.set(this.pidKey(pid), handle);
       return handle;
     } catch {
       return undefined;
