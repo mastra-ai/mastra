@@ -4,6 +4,7 @@ import { useLocation } from '@docusaurus/router'
 import { cn } from '@site/src/lib/utils'
 import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 import type { Lesson, LearnStorageV1, LessonStatus } from '../types'
+import { course } from '../course'
 import { LearnProgressBar } from './LearnProgressBar'
 import { getPublishedCount } from '../utils'
 
@@ -48,7 +49,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
       <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
         <div className="px-4 pb-4">
           <Link to="/learn" className="learn-link text-sm font-semibold text-(--mastra-text-primary)">
-            Mastra Learn
+            {course.title}
           </Link>
           <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mt-3" />
         </div>
