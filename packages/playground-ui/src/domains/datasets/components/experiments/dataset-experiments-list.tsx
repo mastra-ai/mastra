@@ -82,11 +82,7 @@ export function DatasetExperimentsList({
                   <ItemList.LabelCell>
                     <Checkbox
                       checked={isSelected}
-                      onCheckedChange={() => {}}
-                      onClick={e => {
-                        e.stopPropagation();
-                        onToggleSelection(experiment.id);
-                      }}
+                      onCheckedChange={() => onToggleSelection(experiment.id)}
                       aria-label={`Select experiment ${experiment.id}`}
                     />
                   </ItemList.LabelCell>
