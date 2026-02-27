@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
@@ -1040,9 +1041,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   async sendMessage({
     content,
     images,
+    tracingContext,
+    tracingOptions,
   }: {
     content: string;
     images?: Array<{ data: string; mimeType: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1067,6 +1072,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         maxSteps: 1000,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
       };
 
       streamOptions.toolsets = await this.buildToolsets(requestContext);

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
+import type { TracingContext, TracingOptions } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 
@@ -52,28 +53,45 @@ describe('Harness tracing propagation', () => {
     (harness as any).currentThreadId = 'test-thread-123';
   });
 
-  // TODO(#13540): The fix should wrap agents with the tracing proxy (like wrapAgent)
-  // so tracingContext is automatically injected into agent.stream() calls.
-  it('should forward tracingContext to agent.stream()', async () => {
-    await harness.sendMessage({ content: 'hello' });
+  it('should forward tracingContext to agent.stream() when provided', async () => {
+    const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
+    const tracingContext: TracingContext = { currentSpan: mockSpan as any };
+
+    await harness.sendMessage({ content: 'hello', tracingContext });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
     const [, streamOptions] = streamSpy.mock.calls[0]!;
 
     expect(streamOptions).toHaveProperty('tracingContext');
+    expect((streamOptions as any).tracingContext).toBe(tracingContext);
   });
 
-  // TODO(#13540): The fix should add tracingOptions as an optional parameter to
-  // sendMessage() and forward it to agent.stream(). Update this test to pass
-  // tracingOptions through sendMessage() once the API supports it.
-  it('should forward tracingOptions to agent.stream()', async () => {
-    await harness.sendMessage({ content: 'hello' });
+  it('should forward tracingOptions to agent.stream() when provided', async () => {
+    const tracingOptions: TracingOptions = {
+      traceId: 'abc123',
+      parentSpanId: 'def456',
+      metadata: { requestId: 'req-789' },
+    };
+
+    await harness.sendMessage({ content: 'hello', tracingOptions });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
     const [, streamOptions] = streamSpy.mock.calls[0]!;
 
     expect(streamOptions).toHaveProperty('tracingOptions');
+    expect((streamOptions as any).tracingOptions).toBe(tracingOptions);
+  });
+
+  it('should not include tracingContext/tracingOptions when not provided', async () => {
+    await harness.sendMessage({ content: 'hello' });
+
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+
+    const [, streamOptions] = streamSpy.mock.calls[0]!;
+
+    expect(streamOptions).not.toHaveProperty('tracingContext');
+    expect(streamOptions).not.toHaveProperty('tracingOptions');
   });
 });
