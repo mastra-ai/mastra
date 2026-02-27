@@ -522,16 +522,25 @@ describe('Mock OM Agent Integration', () => {
     expect(primaryRecord!.activeObservations).toContain('User asked for help');
 
     // Sub-agent should have its own thread with a separate resourceId
-    const subAgentThreads = await memoryStore!.listThreads({
-      filter: { resourceId: 'primary-agent-researcher' },
+    const subAgentResourceId = 'test-resource-researcher';
+    let subAgentThreads = await memoryStore!.listThreads({
+      filter: { resourceId: subAgentResourceId },
     });
+
+    for (let i = 0; i < 20 && subAgentThreads.threads.length === 0; i++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      subAgentThreads = await memoryStore!.listThreads({
+        filter: { resourceId: subAgentResourceId },
+      });
+    }
+
     expect(subAgentThreads.threads.length).toBe(1);
 
     // Sub-agent's OM record should have its own observations under its own identity
     const subThreadId = subAgentThreads.threads[0]!.id;
-    const subRecord = await memoryStore!.getObservationalMemory(subThreadId, 'primary-agent-researcher');
+    const subRecord = await memoryStore!.getObservationalMemory(subThreadId, subAgentResourceId);
     expect(subRecord).toBeTruthy();
-    expect(subRecord!.resourceId).toBe('primary-agent-researcher');
+    expect(subRecord!.resourceId).toBe(subAgentResourceId);
     expect(subRecord!.activeObservations).toContain('User asked for help');
   });
 });

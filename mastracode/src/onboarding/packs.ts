@@ -59,21 +59,6 @@ export function getAvailableModePacks(
   const openaiCodex = 'openai/gpt-5.3-codex';
   const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-6' : 'anthropic/claude-sonnet-4-5';
 
-  // Varied — needs both Anthropic + OpenAI.  Cerebras is nice-to-have; fall
-  // back to Haiku for the fast slot when it's missing.
-  if (access.anthropic && access.openai) {
-    packs.push({
-      id: 'varied',
-      name: 'Varied',
-      description: 'Models from multiple providers',
-      models: {
-        build: anthropicBuild,
-        plan: openaiCodex,
-        fast: access.cerebras ? 'cerebras/zai-glm-4.7' : 'anthropic/claude-haiku-4-5',
-      },
-    });
-  }
-
   if (access.anthropic) {
     packs.push({
       id: 'anthropic',

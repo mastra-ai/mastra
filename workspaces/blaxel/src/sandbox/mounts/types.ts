@@ -58,6 +58,26 @@ export function validateEndpoint(endpoint: string): void {
 }
 
 /**
+ * Detected system package manager.
+ */
+export type PackageManager = 'apt' | 'apk' | 'unknown';
+
+/**
+ * Detect the system package manager available in the sandbox.
+ * Returns 'apt' for Debian/Ubuntu, 'apk' for Alpine, or 'unknown'.
+ */
+export async function detectPackageManager(sandbox: SandboxInstance): Promise<PackageManager> {
+  const result = await runCommand(
+    sandbox,
+    'which apt-get >/dev/null 2>&1 && echo "apt" || (which apk >/dev/null 2>&1 && echo "apk" || echo "unknown")',
+  );
+  const pm = result.stdout.trim();
+  if (pm === 'apt') return 'apt';
+  if (pm === 'apk') return 'apk';
+  return 'unknown';
+}
+
+/**
  * Run a command in the Blaxel sandbox and return the result.
  * Wraps the process.exec API to match the command execution pattern used in mount operations.
  *
