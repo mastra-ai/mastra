@@ -89,7 +89,6 @@ export function DatasetExperimentsList({
                 )}
                 <ItemList.RowButton
                   item={entry}
-                  isFeatured={isSelected}
                   columns={experimentsListColumns}
                   onClick={() => onRowClick(experiment.id)}
                 >

@@ -12,7 +12,7 @@ const meta: Meta<typeof Chip> = {
   argTypes: {
     color: {
       control: { type: 'select' },
-      options: ['gray', 'red', 'orange', 'blue', 'green', 'purple', 'yellow', 'cyan'],
+      options: ['gray', 'red', 'orange', 'blue', 'green', 'purple', 'yellow', 'cyan', 'pink'],
     },
     size: {
       control: { type: 'select' },
@@ -45,6 +45,7 @@ export const Colors: Story = {
       <Chip color="purple">Purple</Chip>
       <Chip color="yellow">Yellow</Chip>
       <Chip color="cyan">Cyan</Chip>
+      <Chip color="pink">Pink</Chip>
     </div>
   ),
 };

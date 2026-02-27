@@ -35,8 +35,7 @@ export function DatasetExperimentsComparison({
 }: DatasetExperimentsComparisonProps) {
   const [featuredItemId, setFeaturedItemId] = useState<string | null>(null);
 
-  const { data, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
-  const comparison = data as CompareExperimentsResponse | undefined;
+  const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
   const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
   const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
@@ -63,7 +62,7 @@ export function DatasetExperimentsComparison({
   const scorerSummaries = useMemo(() => {
     if (!comparison || scorerIds.length === 0) return [];
     const baselineId = comparison.baselineId;
-    const otherId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
+    const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
 
     return scorerIds.map(scorerId => {
       let sumA = 0;
@@ -73,7 +72,7 @@ export function DatasetExperimentsComparison({
 
       for (const item of comparison.items) {
         const scoreA = item.results[baselineId]?.scores[scorerId];
-        const scoreB = item.results[otherId]?.scores[scorerId];
+        const scoreB = item.results[contenderId]?.scores[scorerId];
         if (scoreA != null) {
           sumA += scoreA;
           countA++;
@@ -161,7 +160,7 @@ export function DatasetExperimentsComparison({
   }
 
   const baselineId = comparison.baselineId;
-  const otherId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
+  const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
 
   return (
     <div className="grid gap-10">
@@ -254,7 +253,7 @@ export function DatasetExperimentsComparison({
         <ComparisonItemsList
           items={comparison.items}
           baselineId={baselineId}
-          contenderId={otherId}
+          contenderId={contenderId}
           scorerIds={scorerIds}
           featuredItemId={featuredItemId}
           columns={comparisonColumns}
@@ -265,7 +264,7 @@ export function DatasetExperimentsComparison({
           <ComparisonItemPanel
             item={featuredItem}
             baselineId={baselineId}
-            contenderId={otherId}
+            contenderId={contenderId}
             baselineVersion={expA?.datasetVersion}
             contenderVersion={expB?.datasetVersion}
             onPrevious={toPreviousItem()}
