@@ -339,10 +339,10 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private renderModePack(): void {
     const packs = this.options.modePacks;
+    const box = this.makeBox();
 
     // No API keys and no OAuth logins — show warning but allow the user to continue
     if (!this.options.hasProviderAccess) {
-      const box = this.makeBox();
       box.addChild(new Text(theme.bold(theme.fg('warning', 'No model providers configured')), 0, 0));
       box.addChild(new Spacer(1));
       box.addChild(new Text(theme.fg('text', 'To use Mastra Code you need at least one API key or OAuth login'), 0, 0));
@@ -355,9 +355,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
       box.addChild(
         new Text(theme.fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0),
       );
+      box.addChild(new Spacer(1));
     }
 
-    const box = this.makeBox();
     box.addChild(new Text(theme.bold(theme.fg('accent', 'Model Packs')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', 'Choose default models for each mode (build / plan / fast):'), 0, 0));
