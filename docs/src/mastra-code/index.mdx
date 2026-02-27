@@ -1,23 +1,34 @@
 ---
-title: 'Mastra Code overview | Mastra Code'
+title: 'Mastra Code'
 description: 'Mastra Code is a terminal-based AI coding agent built with Mastra. It provides multi-model support, persistent conversations, coding tools, and a polished TUI.'
 packages:
   - 'mastracode'
+slug: /
 ---
 
 import Steps from '@site/src/components/Steps';
 import StepItem from '@site/src/components/StepItem';
+import ThemedImage from "@theme/ThemedImage";
 
-# Mastra Code overview
+<ThemedImage
+  alt=""
+  sources={{
+light: "/img/mastracode-logo-dark.svg",
+dark: "/img/mastracode-logo.svg"
+}}
+  style={{ width: "460px", marginBottom: "1.5rem", borderRadius: 0 }}
+/>
 
-Mastra Code is a terminal-based AI coding agent built on Mastra's [Harness](/reference/harness/harness-class), [Agent](/docs/agents/overview), and [Memory](/docs/memory/overview) primitives. It runs in your terminal, connects to 70+ AI models, and provides tools for reading, searching, editing, and executing code.
+# Mastra Code
+
+Mastra Code is a terminal-based AI coding agent built on Mastra's [Harness](https://mastra.ai/reference/harness/harness-class), [Agent](https://mastra.ai/docs/agents/overview), and [Memory](https://mastra.ai/docs/memory/overview) primitives. It runs in your terminal, connects to 70+ AI models, and provides tools for reading, searching, editing, and executing code.
 
 Mastra Code organizes its capabilities around these areas:
 
-- [**Modes**](/docs/mastra-code/modes): Switch between Build, Plan, and Fast modes to match your workflow.
-- [**Tools**](/docs/mastra-code/tools): Built-in tools for file viewing, editing, searching, shell commands, and web search.
-- [**Configuration**](/docs/mastra-code/configuration): Project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
-- [**Customization**](/docs/mastra-code/customization): Extend Mastra Code programmatically with custom modes, tools, subagents, and storage.
+- [**Modes**](/modes): Switch between Build, Plan, and Fast modes to match your workflow.
+- [**Tools**](/tools): Built-in tools for file viewing, editing, searching, shell commands, and web search.
+- [**Configuration**](/configuration): Project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
+- [**Customization**](/customization): Extend Mastra Code programmatically with custom modes, tools, subagents, and storage.
 
 ## When to use Mastra Code
 
@@ -59,7 +70,7 @@ Mastra Code requires Node.js 22.13.0 or later.
   <StepItem>
     Set an API key for your preferred provider (e.g. `export ANTHROPIC_API_KEY=sk-ant-...`), or run `/login` to
     authenticate with an Anthropic or OpenAI subscription. See
-    [Configuration](/docs/mastra-code/configuration#authentication) for all supported providers.
+    [Configuration](/configuration#authentication) for all supported providers.
   </StepItem>
 
   <StepItem>
@@ -87,7 +98,7 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | `/help` | Show available commands |
 | `/exit` | Exit the TUI |
 
-You can also define custom slash commands as markdown files. See [Configuration](/docs/mastra-code/configuration) for details.
+You can also define custom slash commands as markdown files. See [Configuration](/configuration) for details.
 
 ## Keyboard shortcuts
 
@@ -110,8 +121,8 @@ Mastra Code is built on four layers:
 
 ## Next steps
 
-- [Modes](/docs/mastra-code/modes)
-- [Tools](/docs/mastra-code/tools)
-- [Configuration](/docs/mastra-code/configuration)
-- [Customization](/docs/mastra-code/customization)
-- [API reference](/reference/mastra-code/createMastraCode)
+- [Modes](/modes)
+- [Tools](/tools)
+- [Configuration](/configuration)
+- [Customization](/customization)
+- [API reference](/reference)

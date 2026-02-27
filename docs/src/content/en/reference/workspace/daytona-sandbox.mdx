@@ -7,7 +7,7 @@ packages:
 
 # DaytonaSandbox
 
-Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, and network isolation.
+Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, network isolation, and mounting cloud storage (S3, GCS) via FUSE.
 
 :::info
 
@@ -314,6 +314,11 @@ type: "ProviderStatus",
 description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
 },
 {
+name: "mounts",
+type: "MountManager",
+description: "Mount manager for tracking FUSE-mounted cloud filesystems (S3, GCS).",
+},
+{
 name: "instance",
 type: "Sandbox",
 description: "The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.",
@@ -415,6 +420,22 @@ isOptional: true,
 ]}
 />
 
+### `mount(filesystem, mountPath)`
+
+Mount a filesystem into the sandbox at the specified path.
+
+```typescript
+await sandbox.mount(s3Filesystem, '/mnt/data')
+```
+
+### `unmount(mountPath)`
+
+Unmount a previously mounted filesystem.
+
+```typescript
+await sandbox.unmount('/mnt/data')
+```
+
 ### `getInfo()`
 
 Get sandbox status and resource information.
@@ -491,8 +512,75 @@ The `instance` getter throws `SandboxNotReadyError` if the sandbox has not been 
 
 Resources are only applied when `image` is set. Passing `resources` without `image` has no effect.
 
+## Mounting Cloud Storage
+
+Daytona sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as local directories inside the sandbox. This is useful for:
+
+- Processing large datasets stored in cloud buckets
+- Writing output files directly to cloud storage
+- Sharing data between sandbox sessions
+
+### Using the mounts config
+
+The simplest way to mount filesystems is through the workspace `mounts` config:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { GCSFilesystem } from '@mastra/gcs'
+import { DaytonaSandbox } from '@mastra/daytona'
+
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      bucket: 'my-s3-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }),
+    '/gcs-data': new GCSFilesystem({
+      bucket: 'my-gcs-bucket',
+      projectId: 'my-project',
+      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
+    }),
+  },
+  sandbox: new DaytonaSandbox({ id: 'dev-sandbox' }),
+})
+```
+
+When the sandbox starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
+
+### How mounting works
+
+Daytona sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
+
+- **S3/R2**: Mounted via [s3fs-fuse](https://github.com/s3fs-fuse/s3fs-fuse)
+- **GCS**: Mounted via [gcsfuse](https://github.com/GoogleCloudPlatform/gcsfuse)
+
+The required FUSE tools are installed automatically at mount time if not already present in the sandbox image. For faster startup, pre-install them in a custom image:
+
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y s3fs fuse gcsfuse
+```
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    image: 'my-registry/my-image:latest',
+  }),
+  mounts: {
+    '/data': new S3Filesystem({
+      /* ... */
+    }),
+  },
+})
+```
+
 ## Related
 
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
 - [Workspace overview](/docs/workspace/overview)

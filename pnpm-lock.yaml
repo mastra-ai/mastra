@@ -362,6 +362,9 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15

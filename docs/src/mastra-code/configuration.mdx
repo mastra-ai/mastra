@@ -1,5 +1,5 @@
 ---
-title: 'Configuration | Mastra Code'
+title: 'Configuration'
 description: 'Learn how to configure Mastra Code with authentication, MCP servers, hooks, custom commands, skills, storage backends (LibSQL and PostgreSQL), and environment variables.'
 packages:
   - 'mastracode'
@@ -25,7 +25,7 @@ export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
 ```
 
-Mastra Code uses Mastra's [model router](/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
+Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
 ### OAuth login (optional)
 
@@ -36,7 +36,7 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
 
-OAuth credentials are stored in `auth.json` alongside the database in the [app data directory](#database-location). During onboarding, you can skip the OAuth step if you already have API keys configured.
+OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
 ### Anthropic OAuth warning
 
@@ -44,7 +44,7 @@ Authenticating with a Claude Max subscription through OAuth is a grey area. Anth
 
 ## MCP servers
 
-Mastra Code can connect to external [MCP](/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
+Mastra Code can connect to external [MCP](https://mastra.ai/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
 
 | Priority | Path | Scope |
 | - | - | - |
@@ -227,7 +227,7 @@ If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL an
 
 ## Observational memory
 
-[Observational memory](/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
+[Observational memory](https://mastra.ai/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
 
 ### OM scope
 

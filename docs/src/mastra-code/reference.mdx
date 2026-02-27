@@ -1,185 +1,267 @@
 ---
-title: 'API Reference | Mastra Code'
-description: 'API reference for createMastraCode(), the factory function that initializes the Mastra Code coding agent with its harness, MCP manager, hooks, and auth.'
-packages:
-  - 'mastracode'
+title: "API Reference"
+description: "Complete API reference for createMastraCode() factory function and the returned components."
 ---
 
 # API Reference
 
-## createMastraCode()
+The `createMastraCode()` factory function bootstraps Mastra Code and returns a configured harness, MCP manager, and other components. Use it to embed Mastra Code in custom applications or extend its functionality.
 
-`createMastraCode()` is the main factory function that bootstraps the Mastra Code coding agent. It wires together project detection, storage, authentication, MCP servers, hooks, modes, subagents, and the [Harness](/reference/harness/harness-class) that drives the TUI or any other frontend.
+## `createMastraCode()`
 
-### Usage example
-
-```typescript title="src/main.ts"
+```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
-```
-
-Pass a config object to customize behavior:
-
-```typescript title="src/custom.ts"
-import { createMastraCode } from 'mastracode'
-
-const { harness } = createMastraCode({
-  cwd: '/path/to/project',
-  disableMcp: true,
-  initialState: { yolo: false },
-})
-
-await harness.init()
-await harness.selectOrCreateThread()
-await harness.sendMessage({ content: 'Explain the auth flow' })
+const { harness, mcpManager, hookManager, authStorage } = createMastraCode(options)
 ```
 
 ### Parameters
 
-`createMastraCode()` accepts an optional `MastraCodeConfig` object:
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `options` | `CreateMastraCodeOptions` | No | Configuration options |
 
-<PropertiesTable
-  content={[
-{
-name: 'cwd',
-type: 'string',
-description:
-'Working directory for project detection. Mastra Code uses this path to find the Git root, determine the project name, and scope threads.',
-isOptional: true,
-defaultValue: 'process.cwd()',
-},
-{
-name: 'modes',
-type: 'HarnessMode[]',
-description:
-'Override the default agent modes. Each mode defines an agent, a default model, and a display color. When omitted, Mastra Code ships with Build, Plan, and Fast modes.',
-isOptional: true,
-},
-{
-name: 'subagents',
-type: 'HarnessSubagent[]',
-description:
-'Override the default subagent definitions. When omitted, Mastra Code includes Explore (read-only codebase exploration), Plan (read-only analysis and planning), and Execute (task execution with write access).',
-isOptional: true,
-},
-{
-name: 'extraTools',
-type: 'Record<string, any>',
-description: 'Additional tools merged into the dynamic tool set available to the agent.',
-isOptional: true,
-},
-{
-name: 'storage',
-type: '{ url: string; authToken?: string }',
-description:
-'Custom LibSQL storage configuration. When omitted, Mastra Code auto-detects storage from environment variables, project config, global config, or falls back to a local SQLite database.',
-isOptional: true,
-},
-{
-name: 'initialState',
-type: 'Record<string, unknown>',
-description:
-'Initial harness state overrides. Merged with defaults like `yolo`, `thinkingLevel`, and project info.',
-isOptional: true,
-},
-{
-name: 'heartbeatHandlers',
-type: 'HeartbeatHandler[]',
-description:
-'Override the default periodic background tasks. The default handler syncs model gateways every 5 minutes.',
-isOptional: true,
-},
-{
-name: 'disableMcp',
-type: 'boolean',
-description: 'Disable MCP server discovery and connection.',
-isOptional: true,
-defaultValue: 'false',
-},
-{
-name: 'disableHooks',
-type: 'boolean',
-description: 'Disable the hooks system (lifecycle shell commands).',
-isOptional: true,
-defaultValue: 'false',
-},
-]}
-/>
+### Returns
 
-### Return value
-
-`createMastraCode()` returns an object with four properties:
-
-<PropertiesTable
-  content={[
-{
-name: 'harness',
-type: 'Harness',
-description:
-'The Harness instance that orchestrates modes, threads, state, memory, and agent interactions. This is the primary interface for sending messages, switching models, and managing conversations.',
-},
-{
-name: 'mcpManager',
-type: 'McpManager | undefined',
-description: 'The MCP manager for connecting to external MCP servers. `undefined` when `disableMcp` is `true`.',
-},
-{
-name: 'hookManager',
-type: 'HookManager | undefined',
-description:
-'The hook manager for executing lifecycle shell commands. `undefined` when `disableHooks` is `true`.',
-},
-{
-name: 'authStorage',
-type: 'AuthStorage',
-description:
-'The authentication storage instance. Manages OAuth credentials for AI providers (Anthropic Claude Max, OpenAI Codex).',
-},
-]}
-/>
-
-### Default modes
-
-When no `modes` are specified, Mastra Code creates three modes:
-
-| Mode | Default model | Description |
+| Property | Type | Description |
 | - | - | - |
-| **Build** (default) | `anthropic/claude-opus-4-6` | Full tool access. Read, write, edit files, and execute commands. |
-| **Plan** | `openai/gpt-5.2-codex` | Read-only mode. Explore the codebase and produce implementation plans. |
-| **Fast** | `cerebras/zai-glm-4.7` | Quick answers and small edits with minimal overhead. |
+| `harness` | `Harness` | The main orchestrator for modes, threads, messages, and tools |
+| `mcpManager` | `MCPManager` | Manager for MCP server connections |
+| `hookManager` | `HookManager` | Manager for lifecycle hooks |
+| `authStorage` | `AuthStorage` | Storage for OAuth credentials |
 
-### Default subagents
+### `CreateMastraCodeOptions`
 
-When no `subagents` are specified, Mastra Code creates three subagent types:
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `cwd` | `string` | `process.cwd()` | Working directory for the agent |
+| `modes` | `HarnessMode[]` | Build, Plan, Fast | Custom mode configurations |
+| `extraTools` | `ToolsInput` | `{}` | Additional tools merged with built-in tools |
+| `subagents` | `HarnessSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
+| `storage` | `StorageConfig` | Local LibSQL | Database configuration |
+| `initialState` | `Partial<MastraCodeState>` | Default state | Initial harness state values |
+| `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
+| `resolveModel` | `(id: string) => LanguageModel` | Default resolver | Custom model resolution function |
 
-| Subagent | Tools | Description |
-| - | - | - |
-| **Explore** | `view`, `search_content`, `find_files` | Read-only codebase exploration for answering questions about code structure. |
-| **Plan** | `view`, `search_content`, `find_files` | Read-only analysis and planning with structured plan output. |
-| **Execute** | All read tools + `string_replace_lsp`, `write_file`, `execute_command`, `task_write`, `task_check` | Focused task execution with full write capabilities. |
+#### `HarnessMode`
 
-### Project detection
+Each mode defines an agent configuration and display properties.
 
-Mastra Code automatically detects project identity from the working directory:
+| Property | Type | Required | Description |
+| - | - | - | - |
+| `id` | `string` | Yes | Unique identifier (e.g., `"build"`, `"plan"`) |
+| `name` | `string` | No | Display name shown in the TUI |
+| `default` | `boolean` | No | Whether this mode is active on startup |
+| `defaultModelId` | `string` | No | Default model ID for this mode |
+| `color` | `string` | No | Hex color for mode indicator (e.g., `"#7c3aed"`) |
+| `agent` | `Agent \| ((state) => Agent)` | Yes | Agent instance or factory function |
 
-1. **Git remote URL** — if available, normalizes SSH and HTTPS URLs to create a stable identifier shared across clones and worktrees.
-1. **Absolute path** — falls back to the filesystem path when Git isn't available.
+#### `HarnessSubagent`
 
-The resulting `resourceId` scopes threads to the project, so conversations are shared across clones, worktrees, and SSH/HTTPS URLs of the same repository.
+Subagent definitions for spawning focused child agents.
 
-### Storage resolution
+| Property | Type | Required | Description |
+| - | - | - | - |
+| `id` | `string` | Yes | Unique identifier (e.g., `"explore"`) |
+| `name` | `string` | Yes | Display name in tool output |
+| `description` | `string` | Yes | What this subagent does |
+| `instructions` | `string` | Yes | System prompt for the subagent |
+| `tools` | `ToolsInput` | No | Tools available to this subagent |
+| `allowedHarnessTools` | `string[]` | No | Tool IDs from harness tools this subagent can use |
+| `defaultModelId` | `string` | No | Default model for this subagent type |
 
-Storage configuration is resolved in priority order:
+#### `StorageConfig`
 
-1. `storage` parameter passed to `createMastraCode()`
-1. `MASTRA_DB_URL` and `MASTRA_DB_AUTH_TOKEN` environment variables
-1. Project config at `.mastracode/database.json`
-1. Global config at `~/.mastracode/database.json`
-1. Local SQLite database at the platform-specific app data directory
+Database connection configuration.
 
-:::note
+| Property | Type | Required | Description |
+| - | - | - | - |
+| `url` | `string` | Yes | Database URL (LibSQL or PostgreSQL) |
+| `authToken` | `string` | No | Auth token for remote LibSQL |
 
-The returned `harness` object is a full [Harness](/reference/harness/harness-class) instance with methods for sending messages, switching modes and models, managing threads, and subscribing to events.
+#### `MastraCodeState`
 
-:::
+Harness state fields available through `initialState`.
+
+| Field | Type | Default | Description |
+| - | - | - | - |
+| `yolo` | `boolean` | `true` | Auto-approve all tool calls |
+| `thinkingLevel` | `"off" \| "low" \| "medium" \| "high"` | `"off"` | Extended thinking depth for Anthropic models |
+| `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
+| `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert style when TUI needs attention |
+| `permissionRules` | `PermissionRules` | Default policies | Per-category and per-tool approval policies |
+| `observerModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory observer |
+| `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
+| `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
+| `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |
+
+#### `PermissionRules`
+
+Tool permission configuration.
+
+```typescript
+interface PermissionRules {
+  categories: {
+    read: 'allow' | 'ask' | 'deny'
+    edit: 'allow' | 'ask' | 'deny'
+    execute: 'allow' | 'ask' | 'deny'
+    mcp: 'allow' | 'ask' | 'deny'
+  }
+  tools: Record<string, 'allow' | 'ask' | 'deny'>
+}
+```
+
+#### `HeartbeatHandler`
+
+Background task definition.
+
+| Property | Type | Required | Description |
+| - | - | - | - |
+| `id` | `string` | Yes | Unique identifier for this handler |
+| `intervalMs` | `number` | Yes | Interval between executions in milliseconds |
+| `handler` | `() => Promise<void>` | Yes | Async function to execute |
+
+### Harness
+
+The `Harness` instance returned by `createMastraCode()` is the main orchestrator. See the [Harness Class reference](https://mastra.ai/reference/harness/harness-class) for the complete API.
+
+## MastraTUI
+
+The `MastraTUI` class provides the terminal interface. Import it separately to build custom TUI applications:
+
+```typescript
+import { createMastraCode } from 'mastracode'
+import { MastraTUI } from 'mastracode/tui'
+
+const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+
+const tui = new MastraTUI({
+  harness,
+  hookManager,
+  authStorage,
+  mcpManager,
+  appName: 'My Agent',
+  version: '1.0.0',
+})
+
+tui.run()
+```
+
+### `MastraTUIOptions`
+
+| Option | Type | Required | Description |
+| - | - | - | - |
+| `harness` | `Harness` | Yes | The harness instance |
+| `hookManager` | `HookManager` | Yes | Hook manager from `createMastraCode()` |
+| `authStorage` | `AuthStorage` | Yes | Auth storage from `createMastraCode()` |
+| `mcpManager` | `MCPManager` | Yes | MCP manager from `createMastraCode()` |
+| `appName` | `string` | No | Application name shown in header |
+| `version` | `string` | No | Version shown in header |
+
+## Examples
+
+### Basic usage
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  cwd: '/path/to/project',
+})
+
+await harness.init()
+await harness.selectOrCreateThread()
+
+harness.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message.content)
+  }
+})
+
+await harness.sendMessage({ content: 'Explain the auth module' })
+```
+
+### Custom mode
+
+```typescript
+import { createMastraCode } from 'mastracode'
+import { Agent } from '@mastra/core/agent'
+
+const reviewAgent = new Agent({
+  id: 'review-agent',
+  name: 'Review Agent',
+  instructions: 'You are a code review specialist.',
+  model: 'anthropic/claude-sonnet-4',
+})
+
+const { harness } = createMastraCode({
+  modes: [
+    {
+      id: 'review',
+      name: 'Review',
+      default: true,
+      defaultModelId: 'anthropic/claude-sonnet-4',
+      color: '#f59e0b',
+      agent: reviewAgent,
+    },
+  ],
+})
+```
+
+### Custom tools
+
+```typescript
+import { createMastraCode } from 'mastracode'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const deployTool = createTool({
+  id: 'deploy',
+  description: 'Deploy the current branch to staging',
+  inputSchema: z.object({
+    environment: z.enum(['staging', 'production']),
+  }),
+  execute: async ({ environment }) => {
+    // Deploy logic here
+    return { content: `Deployed to ${environment}` }
+  },
+})
+
+const { harness } = createMastraCode({
+  extraTools: { deploy: deployTool },
+})
+```
+
+### Remote storage
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  storage: {
+    url: 'libsql://my-db.turso.io',
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  },
+})
+```
+
+### Disable YOLO mode
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const { harness } = createMastraCode({
+  initialState: {
+    yolo: false,
+    permissionRules: {
+      categories: {
+        read: 'allow',
+        edit: 'ask',
+        execute: 'ask',
+        mcp: 'deny',
+      },
+      tools: {},
+    },
+  },
+})
+```
