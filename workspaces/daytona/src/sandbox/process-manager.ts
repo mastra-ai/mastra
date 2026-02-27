@@ -39,13 +39,7 @@ class DaytonaProcessHandle extends ProcessHandle {
   private _streamingPromise: Promise<void> | null = null;
   private _killed = false;
 
-  constructor(
-    sessionId: string,
-    cmdId: string,
-    sandbox: Sandbox,
-    startTime: number,
-    options?: SpawnProcessOptions,
-  ) {
+  constructor(sessionId: string, cmdId: string, sandbox: Sandbox, startTime: number, options?: SpawnProcessOptions) {
     super(options);
     this.pid = sessionId;
     this._cmdId = cmdId;

@@ -36,12 +36,7 @@ class BlaxelProcessHandle extends ProcessHandle {
   private _closeStream: (() => void) | null = null;
   private _killed = false;
 
-  constructor(
-    pid: string,
-    sandbox: SandboxInstance,
-    startTime: number,
-    options?: SpawnProcessOptions,
-  ) {
+  constructor(pid: string, sandbox: SandboxInstance, startTime: number, options?: SpawnProcessOptions) {
     super(options);
     this.pid = pid;
     this._sandbox = sandbox;
