@@ -52,35 +52,28 @@ describe('Harness tracing propagation', () => {
     (harness as any).currentThreadId = 'test-thread-123';
   });
 
-  it('should forward tracingContext to agent.stream() when provided', async () => {
+  // TODO(#13540): The fix should wrap agents with the tracing proxy (like wrapAgent)
+  // so tracingContext is automatically injected into agent.stream() calls.
+  it('should forward tracingContext to agent.stream()', async () => {
     await harness.sendMessage({ content: 'hello' });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
     const [, streamOptions] = streamSpy.mock.calls[0]!;
 
-    // This assertion verifies that agent.stream() receives tracingContext.
-    // Currently this FAILS because sendMessage() never passes tracingContext
-    // to agent.stream().
     expect(streamOptions).toHaveProperty('tracingContext');
   });
 
-  it('should forward tracingOptions to agent.stream() when provided', async () => {
-    // These values exist to document what sendMessage() SHOULD forward.
-    // Currently there is no way to pass tracingOptions through sendMessage().
-    void {
-      traceId: 'abc123',
-      parentSpanId: 'def456',
-      metadata: { requestId: 'req-789' },
-    };
+  // TODO(#13540): The fix should add tracingOptions as an optional parameter to
+  // sendMessage() and forward it to agent.stream(). Update this test to pass
+  // tracingOptions through sendMessage() once the API supports it.
+  it('should forward tracingOptions to agent.stream()', async () => {
     await harness.sendMessage({ content: 'hello' });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
     const [, streamOptions] = streamSpy.mock.calls[0]!;
 
-    // This assertion verifies that agent.stream() receives tracingOptions.
-    // Currently this FAILS because sendMessage() never passes tracingOptions.
     expect(streamOptions).toHaveProperty('tracingOptions');
   });
 });
