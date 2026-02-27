@@ -17,7 +17,7 @@ import {
   requestSandboxAccessTool,
 } from '../tools';
 
-export function createDynamicTools(mcpManager?: McpManager) {
+export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
@@ -64,6 +64,24 @@ export function createDynamicTools(mcpManager?: McpManager) {
     if (mcpManager) {
       const mcpTools = mcpManager.getTools();
       Object.assign(tools, mcpTools);
+    }
+
+    if (extraTools) {
+      for (const [name, tool] of Object.entries(extraTools)) {
+        if (!(name in tools)) {
+          tools[name] = tool;
+        }
+      }
+    }
+
+    // Remove tools that have a per-tool 'deny' policy so the model never sees them.
+    const permissionRules = state?.permissionRules;
+    if (permissionRules?.tools) {
+      for (const [name, policy] of Object.entries(permissionRules.tools)) {
+        if (policy === 'deny') {
+          delete tools[name];
+        }
+      }
     }
 
     return tools;

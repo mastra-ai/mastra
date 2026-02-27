@@ -124,8 +124,15 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.mode = 'feedback';
     this.selectList = undefined;
 
-    // Rebuild content box with feedback input
+    // Rebuild content box with feedback input while keeping the plan visible
     this.contentBox.clear();
+    this.contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`)), 0, 0));
+    this.contentBox.addChild(new Spacer(1));
+
+    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme());
+    this.contentBox.addChild(md);
+    this.contentBox.addChild(new Spacer(1));
+
     this.contentBox.addChild(new Text(theme.fg('accent', 'Provide feedback for revision:'), 0, 0));
     this.contentBox.addChild(new Spacer(1));
 

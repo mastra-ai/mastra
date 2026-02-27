@@ -9,6 +9,11 @@ const mcp = new MCPClient({
   servers: {
     zapier: {
       url: new URL(process.env.ZAPIER_MCP_URL || ''),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
+        },
+      },
     },
     github: {
       url: new URL(process.env.COMPOSIO_MCP_GITHUB || ''),

@@ -32,6 +32,11 @@ export interface SubagentToolCall {
 const MAX_ACTIVITY_LINES = 15;
 const COLLAPSED_LINES = 15;
 
+export interface SubagentExecutionOptions {
+  /** When true, auto-collapse to a single summary line on completion. Default false. */
+  collapseOnComplete?: boolean;
+}
+
 export class SubagentExecutionComponent extends Container implements IToolExecutionComponent {
   private ui: TUI;
 
@@ -46,13 +51,15 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
   private durationMs = 0;
   private finalResult?: string;
   private expanded = false;
+  private collapseOnComplete: boolean;
 
-  constructor(agentType: string, task: string, ui: TUI, modelId?: string) {
+  constructor(agentType: string, task: string, ui: TUI, modelId?: string, options?: SubagentExecutionOptions) {
     super();
     this.agentType = agentType;
     this.task = task;
     this.modelId = modelId;
     this.ui = ui;
+    this.collapseOnComplete = options?.collapseOnComplete ?? false;
 
     this.rebuild();
   }
@@ -81,6 +88,9 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.isError = isError;
     this.durationMs = durationMs;
     this.finalResult = result;
+    if (this.collapseOnComplete) {
+      this.expanded = false;
+    }
     this.rebuild();
   }
 
@@ -107,6 +117,25 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     const border = (char: string) => theme.bold(theme.fg('accent', char));
     const termWidth = process.stdout.columns || 80;
     const maxLineWidth = termWidth - 6;
+
+    // ── Bottom border with info (always rendered) ──
+    const typeLabel = theme.bold(theme.fg('accent', this.agentType));
+    const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
+    const statusIcon = this.done
+      ? this.isError
+        ? theme.fg('error', ' ✗')
+        : theme.fg('success', ' ✓')
+      : theme.fg('muted', ' ⋯');
+    const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'subagent'))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
+
+    // When collapse-on-complete is enabled, render only the single-line footer summary
+    if (this.collapseOnComplete && this.done && !this.expanded) {
+      this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.invalidate();
+      this.ui.requestRender();
+      return;
+    }
 
     // ── Top border ──
     this.addChild(new Text(border('┌──'), 0, 0));
@@ -177,23 +206,12 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       }
     }
 
-    // ── Final result (shown after completion) ──
-    // When tool calls exist: only show result when expanded
-    // When no tool calls: always show result (capped when collapsed)
-    const showResult = this.done && this.finalResult && (this.expanded || this.toolCalls.length === 0);
-    if (showResult) {
+    // ── Final result (shown after completion, only when expanded) ──
+    if (this.done && this.finalResult && this.expanded) {
       this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, 0, 0));
       const resultLines = this.finalResult!.split('\n');
-      const maxResultLines = this.expanded ? resultLines.length : 10;
-      const truncated = !this.expanded && resultLines.length > maxResultLines + 1;
-      const displayLines = truncated ? resultLines.slice(-maxResultLines) : resultLines;
 
-      if (truncated) {
-        const hiddenLine = `${border('│')} ${theme.fg('muted', `  ... ${resultLines.length - maxResultLines} more lines (ctrl+e to expand)`)}`;
-        this.addChild(new Text(hiddenLine, 0, 0));
-      }
-
-      const resultContent = displayLines
+      const resultContent = resultLines
         .map(line => {
           const truncatedLine = line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line;
           return `${border('│')} ${theme.fg('muted', truncatedLine)}`;
@@ -204,17 +222,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       }
     }
 
-    // ── Bottom border with info ──
-    const typeLabel = theme.bold(theme.fg('accent', this.agentType));
-    const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
-    const statusIcon = this.done
-      ? this.isError
-        ? theme.fg('error', ' ✗')
-        : theme.fg('success', ' ✓')
-      : theme.fg('muted', ' ⋯');
-    const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
-
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'subagent'))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
+    // ── Bottom border ──
     this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
 
     this.invalidate();

@@ -216,6 +216,66 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
       );
     });
 
+    describe('abort signal', () => {
+      it(
+        'aborts a running command when signal fires',
+        async () => {
+          const controller = new AbortController();
+
+          const result = await executeCommand(
+            'node',
+            ['-e', 'process.stdout.write("started\\n"); setTimeout(() => {}, 30000)'],
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
+
+          expect(result.success).toBe(false);
+          expect(result.executionTimeMs).toBeLessThan(5000);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'aborts immediately when signal is already aborted',
+        async () => {
+          const controller = new AbortController();
+          controller.abort();
+
+          const start = Date.now();
+          const result = await executeCommand('sleep', ['10'], {
+            abortSignal: controller.signal,
+          });
+
+          expect(result.success).toBe(false);
+          expect(Date.now() - start).toBeLessThan(2000);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'captures partial output before abort',
+        async () => {
+          const controller = new AbortController();
+
+          const result = await executeCommand(
+            'node',
+            ['-e', 'process.stdout.write("before abort\\n"); setTimeout(() => {}, 30000)'],
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
+
+          expect(result.success).toBe(false);
+          expect(result.stdout).toContain('before abort');
+          expect(result.executionTimeMs).toBeLessThan(5000);
+        },
+        getContext().testTimeout,
+      );
+    });
+
     describe('shell patterns', () => {
       it(
         'executes a shell pipeline',
