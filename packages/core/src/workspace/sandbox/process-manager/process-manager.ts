@@ -73,8 +73,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       const handle = await impl.spawn(...args);
       handle.command = args[0];
 
-      // Wire abort signal to handle.kill() for providers that don't handle it internally.
-      // Safe to call even if the provider already handled it — kill() is a no-op after exit.
+      // Wire abort signal to handle.kill() so all providers get abort support automatically.
       const abortSignal = args[1]?.abortSignal;
       if (abortSignal) {
         const onAbort = () => {
