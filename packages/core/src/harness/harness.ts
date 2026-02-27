@@ -1129,7 +1129,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next });
+        await this.sendMessage({ content: next, tracingContext, tracingOptions });
       }
     }
   }
