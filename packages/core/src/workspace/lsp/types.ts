@@ -43,10 +43,11 @@ export interface LSPConfig {
   modulePaths?: string[];
 
   /**
-   * Allow npx as a last-resort fallback when no binary is found via node_modules or serverPaths.
-   * Off by default — npx can hang in pnpm monorepos.
+   * Package runner to use as a last-resort fallback when no binary is found via node_modules or PATH.
+   * Pass the runner command including any flags (e.g. 'npx --yes', 'pnpm dlx', 'bunx').
+   * Off by default — package runners can hang in monorepos with workspace links.
    */
-  allowNpxFallback?: boolean;
+  packageRunner?: string;
 }
 
 // =============================================================================

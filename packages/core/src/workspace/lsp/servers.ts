@@ -168,14 +168,14 @@ export async function findProjectRootAsync(
  *  1. `config.serverPaths[id]` — explicit binary path override
  *  2. Project `node_modules/.bin/` binary
  *  3. `process.cwd()` `node_modules/.bin/` binary
- *  4. PATH lookup (for system-installed servers like gopls, rust-analyzer)
+ *  4. Global PATH lookup (system-installed binaries)
  *  5. `config.allowNpxFallback` — npx last resort (off by default)
  *
  * `config.modulePaths` extends TypeScript module resolution
  * (used to locate typescript/lib/tsserver.js when it lives outside the project).
  */
 export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
-  const { serverPaths, modulePaths, allowNpxFallback = false } = config ?? {};
+  const { serverPaths, modulePaths, packageRunner } = config ?? {};
 
   return {
     typescript: {
@@ -188,7 +188,8 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         if (!resolveRequireFromPaths(root, 'typescript/lib/tsserver.js', modulePaths)) return undefined;
         const bin = resolveNodeBin(root, 'typescript-language-server');
         if (bin) return `${bin} --stdio`;
-        if (allowNpxFallback) return 'npx --yes typescript-language-server --stdio';
+        if (whichSync('typescript-language-server')) return 'typescript-language-server --stdio';
+        if (packageRunner) return `${packageRunner} typescript-language-server --stdio`;
         return undefined;
       },
       initialization: (root: string) => {
@@ -216,7 +217,8 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         if (serverPaths?.eslint) return serverPaths.eslint;
         const bin = resolveNodeBin(root, 'vscode-eslint-language-server');
         if (bin) return `${bin} --stdio`;
-        if (allowNpxFallback) return 'npx --yes vscode-eslint-language-server --stdio';
+        if (whichSync('vscode-eslint-language-server')) return 'vscode-eslint-language-server --stdio';
+        if (packageRunner) return `${packageRunner} vscode-eslint-language-server --stdio`;
         return undefined;
       },
     },
@@ -231,7 +233,7 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         const bin = resolveNodeBin(root, 'pyright-langserver');
         if (bin) return `${bin} --stdio`;
         if (whichSync('pyright-langserver')) return 'pyright-langserver --stdio';
-        if (allowNpxFallback) return 'npx --yes pyright-langserver --stdio';
+        if (packageRunner) return `${packageRunner} pyright-langserver --stdio`;
         return undefined;
       },
     },

@@ -16,7 +16,7 @@ To configure binary paths (e.g. if using a global install):
       "typescript": "/usr/local/bin/typescript-language-server --stdio"
     },
     "modulePaths": ["/path/to/custom/node_modules"],
-    "allowNpxFallback": false
+    "packageRunner": "npx --yes"
   }
 }
 ```

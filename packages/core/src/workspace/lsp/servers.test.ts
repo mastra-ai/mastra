@@ -459,38 +459,41 @@ describe('buildServerDefs', () => {
     });
   });
 
-  describe('allowNpxFallback', () => {
-    it('returns npx command for eslint when binary not found and fallback enabled', () => {
-      const defs = buildServerDefs({ allowNpxFallback: true });
-      // No binary in tempDir → falls back to npx
+  describe('packageRunner fallback', () => {
+    it('uses the provided runner for eslint when binary not found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
       expect(defs.eslint!.command(tempDir)).toBe('npx --yes vscode-eslint-language-server --stdio');
     });
 
-    it('returns npx command for python after PATH check when fallback enabled', () => {
-      const defs = buildServerDefs({ allowNpxFallback: true });
+    it('works with pnpm dlx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'pnpm dlx' });
+      expect(defs.eslint!.command(tempDir)).toBe('pnpm dlx vscode-eslint-language-server --stdio');
+    });
+
+    it('works with bunx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'bunx' });
+      expect(defs.eslint!.command(tempDir)).toBe('bunx vscode-eslint-language-server --stdio');
+    });
+
+    it('uses the provided runner for python after PATH check when no binary found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
       const result = defs.python!.command(tempDir);
-      // Either pyright-langserver is on PATH (returns PATH command) or not (returns npx)
-      // Either way, npx should only appear if PATH lookup also failed
-      if (result === 'pyright-langserver --stdio') return; // on PATH, npx not needed
+      // Either pyright-langserver is on PATH (returns PATH command) or not (returns runner)
+      if (result === 'pyright-langserver --stdio') return; // on PATH, runner not needed
       expect(result).toBe('npx --yes pyright-langserver --stdio');
     });
 
-    it('does not return npx fallback when disabled (default)', () => {
-      const defs = buildServerDefs({ allowNpxFallback: false });
-      expect(defs.eslint!.command(tempDir)).toBeUndefined();
-    });
-
-    it('does not return npx fallback with no config', () => {
+    it('returns undefined when no packageRunner set (default)', () => {
       const defs = buildServerDefs();
       expect(defs.eslint!.command(tempDir)).toBeUndefined();
     });
 
-    it('local binary takes priority over npx fallback', () => {
+    it('local binary takes priority over packageRunner', () => {
       const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
       mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
       writeFileSync(bin, '');
 
-      const defs = buildServerDefs({ allowNpxFallback: true });
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
       expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
     });
   });
