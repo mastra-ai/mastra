@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed subagent output to auto-collapse to a single summary line when execution completes. Previously, the full bordered box with task description, tool call activity, and result stayed visible after completion. Now it collapses to a compact footer (e.g. `└── subagent explore 12.3s ✓`) and can be re-expanded with ctrl+e.
+Added configurable subagent output collapse. By default, subagent output stays fully visible after completion. Users can opt in to auto-collapse (single summary line on completion) via `/settings` → "Collapse subagents" → On. The setting persists across restarts.

@@ -78,7 +78,12 @@ describe('SubagentExecutionComponent', () => {
 
   describe('default behavior (collapseOnComplete: false)', () => {
     it('keeps full content visible after finish', () => {
-      const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
+      const comp = new SubagentExecutionComponent(
+        'explore',
+        'Find all usages of X',
+        mockTui,
+        'claude-sonnet-4-20250514',
+      );
       comp.addToolStart('search_content', { pattern: 'foo' });
       comp.addToolEnd('search_content', 'found 3 matches', false);
       comp.finish(false, 12300);
