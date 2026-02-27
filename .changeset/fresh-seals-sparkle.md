@@ -2,6 +2,6 @@
 "@mastra/memory": patch
 ---
 
-Fix stale observational-memory continuation hints by explicitly clearing thread OM metadata when newer observation/activation results omit `<current-task>` or `<suggested-response>`.
+Fixed stale continuation hints in observational memory.
 
-This updates observation and activation metadata writes to always set `currentTask` and `suggestedResponse` (including `undefined`), preventing previously stored hints from being re-injected into context after they are no longer present in the latest model output.
+When newer outputs omit continuation hints, old hints are now cleared. This prevents outdated task and response guidance from appearing in later turns.
