@@ -448,6 +448,14 @@ const threads = await harness.listThreads()
 const allThreads = await harness.listThreads({ allResources: true })
 ```
 
+#### `deleteThread({ threadId })`
+
+Delete a thread and all its messages from storage. If the deleted thread is the currently active thread, the thread lock is released and the harness clears its active thread. Emits a `thread_deleted` event.
+
+```typescript
+await harness.deleteThread({ threadId: 'thread-abc123' })
+```
+
 #### `renameThread({ title })`
 
 Update the title of the current thread.

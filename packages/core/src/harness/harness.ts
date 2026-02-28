@@ -608,6 +608,28 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return thread;
   }
 
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    if (!this.config.storage) return;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const thread = await memoryStorage.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+
+    const isDeletingCurrentThread = this.currentThreadId === threadId;
+
+    await memoryStorage.deleteThread({ threadId });
+
+    if (isDeletingCurrentThread) {
+      await this.config.threadLock?.release(threadId);
+      this.currentThreadId = null;
+      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    }
+
+    this.emit({ type: 'thread_deleted', threadId });
+  }
+
   async renameThread({ title }: { title: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 

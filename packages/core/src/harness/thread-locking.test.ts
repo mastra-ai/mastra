@@ -236,6 +236,59 @@ describe('Harness thread locking', () => {
     });
   });
 
+  describe('deleteThread', () => {
+    it('deletes a thread from storage', async () => {
+      const thread = await harness.createThread({ title: 'to-delete' });
+      await harness.deleteThread({ threadId: thread.id });
+
+      const threads = await harness.listThreads();
+      expect(threads.find(t => t.id === thread.id)).toBeUndefined();
+    });
+
+    it('releases lock when deleting the current thread', async () => {
+      const thread = await harness.createThread({ title: 'current' });
+      acquire.mockClear();
+      release.mockClear();
+
+      await harness.deleteThread({ threadId: thread.id });
+      expect(release).toHaveBeenCalledWith(thread.id);
+    });
+
+    it('clears currentThreadId when deleting the current thread', async () => {
+      const thread = await harness.createThread({ title: 'current' });
+      expect(harness.getCurrentThreadId()).toBe(thread.id);
+
+      await harness.deleteThread({ threadId: thread.id });
+      expect(harness.getCurrentThreadId()).toBeNull();
+    });
+
+    it('does not release lock when deleting a non-current thread', async () => {
+      const first = await harness.createThread({ title: 'first' });
+      const second = await harness.createThread({ title: 'second' });
+      release.mockClear();
+
+      await harness.deleteThread({ threadId: first.id });
+      // Should not release lock since first is not the current thread (second is)
+      expect(release).not.toHaveBeenCalled();
+      expect(harness.getCurrentThreadId()).toBe(second.id);
+    });
+
+    it('throws when thread does not exist', async () => {
+      await expect(harness.deleteThread({ threadId: 'nonexistent' })).rejects.toThrow('Thread not found');
+    });
+
+    it('emits thread_deleted event', async () => {
+      const events: string[] = [];
+      harness.subscribe(event => {
+        if (event.type === 'thread_deleted') events.push(event.threadId);
+      });
+
+      const thread = await harness.createThread({ title: 'to-delete' });
+      await harness.deleteThread({ threadId: thread.id });
+      expect(events).toEqual([thread.id]);
+    });
+  });
+
   describe('without threadLock config', () => {
     it('works normally without locking', async () => {
       const unlocked = createHarness(); // no threadLock
