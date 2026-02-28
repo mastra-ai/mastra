@@ -3,7 +3,7 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
-  EEUser,
+  User,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
@@ -25,7 +25,7 @@ function isUserProvider(p: unknown): p is IUserProvider {
 
 export class CompositeAuth
   extends MastraAuthProvider
-  implements ISSOProvider<EEUser>, ISessionProvider<Session>, IUserProvider<EEUser>
+  implements ISSOProvider<User>, ISessionProvider<Session>, IUserProvider<User>
 {
   private providers: MastraAuthProvider[];
 
@@ -121,10 +121,10 @@ export class CompositeAuth
     return sso?.getLoginCookies?.(redirectUri, state);
   }
 
-  async handleCallback(code: string, state: string): Promise<SSOCallbackResult<EEUser>> {
+  async handleCallback(code: string, state: string): Promise<SSOCallbackResult<User>> {
     const sso = this.findProvider(isSSOProvider);
     if (!sso) throw new Error('No SSO provider configured in CompositeAuth');
-    return sso.handleCallback(code, state) as Promise<SSOCallbackResult<EEUser>>;
+    return sso.handleCallback(code, state) as Promise<SSOCallbackResult<User>>;
   }
 
   getLoginButtonConfig(): SSOLoginConfig {
@@ -244,7 +244,7 @@ export class CompositeAuth
   // Try each provider until one returns a user (like authenticateToken)
   // ============================================================================
 
-  async getCurrentUser(request: Request): Promise<EEUser | null> {
+  async getCurrentUser(request: Request): Promise<User | null> {
     for (const provider of this.providers) {
       if (isUserProvider(provider)) {
         try {
@@ -258,7 +258,7 @@ export class CompositeAuth
     return null;
   }
 
-  async getUser(userId: string): Promise<EEUser | null> {
+  async getUser(userId: string): Promise<User | null> {
     for (const provider of this.providers) {
       if (isUserProvider(provider)) {
         try {

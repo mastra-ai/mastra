@@ -1,14 +1,14 @@
 /**
- * EE Authentication Interfaces
+ * Authentication Interfaces
  *
- * These interfaces define the contracts for enterprise authentication features.
- * Implement these interfaces to enable advanced auth capabilities in Studio.
+ * These interfaces define the contracts for authentication features.
+ * For enterprise features (RBAC, ACL), see `@mastra/core/auth/ee`.
  *
  * @packageDocumentation
  */
 
-// User awareness
-export type { EEUser, IUserProvider } from './user';
+// User
+export type { User, EEUser, IUserProvider } from './user';
 
 // Session management
 export type { Session, ISessionProvider } from './session';
@@ -18,19 +18,3 @@ export type { SSOLoginConfig, SSOCallbackResult, ISSOProvider } from './sso';
 
 // Credentials
 export type { CredentialsResult, ICredentialsProvider } from './credentials';
-
-// RBAC
-export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager } from './rbac';
-
-// Permissions (generated from SERVER_ROUTES)
-export type { Resource, Action, Permission, PermissionPattern, TypedRoleMapping } from './permissions.generated';
-export {
-  RESOURCES,
-  ACTIONS,
-  PERMISSIONS,
-  isValidPermissionPattern,
-  validatePermissions,
-} from './permissions.generated';
-
-// ACL
-export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './acl';

@@ -20,7 +20,7 @@ type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth')
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
       .then(m => m.hasPermission)
       .catch(() => {
         console.error(

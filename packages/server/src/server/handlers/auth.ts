@@ -13,10 +13,9 @@ import type {
   ISessionProvider,
   ISSOProvider,
   ICredentialsProvider,
-  IRBACProvider,
-  EEUser,
   SSOCallbackResult,
 } from '@mastra/core/auth';
+import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { HTTPException } from '../http-exception';
@@ -35,11 +34,11 @@ type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any 
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
-    _buildCapabilitiesPromise = import('@mastra/core/auth')
+    _buildCapabilitiesPromise = import('@mastra/core/auth/ee')
       .then(m => m.buildCapabilities as BuildCapabilitiesFn)
       .catch(() => {
         console.error(
-          '[@mastra/server] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+          '[@mastra/server] EE auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
         );
         return undefined;
       });

@@ -31,6 +31,16 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./auth/ee": {
+      "import": {
+        "types": "./dist/auth/ee/index.d.ts",
+        "default": "./dist/auth/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/auth/ee/index.d.ts",
+        "default": "./dist/auth/ee/index.cjs"
+      }
+    },
     "./tools/is-vercel-tool": {
       "import": {
         "types": "./dist/tools/is-vercel-tool.d.ts",

@@ -18,7 +18,7 @@ type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth')
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
       .then(m => m.hasPermission)
       .catch(() => {
         console.error(
@@ -643,7 +643,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (authConfig) {
           let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
           try {
-            ({ hasPermission } = await import('@mastra/core/auth'));
+            ({ hasPermission } = await import('@mastra/core/auth/ee'));
           } catch {
             console.error(
               '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',

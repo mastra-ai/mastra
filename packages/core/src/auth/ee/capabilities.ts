@@ -2,17 +2,12 @@
  * Capabilities detection and response building for EE authentication.
  */
 
-import type { MastraAuthProvider } from '../server';
-import type {
-  EEUser,
-  IUserProvider,
-  ISSOProvider,
-  IRBACProvider,
-  IACLProvider,
-  ISessionProvider,
-  ICredentialsProvider,
-} from './interfaces';
-import { isLicenseValid } from './license';
+import type { MastraAuthProvider } from '../../server';
+import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
+import type { IACLProvider } from './interfaces/acl';
+import type { IRBACProvider } from './interfaces/rbac';
+import type { EEUser } from './interfaces/user';
+import { isLicenseValid, isDevEnvironment } from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -171,11 +166,12 @@ export async function buildCapabilities(
   }
 
   // Determine if EE features are available
-  // SimpleAuth and MastraCloudAuth are exempt from license requirement
+  // SimpleAuth, MastraCloudAuth, and dev environments are exempt from license requirement
   const hasLicense = isLicenseValid();
   const isCloud = isMastraCloudAuth(auth);
   const isSimple = isSimpleAuth(auth);
-  const isLicensedOrCloud = hasLicense || isCloud || isSimple;
+  const isDev = isDevEnvironment();
+  const isLicensedOrCloud = hasLicense || isCloud || isSimple || isDev;
 
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;

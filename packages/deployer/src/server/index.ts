@@ -211,6 +211,9 @@ export async function createHonoServer(
     );
   }
 
+  // Validate EE license before starting (checks RBAC config vs license)
+  await honoServerAdapter.validateEELicense();
+
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
   honoServerAdapter.registerAuthMiddleware();
