@@ -25,6 +25,9 @@ import type { CardinalityFilter } from '../metrics/cardinality';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
 
+/** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
+const MAX_FLUSH_ITERATIONS = 3;
+
 function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   return (
     event.type === TracingEventType.SPAN_STARTED ||
@@ -176,18 +179,15 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * client queue). Phases are sequential — Phase 2 must not start until
    * Phase 1 completes, otherwise exporters would flush empty buffers.
    */
-  /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
-  private static readonly MAX_FLUSH_ITERATIONS = 3;
-
   async flush(): Promise<void> {
     // Phase 1: Await in-flight handler delivery promises, draining until empty.
     let iterations = 0;
     while (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);
       iterations++;
-      if (iterations >= ObservabilityBus.MAX_FLUSH_ITERATIONS) {
+      if (iterations >= MAX_FLUSH_ITERATIONS) {
         this.logger.error(
-          `[ObservabilityBus] flush() exceeded ${ObservabilityBus.MAX_FLUSH_ITERATIONS} drain iterations — ` +
+          `[ObservabilityBus] flush() exceeded ${MAX_FLUSH_ITERATIONS} drain iterations — ` +
             `${this.pendingHandlers.size} promises still pending. Handlers may be re-emitting during flush.`,
         );
         break;
