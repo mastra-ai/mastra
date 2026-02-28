@@ -152,7 +152,7 @@ export function createMcpManager(projectDir: string): McpManager {
     },
 
     getSkippedServers() {
-      return config.skippedServers ?? [];
+      return [...(config.skippedServers ?? [])];
     },
 
     getConfigPaths() {
