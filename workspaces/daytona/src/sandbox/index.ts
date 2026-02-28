@@ -31,7 +31,7 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import { DaytonaProcessManager } from './process-manager';
-import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
+import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
 import type { DaytonaResources } from './types';
 
@@ -40,8 +40,6 @@ const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
 
 /** Default timeout for mount lifecycle shell commands (mkdir, unmount, proc reads, etc.) */
 const MOUNT_COMMAND_TIMEOUT_MS = 30_000;
-/** Same timeout in seconds for the Daytona SDK executeCommand API. */
-const MOUNT_COMMAND_TIMEOUT_S = Math.ceil(MOUNT_COMMAND_TIMEOUT_MS / 1000);
 
 /** Convert an unknown error to a readable string. */
 function errorToString(error: unknown): string {
@@ -561,14 +559,13 @@ export class DaytonaSandbox extends MastraSandbox {
     // prior unmount): its contents are remote objects, not local files to protect.
     try {
       const quotedPath = shellQuote(mountPath);
-      const response = await sandbox.process.executeCommand(
+      const response = await runCommand(
+        sandbox,
         `[ -d ${quotedPath} ] && ! mountpoint -q ${quotedPath} 2>/dev/null && ` +
           `[ "$(ls -A ${quotedPath} 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      if (response.result.trim() === 'non-empty') {
+      if (response.output.trim() === 'non-empty') {
         const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
         this.logger.error(`${LOG_PREFIX} ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
@@ -586,16 +583,15 @@ export class DaytonaSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Creating mount directory for "${mountPath}"...`);
     try {
       const qp = shellQuote(mountPath);
-      const mkdirResponse = await sandbox.process.executeCommand(
+      const mkdirResult = await runCommand(
+        sandbox,
         `mountpoint -q ${qp} 2>/dev/null && sudo mount -t tmpfs tmpfs ${qp} 2>/dev/null; ` +
           `sudo mkdir -p ${qp} 2>/dev/null; ` +
           `sudo chown $(id -u):$(id -g) ${qp}`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      if (mkdirResponse.exitCode !== 0) {
-        const error = mkdirResponse.result || 'Failed to create mount directory';
+      if (mkdirResult.exitCode !== 0) {
+        const error = mkdirResult.output || 'Failed to create mount directory';
         this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, error);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
@@ -606,19 +602,14 @@ export class DaytonaSandbox extends MastraSandbox {
       return { success: false, mountPath, error };
     }
 
-    // Build mount context — run() timeout is in ms, SDK expects seconds
+    // Build mount context for SDK-agnostic mount helpers
     const ctx: MountContext = {
       run: async (cmd, timeoutMs) => {
-        const response = await sandbox.process.executeCommand(
-          cmd,
-          undefined,
-          undefined,
-          timeoutMs !== undefined ? Math.ceil(timeoutMs / 1000) : undefined,
-        );
+        const result = await runCommand(sandbox, cmd, timeoutMs !== undefined ? { timeout: timeoutMs } : undefined);
         return {
-          exitCode: response.exitCode,
-          stdout: response.result,
-          stderr: response.exitCode !== 0 ? response.result : '',
+          exitCode: result.exitCode,
+          stdout: result.output,
+          stderr: result.exitCode !== 0 ? result.output : '',
         };
       },
       writeFile: async (path, content) => {
@@ -653,12 +644,9 @@ export class DaytonaSandbox extends MastraSandbox {
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
 
       // Clean up the directory we created since mount failed
-      await sandbox.process.executeCommand(
-        `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
+      await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
       this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
       return { success: false, mountPath, error: errorToString(error) };
     }
@@ -690,15 +678,14 @@ export class DaytonaSandbox extends MastraSandbox {
     // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
     // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
     const qp = shellQuote(mountPath);
-    await sandbox.process.executeCommand(
+    await runCommand(
+      sandbox,
       `sudo fusermount -u ${qp} 2>/dev/null; ` +
         `sudo umount -l ${qp} 2>/dev/null; ` +
         // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
         `mountpoint -q ${qp} 2>/dev/null && ` +
         `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${qp} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
-      undefined,
-      undefined,
-      MOUNT_COMMAND_TIMEOUT_S,
+      { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
     this.mounts.delete(mountPath);
@@ -706,17 +693,18 @@ export class DaytonaSandbox extends MastraSandbox {
     // Clean up marker file and mount directory in one round-trip.
     // rm -f always exits 0, so the combined exit code reflects rmdir.
     const markerPath = `/tmp/.mastra-mounts/${this.mounts.markerFilename(mountPath)}`;
-    const cleanupResult = await sandbox.process.executeCommand(
+    const rmdirResult = await runCommand(
+      sandbox,
       `rm -f ${shellQuote(markerPath)} 2>/dev/null; sudo rmdir ${qp} 2>&1`,
-      undefined,
-      undefined,
-      MOUNT_COMMAND_TIMEOUT_S,
+      {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      },
     );
-    if (cleanupResult.exitCode === 0) {
+    if (rmdirResult.exitCode === 0) {
       this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
       this.logger.debug(
-        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${cleanupResult.result.trim() || 'not empty'})`,
+        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${rmdirResult.output.trim() || 'not empty'})`,
       );
     }
   }
@@ -735,13 +723,12 @@ export class DaytonaSandbox extends MastraSandbox {
     // Get current FUSE mounts
     let currentMounts: string[] = [];
     try {
-      const mountsResponse = await sandbox.process.executeCommand(
+      const mountsResult = await runCommand(
+        sandbox,
         `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      currentMounts = mountsResponse.result
+      currentMounts = mountsResult.output
         .trim()
         .split('\n')
         .filter(p => p.length > 0);
@@ -755,13 +742,10 @@ export class DaytonaSandbox extends MastraSandbox {
     // Read our marker files to know which mounts WE created
     let markerFiles: string[] = [];
     try {
-      const markersResponse = await sandbox.process.executeCommand(
-        'ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""',
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      markerFiles = markersResponse.result
+      const markersResult = await runCommand(sandbox, 'ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""', {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
+      markerFiles = markersResult.output
         .trim()
         .split('\n')
         .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
@@ -772,13 +756,10 @@ export class DaytonaSandbox extends MastraSandbox {
     // Build a map of mount paths -> marker filenames for mounts WE created
     const managedMountPaths = new Map<string, string>();
     for (const markerFile of markerFiles) {
-      const markerResponse = await sandbox.process.executeCommand(
-        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      const parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
+      const markerResult = await runCommand(sandbox, `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`, {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
+      const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
       if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
         managedMountPaths.set(parsed.path, markerFile);
       }
@@ -815,22 +796,18 @@ export class DaytonaSandbox extends MastraSandbox {
             // Only clean up directory if not currently FUSE mounted
             if (!currentMounts.includes(mountPath)) {
               this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
-              await sandbox.process.executeCommand(
+              await runCommand(
+                sandbox,
                 `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null; sudo rmdir ${shellQuote(mountPath)} 2>/dev/null`,
-                undefined,
-                undefined,
-                MOUNT_COMMAND_TIMEOUT_S,
+                { timeout: MOUNT_COMMAND_TIMEOUT_MS },
               );
             }
           } else {
             // Malformed marker file - just delete it
             this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
-            await sandbox.process.executeCommand(
-              `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`,
-              undefined,
-              undefined,
-              MOUNT_COMMAND_TIMEOUT_S,
-            );
+            await runCommand(sandbox, `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`, {
+              timeout: MOUNT_COMMAND_TIMEOUT_MS,
+            });
           }
         }
       }
@@ -853,12 +830,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
     try {
-      await this._sandbox.process.executeCommand(
-        'mkdir -p /tmp/.mastra-mounts',
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
+      await runCommand(this._sandbox, 'mkdir -p /tmp/.mastra-mounts', { timeout: MOUNT_COMMAND_TIMEOUT_MS });
       await this._sandbox.fs.uploadFile(Buffer.from(markerContent, 'utf-8'), markerPath);
     } catch {
       // Non-fatal - marker is just for optimization
@@ -882,13 +854,12 @@ export class DaytonaSandbox extends MastraSandbox {
 
     // Check if path is a mount point
     try {
-      const mountResponse = await sandbox.process.executeCommand(
+      const mountCheck = await runCommand(
+        sandbox,
         `mountpoint -q ${shellQuote(mountPath)} && echo "mounted" || echo "not mounted"`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      if (mountResponse.result.trim() !== 'mounted') {
+      if (mountCheck.output.trim() !== 'mounted') {
         return 'not_mounted';
       }
     } catch {
@@ -900,13 +871,10 @@ export class DaytonaSandbox extends MastraSandbox {
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
     let parsed;
     try {
-      const markerResponse = await sandbox.process.executeCommand(
-        `cat ${shellQuote(markerPath)} 2>/dev/null || echo ""`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
+      const markerResult = await runCommand(sandbox, `cat ${shellQuote(markerPath)} 2>/dev/null || echo ""`, {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
+      parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
     } catch {
       // Marker doesn't exist or can't be read - treat as unmanaged
       return 'unmanaged';

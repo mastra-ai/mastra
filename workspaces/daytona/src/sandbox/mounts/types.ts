@@ -2,6 +2,8 @@
  * Shared types for Daytona mount operations.
  */
 
+import type { Sandbox } from '@daytonaio/sdk';
+
 import type { DaytonaGCSMountConfig } from './gcs';
 import type { DaytonaS3MountConfig } from './s3';
 
@@ -45,6 +47,45 @@ export function validateBucketName(bucket: string): void {
  * Validate an endpoint URL before interpolating into shell commands.
  * Only http and https schemes are allowed.
  */
+/**
+ * Result of running a command in the Daytona sandbox.
+ *
+ * Note: Daytona's `executeCommand` returns a single combined string (stdout + stderr).
+ * There is no separate stderr stream. If you need stderr isolated, redirect it in the
+ * shell command itself (e.g. `2>/dev/null` or `2>&1`).
+ */
+export interface CommandResult {
+  exitCode: number;
+  /** Combined stdout/stderr output from the command. */
+  output: string;
+}
+
+/**
+ * Run a command in the Daytona sandbox.
+ *
+ * Thin wrapper around `sandbox.process.executeCommand` that converts timeout
+ * from milliseconds to seconds and null-coalesces the output string.
+ *
+ * Does NOT throw on non-zero exit codes — callers should check `exitCode`.
+ */
+export async function runCommand(
+  sandbox: Sandbox,
+  command: string,
+  options?: { timeout?: number },
+): Promise<CommandResult> {
+  const result = await sandbox.process.executeCommand(
+    command,
+    undefined, // cwd
+    undefined, // env
+    options?.timeout !== undefined ? Math.ceil(options.timeout / 1000) : undefined,
+  );
+
+  return {
+    exitCode: result.exitCode,
+    output: result.result ?? '',
+  };
+}
+
 export function validateEndpoint(endpoint: string): void {
   let parsed: URL;
   try {
