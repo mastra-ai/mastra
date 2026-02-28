@@ -7,6 +7,7 @@ import type { DaytonaS3MountConfig } from './s3';
 
 export const LOG_PREFIX = '[@mastra/daytona]';
 
+/** Union of mount configs supported by Daytona sandbox. */
 export type DaytonaMountConfig = DaytonaS3MountConfig | DaytonaGCSMountConfig;
 
 /**

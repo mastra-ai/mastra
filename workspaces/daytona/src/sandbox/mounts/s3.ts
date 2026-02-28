@@ -6,6 +6,14 @@ import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
 import type { MountContext } from './types';
 
+/**
+ * S3 mount config for Daytona (mounted via s3fs-fuse).
+ *
+ * If credentials are not provided, the bucket will be mounted as read-only
+ * using the `public_bucket=1` option (for public AWS S3 buckets only).
+ *
+ * Note: S3-compatible services (R2, MinIO, etc.) always require credentials.
+ */
 export interface DaytonaS3MountConfig extends FilesystemMountConfig {
   type: 's3';
   /** S3 bucket name */
@@ -18,7 +26,7 @@ export interface DaytonaS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
-  /** Mount as read-only */
+  /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
 }
 
@@ -75,6 +83,8 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
   }
   const hasCredentials = hasAccessKey && hasSecretKey;
+
+  // Use a mount-specific credentials path to avoid races with concurrent mounts
   const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 

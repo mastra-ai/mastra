@@ -6,6 +6,12 @@ import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateBucketName } from './types';
 import type { MountContext } from './types';
 
+/**
+ * GCS mount config for Daytona (mounted via gcsfuse).
+ *
+ * If credentials are not provided, the bucket will be mounted as read-only
+ * using anonymous access (for public buckets only).
+ */
 export interface DaytonaGCSMountConfig extends FilesystemMountConfig {
   type: 'gcs';
   /** GCS bucket name */
@@ -86,6 +92,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.stdout.trim()}" — mounted files will be owned by root`,
     );
   }
+  // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
   const uidGidFlags = validUidGid ? `--uid=${uid} --gid=${gid}` : '';
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
@@ -101,6 +108,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   let mountCmd: string;
 
   if (hasCredentials) {
+    // Use a mount-specific key path to avoid races with concurrent mounts
     const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
     const keyPath = `/tmp/gcs-key-${mountHash}.json`;
     await run(`sudo rm -f ${shellQuote(keyPath)}`, 30_000);
