@@ -83,6 +83,10 @@ class TestExporter implements ObservabilityExporter {
     // no-op
   }
 
+  async flush(): Promise<void> {
+    // no-op
+  }
+
   reset(): void {
     this.events = [];
   }
@@ -531,6 +535,7 @@ describe('Tracing', () => {
       const mockExporter = {
         name: 'mock-exporter',
         exportTracingEvent: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
