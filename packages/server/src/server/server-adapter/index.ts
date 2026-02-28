@@ -368,7 +368,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           '[mastra/auth-ee] RBAC is configured but no valid EE license was found.\n' +
             'RBAC requires a Mastra Enterprise License for production use.\n' +
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
-            'Learn more: https://mastra.ai/docs/ee/license',
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
       }
     } catch (err) {
