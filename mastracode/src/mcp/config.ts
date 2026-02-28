@@ -115,7 +115,8 @@ export function validateConfig(raw: unknown): McpConfig {
       const e = entry as Record<string, unknown>;
       servers[name] = {
         url: e.url as string,
-        headers: typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
+        headers:
+          typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
       };
     } else {
       skippedServers.push({ name, reason: classification.reason! });

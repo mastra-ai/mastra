@@ -45,9 +45,7 @@ export function createMcpManager(projectDir: string): McpManager {
   let serverStatuses = new Map<string, McpServerStatus>();
   let initialized = false;
 
-  function buildServerDefs(
-    servers: Record<string, McpServerConfig>,
-  ): Record<string, MastraMCPServerDefinition> {
+  function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
     const defs: Record<string, MastraMCPServerDefinition> = {};
     for (const [name, cfg] of Object.entries(servers)) {
       if ('url' in cfg) {
