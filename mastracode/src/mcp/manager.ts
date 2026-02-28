@@ -4,8 +4,9 @@
  */
 
 import { MCPClient } from '@mastra/mcp';
+import type { MastraMCPServerDefinition } from '@mastra/mcp';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
-import type { McpConfig, McpServerStatus } from './types.js';
+import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
 /** Public interface for the MCP manager returned by createMcpManager(). */
 export interface McpManager {
@@ -17,14 +18,20 @@ export interface McpManager {
   disconnect(): Promise<void>;
   /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
   getTools(): Record<string, any>;
-  /** Check if any MCP servers are configured. */
+  /** Check if any MCP servers are configured (or skipped). */
   hasServers(): boolean;
   /** Get status of all servers. */
   getServerStatuses(): McpServerStatus[];
+  /** Get servers that were skipped during config loading. */
+  getSkippedServers(): McpSkippedServer[];
   /** Get config file paths for display. */
   getConfigPaths(): { project: string; global: string; claude: string };
   /** Get the merged config. */
   getConfig(): McpConfig;
+}
+
+function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
+  return 'url' in cfg ? 'http' : 'stdio';
 }
 
 /**
@@ -39,11 +46,19 @@ export function createMcpManager(projectDir: string): McpManager {
   let initialized = false;
 
   function buildServerDefs(
-    servers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>,
-  ) {
-    const defs: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
+    servers: Record<string, McpServerConfig>,
+  ): Record<string, MastraMCPServerDefinition> {
+    const defs: Record<string, MastraMCPServerDefinition> = {};
     for (const [name, cfg] of Object.entries(servers)) {
-      defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env };
+      if ('url' in cfg) {
+        const httpCfg = cfg as McpHttpServerConfig;
+        defs[name] = {
+          url: new URL(httpCfg.url),
+          requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
+        };
+      } else {
+        defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env };
+      }
     }
     return defs;
   }
@@ -75,6 +90,7 @@ export function createMcpManager(projectDir: string): McpManager {
           connected: true,
           toolCount: serverToolNames.length,
           toolNames: serverToolNames,
+          transport: getTransport(servers[name]!),
         });
       }
     } catch (error) {
@@ -86,6 +102,7 @@ export function createMcpManager(projectDir: string): McpManager {
           connected: false,
           toolCount: 0,
           toolNames: [],
+          transport: getTransport(servers[name]!),
           error: errMsg,
         });
       }
@@ -127,11 +144,17 @@ export function createMcpManager(projectDir: string): McpManager {
     },
 
     hasServers() {
-      return config.mcpServers !== undefined && Object.keys(config.mcpServers).length > 0;
+      const hasConfigured = config.mcpServers !== undefined && Object.keys(config.mcpServers).length > 0;
+      const hasSkipped = config.skippedServers !== undefined && config.skippedServers.length > 0;
+      return hasConfigured || hasSkipped;
     },
 
     getServerStatuses() {
       return Array.from(serverStatuses.values());
+    },
+
+    getSkippedServers() {
+      return config.skippedServers ?? [];
     },
 
     getConfigPaths() {
