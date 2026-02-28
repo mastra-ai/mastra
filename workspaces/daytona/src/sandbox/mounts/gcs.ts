@@ -30,6 +30,30 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
 
   const quotedMountPath = shellQuote(mountPath);
 
+  // gcsfuse needs to reach Google Cloud Storage APIs at runtime.
+  // Daytona's free/restricted tiers block access to Google services.
+  // Fail fast with a clear message instead of hanging on the mount command.
+  const connectivityCheck = await run(
+    'curl -sS --max-time 5 http://storage.googleapis.com 2>&1',
+    10_000,
+  );
+  const checkOutput = connectivityCheck.stdout.trim();
+  // Daytona's restricted tiers return HTTP 200 with a plain-text restriction message
+  // for HTTP requests, or reset the connection for HTTPS. Detect either case.
+  if (
+    connectivityCheck.exitCode !== 0 ||
+    checkOutput.toLowerCase().includes('restricted') ||
+    checkOutput.toLowerCase().includes('blocked')
+  ) {
+    throw new Error(
+      `Cannot reach Google Cloud Storage from this sandbox. ` +
+        `GCS mounting requires network access to storage.googleapis.com, ` +
+        `which may be blocked on Daytona's restricted tiers. ` +
+        `Upgrade to a tier with unrestricted internet access, or use S3-compatible storage instead.` +
+        (checkOutput ? `\n\nSandbox network response: ${checkOutput}` : ''),
+    );
+  }
+
   // Install gcsfuse if not present
   const checkResult = await run('which gcsfuse 2>/dev/null || echo "not found"', 30_000);
   if (checkResult.stdout.includes('not found')) {
