@@ -440,26 +440,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Mount Safety', () 
     }
   });
 
-  it('mount errors if directory exists and is non-empty', async () => {
-    await sandbox._start();
-
-    const testDir = '/home/daytona/test-non-empty';
-    await sandbox.executeCommand('mkdir', ['-p', testDir]);
-    await sandbox.executeCommand('sh', ['-c', `echo "existing" > ${testDir}/file.txt`]);
-
-    const mockFilesystem = {
-      id: 'test-fs',
-      name: 'MockFS',
-      provider: 'mock',
-      status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket', region: 'auto' }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, testDir);
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not empty');
-  }, 120000);
-
   it.skipIf(!hasS3Credentials)(
     'mount creates directory with sudo for paths outside home',
     async () => {
@@ -549,25 +529,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasS3Credentials)('DaytonaSandb
     expect(checkMarker.exitCode).not.toBe(0);
   }, 180000);
 
-  it('unmount removes empty mount directory', async () => {
-    await sandbox._start();
-
-    const s3Config = getS3TestConfig();
-    const mockFilesystem = {
-      id: 'test-s3-rmdir',
-      name: 'S3Filesystem',
-      provider: 's3',
-      status: 'ready',
-      getMountConfig: () => s3Config,
-    } as any;
-
-    const mountPath = '/data/rmdir-test';
-    await sandbox.mount(mockFilesystem, mountPath);
-    await sandbox.unmount(mountPath);
-
-    const checkDir = await sandbox.executeCommand('test', ['-d', mountPath]);
-    expect(checkDir.exitCode).not.toBe(0);
-  }, 180000);
 });
 
 /**
@@ -874,6 +835,15 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
         id: `bad-config-${Date.now()}`,
         image: 'nonexistent/fake-image:latest',
       }),
+    createMountableFilesystem: hasS3Credentials
+      ? () => ({
+          id: `conformance-s3-${Date.now()}`,
+          name: 'S3Filesystem',
+          provider: 's3',
+          status: 'ready' as const,
+          getMountConfig: () => getS3TestConfig(),
+        }) as any
+      : undefined,
     capabilities: {
       supportsMounting: true,
       supportsReconnection: true,

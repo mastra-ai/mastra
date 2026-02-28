@@ -766,7 +766,9 @@ export class DaytonaSandbox extends MastraSandbox {
     }
 
     // Find mounts that exist but shouldn't — only unmount if WE created them (have a marker)
-    for (const stalePath of currentMounts.filter(p => !expectedMountPaths.includes(p))) {
+    const staleMounts = currentMounts.filter(path => !expectedMountPaths.includes(path));
+
+    for (const stalePath of staleMounts) {
       if (managedMountPaths.has(stalePath)) {
         this.logger.debug(`${LOG_PREFIX} Found stale managed FUSE mount at "${stalePath}", unmounting...`);
         try {
@@ -774,7 +776,9 @@ export class DaytonaSandbox extends MastraSandbox {
         } catch (err) {
           this.logger.debug(`${LOG_PREFIX} Failed to unmount stale mount at "${stalePath}": ${err}`);
         }
-      } else this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
+      } else {
+        this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at "${stalePath}", leaving untouched`);
+      }
     }
 
     // Clean up orphaned marker files and empty directories from failed mounts
