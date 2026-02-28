@@ -2,7 +2,7 @@
 '@mastra/observability': minor
 ---
 
-Added a unified observability system that automatically captures metrics, logs, and traces from agent runs, tool calls, model generations, and workflow executions.
+Adds the ObservabilityBus with built-in promise tracking and flush support, laying the groundwork for fixing #13388 where spans were lost in durable execution contexts.
 
 **Automatic metrics** — Agent runs, tool calls, and workflows now automatically emit duration and count metrics with structured labels, removing the need for manual instrumentation.
 
