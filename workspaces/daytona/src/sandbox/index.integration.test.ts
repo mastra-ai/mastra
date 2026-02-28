@@ -181,27 +181,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasS3Credentials)('DaytonaSandb
     expect(writeResult.stdout).toMatch(/Read-only|write failed/);
   }, 180000);
 
-  it('S3-compatible without credentials fails with credentials error', async () => {
-    await sandbox._start();
-
-    const mockFilesystem = {
-      id: 'test-s3-compat',
-      name: 'S3Filesystem',
-      provider: 's3',
-      status: 'ready',
-      getMountConfig: () => ({
-        type: 's3',
-        bucket: 'test-bucket',
-        region: 'auto',
-        endpoint: 'https://example.r2.cloudflarestorage.com',
-      }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, '/data/compat-test');
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('credentials');
-  }, 180000);
-
   it('S3 mount sets uid/gid for file ownership', async () => {
     await sandbox._start();
 
@@ -353,24 +332,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasGCSCredentials)(
       }
     }, 240000);
 
-    it('GCS public bucket mounts with anonymous access', async () => {
-      await sandbox._start();
-
-      const mockFilesystem = {
-        id: 'test-gcs-public',
-        name: 'GCSFilesystem',
-        provider: 'gcs',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 'gcs',
-          bucket: 'gcp-public-data-landsat', // Known public bucket
-        }),
-      } as any;
-
-      const result = await sandbox.mount(mockFilesystem, '/data/gcs-public');
-      expect(result.success).toBe(true);
-    }, 180000);
-
     it('GCS mount sets uid/gid for file ownership', async () => {
       await sandbox._start();
 
@@ -394,6 +355,70 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasGCSCredentials)(
     }, 180000);
   },
 );
+
+/**
+ * Mount tests that only require DAYTONA_API_KEY (no cloud storage credentials).
+ */
+describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Mount Error Handling', () => {
+  let sandbox: DaytonaSandbox;
+
+  beforeEach(() => {
+    sandbox = new DaytonaSandbox({
+      id: `test-mount-errors-${Date.now()}`,
+      timeout: 120000,
+      language: 'typescript',
+    });
+  });
+
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox._destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('S3-compatible without credentials fails with credentials error', async () => {
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-compat',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'auto',
+        endpoint: 'https://example.r2.cloudflarestorage.com',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/compat-test');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('credentials');
+  }, 180000);
+
+  it('GCS public bucket mounts with anonymous access', async () => {
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-public',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'gcp-public-data-landsat', // Known public bucket
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/gcs-public');
+    expect(result.success).toBe(true);
+  }, 180000);
+});
 
 /**
  * Mount safety and error handling integration tests.
