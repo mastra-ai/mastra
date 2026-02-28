@@ -1,4 +1,9 @@
+import { MCPClient } from '@mastra/mcp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { loadMcpConfig } from '../config.js';
+import { createMcpManager } from '../manager.js';
+import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types.js';
 
 // Mock @mastra/mcp before importing manager
 vi.mock('@mastra/mcp', () => {
@@ -16,11 +21,6 @@ vi.mock('../config.js', async importOriginal => {
     loadMcpConfig: vi.fn(() => ({})),
   };
 });
-
-import { MCPClient } from '@mastra/mcp';
-import { loadMcpConfig } from '../config.js';
-import { createMcpManager } from '../manager.js';
-import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types.js';
 
 const mockedLoadMcpConfig = vi.mocked(loadMcpConfig);
 const MockedMCPClient = vi.mocked(MCPClient);
