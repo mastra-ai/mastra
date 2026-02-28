@@ -226,7 +226,7 @@ function hasNullableButNotOptionalInChain(schema: unknown): boolean {
     if (!typeName) break;
     if (typeName === 'ZodOptional') return false;
     if (typeName === 'ZodNullable') hasNullable = true;
-    if (typeName === 'ZodAny') return true;
+    if (typeName === 'ZodAny') return hasNullable;
     const inner = getZodInnerType(current, typeName);
     if (!inner) break;
     current = inner;
