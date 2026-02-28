@@ -1490,8 +1490,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const promptTokens = usage.promptTokens ?? 0;
-            const completionTokens = usage.completionTokens ?? 0;
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
 
             this.tokenUsage.promptTokens += promptTokens;
