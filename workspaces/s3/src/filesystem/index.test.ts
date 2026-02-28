@@ -225,6 +225,32 @@ describe('S3Filesystem', () => {
       expect(config.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
     });
 
+    it('includes sessionToken if set with credentials', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7vz+example-session-token',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBe('FwoGZXIvYXdzEBYaDH7vz+example-session-token');
+    });
+
+    it('does not include sessionToken if credentials are not set', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7vz+example-session-token',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBeUndefined();
+    });
+
     it('does not include credentials if not set', () => {
       const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
 
@@ -417,6 +443,64 @@ describe('S3Filesystem', () => {
       expect(client1).toBe(fakeClient);
       expect(client2).toBe(fakeClient);
       expect(client1).toBe(client2);
+    });
+
+    it('passes sessionToken in credentials when provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKID',
+        secretAccessKey: 'secret',
+        sessionToken: 'my-session-token',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'AKID',
+            secretAccessKey: 'secret',
+            sessionToken: 'my-session-token',
+          },
+        }),
+      );
+    });
+
+    it('omits sessionToken from credentials when not provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKID',
+        secretAccessKey: 'secret',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'AKID',
+            secretAccessKey: 'secret',
+          },
+        }),
+      );
     });
 
     it('uses anonymous credentials for public buckets', async () => {

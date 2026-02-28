@@ -101,6 +101,12 @@ description: "AWS secret access key. Optional for public buckets (read-only acce
 isOptional: true,
 },
 {
+name: "sessionToken",
+type: "string",
+description: "AWS session token for temporary credentials (e.g. from STS AssumeRole). Only needed when using temporary security credentials. Ignored when accessKeyId and secretAccessKey are not provided.",
+isOptional: true,
+},
+{
 name: "endpoint",
 type: "string",
 description: "Custom endpoint URL for S3-compatible storage (R2, MinIO, etc.)",
