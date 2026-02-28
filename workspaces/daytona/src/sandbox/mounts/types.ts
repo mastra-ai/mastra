@@ -44,6 +44,22 @@ export function validateBucketName(bucket: string): void {
 }
 
 /**
+ * Validate an endpoint URL before interpolating into shell commands.
+ * Only http and https schemes are allowed.
+ */
+export function validateEndpoint(endpoint: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    throw new Error(`Invalid endpoint URL: "${endpoint}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid endpoint URL scheme: "${parsed.protocol}". Only http: and https: are allowed.`);
+  }
+}
+
+/**
  * Result of running a command in the Daytona sandbox.
  *
  * Note: Daytona's `executeCommand` returns a single combined string (stdout + stderr).
@@ -80,20 +96,4 @@ export async function runCommand(
     exitCode: result.exitCode,
     output: result.result ?? '',
   };
-}
-
-/**
- * Validate an endpoint URL before interpolating into shell commands.
- * Only http and https schemes are allowed.
- */
-export function validateEndpoint(endpoint: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(endpoint);
-  } catch {
-    throw new Error(`Invalid endpoint URL: "${endpoint}"`);
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`Invalid endpoint URL scheme: "${parsed.protocol}". Only http: and https: are allowed.`);
-  }
 }
