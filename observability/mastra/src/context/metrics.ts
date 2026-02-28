@@ -65,6 +65,8 @@ export class MetricsContextImpl implements MetricsContext {
   }
 
   private emit(name: string, metricType: MetricType, value: number, additionalLabels?: Record<string, string>): void {
+    if (!Number.isFinite(value)) return;
+
     const allLabels = {
       ...this.config.labels,
       ...additionalLabels,

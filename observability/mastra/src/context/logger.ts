@@ -44,7 +44,7 @@ export class LoggerContextImpl implements LoggerContext {
     this.config = {
       ...config,
       tags: config.tags ? [...config.tags] : undefined,
-      metadata: config.metadata ? { ...config.metadata } : undefined,
+      metadata: config.metadata ? structuredClone(config.metadata) : undefined,
     };
   }
 

@@ -8,7 +8,7 @@ import type {
   ObservabilityInstance,
   ExportedSpan,
 } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -69,6 +69,10 @@ const mockConsole = {
 };
 
 vi.stubGlobal('console', mockConsole);
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
