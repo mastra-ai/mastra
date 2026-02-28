@@ -43,6 +43,27 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   const quotedMountPath = shellQuote(mountPath);
 
+  // For S3-compatible storage (R2, MinIO, etc.), check connectivity to the custom endpoint.
+  // AWS S3 endpoints are whitelisted in Daytona's proxy so no check needed for the default case.
+  if (config.endpoint) {
+    const endpoint = config.endpoint.replace(/\/$/, '');
+    const connectivityCheck = await run(`curl -sS --max-time 5 ${shellQuote(endpoint)} 2>&1`, 10_000);
+    const checkOutput = connectivityCheck.stdout.trim();
+    if (
+      connectivityCheck.exitCode !== 0 ||
+      checkOutput.toLowerCase().includes('restricted') ||
+      checkOutput.toLowerCase().includes('blocked')
+    ) {
+      throw new Error(
+        `Cannot reach ${endpoint} from this sandbox. ` +
+          `S3-compatible storage mounting requires network access to the configured endpoint, ` +
+          `which may be blocked on Daytona's restricted tiers. ` +
+          `Upgrade to a tier with unrestricted internet access, or contact Daytona support to remove the network restriction.` +
+          (checkOutput ? `\n\nSandbox network response: ${checkOutput}` : ''),
+      );
+    }
+  }
+
   // Install s3fs if not present
   const checkResult = await run('which s3fs 2>/dev/null || echo "not found"', 30_000);
   if (checkResult.stdout.includes('not found')) {
