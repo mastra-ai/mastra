@@ -18,11 +18,6 @@ export interface User {
 }
 
 /**
- * @deprecated Use `User` instead. `EEUser` with enterprise fields is available from `@mastra/core/auth/ee`.
- */
-export type EEUser = User;
-
-/**
  * Provider interface for user awareness in Studio.
  *
  * Implement this interface to enable:
