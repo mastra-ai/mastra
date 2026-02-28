@@ -204,6 +204,7 @@ export class DaytonaSandbox extends MastraSandbox {
   readonly provider = 'daytona';
 
   declare readonly mounts: MountManager; // Non-optional (initialized by base class when mount() exists)
+
   status: ProviderStatus = 'pending';
 
   private _daytona: Daytona | null = null;
@@ -650,6 +651,7 @@ export class DaytonaSandbox extends MastraSandbox {
         error,
       );
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
+
       // Clean up the directory we created since mount failed
       await sandbox.process.executeCommand(
         `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`,
@@ -797,6 +799,8 @@ export class DaytonaSandbox extends MastraSandbox {
     // Clean up orphaned marker files and empty directories from failed mounts
     try {
       const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
+
+      // Build a reverse map: markerFile -> mountPath
       const markerToPath = new Map<string, string>();
       for (const [path, file] of managedMountPaths) {
         markerToPath.set(file, path);
@@ -848,7 +852,6 @@ export class DaytonaSandbox extends MastraSandbox {
 
     const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-
     try {
       await this._sandbox.process.executeCommand(
         'mkdir -p /tmp/.mastra-mounts',
@@ -856,10 +859,10 @@ export class DaytonaSandbox extends MastraSandbox {
         undefined,
         MOUNT_COMMAND_TIMEOUT_S,
       );
-      await this._sandbox.fs.uploadFile(Buffer.from(markerContent), markerPath);
+      await this._sandbox.fs.uploadFile(Buffer.from(markerContent, 'utf-8'), markerPath);
     } catch {
-      // Non-fatal — marker is just for optimization
-      this.logger.debug(`${LOG_PREFIX} Warning: could not write marker file at ${markerPath}`);
+      // Non-fatal - marker is just for optimization
+      this.logger.debug(`${LOG_PREFIX} Warning: Could not write marker file at ${markerPath}`);
     }
   }
 
@@ -914,8 +917,9 @@ export class DaytonaSandbox extends MastraSandbox {
     // Compute hash of the NEW config and compare with stored hash
     const newConfigHash = this.mounts.computeConfigHash(newConfig);
     this.logger.debug(
-      `${LOG_PREFIX} Marker check — stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
+      `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
     );
+
     if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
       return 'matching';
     }
