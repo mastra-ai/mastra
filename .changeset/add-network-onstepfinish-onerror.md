@@ -2,7 +2,7 @@
 "@mastra/core": minor
 ---
 
-Added `onStepFinish` and `onError` callbacks to `NetworkOptions`. These callbacks are forwarded to sub-agent `stream()` and `resumeStream()` calls during network execution, enabling per-LLM-step progress monitoring and error handling. Closes #13362.
+Added `onStepFinish` and `onError` callbacks to `NetworkOptions`, allowing per-LLM-step progress monitoring and custom error handling during network execution. Closes #13362.
 
 **Before:** No way to observe per-step progress or handle errors during network execution.
 
