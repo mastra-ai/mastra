@@ -208,6 +208,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
+  private _workingDir: string | null = null;
   private _isRetrying = false;
 
   private readonly timeout: number;
@@ -321,6 +322,7 @@ export class DaytonaSandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
       await this.reconcileMounts(expectedPaths);
       this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+      await this.detectWorkingDir();
       return;
     }
 
@@ -364,6 +366,7 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
+    await this.detectWorkingDir();
   }
 
   /**
@@ -469,6 +472,10 @@ export class DaytonaSandbox extends MastraSandbox {
     const mountCount = this.mounts.entries.size;
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).${mountInfo}`);
+
+    if (this._workingDir) {
+      parts.push(`Default working directory: ${this._workingDir}.`);
+    }
 
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
 
@@ -917,6 +924,20 @@ export class DaytonaSandbox extends MastraSandbox {
    * Returns the sandbox if found and usable, or null if a fresh one should
    * be created.
    */
+  private async detectWorkingDir(): Promise<void> {
+    if (!this._sandbox) return;
+    try {
+      const result = await runCommand(this._sandbox, 'pwd', { timeout: MOUNT_COMMAND_TIMEOUT_MS });
+      const dir = result.output?.trim();
+      if (dir) {
+        this._workingDir = dir;
+        this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
+      }
+    } catch {
+      this.logger.debug(`${LOG_PREFIX} Could not detect working directory, will omit from instructions`);
+    }
+  }
+
   private async findExistingSandbox(): Promise<Sandbox | null> {
     const DEAD_STATES: SandboxState[] = [
       SandboxState.DESTROYED,

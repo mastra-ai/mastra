@@ -754,6 +754,17 @@ describe('DaytonaSandbox', () => {
       const sandbox = new DaytonaSandbox();
       expect(sandbox.getInstructions()).not.toContain('Network access is blocked');
     });
+
+    it('includes working directory when detected', () => {
+      const sandbox = new DaytonaSandbox();
+      (sandbox as any)._workingDir = '/home/daytona';
+      expect(sandbox.getInstructions()).toContain('Default working directory: /home/daytona');
+    });
+
+    it('omits working directory when not yet detected', () => {
+      const sandbox = new DaytonaSandbox();
+      expect(sandbox.getInstructions()).not.toContain('working directory');
+    });
   });
 
   describe('isReady()', () => {
