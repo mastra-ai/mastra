@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX } from '../index';
-import { validateBucketName } from './types';
+import { shellQuote } from '../../utils/shell-quote';
+import { LOG_PREFIX, validateBucketName } from './types';
 import type { MountContext } from './types';
 
 export interface DaytonaGCSMountConfig extends FilesystemMountConfig {
@@ -22,11 +22,19 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
 
   validateBucketName(config.bucket);
 
+  const quotedMountPath = shellQuote(mountPath);
+
   // Install gcsfuse if not present
-  const checkResult = await run('which gcsfuse 2>/dev/null || echo "not found"');
+  const checkResult = await run('which gcsfuse 2>/dev/null || echo "not found"', 30_000);
   if (checkResult.stdout.includes('not found')) {
-    const codenameResult = await run('lsb_release -cs 2>/dev/null || echo jammy');
+    logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
+    logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
+
+    const codenameResult = await run('lsb_release -cs 2>/dev/null || echo jammy', 30_000);
     const detectedCodename = codenameResult.stdout.trim() || 'jammy';
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(detectedCodename)) {
+      throw new Error(`Invalid distro codename for gcsfuse repo: "${detectedCodename}"`);
+    }
 
     // Set up the gcsfuse apt repository. Use separate curl + gpg steps (not piped)
     // so a curl failure propagates as non-zero exit rather than being masked by gpg.
@@ -61,12 +69,24 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     if (installResult.exitCode !== 0) {
       throw new Error(`Failed to install gcsfuse: ${installResult.stderr || installResult.stdout}`);
     }
+
+    // Verify installation
+    const verifyResult = await run('which gcsfuse 2>/dev/null || echo "not found"', 30_000);
+    if (verifyResult.stdout.includes('not found')) {
+      throw new Error('gcsfuse installation appeared to succeed but binary not found on PATH');
+    }
   }
 
   // Get uid/gid for proper file ownership
-  const idResult = await run('id -u && id -g');
+  const idResult = await run('id -u && id -g', 30_000);
   const [uid, gid] = idResult.stdout.trim().split('\n');
-  const uidGidFlags = uid && gid ? `--uid=${uid} --gid=${gid}` : '';
+  const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
+  if (!validUidGid) {
+    logger.warn(
+      `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.stdout.trim()}" — mounted files will be owned by root`,
+    );
+  }
+  const uidGidFlags = validUidGid ? `--uid=${uid} --gid=${gid}` : '';
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
   // These are no-ops if already configured.
@@ -83,20 +103,24 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   if (hasCredentials) {
     const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
     const keyPath = `/tmp/gcs-key-${mountHash}.json`;
-    await run(`sudo rm -f ${keyPath}`);
+    await run(`sudo rm -f ${shellQuote(keyPath)}`, 30_000);
     await writeFile(keyPath, config.serviceAccountKey!);
-    await run(`chmod 600 ${keyPath}`);
+    await run(`chmod 600 ${shellQuote(keyPath)}`, 30_000);
 
-    mountCmd = `gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `gcsfuse --key-file=${shellQuote(keyPath)} -o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   } else {
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
-    mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS: ${mountCmd}`);
 
   const result = await run(mountCmd, 60_000);
-  logger.debug(`${LOG_PREFIX} gcsfuse result:`, { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr });
+  logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
   if (result.exitCode !== 0) {
     throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
   }

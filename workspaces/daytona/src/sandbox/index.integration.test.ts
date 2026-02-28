@@ -234,127 +234,123 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasS3Credentials)('DaytonaSandb
 /**
  * GCS Mount integration tests.
  */
-describe.skipIf(!process.env.DAYTONA_API_KEY || !hasGCSCredentials)(
-  'DaytonaSandbox GCS Mount Integration',
-  () => {
-    let sandbox: DaytonaSandbox;
+describe.skipIf(!process.env.DAYTONA_API_KEY || !hasGCSCredentials)('DaytonaSandbox GCS Mount Integration', () => {
+  let sandbox: DaytonaSandbox;
 
-    beforeEach(() => {
-      sandbox = new DaytonaSandbox({
-        id: `test-gcs-${Date.now()}`,
-        timeout: 120000,
-        language: 'typescript',
-      });
+  beforeEach(() => {
+    sandbox = new DaytonaSandbox({
+      id: `test-gcs-${Date.now()}`,
+      timeout: 120000,
+      language: 'typescript',
     });
+  });
 
-    afterEach(async () => {
-      if (sandbox) {
-        try {
-          await sandbox._destroy();
-        } catch {
-          // Ignore cleanup errors
-        }
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox._destroy();
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+    }
+  });
 
-    it('GCS with service account mounts successfully', async () => {
-      await sandbox._start();
+  it('GCS with service account mounts successfully', async () => {
+    await sandbox._start();
 
-      const bucket = process.env.TEST_GCS_BUCKET!;
-      const mockFilesystem = {
-        id: 'test-gcs-fs',
-        name: 'GCSFilesystem',
-        provider: 'gcs',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 'gcs',
-          bucket,
-          serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
-        }),
-      } as any;
+    const bucket = process.env.TEST_GCS_BUCKET!;
+    const mockFilesystem = {
+      id: 'test-gcs-fs',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket,
+        serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+      }),
+    } as any;
 
-      const result = await sandbox.mount(mockFilesystem, '/data/gcs-test');
-      expect(result.success).toBe(true);
+    const result = await sandbox.mount(mockFilesystem, '/data/gcs-test');
+    expect(result.success).toBe(true);
 
-      const mountsResult = await sandbox.executeCommand('mount');
-      const hasFuseMount =
-        mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
-      expect(hasFuseMount).toBe(true);
+    const mountsResult = await sandbox.executeCommand('mount');
+    const hasFuseMount = mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
+    expect(hasFuseMount).toBe(true);
 
-      // If accessible, verify we can list
-      const lsResult = await sandbox.executeCommand('ls', ['/data/gcs-test']);
-      if (lsResult.exitCode !== 0) {
-        console.log(`[GCS TEST] Note: ls failed (bucket may be empty or have access restrictions): ${lsResult.stderr}`);
+    // If accessible, verify we can list
+    const lsResult = await sandbox.executeCommand('ls', ['/data/gcs-test']);
+    if (lsResult.exitCode !== 0) {
+      console.log(`[GCS TEST] Note: ls failed (bucket may be empty or have access restrictions): ${lsResult.stderr}`);
+    }
+  }, 180000);
+
+  it('full workflow: mount GCS and verify FUSE mount', async () => {
+    await sandbox._start();
+    expect(sandbox.status).toBe('running');
+
+    const bucket = process.env.TEST_GCS_BUCKET!;
+    const mockFilesystem = {
+      id: 'test-gcs-workflow',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket,
+        serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+      }),
+    } as any;
+
+    const mountPath = '/data/gcs-workflow-test';
+    const mountResult = await sandbox.mount(mockFilesystem, mountPath);
+    expect(mountResult.success).toBe(true);
+
+    // Verify FUSE mount
+    const mountsResult = await sandbox.executeCommand('mount');
+    const hasFuseMount = mountsResult.stdout.includes(mountPath) && mountsResult.stdout.includes('fuse.gcsfuse');
+    expect(hasFuseMount).toBe(true);
+
+    // Try file operations (may fail depending on bucket permissions)
+    const lsResult = await sandbox.executeCommand('ls', [mountPath]);
+    if (lsResult.exitCode === 0) {
+      const testContent = `gcs-test-${Date.now()}`;
+      const testFile = `${mountPath}/workflow-test-file.txt`;
+      const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
+
+      if (writeResult.exitCode === 0) {
+        const readResult = await sandbox.executeCommand('cat', [testFile]);
+        expect(readResult.exitCode).toBe(0);
+        expect(readResult.stdout.trim()).toBe(testContent);
+        await sandbox.executeCommand('rm', [testFile]);
       }
-    }, 180000);
+    } else {
+      console.log(`[GCS TEST] Note: ls failed (bucket may have access restrictions): ${lsResult.stderr}`);
+    }
+  }, 240000);
 
-    it('full workflow: mount GCS and verify FUSE mount', async () => {
-      await sandbox._start();
-      expect(sandbox.status).toBe('running');
+  it('GCS mount sets uid/gid for file ownership', async () => {
+    await sandbox._start();
 
-      const bucket = process.env.TEST_GCS_BUCKET!;
-      const mockFilesystem = {
-        id: 'test-gcs-workflow',
-        name: 'GCSFilesystem',
-        provider: 'gcs',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 'gcs',
-          bucket,
-          serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
-        }),
-      } as any;
+    const bucket = process.env.TEST_GCS_BUCKET!;
+    const mockFilesystem = {
+      id: 'test-gcs-ownership',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket,
+        serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+      }),
+    } as any;
 
-      const mountPath = '/data/gcs-workflow-test';
-      const mountResult = await sandbox.mount(mockFilesystem, mountPath);
-      expect(mountResult.success).toBe(true);
+    await sandbox.mount(mockFilesystem, '/data/gcs-ownership');
 
-      // Verify FUSE mount
-      const mountsResult = await sandbox.executeCommand('mount');
-      const hasFuseMount = mountsResult.stdout.includes(mountPath) && mountsResult.stdout.includes('fuse.gcsfuse');
-      expect(hasFuseMount).toBe(true);
-
-      // Try file operations (may fail depending on bucket permissions)
-      const lsResult = await sandbox.executeCommand('ls', [mountPath]);
-      if (lsResult.exitCode === 0) {
-        const testContent = `gcs-test-${Date.now()}`;
-        const testFile = `${mountPath}/workflow-test-file.txt`;
-        const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
-
-        if (writeResult.exitCode === 0) {
-          const readResult = await sandbox.executeCommand('cat', [testFile]);
-          expect(readResult.exitCode).toBe(0);
-          expect(readResult.stdout.trim()).toBe(testContent);
-          await sandbox.executeCommand('rm', [testFile]);
-        }
-      } else {
-        console.log(`[GCS TEST] Note: ls failed (bucket may have access restrictions): ${lsResult.stderr}`);
-      }
-    }, 240000);
-
-    it('GCS mount sets uid/gid for file ownership', async () => {
-      await sandbox._start();
-
-      const bucket = process.env.TEST_GCS_BUCKET!;
-      const mockFilesystem = {
-        id: 'test-gcs-ownership',
-        name: 'GCSFilesystem',
-        provider: 'gcs',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 'gcs',
-          bucket,
-          serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
-        }),
-      } as any;
-
-      await sandbox.mount(mockFilesystem, '/data/gcs-ownership');
-
-      const statResult = await sandbox.executeCommand('stat', ['-c', '%U', '/data/gcs-ownership']);
-      expect(statResult.stdout.trim()).not.toBe('root');
-    }, 180000);
-  },
-);
+    const statResult = await sandbox.executeCommand('stat', ['-c', '%U', '/data/gcs-ownership']);
+    expect(statResult.stdout.trim()).not.toBe('root');
+  }, 180000);
+});
 
 /**
  * Mount tests that only require DAYTONA_API_KEY (no cloud storage credentials).
@@ -464,24 +460,28 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Mount Safety', () 
     expect(result.error).toContain('not empty');
   }, 120000);
 
-  it.skipIf(!hasS3Credentials)('mount creates directory with sudo for paths outside home', async () => {
-    await sandbox._start();
+  it.skipIf(!hasS3Credentials)(
+    'mount creates directory with sudo for paths outside home',
+    async () => {
+      await sandbox._start();
 
-    const s3Config = getS3TestConfig();
-    const mockFilesystem = {
-      id: 'test-fs-outside-home',
-      name: 'S3Filesystem',
-      provider: 's3',
-      status: 'ready',
-      getMountConfig: () => s3Config,
-    } as any;
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-fs-outside-home',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
 
-    const result = await sandbox.mount(mockFilesystem, '/opt/test-mount');
-    expect(result.success).toBe(true);
+      const result = await sandbox.mount(mockFilesystem, '/opt/test-mount');
+      expect(result.success).toBe(true);
 
-    const checkDir = await sandbox.executeCommand('test', ['-d', '/opt/test-mount']);
-    expect(checkDir.exitCode).toBe(0);
-  }, 120000);
+      const checkDir = await sandbox.executeCommand('test', ['-d', '/opt/test-mount']);
+      expect(checkDir.exitCode).toBe(0);
+    },
+    120000,
+  );
 });
 
 /**
@@ -594,37 +594,41 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasS3Credentials)('DaytonaSandb
     }
   });
 
-  it.skipIf(!hasS3Credentials)('mount skips if already mounted with matching config', async () => {
-    await sandbox._start();
+  it.skipIf(!hasS3Credentials)(
+    'mount skips if already mounted with matching config',
+    async () => {
+      await sandbox._start();
 
-    const s3Config = getS3TestConfig();
-    const mockFilesystem = {
-      id: 'test-s3-skip',
-      name: 'S3Filesystem',
-      provider: 's3',
-      status: 'ready',
-      getMountConfig: () => s3Config,
-    } as any;
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-skip',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
 
-    const mountPath = '/data/skip-test';
+      const mountPath = '/data/skip-test';
 
-    const result1 = await sandbox.mount(mockFilesystem, mountPath);
-    expect(result1.success).toBe(true);
+      const result1 = await sandbox.mount(mockFilesystem, mountPath);
+      expect(result1.success).toBe(true);
 
-    const markerBefore = await sandbox.executeCommand('sh', [
-      '-c',
-      `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
-    ]);
+      const markerBefore = await sandbox.executeCommand('sh', [
+        '-c',
+        `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
+      ]);
 
-    const result2 = await sandbox.mount(mockFilesystem, mountPath);
-    expect(result2.success).toBe(true);
+      const result2 = await sandbox.mount(mockFilesystem, mountPath);
+      expect(result2.success).toBe(true);
 
-    const markerAfter = await sandbox.executeCommand('sh', [
-      '-c',
-      `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
-    ]);
-    expect(markerAfter.stdout).toBe(markerBefore.stdout);
-  }, 180000);
+      const markerAfter = await sandbox.executeCommand('sh', [
+        '-c',
+        `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
+      ]);
+      expect(markerAfter.stdout).toBe(markerBefore.stdout);
+    },
+    180000,
+  );
 
   it('mount unmounts and remounts if config changed', async () => {
     await sandbox._start();

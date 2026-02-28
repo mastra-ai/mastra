@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX } from '../index';
-import { validateBucketName, validateEndpoint } from './types';
+import { shellQuote } from '../../utils/shell-quote';
+import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
 import type { MountContext } from './types';
 
 export interface DaytonaS3MountConfig extends FilesystemMountConfig {
@@ -33,10 +33,13 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     validateEndpoint(config.endpoint);
   }
 
+  const quotedMountPath = shellQuote(mountPath);
+
   // Install s3fs if not present
-  const checkResult = await run('which s3fs 2>/dev/null || echo "not found"');
+  const checkResult = await run('which s3fs 2>/dev/null || echo "not found"', 30_000);
   if (checkResult.stdout.includes('not found')) {
-    logger.warn(`${LOG_PREFIX} s3fs not found, installing...`);
+    logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
+    logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
 
     await run('sudo apt-get update -qq 2>&1', 60_000);
 
@@ -45,7 +48,8 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     // then verify the binary is actually present below.
     await run('sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1 || true', 120_000);
 
-    const s3fsCheck = await run('which s3fs 2>/dev/null || echo "not found"');
+    // Verify installation
+    const s3fsCheck = await run('which s3fs 2>/dev/null || echo "not found"', 30_000);
     if (s3fsCheck.stdout.includes('not found')) {
       throw new Error('Failed to install s3fs: binary not found after install attempt');
     }
@@ -53,13 +57,24 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   // The fuse post-install script may fail to set the SUID bit on fusermount.
   // Set it explicitly so non-root processes can call fusermount.
-  await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true');
+  await run('sudo chmod u+s /usr/bin/fusermount3 /usr/bin/fusermount 2>/dev/null || true', 30_000);
 
   // Get uid/gid for proper file ownership
-  const idResult = await run('id -u && id -g');
+  const idResult = await run('id -u && id -g', 30_000);
   const [uid, gid] = idResult.stdout.trim().split('\n');
+  const validUidGid = uid && gid && /^\d+$/.test(uid) && /^\d+$/.test(gid);
+  if (!validUidGid) {
+    logger.warn(
+      `${LOG_PREFIX} Unexpected uid/gid format: "${idResult.stdout.trim()}" — mounted files will be owned by root`,
+    );
+  }
 
-  const hasCredentials = config.accessKeyId && config.secretAccessKey;
+  const hasAccessKey = !!config.accessKeyId;
+  const hasSecretKey = !!config.secretAccessKey;
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
+  }
+  const hasCredentials = hasAccessKey && hasSecretKey;
   const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
@@ -79,9 +94,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   );
 
   if (hasCredentials) {
-    await run(`sudo rm -f ${credentialsPath}`);
+    await run(`sudo rm -f ${shellQuote(credentialsPath)}`, 30_000);
     await writeFile(credentialsPath, `${config.accessKeyId}:${config.secretAccessKey}`);
-    await run(`chmod 600 ${credentialsPath}`);
+    await run(`chmod 600 ${shellQuote(credentialsPath)}`, 30_000);
   }
 
   const mountOptions: string[] = [];
@@ -97,7 +112,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   // Requires user_allow_other in /etc/fuse.conf for non-root mounts.
   mountOptions.push('allow_other');
 
-  if (uid && gid) {
+  if (validUidGid) {
     mountOptions.push(`uid=${uid}`, `gid=${gid}`);
   }
 
@@ -113,11 +128,15 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
   // in the container's user namespace — allowing fusermount -u to unmount it later.
-  const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `s3fs ${shellQuote(config.bucket)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3: ${hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd}`);
 
   const result = await run(mountCmd, 60_000);
-  logger.debug(`${LOG_PREFIX} s3fs result:`, { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr });
+  logger.debug(`${LOG_PREFIX} s3fs result:`, {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
   if (result.exitCode !== 0) {
     throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
   }

@@ -271,13 +271,13 @@ Pass `S3Filesystem` or `GCSFilesystem` instances via the workspace `mounts` conf
 
 ### S3 environment variables
 
-| Variable               | Description                                |
-| ---------------------- | ------------------------------------------ |
-| `S3_BUCKET`            | Bucket name                                |
-| `S3_REGION`            | AWS region or `auto` for R2/MinIO          |
-| `S3_ACCESS_KEY_ID`     | Access key ID                              |
-| `S3_SECRET_ACCESS_KEY` | Secret access key                          |
-| `S3_ENDPOINT`          | Endpoint URL (S3-compatible only)          |
+| Variable               | Description                       |
+| ---------------------- | --------------------------------- |
+| `S3_BUCKET`            | Bucket name                       |
+| `S3_REGION`            | AWS region or `auto` for R2/MinIO |
+| `S3_ACCESS_KEY_ID`     | Access key ID                     |
+| `S3_SECRET_ACCESS_KEY` | Secret access key                 |
+| `S3_ENDPOINT`          | Endpoint URL (S3-compatible only) |
 
 ### GCS environment variables
 
@@ -301,9 +301,9 @@ const template = Image.base('daytonaio/sandbox')
   // gcsfuse requires the Google Cloud apt repository
   .runCommands(
     'sudo mkdir -p /etc/apt/keyrings && ' +
-    'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
-    'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
-    'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list'
+      'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
+      'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
+      'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
   )
   .runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse');
 
@@ -322,8 +322,12 @@ Then use the snapshot name in your sandbox config:
 ```typescript
 const workspace = new Workspace({
   mounts: {
-    '/s3-data': new S3Filesystem({ /* ... */ }),
-    '/gcs-data': new GCSFilesystem({ /* ... */ }),
+    '/s3-data': new S3Filesystem({
+      /* ... */
+    }),
+    '/gcs-data': new GCSFilesystem({
+      /* ... */
+    }),
   },
   sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
 });
