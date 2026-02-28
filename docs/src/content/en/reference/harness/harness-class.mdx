@@ -448,14 +448,6 @@ const threads = await harness.listThreads()
 const allThreads = await harness.listThreads({ allResources: true })
 ```
 
-#### `deleteThread({ threadId })`
-
-Delete a thread and all its messages from storage. If the deleted thread is the currently active thread, the thread lock is released and the harness clears its active thread. Emits a `thread_deleted` event.
-
-```typescript
-await harness.deleteThread({ threadId: 'thread-abc123' })
-```
-
 #### `renameThread({ title })`
 
 Update the title of the current thread.
@@ -524,6 +516,18 @@ Retrieve the first user message for a given thread.
 
 ```typescript
 const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-abc123' })
+```
+
+### Memory
+
+The `memory` property exposes thread and message management operations.
+
+#### `memory.deleteThread({ threadId })`
+
+Delete a thread and all its messages from storage. If the deleted thread is the currently active thread, the thread lock is released and the harness clears its active thread. Emits a `thread_deleted` event.
+
+```typescript
+await harness.memory.deleteThread({ threadId: 'thread-abc123' })
 ```
 
 ### Flow control
@@ -821,6 +825,7 @@ The harness emits events through registered listeners. The following table lists
 | `model_changed` | The active model changed. |
 | `thread_changed` | The active thread changed. |
 | `thread_created` | A new thread was created. |
+| `thread_deleted` | A thread was deleted. |
 | `state_changed` | Harness state was updated. |
 | `agent_start` | The agent started processing. |
 | `agent_end` | The agent finished processing. |

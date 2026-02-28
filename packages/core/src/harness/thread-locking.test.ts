@@ -239,7 +239,7 @@ describe('Harness thread locking', () => {
   describe('deleteThread', () => {
     it('deletes a thread from storage', async () => {
       const thread = await harness.createThread({ title: 'to-delete' });
-      await harness.deleteThread({ threadId: thread.id });
+      await harness.memory.deleteThread({ threadId: thread.id });
 
       const threads = await harness.listThreads();
       expect(threads.find(t => t.id === thread.id)).toBeUndefined();
@@ -250,7 +250,7 @@ describe('Harness thread locking', () => {
       acquire.mockClear();
       release.mockClear();
 
-      await harness.deleteThread({ threadId: thread.id });
+      await harness.memory.deleteThread({ threadId: thread.id });
       expect(release).toHaveBeenCalledWith(thread.id);
     });
 
@@ -258,7 +258,7 @@ describe('Harness thread locking', () => {
       const thread = await harness.createThread({ title: 'current' });
       expect(harness.getCurrentThreadId()).toBe(thread.id);
 
-      await harness.deleteThread({ threadId: thread.id });
+      await harness.memory.deleteThread({ threadId: thread.id });
       expect(harness.getCurrentThreadId()).toBeNull();
     });
 
@@ -267,14 +267,14 @@ describe('Harness thread locking', () => {
       const second = await harness.createThread({ title: 'second' });
       release.mockClear();
 
-      await harness.deleteThread({ threadId: first.id });
+      await harness.memory.deleteThread({ threadId: first.id });
       // Should not release lock since first is not the current thread (second is)
       expect(release).not.toHaveBeenCalled();
       expect(harness.getCurrentThreadId()).toBe(second.id);
     });
 
     it('throws when thread does not exist', async () => {
-      await expect(harness.deleteThread({ threadId: 'nonexistent' })).rejects.toThrow('Thread not found');
+      await expect(harness.memory.deleteThread({ threadId: 'nonexistent' })).rejects.toThrow('Thread not found');
     });
 
     it('emits thread_deleted event', async () => {
@@ -284,7 +284,7 @@ describe('Harness thread locking', () => {
       });
 
       const thread = await harness.createThread({ title: 'to-delete' });
-      await harness.deleteThread({ threadId: thread.id });
+      await harness.memory.deleteThread({ threadId: thread.id });
       expect(events).toEqual([thread.id]);
     });
   });

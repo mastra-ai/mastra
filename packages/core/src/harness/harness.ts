@@ -608,7 +608,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return thread;
   }
 
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+  /**
+   * Returns a memory accessor with thread and message management methods.
+   */
+  get memory() {
+    return {
+      deleteThread: this.deleteThread.bind(this),
+    };
+  }
+
+  private async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     if (!this.config.storage) return;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -2374,6 +2383,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       case 'thread_created':
         this.resetThreadDisplayState();
         ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        break;
+
+      case 'thread_deleted':
+        if (!this.currentThreadId) {
+          this.resetThreadDisplayState();
+          ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        }
         break;
 
       // ── State changes (for OM threshold overrides) ──────────────────────
