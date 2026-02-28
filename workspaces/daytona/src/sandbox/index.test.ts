@@ -50,7 +50,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
 
   const mockDaytona = {
     create: vi.fn().mockResolvedValue(mockSandbox),
-    get: vi.fn().mockResolvedValue(mockSandbox),
+    get: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     findOne: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     delete: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
@@ -60,7 +60,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
 
   const resetMockDefaults = () => {
     mockDaytona.create.mockResolvedValue(mockSandbox);
-    mockDaytona.get.mockResolvedValue(mockSandbox);
+    mockDaytona.get.mockRejectedValue(new Error('No sandbox found'));
     mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
     mockDaytona.delete.mockResolvedValue(undefined);
     mockDaytona.stop.mockResolvedValue(undefined);
@@ -98,13 +98,21 @@ vi.mock('@daytonaio/sdk', () => ({
   }),
   DaytonaNotFoundError,
   SandboxState: {
+    CREATING: 'creating',
+    RESTORING: 'restoring',
     DESTROYED: 'destroyed',
     DESTROYING: 'destroying',
     STARTED: 'started',
     STOPPED: 'stopped',
+    STARTING: 'starting',
+    STOPPING: 'stopping',
     ERROR: 'error',
     BUILD_FAILED: 'build_failed',
     ARCHIVED: 'archived',
+    ARCHIVING: 'archiving',
+    RESIZING: 'resizing',
+    PULLING_SNAPSHOT: 'pulling_snapshot',
+    BUILDING_SNAPSHOT: 'building_snapshot',
   },
 }));
 
@@ -438,18 +446,30 @@ describe('DaytonaSandbox', () => {
 
   describe('Start - Reconnection', () => {
     it('reconnects to an existing started sandbox without calling create', async () => {
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.get).toHaveBeenCalledWith('my-id');
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+    });
+
+    it('falls back to findOne when get() fails', async () => {
+      mockDaytona.get.mockRejectedValue(new Error('No sandbox found'));
       mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
 
+      expect(mockDaytona.get).toHaveBeenCalled();
       expect(mockDaytona.findOne).toHaveBeenCalledWith({ labels: { 'mastra-sandbox-id': 'my-id' } });
       expect(mockDaytona.create).not.toHaveBeenCalled();
-      expect(mockDaytona.start).not.toHaveBeenCalled();
     });
 
     it('restarts a stopped sandbox and reconnects without calling create', async () => {
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'stopped' });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'stopped' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -459,7 +479,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('restarts an archived sandbox and reconnects without calling create', async () => {
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'archived' });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'archived' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -472,7 +492,7 @@ describe('DaytonaSandbox', () => {
       for (const state of ['destroyed', 'destroying', 'error', 'build_failed']) {
         vi.clearAllMocks();
         resetMockDefaults();
-        mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state });
+        mockDaytona.get.mockResolvedValue({ ...mockSandbox, state });
         const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
         await sandbox._start();
@@ -482,7 +502,6 @@ describe('DaytonaSandbox', () => {
     });
 
     it('creates fresh sandbox when no existing sandbox is found', async () => {
-      mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -492,7 +511,7 @@ describe('DaytonaSandbox', () => {
 
     it('uses createdAt from existing sandbox on reconnect', async () => {
       const createdAt = '2024-01-15T10:00:00.000Z';
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();

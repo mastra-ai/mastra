@@ -904,9 +904,18 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Try to find and reconnect to an existing Daytona sandbox with the same
-   * logical ID (via the mastra-sandbox-id label). Returns the sandbox if
-   * found and usable, or null if a fresh sandbox should be created.
+   * Try to find and reconnect to an existing Daytona sandbox.
+   *
+   * Uses two strategies:
+   * 1. `get()` by sandbox name — calls the getSandbox API directly, which
+   *    returns sandboxes in ANY state (including stopped). This is the
+   *    primary path and fixes reconnection after stop/start cycles.
+   * 2. `findOne()` by label — falls back to label-based search. Note: the
+   *    SDK's list() API only returns started sandboxes by default (no states
+   *    param in v0.143.0), so this only finds running sandboxes.
+   *
+   * Returns the sandbox if found and usable, or null if a fresh one should
+   * be created.
    */
   private async findExistingSandbox(): Promise<Sandbox | null> {
     const DEAD_STATES: SandboxState[] = [
@@ -916,32 +925,120 @@ export class DaytonaSandbox extends MastraSandbox {
       SandboxState.BUILD_FAILED,
     ];
 
-    try {
-      const sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-      const state = sandbox.state;
+    let sandbox: Sandbox | null = null;
 
-      if (state && DEAD_STATES.includes(state)) {
-        this.logger.debug(
-          `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
-        );
-        try {
-          await this._daytona!.delete(sandbox);
-        } catch {
-          // Best-effort cleanup of dead sandbox
-        }
+    // Strategy 1: lookup by name (works for stopped sandboxes)
+    if (this.sandboxName) {
+      try {
+        sandbox = await this._daytona!.get(this.sandboxName);
+      } catch {
+        // Not found by name — fall through to label lookup
+      }
+    }
+
+    // Strategy 2: fallback to label-based lookup
+    if (!sandbox) {
+      try {
+        sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
+      } catch {
+        // Not found by label either — create a fresh sandbox
         return null;
       }
+    }
 
-      if (state !== SandboxState.STARTED) {
-        this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-        await this._daytona!.start(sandbox);
+    const state = sandbox.state;
+
+    if (state && DEAD_STATES.includes(state)) {
+      this.logger.debug(
+        `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
+      );
+      try {
+        await this._daytona!.delete(sandbox);
+      } catch {
+        // Best-effort cleanup of dead sandbox
       }
-
-      return sandbox;
-    } catch {
-      // Not found or any error — create a fresh sandbox
       return null;
     }
+
+    if (state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
+      await this.waitForStableStateAndStart(sandbox);
+    }
+
+    return sandbox;
+  }
+
+  /**
+   * Transitional states where the Daytona API will reject start() with
+   * "State change in progress". We poll until the sandbox reaches a stable
+   * state before attempting start().
+   */
+  private static readonly TRANSITIONAL_STATES: SandboxState[] = [
+    SandboxState.STARTING,
+    SandboxState.STOPPING,
+    SandboxState.CREATING,
+    SandboxState.RESTORING,
+    SandboxState.ARCHIVING,
+    SandboxState.RESIZING,
+    SandboxState.PULLING_SNAPSHOT,
+    SandboxState.BUILDING_SNAPSHOT,
+  ];
+
+  /**
+   * Wait for the sandbox to leave a transitional state, then start it if needed.
+   * Polls every 2s for up to 120s. If the sandbox reaches STARTED on its own
+   * (e.g. it was STARTING), we skip the start() call. If start() still fails
+   * with "State change in progress", we retry with backoff.
+   */
+  private async waitForStableStateAndStart(sandbox: Sandbox): Promise<void> {
+    const MAX_WAIT_MS = 120_000;
+    const POLL_INTERVAL_MS = 2_000;
+    const deadline = Date.now() + MAX_WAIT_MS;
+
+    let current = sandbox;
+
+    // Phase 1: Poll until the reported state is no longer transitional
+    while (
+      current.state &&
+      DaytonaSandbox.TRANSITIONAL_STATES.includes(current.state) &&
+      Date.now() < deadline
+    ) {
+      this.logger.debug(
+        `${LOG_PREFIX} Sandbox ${current.id} is in transitional state (${current.state}), waiting...`,
+      );
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+      current = await this._daytona!.get(current.id);
+    }
+
+    if (current.state === SandboxState.STARTED) {
+      // Reached STARTED on its own — update the reference and return
+      Object.assign(sandbox, current);
+      return;
+    }
+
+    // Phase 2: Attempt start() with retries for "State change in progress"
+    while (Date.now() < deadline) {
+      try {
+        await this._daytona!.start(current);
+        return;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('State change in progress') && Date.now() < deadline) {
+          this.logger.debug(`${LOG_PREFIX} start() returned "State change in progress", retrying...`);
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+          current = await this._daytona!.get(current.id);
+          if (current.state === SandboxState.STARTED) {
+            Object.assign(sandbox, current);
+            return;
+          }
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Last-ditch attempt after deadline
+    await this._daytona!.start(current);
   }
 
   /**
