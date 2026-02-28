@@ -38,9 +38,6 @@ import type { DaytonaResources } from './types';
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
 
-/** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
-const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
-
 /** Default timeout for mount lifecycle shell commands (mkdir, unmount, proc reads, etc.) */
 const MOUNT_COMMAND_TIMEOUT_MS = 30_000;
 /** Same timeout in seconds for the Daytona SDK executeCommand API. */
@@ -75,6 +72,9 @@ function validateMountPath(mountPath: string): void {
   }
 }
 
+/** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
+const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
+
 /** Patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
 const SANDBOX_DEAD_PATTERNS: RegExp[] = [
   /sandbox is not running/i,
@@ -89,7 +89,7 @@ const SANDBOX_DEAD_PATTERNS: RegExp[] = [
 /**
  * Daytona sandbox provider configuration.
  */
-export interface DaytonaSandboxOptions extends MastraSandboxOptions {
+export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** API key for authentication. Falls back to DAYTONA_API_KEY env var. */
@@ -202,8 +202,8 @@ export class DaytonaSandbox extends MastraSandbox {
   readonly name = 'DaytonaSandbox';
   readonly provider = 'daytona';
 
-  status: ProviderStatus = 'pending';
   declare readonly mounts: MountManager; // Non-optional (initialized by MastraSandbox base class)
+  status: ProviderStatus = 'pending';
 
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
@@ -530,11 +530,13 @@ export class DaytonaSandbox extends MastraSandbox {
     // Check if already mounted with matching config (e.g., when reconnecting)
     const existingMount = await this.checkExistingMount(mountPath, config);
     if (existingMount === 'matching') {
-      this.logger.debug(`${LOG_PREFIX} Existing mount at "${mountPath}" matches config, skipping`);
+      this.logger.debug(
+        `${LOG_PREFIX} Detected existing mount for ${filesystem.provider} ("${filesystem.id}") at "${mountPath}" with correct config, skipping`,
+      );
       this.mounts.set(mountPath, { state: 'mounted', config });
       return { success: true, mountPath };
     } else if (existingMount === 'mismatched') {
-      this.logger.debug(`${LOG_PREFIX} Config mismatch at "${mountPath}", re-mounting...`);
+      this.logger.debug(`${LOG_PREFIX} Config mismatch at "${mountPath}", unmounting to re-mount with new config...`);
       await this.unmount(mountPath);
     } else if (existingMount === 'unmanaged') {
       const error = `Mount path "${mountPath}" is already mounted by an unmanaged source`;
@@ -544,6 +546,7 @@ export class DaytonaSandbox extends MastraSandbox {
     }
 
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+    this.logger.debug(`${LOG_PREFIX} Config type: ${config.type}`);
 
     // Reject non-empty directories — mounting would shadow existing files.
     // Skip the check if the path is already a mount point (stuck FUSE from a failed
@@ -558,7 +561,7 @@ export class DaytonaSandbox extends MastraSandbox {
         MOUNT_COMMAND_TIMEOUT_S,
       );
       if (response.result.trim() === 'non-empty') {
-        const error = `Cannot mount at ${mountPath}: directory exists and is not empty`;
+        const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
         this.logger.error(`${LOG_PREFIX} ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
@@ -572,6 +575,7 @@ export class DaytonaSandbox extends MastraSandbox {
     // it with a tmpfs first. New FUSE-on-existing-FUSE fails because the kernel asks the
     // existing daemon to resolve the mount point path, which returns ENOENT. A tmpfs
     // overlay is kernel-native and doesn't involve the FUSE driver.
+    this.logger.debug(`${LOG_PREFIX} Creating mount directory for "${mountPath}"...`);
     try {
       const qp = shellQuote(mountPath);
       const mkdirResponse = await sandbox.process.executeCommand(
@@ -584,6 +588,7 @@ export class DaytonaSandbox extends MastraSandbox {
       );
       if (mkdirResponse.exitCode !== 0) {
         const error = mkdirResponse.result || 'Failed to create mount directory';
+        this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, error);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
@@ -658,32 +663,6 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   /**
-   * Write a marker file so we can detect config changes on reconnect.
-   */
-  private async writeMarkerFile(mountPath: string): Promise<void> {
-    if (!this._sandbox) return;
-
-    const markerContent = this.mounts.getMarkerContent(mountPath);
-    if (!markerContent) return;
-
-    const filename = this.mounts.markerFilename(mountPath);
-    const markerPath = `/tmp/.mastra-mounts/${filename}`;
-
-    try {
-      await this._sandbox.process.executeCommand(
-        'mkdir -p /tmp/.mastra-mounts',
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      await this._sandbox.fs.uploadFile(Buffer.from(markerContent), markerPath);
-    } catch {
-      // Non-fatal — marker is just for optimization
-      this.logger.debug(`${LOG_PREFIX} Warning: could not write marker file at ${markerPath}`);
-    }
-  }
-
-  /**
    * Unmount a filesystem from a path in the sandbox.
    */
   async unmount(mountPath: string): Promise<void> {
@@ -723,12 +702,152 @@ export class DaytonaSandbox extends MastraSandbox {
       MOUNT_COMMAND_TIMEOUT_S,
     );
     if (cleanupResult.exitCode === 0) {
-      this.logger.debug(`${LOG_PREFIX} Removed mount directory ${mountPath}`);
+      this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
-      this.logger.debug(`${LOG_PREFIX} Could not remove ${mountPath}: ${cleanupResult.result.trim() || 'not empty'}`);
+      this.logger.debug(
+        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${cleanupResult.result.trim() || 'not empty'})`,
+      );
+    }
+  }
+
+  /**
+   * Unmount stale FUSE mounts not in the expected list.
+   * Called after reconnecting to clean up mounts from a previous session.
+   */
+  async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
+    if (!this._sandbox) return;
+    const sandbox = this._sandbox;
+
+    this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected paths:`, expectedMountPaths);
+
+    // Get current FUSE mounts
+    let currentMounts: string[] = [];
+    try {
+      const mountsResponse = await sandbox.process.executeCommand(
+        `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+        undefined,
+        undefined,
+        MOUNT_COMMAND_TIMEOUT_S,
+      );
+      currentMounts = mountsResponse.result
+        .trim()
+        .split('\n')
+        .filter(p => p.length > 0);
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read /proc/mounts: ${err}`);
+      return;
     }
 
-    this.logger.debug(`${LOG_PREFIX} Unmounted "${mountPath}"`);
+    this.logger.debug(`${LOG_PREFIX} Current FUSE mounts in sandbox:`, currentMounts);
+
+    // Read marker files to know which mounts we created
+    let markerFiles: string[] = [];
+    try {
+      const markersResponse = await sandbox.process.executeCommand(
+        'ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""',
+        undefined,
+        undefined,
+        MOUNT_COMMAND_TIMEOUT_S,
+      );
+      markerFiles = markersResponse.result
+        .trim()
+        .split('\n')
+        .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read marker files: ${err}`);
+    }
+
+    // Build map of mount paths we manage
+    const managedMountPaths = new Map<string, string>();
+    for (const markerFile of markerFiles) {
+      const markerResponse = await sandbox.process.executeCommand(
+        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
+        undefined,
+        undefined,
+        MOUNT_COMMAND_TIMEOUT_S,
+      );
+      const parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
+      if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
+        managedMountPaths.set(parsed.path, markerFile);
+      }
+    }
+
+    // Unmount stale managed FUSE mounts
+    for (const stalePath of currentMounts.filter(p => !expectedMountPaths.includes(p))) {
+      if (managedMountPaths.has(stalePath)) {
+        this.logger.debug(`${LOG_PREFIX} Found stale managed FUSE mount at "${stalePath}", unmounting...`);
+        try {
+          await this.unmount(stalePath);
+        } catch (err) {
+          this.logger.debug(`${LOG_PREFIX} Failed to unmount stale mount at "${stalePath}": ${err}`);
+        }
+      } else this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
+    }
+
+    // Clean up orphaned marker files and empty directories
+    try {
+      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
+      const markerToPath = new Map<string, string>();
+      for (const [path, file] of managedMountPaths) {
+        markerToPath.set(file, path);
+      }
+
+      for (const markerFile of markerFiles) {
+        if (!expectedMarkerFiles.has(markerFile)) {
+          const mountPath = markerToPath.get(markerFile);
+
+          if (mountPath) {
+            if (!currentMounts.includes(mountPath)) {
+              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
+              await sandbox.process.executeCommand(
+                `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null; sudo rmdir ${shellQuote(mountPath)} 2>/dev/null`,
+                undefined,
+                undefined,
+                MOUNT_COMMAND_TIMEOUT_S,
+              );
+            }
+          } else {
+            // Malformed marker file - just delete it
+            this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
+            await sandbox.process.executeCommand(
+              `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`,
+              undefined,
+              undefined,
+              MOUNT_COMMAND_TIMEOUT_S,
+            );
+          }
+        }
+      }
+    } catch {
+      // Ignore errors during orphan cleanup
+      this.logger.debug(`${LOG_PREFIX} Error during orphan cleanup (non-fatal)`);
+    }
+  }
+
+  /**
+   * Write a marker file so we can detect config changes on reconnect.
+   */
+  private async writeMarkerFile(mountPath: string): Promise<void> {
+    if (!this._sandbox) return;
+
+    const markerContent = this.mounts.getMarkerContent(mountPath);
+    if (!markerContent) return;
+
+    const filename = this.mounts.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+
+    try {
+      await this._sandbox.process.executeCommand(
+        'mkdir -p /tmp/.mastra-mounts',
+        undefined,
+        undefined,
+        MOUNT_COMMAND_TIMEOUT_S,
+      );
+      await this._sandbox.fs.uploadFile(Buffer.from(markerContent), markerPath);
+    } catch {
+      // Non-fatal — marker is just for optimization
+      this.logger.debug(`${LOG_PREFIX} Warning: could not write marker file at ${markerPath}`);
+    }
   }
 
   /**
@@ -787,118 +906,6 @@ export class DaytonaSandbox extends MastraSandbox {
     }
 
     return 'mismatched';
-  }
-
-  /**
-   * Unmount stale FUSE mounts not in the expected list.
-   * Called after reconnecting to clean up mounts from a previous session.
-   */
-  async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
-    if (!this._sandbox) return;
-    const sandbox = this._sandbox;
-
-    this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected:`, expectedMountPaths);
-
-    // Get current FUSE mounts
-    let currentMounts: string[] = [];
-    try {
-      const mountsResponse = await sandbox.process.executeCommand(
-        `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      currentMounts = mountsResponse.result
-        .trim()
-        .split('\n')
-        .filter(p => p.length > 0);
-    } catch (err) {
-      this.logger.debug(`${LOG_PREFIX} Could not read /proc/mounts: ${err}`);
-      return;
-    }
-
-    // Read marker files to know which mounts we created
-    let markerFiles: string[] = [];
-    try {
-      const markersResponse = await sandbox.process.executeCommand(
-        'ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""',
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      markerFiles = markersResponse.result
-        .trim()
-        .split('\n')
-        .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
-    } catch (err) {
-      this.logger.debug(`${LOG_PREFIX} Could not read marker files: ${err}`);
-    }
-
-    // Build map of mount paths we manage
-    const managedMountPaths = new Map<string, string>();
-    for (const markerFile of markerFiles) {
-      const markerResponse = await sandbox.process.executeCommand(
-        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
-        undefined,
-        undefined,
-        MOUNT_COMMAND_TIMEOUT_S,
-      );
-      const parsed = this.mounts.parseMarkerContent(markerResponse.result.trim());
-      if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
-        managedMountPaths.set(parsed.path, markerFile);
-      }
-    }
-
-    // Unmount stale managed FUSE mounts
-    for (const stalePath of currentMounts.filter(p => !expectedMountPaths.includes(p))) {
-      if (managedMountPaths.has(stalePath)) {
-        this.logger.debug(`${LOG_PREFIX} Unmounting stale mount at "${stalePath}"`);
-        try {
-          await this.unmount(stalePath);
-        } catch (err) {
-          this.logger.debug(`${LOG_PREFIX} Failed to unmount stale mount at "${stalePath}": ${err}`);
-        }
-      } else this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
-    }
-
-    // Clean up orphaned marker files and empty directories
-    try {
-      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
-      const markerToPath = new Map<string, string>();
-      for (const [path, file] of managedMountPaths) {
-        markerToPath.set(file, path);
-      }
-
-      for (const markerFile of markerFiles) {
-        if (!expectedMarkerFiles.has(markerFile)) {
-          const mountPath = markerToPath.get(markerFile);
-
-          if (mountPath) {
-            if (!currentMounts.includes(mountPath)) {
-              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
-              await sandbox.process.executeCommand(
-                `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null; sudo rmdir ${shellQuote(mountPath)} 2>/dev/null`,
-                undefined,
-                undefined,
-                MOUNT_COMMAND_TIMEOUT_S,
-              );
-            }
-          } else {
-            // Malformed marker file - just delete it
-            this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
-            await sandbox.process.executeCommand(
-              `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`,
-              undefined,
-              undefined,
-              MOUNT_COMMAND_TIMEOUT_S,
-            );
-          }
-        }
-      }
-    } catch {
-      // Ignore errors during orphan cleanup
-      this.logger.debug(`${LOG_PREFIX} Error during orphan cleanup (non-fatal)`);
-    }
   }
 
   // ---------------------------------------------------------------------------

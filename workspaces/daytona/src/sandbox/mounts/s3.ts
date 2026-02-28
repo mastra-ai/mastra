@@ -139,7 +139,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
   // in the container's user namespace — allowing fusermount -u to unmount it later.
   const mountCmd = `s3fs ${shellQuote(config.bucket)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
-  logger.debug(`${LOG_PREFIX} Mounting S3: ${hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd}`);
+  logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await run(mountCmd, 60_000);
   logger.debug(`${LOG_PREFIX} s3fs result:`, {

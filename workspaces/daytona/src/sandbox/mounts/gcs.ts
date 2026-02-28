@@ -121,7 +121,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   }
 
-  logger.debug(`${LOG_PREFIX} Mounting GCS: ${mountCmd}`);
+  logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
   const result = await run(mountCmd, 60_000);
   logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
