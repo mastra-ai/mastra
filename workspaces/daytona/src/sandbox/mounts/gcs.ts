@@ -49,7 +49,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       `Cannot reach Google Cloud Storage from this sandbox. ` +
         `GCS mounting requires network access to storage.googleapis.com, ` +
         `which may be blocked on Daytona's restricted tiers. ` +
-        `Upgrade to a tier with unrestricted internet access, or use S3-compatible storage instead.` +
+        `Upgrade to a tier with unrestricted internet access, or contact Daytona support to remove the network restriction.` +
         (checkOutput ? `\n\nSandbox network response: ${checkOutput}` : ''),
     );
   }
