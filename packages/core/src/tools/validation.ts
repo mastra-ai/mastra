@@ -2,7 +2,15 @@ import type { z } from 'zod';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
-import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
+import {
+  getZodDef,
+  getZodInnerType,
+  getZodTypeName,
+  isZodArray,
+  isZodObject,
+  isZodType,
+  unwrapZodType,
+} from '../utils/zod-utils';
 
 /**
  * Keys that should be redacted from error messages to prevent sensitive data leakage.
@@ -192,19 +200,72 @@ function stripNullishValues(input: unknown): unknown {
 }
 
 /**
+ * Gets the object shape from a Zod schema, unwrapping any wrapper types.
+ * Returns undefined if the schema is not a ZodObject after unwrapping.
+ */
+function getObjectShape(schema: unknown): Record<string, unknown> | undefined {
+  if (!schema || !isZodType(schema)) return undefined;
+  const unwrapped = unwrapZodType(schema as z.ZodTypeAny);
+  if (!isZodObject(unwrapped)) return undefined;
+  const shape = (unwrapped as any).shape;
+  if (!shape || typeof shape !== 'object') return undefined;
+  return shape;
+}
+
+/**
+ * Checks if a Zod schema has ZodNullable but NOT ZodOptional in its type chain.
+ * This targets the OpenAI compat pattern: .optional() → .nullable().transform(...)
+ * Fields with ZodOptional already accept absent values and should not be filled.
+ */
+function hasNullableButNotOptionalInChain(schema: unknown): boolean {
+  if (!schema || !isZodType(schema)) return false;
+  let hasNullable = false;
+  let current = schema as z.ZodTypeAny;
+  while (true) {
+    const typeName = getZodTypeName(current);
+    if (!typeName) break;
+    if (typeName === 'ZodOptional') return false;
+    if (typeName === 'ZodNullable') hasNullable = true;
+    if (typeName === 'ZodAny') return true;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
+  }
+  return hasNullable;
+}
+
+/**
+ * Gets the array element schema from a Zod schema, unwrapping any wrapper types.
+ * Returns undefined if the schema is not a ZodArray after unwrapping.
+ */
+function getArrayItemSchema(schema: unknown): unknown {
+  if (!schema || !isZodType(schema)) return undefined;
+  const unwrapped = unwrapZodType(schema as z.ZodTypeAny);
+  if (!isZodArray(unwrapped)) return undefined;
+  const def = getZodDef(unwrapped as z.ZodTypeAny);
+  // Zod v3 uses _def.type, Zod v4 uses _def.element
+  return def?.type ?? def?.element;
+}
+
+/**
  * Recursively converts undefined values to null in an object.
  * This is needed for OpenAI compat layers which convert .optional() to .nullable()
  * for strict mode compliance. When fields are omitted (undefined), we convert them
  * to null so the schema validation passes, and the transform then converts null back
  * to undefined. (GitHub #11457)
  *
+ * When a schema is provided, also fills in absent nullable properties with null.
+ * This handles OpenAI compat layers where .optional() → .nullable() and the LLM
+ * omits fields from nested objects.
+ *
  * Only recurses into plain objects to preserve class instances and built-in objects
  * like Date, Map, URL, etc. (GitHub #11502)
  *
  * @param input The input to process
+ * @param schema Optional Zod schema to fill absent properties from
  * @returns The processed input with undefined values converted to null
  */
-function convertUndefinedToNull(input: unknown): unknown {
+function convertUndefinedToNull(input: unknown, schema?: unknown): unknown {
   if (input === undefined) {
     return null;
   }
@@ -214,7 +275,8 @@ function convertUndefinedToNull(input: unknown): unknown {
   }
 
   if (Array.isArray(input)) {
-    return input.map(convertUndefinedToNull);
+    const itemSchema = getArrayItemSchema(schema);
+    return input.map(item => convertUndefinedToNull(item, itemSchema));
   }
 
   // Only recurse into plain objects - preserve class instances, built-in objects
@@ -223,11 +285,23 @@ function convertUndefinedToNull(input: unknown): unknown {
     return input;
   }
 
+  const shape = getObjectShape(schema);
+
   // It's a plain object - recursively process all properties
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
-    result[key] = convertUndefinedToNull(value);
+    result[key] = convertUndefinedToNull(value, shape?.[key]);
   }
+
+  // Fill absent nullable properties with null
+  if (shape) {
+    for (const key of Object.keys(shape)) {
+      if (!(key in result) && hasNullableButNotOptionalInChain(shape[key])) {
+        result[key] = null;
+      }
+    }
+  }
+
   return result;
 }
 
@@ -352,7 +426,7 @@ export function validateToolInput<T = any>(
   let normalizedInput = normalizeNullishInput(schema, input);
 
   // Step 2: Convert undefined values to null recursively (GitHub #11457)
-  normalizedInput = convertUndefinedToNull(normalizedInput);
+  normalizedInput = convertUndefinedToNull(normalizedInput, schema);
 
   // Step 3: Try validation with null values preserved
   const validation = schema.safeParse(normalizedInput);
