@@ -400,7 +400,7 @@ export class DaytonaPtyProcessManager extends SandboxProcessManager<DaytonaSandb
       const ptyHandle = await sandbox.process.createPty({
         id: sessionId,
         cwd: '/',
-        envs: { TERM: 'dumb' },
+        envs: { TERM: 'dumb', ...envs },
         onData: (data: Uint8Array) => {
           const text = new TextDecoder().decode(data);
           handle.appendOutput(text);
