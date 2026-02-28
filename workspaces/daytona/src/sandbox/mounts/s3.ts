@@ -128,7 +128,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   if (config.endpoint) {
     const endpoint = config.endpoint.replace(/\/$/, '');
-    mountOptions.push(`url=${endpoint}`, 'use_path_request_style', 'sigv4', 'nomultipart');
+    mountOptions.push(`url=${shellQuote(endpoint)}`, 'use_path_request_style', 'sigv4', 'nomultipart');
   }
 
   if (config.readOnly) {

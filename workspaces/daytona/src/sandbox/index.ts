@@ -931,7 +931,10 @@ export class DaytonaSandbox extends MastraSandbox {
     if (this.sandboxName) {
       try {
         sandbox = await this._daytona!.get(this.sandboxName);
-      } catch {
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError)) {
+          throw error;
+        }
         // Not found by name — fall through to label lookup
       }
     }
@@ -940,7 +943,10 @@ export class DaytonaSandbox extends MastraSandbox {
     if (!sandbox) {
       try {
         sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-      } catch {
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof Error && error.message.includes('No sandbox found'))) {
+          throw error;
+        }
         // Not found by label either — create a fresh sandbox
         return null;
       }

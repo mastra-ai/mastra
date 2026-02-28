@@ -812,8 +812,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY || !hasS3Credentials)('DaytonaSandb
 
     await sandbox2.executeCommand('rm', [testFile]);
     await sandbox2._destroy();
-
-    sandbox = undefined as any;
   }, 300000);
 });
 

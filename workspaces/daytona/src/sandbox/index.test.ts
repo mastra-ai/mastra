@@ -60,8 +60,8 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
 
   const resetMockDefaults = () => {
     mockDaytona.create.mockResolvedValue(mockSandbox);
-    mockDaytona.get.mockRejectedValue(new Error('No sandbox found'));
-    mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
+    mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
+    mockDaytona.findOne.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
     mockDaytona.delete.mockResolvedValue(undefined);
     mockDaytona.stop.mockResolvedValue(undefined);
     mockDaytona.start.mockResolvedValue(undefined);
@@ -457,7 +457,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('falls back to findOne when get() fails', async () => {
-      mockDaytona.get.mockRejectedValue(new Error('No sandbox found'));
+      mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
       mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 

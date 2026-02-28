@@ -8,6 +8,9 @@ Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.
 
 ```bash
 pnpm add @mastra/daytona @mastra/core
+
+# For filesystem mounting (optional)
+pnpm add @mastra/s3 @mastra/gcs
 ```
 
 ## Usage
@@ -303,6 +306,7 @@ const template = Image.base('daytonaio/sandbox')
     'sudo mkdir -p /etc/apt/keyrings && ' +
       'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
       'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
+      // Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
       'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
   )
   .runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse');
