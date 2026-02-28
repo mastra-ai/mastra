@@ -36,36 +36,64 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
 
-    const codenameResult = await run('lsb_release -cs 2>/dev/null || echo jammy', 30_000);
-    const detectedCodename = codenameResult.stdout.trim() || 'jammy';
+    // Ensure prerequisites (curl, gpg, fuse) are available before setting up the repo
+    await run('sudo apt-get update -qq 2>&1', 60_000);
+    const prepResult = await run('sudo apt-get install -y curl gnupg fuse 2>&1', 120_000);
+    if (prepResult.exitCode !== 0) {
+      throw new Error(`Failed to install gcsfuse prerequisites (curl, gnupg, fuse): ${prepResult.stderr || prepResult.stdout}`);
+    }
+
+    // Detect distro ID and codename from /etc/os-release (more reliable than lsb_release).
+    // Google's gcsfuse apt repo only has packages for certain codenames (e.g. bookworm, jammy).
+    // If the detected codename has no repo (e.g. trixie, noble), fall back to a known-good
+    // codename for the distro family: bookworm for Debian, jammy for Ubuntu.
+    const distroIdResult = await run(
+      'cat /etc/os-release 2>/dev/null | grep "^ID=" | cut -d= -f2 || echo debian',
+      30_000,
+    );
+    const distroId = distroIdResult.stdout.trim().replace(/"/g, '') || 'debian';
+
+    // Pick the appropriate known-good fallback for this distro family
+    const fallbackCodename = distroId === 'ubuntu' ? 'jammy' : 'bookworm';
+
+    const codenameResult = await run(
+      `cat /etc/os-release 2>/dev/null | grep "^VERSION_CODENAME=" | cut -d= -f2 || echo ${fallbackCodename}`,
+      30_000,
+    );
+    const detectedCodename = codenameResult.stdout.trim() || fallbackCodename;
     if (!/^[a-z0-9][a-z0-9-]*$/.test(detectedCodename)) {
       throw new Error(`Invalid distro codename for gcsfuse repo: "${detectedCodename}"`);
     }
 
+    logger.debug(`${LOG_PREFIX} Detected distro: ${distroId}/${detectedCodename}, fallback: ${fallbackCodename}`);
+
     // Set up the gcsfuse apt repository. Use separate curl + gpg steps (not piped)
     // so a curl failure propagates as non-zero exit rather than being masked by gpg.
-    await run(
+    const repoSetup = await run(
       'sudo mkdir -p /etc/apt/keyrings && ' +
-        'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg 2>/dev/null && ' +
+        'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
         'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
         `echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-${detectedCodename} main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list`,
       30_000,
     );
+    if (repoSetup.exitCode !== 0) {
+      throw new Error(`Failed to set up gcsfuse apt repository: ${repoSetup.stderr || repoSetup.stdout}`);
+    }
 
     // apt-get update may fail on unrelated repos (e.g. broken keys); use || true and verify install separately
     await run('sudo apt-get update -qq 2>&1 || true', 60_000);
 
     let installResult = await run('sudo apt-get install -y gcsfuse 2>&1', 120_000);
 
-    // Fallback: if install failed with detected codename (e.g. 'noble' repo not yet available),
-    // retry with 'jammy' which is a known-stable codename with available packages.
-    if (installResult.exitCode !== 0 && detectedCodename !== 'jammy') {
+    // Fallback: if install failed with detected codename (e.g. trixie, noble — no repo yet),
+    // retry with a known-good codename for the distro family.
+    if (installResult.exitCode !== 0 && detectedCodename !== fallbackCodename) {
       logger.warn(
-        `${LOG_PREFIX} gcsfuse install failed for codename "${detectedCodename}", retrying with "jammy" fallback`,
+        `${LOG_PREFIX} gcsfuse install failed for "${detectedCodename}", retrying with "${fallbackCodename}" fallback`,
       );
       await run(
         'sudo rm -f /etc/apt/sources.list.d/gcsfuse.list && ' +
-          'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
+          `echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-${fallbackCodename} main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list`,
         10_000,
       );
       await run('sudo apt-get update -qq 2>&1 || true', 60_000);
