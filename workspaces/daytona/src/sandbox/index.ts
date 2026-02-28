@@ -30,9 +30,9 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
-import { DaytonaProcessManager } from './process-manager';
 import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
+import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
@@ -559,13 +559,13 @@ export class DaytonaSandbox extends MastraSandbox {
     // prior unmount): its contents are remote objects, not local files to protect.
     try {
       const quotedPath = shellQuote(mountPath);
-      const response = await runCommand(
+      const checkResult = await runCommand(
         sandbox,
         `[ -d ${quotedPath} ] && ! mountpoint -q ${quotedPath} 2>/dev/null && ` +
           `[ "$(ls -A ${quotedPath} 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
-      if (response.output.trim() === 'non-empty') {
+      if (checkResult.output.trim() === 'non-empty') {
         const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
         this.logger.error(`${LOG_PREFIX} ${error}`);
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
@@ -582,12 +582,12 @@ export class DaytonaSandbox extends MastraSandbox {
     // overlay is kernel-native and doesn't involve the FUSE driver.
     this.logger.debug(`${LOG_PREFIX} Creating mount directory for "${mountPath}"...`);
     try {
-      const qp = shellQuote(mountPath);
+      const quotedPath = shellQuote(mountPath);
       const mkdirResult = await runCommand(
         sandbox,
-        `mountpoint -q ${qp} 2>/dev/null && sudo mount -t tmpfs tmpfs ${qp} 2>/dev/null; ` +
-          `sudo mkdir -p ${qp} 2>/dev/null; ` +
-          `sudo chown $(id -u):$(id -g) ${qp}`,
+        `mountpoint -q ${quotedPath} 2>/dev/null && sudo mount -t tmpfs tmpfs ${quotedPath} 2>/dev/null; ` +
+          `sudo mkdir -p ${quotedPath} 2>/dev/null; ` +
+          `sudo chown $(id -u):$(id -g) ${quotedPath}`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       if (mkdirResult.exitCode !== 0) {
@@ -603,7 +603,7 @@ export class DaytonaSandbox extends MastraSandbox {
     }
 
     // Build mount context for SDK-agnostic mount helpers
-    const ctx: MountContext = {
+    const mountCtx: MountContext = {
       run: async (cmd, timeoutMs) => {
         const result = await runCommand(sandbox, cmd, timeoutMs !== undefined ? { timeout: timeoutMs } : undefined);
         return {
@@ -622,12 +622,12 @@ export class DaytonaSandbox extends MastraSandbox {
       switch (config.type) {
         case 's3':
           this.logger.debug(`${LOG_PREFIX} Mounting S3 at "${mountPath}"...`);
-          await mountS3(mountPath, config, ctx);
+          await mountS3(mountPath, config, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted S3 bucket at ${mountPath}`);
           break;
         case 'gcs':
           this.logger.debug(`${LOG_PREFIX} Mounting GCS at "${mountPath}"...`);
-          await mountGCS(mountPath, config, ctx);
+          await mountGCS(mountPath, config, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
           break;
         default: {
@@ -677,14 +677,14 @@ export class DaytonaSandbox extends MastraSandbox {
     // Try fusermount first (user-space), then lazy umount as fallback.
     // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
     // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
-    const qp = shellQuote(mountPath);
+    const quotedPath = shellQuote(mountPath);
     await runCommand(
       sandbox,
-      `sudo fusermount -u ${qp} 2>/dev/null; ` +
-        `sudo umount -l ${qp} 2>/dev/null; ` +
+      `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
+        `sudo umount -l ${quotedPath} 2>/dev/null; ` +
         // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
-        `mountpoint -q ${qp} 2>/dev/null && ` +
-        `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${qp} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
+        `mountpoint -q ${quotedPath} 2>/dev/null && ` +
+        `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
@@ -695,7 +695,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const markerPath = `/tmp/.mastra-mounts/${this.mounts.markerFilename(mountPath)}`;
     const rmdirResult = await runCommand(
       sandbox,
-      `rm -f ${shellQuote(markerPath)} 2>/dev/null; sudo rmdir ${qp} 2>&1`,
+      `rm -f ${shellQuote(markerPath)} 2>/dev/null; sudo rmdir ${quotedPath} 2>&1`,
       {
         timeout: MOUNT_COMMAND_TIMEOUT_MS,
       },

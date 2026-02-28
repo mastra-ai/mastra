@@ -44,10 +44,6 @@ export function validateBucketName(bucket: string): void {
 }
 
 /**
- * Validate an endpoint URL before interpolating into shell commands.
- * Only http and https schemes are allowed.
- */
-/**
  * Result of running a command in the Daytona sandbox.
  *
  * Note: Daytona's `executeCommand` returns a single combined string (stdout + stderr).
@@ -86,6 +82,10 @@ export async function runCommand(
   };
 }
 
+/**
+ * Validate an endpoint URL before interpolating into shell commands.
+ * Only http and https schemes are allowed.
+ */
 export function validateEndpoint(endpoint: string): void {
   let parsed: URL;
   try {
