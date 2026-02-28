@@ -613,6 +613,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   get memory() {
     return {
+      createThread: this.createThread.bind(this),
+      switchThread: this.switchThread.bind(this),
+      listThreads: this.listThreads.bind(this),
+      renameThread: this.renameThread.bind(this),
       deleteThread: this.deleteThread.bind(this),
     };
   }

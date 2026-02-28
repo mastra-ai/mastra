@@ -520,7 +520,23 @@ const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-
 
 ### Memory
 
-The `memory` property exposes thread and message management operations.
+The `memory` property exposes thread management operations. These are also available as top-level methods on the harness.
+
+#### `memory.createThread({ title? })`
+
+Create a new thread. Same as `harness.createThread()`.
+
+#### `memory.switchThread({ threadId })`
+
+Switch to a different thread. Same as `harness.switchThread()`.
+
+#### `memory.listThreads(options?)`
+
+List threads from storage. Same as `harness.listThreads()`.
+
+#### `memory.renameThread({ title })`
+
+Update the title of the current thread. Same as `harness.renameThread()`.
 
 #### `memory.deleteThread({ threadId })`
 
