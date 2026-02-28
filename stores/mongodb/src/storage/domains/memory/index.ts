@@ -1245,7 +1245,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             threadId: newThreadId,
             content: parsedContent,
             role: sourceMsg.role as MastraDBMessage['role'],
-            type: sourceMsg.type || undefined,
+            type: sourceMsg.type || 'v2',
             createdAt: formatDateForMongoDB(sourceMsg.createdAt),
             resourceId: targetResourceId,
           });

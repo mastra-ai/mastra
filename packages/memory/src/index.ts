@@ -1349,12 +1349,7 @@ Notes:
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
     const result = await memoryStore.cloneThread(args);
-
-    // If semantic recall is enabled, embed the cloned messages
     const config = this.getMergedThreadConfig(memoryConfig);
-    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
-      await this.embedClonedMessages(result.clonedMessages, config);
-    }
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
@@ -1393,9 +1388,18 @@ Notes:
         await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
       } catch (error) {
         // Rollback the already-persisted clone to avoid orphaned threads
-        await memoryStore.deleteThread({ threadId: result.thread.id });
+        try {
+          await memoryStore.deleteThread({ threadId: result.thread.id });
+        } catch (rollbackError) {
+          this.logger.error('Failed to rollback cloned thread after OM clone failure', rollbackError);
+        }
         throw error;
       }
+    }
+
+    // Embed cloned messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors
+    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
+      await this.embedClonedMessages(result.clonedMessages, config);
     }
 
     return result;

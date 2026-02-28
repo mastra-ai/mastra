@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { SharedMemoryConfig } from '@mastra/core/memory';
+import type { SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
@@ -1094,7 +1094,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
     /** Clean up OM test threads and OM records */
     const cleanupOMTests = async () => {
-      let allThreads: any[] = [];
+      let allThreads: StorageThreadType[] = [];
       let page = 0;
       while (true) {
         const { threads, hasMore } = await memory.listThreads({
