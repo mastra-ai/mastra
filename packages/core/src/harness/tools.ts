@@ -430,6 +430,7 @@ Use this tool when:
           maxSteps: 50,
           abortSignal,
           requireToolApproval: false,
+          requestContext: context.requestContext,
         });
 
         for await (const chunk of response.fullStream) {
