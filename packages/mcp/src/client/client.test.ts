@@ -324,10 +324,14 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
     const abortController = new AbortController();
 
     // Abort after 100ms
-    setTimeout(() => abortController.abort(), 100);
+    const timeoutId = setTimeout(() => abortController.abort(), 100);
 
     const start = Date.now();
-    await expect(slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal })).rejects.toThrow();
+    try {
+      await expect(slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal })).rejects.toThrow();
+    } finally {
+      clearTimeout(timeoutId);
+    }
     const elapsed = Date.now() - start;
 
     // Should abort quickly (< 5s), not wait the full 60s tool duration
