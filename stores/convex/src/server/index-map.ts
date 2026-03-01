@@ -7,6 +7,8 @@
  *
  * These must stay in sync with the index definitions in schema.ts.
  */
+import type { EqualityFilter } from '../storage/types';
+
 export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: string[] }>> = {
   mastra_messages: [
     { name: 'by_thread_created', fields: ['thread_id', 'createdAt'] },
@@ -43,8 +45,6 @@ export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: strin
     { name: 'by_record_id', fields: ['id'] },
   ],
 };
-
-type EqualityFilter = { field: string; value: unknown };
 
 /**
  * Finds the best matching index for the given equality filters on a Convex table.
