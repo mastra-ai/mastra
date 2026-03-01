@@ -196,7 +196,7 @@ export class StoreOperationsMySQL extends StoreOperations {
         return;
       }
       const sql = this.getCreateTableSQL(tableName, schema);
-      await this.pool.execute(sql);
+      await connection.execute(sql);
     } catch (error) {
       throw new MastraError(
         {
