@@ -130,21 +130,21 @@ export class AutoExtractedMetrics {
     if (!usage) return;
 
     const inputTokens = Number(usage.inputTokens);
-    if (Number.isFinite(inputTokens)) {
+    if (Number.isFinite(inputTokens) && inputTokens >= 0) {
       this.emit('mastra_model_input_tokens', 'counter', inputTokens, labels);
     }
     const outputTokens = Number(usage.outputTokens);
-    if (Number.isFinite(outputTokens)) {
+    if (Number.isFinite(outputTokens) && outputTokens >= 0) {
       this.emit('mastra_model_output_tokens', 'counter', outputTokens, labels);
     }
 
     const inputDetails = usage.inputDetails as Record<string, unknown> | undefined;
     const cacheRead = Number(inputDetails?.cacheRead);
-    if (Number.isFinite(cacheRead)) {
+    if (Number.isFinite(cacheRead) && cacheRead >= 0) {
       this.emit('mastra_model_cache_read_tokens', 'counter', cacheRead, labels);
     }
     const cacheWrite = Number(inputDetails?.cacheWrite);
-    if (Number.isFinite(cacheWrite)) {
+    if (Number.isFinite(cacheWrite) && cacheWrite >= 0) {
       this.emit('mastra_model_cache_write_tokens', 'counter', cacheWrite, labels);
     }
   }

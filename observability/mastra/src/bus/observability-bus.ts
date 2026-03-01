@@ -54,6 +54,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
    */
   enableAutoExtractedMetrics(cardinalityFilter?: CardinalityFilter): void {
+    if (this.autoExtractor) {
+      return;
+    }
     this.autoExtractor = new AutoExtractedMetrics(this, cardinalityFilter);
   }
 
