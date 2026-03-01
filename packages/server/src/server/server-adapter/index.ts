@@ -281,7 +281,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
-    if (!token) {
+    // Check for cookie-based credentials (e.g. better-auth session cookies)
+    const hasCookies = !!context.getHeader('cookie');
+
+    // No token AND no cookies — reject immediately
+    if (!token && !hasCookies) {
       return { status: 401, error: 'Authentication required' };
     }
 
@@ -290,7 +294,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (typeof authConfig.authenticateToken === 'function') {
         // Note: We pass null as request since adapters have different request types
         // If specific request is needed, authenticateToken can use data from token
-        user = await authConfig.authenticateToken(token, null as any);
+        user = await authConfig.authenticateToken(token ?? '', null as any);
       } else {
         return { status: 401, error: 'No token verification method configured' };
       }

@@ -118,7 +118,21 @@ When auth is enabled, requests to Mastra's built-in routes require authenticatio
 
 ### Cookie session (recommended)
 
-If your Better Auth setup uses cookies, configure the client to send credentials and ensure your Mastra server CORS allows credentials for cross-origin requests.
+If your Better Auth setup uses cookies, configure the client to send credentials. For cross-origin requests (e.g. Next.js on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: mastraAuth,
+    cors: {
+      origin: 'http://localhost:3000', // your frontend origin
+      credentials: true,
+    },
+  },
+})
+```
+
+Then configure the client to include credentials:
 
 ```ts
 import { MastraClient } from '@mastra/client-js'
@@ -144,15 +158,18 @@ await fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
 
 ### Bearer token
 
-If your Better Auth setup issues bearer tokens, include them in the `Authorization` header:
+You can pass the signed session token as a Bearer token. Retrieve it from your Better Auth client session and include it in the `Authorization` header:
 
 ```ts
 import { MastraClient } from '@mastra/client-js'
+import { authClient } from './auth-client' // your Better Auth client
+
+const session = await authClient.getSession()
 
 export const mastraClient = new MastraClient({
   baseUrl: 'http://localhost:4111',
   headers: {
-    Authorization: `Bearer ${accessToken}`,
+    Authorization: `Bearer ${session.data?.session.token}`,
   },
 })
 ```
@@ -198,8 +215,8 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 ## Troubleshooting
 
-- **401/403 on every request**: confirm your Better Auth handler is mounted and your app can create a valid session/token.
-- **Cookies not sent**: set `credentials: "include"` in `MastraClient` and enable CORS credentials on the Mastra server.
-- **Authorization header missing**: ensure the client attaches `Authorization: Bearer <token>` when using bearer tokens.
+- **401 on every request**: confirm your Better Auth handler is mounted and your app can create a valid session. Check that your client sends either a session cookie or a `Authorization: Bearer <signed-token>` header.
+- **Cookies not sent cross-origin**: set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Bearer token rejected**: ensure you pass the full signed session token (from `authClient.getSession()`), not a raw or unsigned token.
 - **Base URL issues**: set `baseURL` in `betterAuth({ ... })` or set `BETTER_AUTH_URL`.
 - **DB connection errors**: verify `DATABASE_URL` and database provider configuration.

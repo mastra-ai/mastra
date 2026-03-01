@@ -86,23 +86,18 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
    */
   async authenticateToken(token: string, request: HonoRequest): Promise<BetterAuthUser | null> {
     try {
-      // Better Auth expects the token to be passed via headers
-      // We need to construct headers with the Authorization bearer token
+      // Better Auth's api.getSession() reads session tokens from the Cookie header
       const headers = new Headers();
 
-      // Copy relevant headers from the request
-      const authHeader = request.header('Authorization');
-      if (authHeader) {
-        headers.set('Authorization', authHeader);
-      } else if (token) {
-        // If no auth header but token is provided, set it
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-
-      // Copy cookie header if present (Better Auth can use cookies for sessions)
-      const cookieHeader = request.header('Cookie');
+      const cookieHeader = request?.header('Cookie');
       if (cookieHeader) {
         headers.set('Cookie', cookieHeader);
+      }
+
+      // Convert Bearer token to a session cookie so Better Auth can verify it
+      if (token && (!cookieHeader || !cookieHeader.includes('better-auth.session_token='))) {
+        const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
+        headers.set('Cookie', `${existingCookies}better-auth.session_token=${token}`);
       }
 
       // Use Better Auth's API to get the session
