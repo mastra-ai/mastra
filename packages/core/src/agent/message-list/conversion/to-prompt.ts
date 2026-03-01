@@ -4,6 +4,7 @@ import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@inter
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri } from '../prompt/image-utils';
 import type { AIV5Type } from '../types';
+import { sanitizeToolName } from '../utils/tool-name';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 type LanguageModelV1Message = LanguageModelV1Prompt[0];
@@ -67,7 +68,10 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
         if (role === `tool` || role === `user`) {
           throw new Error(incompatibleMessage);
         }
-        roleContent[role].push(part);
+        roleContent[role].push({
+          ...part,
+          toolName: sanitizeToolName(part.toolName),
+        });
         break;
       }
 
@@ -75,7 +79,10 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
         if (role === `assistant` || role === `user`) {
           throw new Error(incompatibleMessage);
         }
-        roleContent[role].push(part);
+        roleContent[role].push({
+          ...part,
+          toolName: sanitizeToolName(part.toolName),
+        });
         break;
       }
 
@@ -212,7 +219,10 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         if (role !== `assistant`) {
           throw new Error(incompatibleMessage);
         }
-        roleContent[role].push(part);
+        roleContent[role].push({
+          ...part,
+          toolName: sanitizeToolName(part.toolName),
+        });
         break;
       }
 
@@ -220,7 +230,10 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         if (role === `assistant` || role === `user`) {
           throw new Error(incompatibleMessage);
         }
-        roleContent[role].push(part);
+        roleContent[role].push({
+          ...part,
+          toolName: sanitizeToolName(part.toolName),
+        });
         break;
       }
 
