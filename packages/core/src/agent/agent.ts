@@ -3161,6 +3161,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
               // Use a unique runId for each workflow tool call to prevent parallel calls
@@ -3235,6 +3236,10 @@ export class Agent<
                 result = await streamResult.result;
               }
 
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               if (result?.status === 'success') {
                 const workflowOutput = result?.result || result;
                 return { result: workflowOutput, runId: run.runId };
@@ -3277,6 +3282,10 @@ export class Agent<
                 };
               }
             } catch (err) {
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
