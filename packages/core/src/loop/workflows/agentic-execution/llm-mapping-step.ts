@@ -226,7 +226,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                         toolInvocation: {
                           state: 'result' as const,
                           toolCallId: toolCall.toolCallId,
-                          toolName: toolCall.toolName,
+                          toolName: sanitizeToolName(toolCall.toolName),
                           args: toolCall.args,
                           result: toolCall.result,
                         },
@@ -253,7 +253,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolInvocation: {
                       state: 'result' as const,
                       toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
+                      toolName: sanitizeToolName(toolCall.toolName),
                       args: toolCall.args,
                       result: toolCall.result,
                     },
@@ -339,7 +339,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolInvocation: {
                       state: 'result' as const,
                       toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
+                      toolName: sanitizeToolName(toolCall.toolName),
                       args: toolCall.args,
                       result: toolCall.result,
                     },
@@ -369,7 +369,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolInvocation: {
                   state: 'result' as const,
                   toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
+                  toolName: sanitizeToolName(toolCall.toolName),
                   args: toolCall.args,
                   result: toolCall.result,
                 },
