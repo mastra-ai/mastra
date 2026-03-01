@@ -1059,12 +1059,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async sendMessage({
     content,
-    images,
+    files,
     tracingContext,
     tracingOptions,
   }: {
     content: string;
-    images?: Array<{ data: string; mimeType: string }>;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<void> {
@@ -1098,17 +1098,33 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (images?.length) {
+      if (files?.length) {
+        const fileParts = files.map(f => {
+          const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+          if (isText) {
+            let textContent = f.data;
+            // Decode data URI to plain text
+            const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+            if (base64Match) {
+              try {
+                textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+              } catch {
+                // Fall through with raw data
+              }
+            }
+            const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+            return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+          }
+          return {
+            type: 'file' as const,
+            data: f.data,
+            mimeType: f.mediaType,
+            filename: f.filename,
+          };
+        });
         messageInput = {
           role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...images.map((img: { data: string; mimeType: string }) => ({
-              type: 'file',
-              data: img.data,
-              mediaType: img.mimeType,
-            })),
-          ],
+          content: [{ type: 'text', text: content }, ...fileParts],
         };
       }
 
@@ -1294,6 +1310,32 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             error: (data.error as string) ?? 'Unknown error',
             tokensAttempted: (data.tokensAttempted as number) ?? 0,
             operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'file':
+          content.push({
+            type: 'file',
+            data: typeof part.data === 'string' ? part.data : '',
+            mediaType:
+              (part as { mediaType?: string }).mediaType ??
+              (part as { mimeType?: string }).mimeType ??
+              'application/octet-stream',
+            ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
+          });
+          break;
+        case 'image': {
+          const imgData =
+            typeof part.data === 'string'
+              ? part.data
+              : typeof (part as { image?: string }).image === 'string'
+                ? (part as { image?: string }).image!
+                : '';
+          content.push({
+            type: 'file',
+            data: imgData,
+            mediaType:
+              (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
           });
           break;
         }
@@ -1490,8 +1532,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const promptTokens = usage.promptTokens ?? 0;
-            const completionTokens = usage.completionTokens ?? 0;
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
 
             this.tokenUsage.promptTokens += promptTokens;

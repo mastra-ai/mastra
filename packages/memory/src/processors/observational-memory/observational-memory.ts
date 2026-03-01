@@ -2956,20 +2956,19 @@ ${suggestedResponse}
             `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
           );
 
-          // Propagate continuation hints from activation to thread metadata
-          if (activationResult.suggestedContinuation || activationResult.currentTask) {
-            const thread = await this.storage.getThreadById({ threadId });
-            if (thread) {
-              const newMetadata = setThreadOMMetadata(thread.metadata, {
-                suggestedResponse: activationResult.suggestedContinuation,
-                currentTask: activationResult.currentTask,
-              });
-              await this.storage.updateThread({
-                id: threadId,
-                title: thread.title ?? '',
-                metadata: newMetadata,
-              });
-            }
+          // Propagate continuation hints from activation to thread metadata.
+          // Explicitly write undefined when omitted so stale values are cleared.
+          const thread = await this.storage.getThreadById({ threadId });
+          if (thread) {
+            const newMetadata = setThreadOMMetadata(thread.metadata, {
+              suggestedResponse: activationResult.suggestedContinuation,
+              currentTask: activationResult.currentTask,
+            });
+            await this.storage.updateThread({
+              id: threadId,
+              title: thread.title ?? '',
+              metadata: newMetadata,
+            });
           }
 
           // Note: lastBufferedBoundary is updated by the caller AFTER cleanupAfterObservation
@@ -3493,19 +3492,18 @@ ${suggestedResponse}
 
             // Propagate continuation hints from activation to thread metadata so
             // injectObservationsIntoContext can include them immediately.
-            if (activationResult.suggestedContinuation || activationResult.currentTask) {
-              const thread = await this.storage.getThreadById({ threadId });
-              if (thread) {
-                const newMetadata = setThreadOMMetadata(thread.metadata, {
-                  suggestedResponse: activationResult.suggestedContinuation,
-                  currentTask: activationResult.currentTask,
-                });
-                await this.storage.updateThread({
-                  id: threadId,
-                  title: thread.title ?? '',
-                  metadata: newMetadata,
-                });
-              }
+            // Explicitly write undefined when omitted so stale values are cleared.
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread) {
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                suggestedResponse: activationResult.suggestedContinuation,
+                currentTask: activationResult.currentTask,
+              });
+              await this.storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
             }
 
             // Check if reflection should be triggered or activated
@@ -4270,19 +4268,17 @@ ${formattedMessages}
       // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
       // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
       // when concurrent agents share a resourceId.
-      if (result.suggestedContinuation || result.currentTask) {
-        const thread = await this.storage.getThreadById({ threadId });
-        if (thread) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            suggestedResponse: result.suggestedContinuation,
-            currentTask: result.currentTask,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: thread.title ?? '',
-            metadata: newMetadata,
-          });
-        }
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          suggestedResponse: result.suggestedContinuation,
+          currentTask: result.currentTask,
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title ?? '',
+          metadata: newMetadata,
+        });
       }
 
       await this.storage.updateActiveObservations({
@@ -5532,14 +5528,14 @@ ${formattedMessages}
 
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
-        // - currentTask, suggestedResponse: only if present in result
+        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
-            ...(result.suggestedContinuation && { suggestedResponse: result.suggestedContinuation }),
-            ...(result.currentTask && { currentTask: result.currentTask }),
+            suggestedResponse: result.suggestedContinuation,
+            currentTask: result.currentTask,
           });
           await this.storage.updateThread({
             id: threadId,
