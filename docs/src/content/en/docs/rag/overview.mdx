@@ -76,6 +76,22 @@ The basic building block of RAG is document processing. Documents can be chunked
 
 Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases).
 
+## Optional failure diagnosis checklist
+
+If your RAG or agent workflow behaves inconsistently across environments, it can help to classify the failure mode before changing prompts or retrieval settings.
+
+One optional external resource is the [WFGY ProblemMap (16-problem RAG and agent failure map)](https://github.com/onestardao/WFGY/blob/main/ProblemMap/README.md).
+
+A practical workflow is:
+
+1. Capture a failing run with Mastra traces (query, retrieved chunks, prompt, and model output).
+1. Classify the failure mode with a consistent taxonomy.
+1. Choose structural fixes (retrieval quality, chunking, routing, tool usage, eval criteria) based on that failure class.
+1. Re-run evals to confirm the fix improves the target metric.
+
+This is optional and framework-agnostic, but it can make debugging faster when multiple issues overlap.
+
 ## More resources
 
 - [Chain of Thought RAG Example](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag)
+- [WFGY ProblemMap (external)](https://github.com/onestardao/WFGY/blob/main/ProblemMap/README.md)
