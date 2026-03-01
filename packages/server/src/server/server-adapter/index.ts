@@ -292,9 +292,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     let user: unknown;
     try {
       if (typeof authConfig.authenticateToken === 'function') {
-        // Note: We pass null as request since adapters have different request types
-        // If specific request is needed, authenticateToken can use data from token
-        user = await authConfig.authenticateToken(token ?? '', null as any);
+        // Create a minimal request-like object so auth providers can read headers (e.g. cookies)
+        const requestShim = { header: (name: string) => context.getHeader(name) };
+        user = await authConfig.authenticateToken(token ?? '', requestShim as any);
       } else {
         return { status: 401, error: 'No token verification method configured' };
       }
