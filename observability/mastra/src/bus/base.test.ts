@@ -192,10 +192,11 @@ describe('BaseObservabilityEventBus', () => {
   describe('shutdown', () => {
     it('should flush then clear subscribers on shutdown', async () => {
       let handlerDone = false;
-      bus.subscribe(async () => {
+      const oldHandler = vi.fn(async () => {
         await new Promise(resolve => setTimeout(resolve, 30));
         handlerDone = true;
       });
+      bus.subscribe(oldHandler);
 
       bus.emit('event-1');
       await bus.shutdown();
@@ -203,10 +204,13 @@ describe('BaseObservabilityEventBus', () => {
       // Handler should have completed during shutdown flush
       expect(handlerDone).toBe(true);
 
-      // Subscribers should be cleared
+      // Subscribers should be cleared — re-subscribe a new handler
       const handler = vi.fn();
       bus.subscribe(handler);
-      // The old handler is gone, only new one should work
+
+      bus.emit('event-2');
+      expect(handler).toHaveBeenCalledWith('event-2');
+      expect(oldHandler).toHaveBeenCalledTimes(1); // only the pre-shutdown call
     });
 
     it('should clear subscribers on shutdown', async () => {
