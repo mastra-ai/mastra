@@ -61,7 +61,9 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
               <ThreadItem isActive={isActive} key={thread.id}>
                 <ThreadLink as={Link} to={threadLink}>
                   <ThreadTitle title={thread.title} id={thread.id} />
-                  <span>{formatDay(thread.createdAt)}</span>
+                  <span className={thread.title ? 'text-xs text-neutral3 font-normal' : undefined}>
+                    {formatDay(thread.createdAt)}
+                  </span>
                 </ThreadLink>
 
                 <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />

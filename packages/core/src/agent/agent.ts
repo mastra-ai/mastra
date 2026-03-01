@@ -4043,6 +4043,23 @@ export class Agent<
               });
             }
           }
+        } else if (!shouldGenerate && !thread.title && !threadExists) {
+          // No LLM title generation configured — use the user's first message as the title directly
+          const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+          if (userMessage) {
+            const textPart = userMessage.parts.find((p): p is TextPart => p.type === 'text');
+            if (textPart?.text) {
+              const raw = textPart.text.trim();
+              const title = raw.length > 100 ? raw.substring(0, 100) + '…' : raw;
+              await memory.createThread({
+                threadId: thread.id,
+                resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
+          }
         }
       } catch (e) {
         if (e instanceof MastraError) {
