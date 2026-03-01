@@ -232,6 +232,7 @@
     "p-retry": "^7.1.0",
     "picomatch": "^4.0.3",
     "radash": "^12.1.1",
+    "ws": "^8.19.0",
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
@@ -269,6 +270,7 @@
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.7",
     "@types/picomatch": "4.0.2",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

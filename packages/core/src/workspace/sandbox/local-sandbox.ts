@@ -66,7 +66,7 @@ function normalizeMountPath(mountPath: string): string {
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions extends MastraSandboxOptions {
+export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
