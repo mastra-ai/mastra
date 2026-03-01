@@ -22,11 +22,20 @@ import type { ObservabilityBus } from '../bus';
 import type { CardinalityFilter } from './cardinality';
 
 export class AutoExtractedMetrics {
+  /**
+   * @param observabilityBus - Bus used to emit derived MetricEvents.
+   * @param cardinalityFilter - Optional filter applied to metric labels before emission.
+   */
   constructor(
     private observabilityBus: ObservabilityBus,
     private cardinalityFilter?: CardinalityFilter,
   ) {}
 
+  /**
+   * Route a tracing event to the appropriate span lifecycle handler.
+   * SPAN_STARTED increments a started counter; SPAN_ENDED emits ended counter,
+   * duration histogram, and (for model spans) token counters.
+   */
   processTracingEvent(event: TracingEvent): void {
     switch (event.type) {
       case TracingEventType.SPAN_STARTED:
@@ -38,6 +47,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Emit a `mastra_scores_total` counter for a score event. */
   processScoreEvent(event: ScoreEvent): void {
     const labels: Record<string, string> = {
       scorer: event.score.scorerName,
@@ -51,6 +61,7 @@ export class AutoExtractedMetrics {
     this.emit('mastra_scores_total', 'counter', 1, labels);
   }
 
+  /** Emit a `mastra_feedback_total` counter for a feedback event. */
   processFeedbackEvent(event: FeedbackEvent): void {
     const labels: Record<string, string> = {
       feedback_type: event.feedback.feedbackType,
@@ -65,6 +76,7 @@ export class AutoExtractedMetrics {
     this.emit('mastra_feedback_total', 'counter', 1, labels);
   }
 
+  /** Emit a started counter (e.g. `mastra_agent_runs_started`) for the span type. */
   private onSpanStarted(span: AnyExportedSpan): void {
     const labels = this.extractLabels(span);
     const metricName = this.getStartedMetricName(span);
@@ -73,6 +85,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Emit ended counter, duration histogram, and token counters (for model spans). */
   private onSpanEnded(span: AnyExportedSpan): void {
     const labels = this.extractLabels(span);
 
@@ -107,6 +120,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Build base metric labels from a span's entity and model attributes. */
   private extractLabels(span: AnyExportedSpan): Record<string, string> {
     const labels: Record<string, string> = {};
 
@@ -124,6 +138,7 @@ export class AutoExtractedMetrics {
     return labels;
   }
 
+  /** Emit token usage counters from a MODEL_GENERATION span's `usage` attributes. Negative and non-finite values are skipped. */
   private extractTokenMetrics(span: AnyExportedSpan, labels: Record<string, string>): void {
     const attrs = span.attributes as Record<string, unknown> | undefined;
     const usage = attrs?.usage as Record<string, unknown> | undefined;
@@ -149,6 +164,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Map a span type to its `*_started` counter metric name, or `null` for unsupported types. */
   private getStartedMetricName(span: AnyExportedSpan): string | null {
     switch (span.type) {
       case SpanType.AGENT_RUN:
@@ -164,6 +180,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Map a span type to its `*_ended` counter metric name, or `null` for unsupported types. */
   private getEndedMetricName(span: AnyExportedSpan): string | null {
     switch (span.type) {
       case SpanType.AGENT_RUN:
@@ -179,6 +196,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Map a span type to its `*_duration_ms` histogram metric name, or `null` for unsupported types. */
   private getDurationMetricName(span: AnyExportedSpan): string | null {
     switch (span.type) {
       case SpanType.AGENT_RUN:
@@ -194,6 +212,7 @@ export class AutoExtractedMetrics {
     }
   }
 
+  /** Build an ExportedMetric, apply cardinality filtering, and emit it through the bus. */
   private emit(name: string, metricType: MetricType, value: number, labels: Record<string, string>): void {
     const filteredLabels = this.cardinalityFilter ? this.cardinalityFilter.filterLabels(labels) : labels;
     const exportedMetric: ExportedMetric = {

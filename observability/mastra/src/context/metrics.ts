@@ -33,6 +33,10 @@ export interface MetricsContextConfig {
 export class MetricsContextImpl implements MetricsContext {
   private config: MetricsContextConfig;
 
+  /**
+   * Create a metrics context. Base labels are defensively copied so
+   * mutations after construction do not affect emitted metrics.
+   */
   constructor(config: MetricsContextConfig) {
     this.config = {
       ...config,
@@ -40,6 +44,11 @@ export class MetricsContextImpl implements MetricsContext {
     };
   }
 
+  /**
+   * Create a counter instrument. Call `.add(value)` to increment.
+   *
+   * @param name - Metric name (e.g. `mastra_custom_requests_total`).
+   */
   counter(name: string): Counter {
     return {
       add: (value: number, additionalLabels?: Record<string, string>) => {
@@ -48,6 +57,11 @@ export class MetricsContextImpl implements MetricsContext {
     };
   }
 
+  /**
+   * Create a gauge instrument. Call `.set(value)` to record a point-in-time value.
+   *
+   * @param name - Metric name (e.g. `mastra_queue_depth`).
+   */
   gauge(name: string): Gauge {
     return {
       set: (value: number, additionalLabels?: Record<string, string>) => {
@@ -56,6 +70,11 @@ export class MetricsContextImpl implements MetricsContext {
     };
   }
 
+  /**
+   * Create a histogram instrument. Call `.record(value)` to observe a measurement.
+   *
+   * @param name - Metric name (e.g. `mastra_request_duration_ms`).
+   */
   histogram(name: string): Histogram {
     return {
       record: (value: number, additionalLabels?: Record<string, string>) => {
@@ -64,6 +83,7 @@ export class MetricsContextImpl implements MetricsContext {
     };
   }
 
+  /** Merge base + additional labels, apply cardinality filtering, and emit a MetricEvent. Non-finite values are silently dropped. */
   private emit(name: string, metricType: MetricType, value: number, additionalLabels?: Record<string, string>): void {
     if (!Number.isFinite(value)) return;
 

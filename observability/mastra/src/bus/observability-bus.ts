@@ -28,6 +28,7 @@ import { routeToHandler } from './route-event';
 /** Max flush drain iterations before bailing — prevents infinite loops when handlers re-emit. */
 const MAX_FLUSH_ITERATIONS = 3;
 
+/** Type guard that narrows an ObservabilityEvent to a TracingEvent. */
 function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   return (
     event.type === TracingEventType.SPAN_STARTED ||
@@ -52,6 +53,10 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * Enable auto-extraction of metrics from tracing, score, and feedback events.
    * When enabled, span lifecycle events automatically generate counter/histogram
    * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
+   *
+   * No-ops if auto-extraction is already enabled.
+   *
+   * @param cardinalityFilter - Optional filter applied to auto-extracted metric labels.
    */
   enableAutoExtractedMetrics(cardinalityFilter?: CardinalityFilter): void {
     if (this.autoExtractor) {
@@ -62,8 +67,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /**
    * Register an exporter to receive routed events.
-   * The bus will call the appropriate handler on each exporter
-   * based on the event type.
+   * Duplicate registrations (same instance) are silently ignored.
+   *
+   * @param exporter - The exporter to register.
    */
   registerExporter(exporter: ObservabilityExporter): void {
     if (this.exporters.includes(exporter)) {
@@ -73,7 +79,10 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Unregister an exporter. Returns true if the exporter was found and removed.
+   * Unregister an exporter.
+   *
+   * @param exporter - The exporter instance to remove.
+   * @returns `true` if the exporter was found and removed, `false` otherwise.
    */
   unregisterExporter(exporter: ObservabilityExporter): boolean {
     const index = this.exporters.indexOf(exporter);
@@ -93,7 +102,10 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /**
    * Register a bridge to receive all routed events alongside exporters.
-   * Only one bridge can be registered at a time.
+   * Only one bridge can be registered at a time; replacing an existing bridge
+   * logs a warning.
+   *
+   * @param bridge - The bridge to register.
    */
   registerBridge(bridge: ObservabilityBridge): void {
     if (this.bridge) {
@@ -103,7 +115,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Unregister the bridge. Returns true if a bridge was registered and removed.
+   * Unregister the bridge.
+   *
+   * @returns `true` if a bridge was registered and removed, `false` otherwise.
    */
   unregisterBridge(): boolean {
     if (this.bridge) {
@@ -208,6 +222,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     }
   }
 
+  /** Flush all pending events and exporter buffers, then clear subscribers. */
   async shutdown(): Promise<void> {
     await this.flush();
     await super.shutdown();

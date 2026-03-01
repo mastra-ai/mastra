@@ -25,6 +25,12 @@ export class BaseObservabilityEventBus<TEvent> extends MastraBase implements Obs
     super({ component: RegisteredLogger.OBSERVABILITY, name: name ?? 'EventBus' });
   }
 
+  /**
+   * Dispatch an event to all subscribers synchronously.
+   * Async handler promises are tracked internally and drained by {@link flush}.
+   *
+   * @param event - The event to broadcast to subscribers.
+   */
   emit(event: TEvent): void {
     for (const handler of this.subscribers) {
       try {
@@ -44,6 +50,12 @@ export class BaseObservabilityEventBus<TEvent> extends MastraBase implements Obs
     }
   }
 
+  /**
+   * Register a handler to receive future events.
+   *
+   * @param handler - Callback invoked synchronously on each {@link emit}.
+   * @returns An unsubscribe function that removes the handler.
+   */
   subscribe(handler: (event: TEvent) => void): () => void {
     this.subscribers.add(handler);
     return () => {
@@ -70,6 +82,7 @@ export class BaseObservabilityEventBus<TEvent> extends MastraBase implements Obs
     }
   }
 
+  /** Flush pending promises, then clear all subscribers. */
   async shutdown(): Promise<void> {
     await this.flush();
     this.subscribers.clear();
