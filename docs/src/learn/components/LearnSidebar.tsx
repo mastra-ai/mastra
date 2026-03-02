@@ -48,8 +48,8 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
     <aside className={cn('learn-sidebar-container', className)}>
       <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
         <div className="px-4 pb-4">
-          <Link to="/learn" className="learn-link text-sm font-semibold text-(--mastra-text-primary)">
-            {course.title}
+          <Link to="/learn" className="learn-link block max-w-[200px] text-sm font-semibold text-(--mastra-text-primary)">
+            {course.title.replace('AI ', '')}
           </Link>
           <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mt-3" />
         </div>
@@ -81,9 +81,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
                         to={`/learn/${lesson.slug}`}
                         className={cn(
                           'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
-                          isActive
-                            ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
-                            : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
+                          isActive ? 'is-active' : 'text-(--mastra-text-tertiary)',
                         )}
                       >
                         <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />

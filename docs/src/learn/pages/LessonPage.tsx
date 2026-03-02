@@ -114,7 +114,7 @@ export default function LessonPage() {
   const prev = lessonIndex > 0 ? course.lessons[lessonIndex - 1] : undefined
   const next = lessonIndex < course.lessons.length - 1 ? course.lessons[lessonIndex + 1] : undefined
 
-  const seoTitle = lesson.seo?.title ?? `${lesson.title} | Mastra Learn`
+  const seoTitle = lesson.seo?.title ?? `${lesson.title} | Mastra`
   const seoDescription = lesson.seo?.description ?? lesson.preview.intro
 
   return (

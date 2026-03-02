@@ -2,28 +2,26 @@ import type { Course } from './types'
 
 export const course: Course = {
   courseId: 'mastra-101',
-  title: 'Build Your First AI Agent with Mastra',
+  title: 'Build Your First AI Agent in TypeScript',
   description: `This course is your roadmap to becoming an AI Engineer.
 
-In 90 minutes, you'll build and deploy your first agent with Mastra. Along the way, you'll learn how the agent loop works under the hood, how tools let an agent reach into external systems, how MCP opens the door to external resources, and how context engineering and memory shape behavior across a conversation.                
+In 90 minutes, you'll build and deploy your first agent in TypeScript with Mastra. Along the way, you'll learn how the agent loop works under the hood, how tools let an agent reach into other systems, how MCP opens the door to external resources, and how context engineering and memory shape behavior across a conversation.                
 
 By the end, you'll have shipped your first agent - and more importantly, you'll know how to build the next one on your own. The patterns you implement here carry directly into whatever you choose to build next.                                                                              
 
-AI agents are the next platform shift. Understanding how to build them is now a core skill for engineers, and there's real opportunity for those who get there early. If you’re excited about what’s possible and want a clear, practical path to get there, this course is for you.
-
-Head to Module 1 to start building with Guil.`,
+AI agents are the next platform shift. Understanding how to build them is now a core skill for engineers, and there's real opportunity for those who get there early. If you're excited about what's possible and want a clear, practical path to get there, this course is for you.`,
   lessons: [
     // Module 1: Getting Started
     {
-      slug: '01-build-ai-agents-with-mastra',
-      title: 'Build AI Agents with Mastra',
+      slug: 'what-is-an-agent',
+      title: 'What is an Agent?',
       durationMin: 5,
       status: 'published',
       youtubeId: '7CwciY0fwHo',
-      module: 'Getting Started',
+      module: 'Agents',
       preview: {
         intro:
-          'Define what makes an agent different from a basic chat experience, introduce Mastra and the kinds of AI-powered apps you can build with it, and preview the Theme Park Companion Agent you will build throughout the course.',
+          'Define what makes an agent different from a basic chat experience, introduce Mastra and the kinds of AI-powered apps you canin TypeScript  buil with it, and preview the Theme Park Companion Agent you will build throughout the course.',
         bullets: [
           'What makes an agent different from a chatbot',
           'The core Mastra building blocks: agents, tools, workflows, memory, retrieval, observability',
@@ -31,18 +29,18 @@ Head to Module 1 to start building with Guil.`,
         ],
       },
       seo: {
-        title: 'Build AI Agents with Mastra | Mastra 101',
+        title: 'What is an Agent? | Mastra',
         description:
           'Learn what AI agents are, how they differ from chatbots, and preview the Theme Park Companion Agent you will build with Mastra.',
       },
     },
     {
-      slug: '02-setup-and-first-run',
-      title: 'Mastra Setup and First Run',
+      slug: 'run-your-first-agent',
+      title: 'Run Your First Agent',
       durationMin: 5,
       status: 'published',
       youtubeId: 'KlBzeoU33iU',
-      module: 'Getting Started',
+      module: 'Agents',
       preview: {
         intro:
           'Cover the main ways people start with Mastra, scaffold a project, and open Mastra Studio — the interactive UI for building and testing agents locally.',
@@ -53,18 +51,18 @@ Head to Module 1 to start building with Guil.`,
         ],
       },
       seo: {
-        title: 'Setup and First Run in Mastra Studio | Mastra 101',
+        title: 'Run Your First Agent | Mastra',
         description:
           'Scaffold a Mastra project, run it locally, and explore Mastra Studio — the interactive UI for building and testing agents.',
       },
     },
     {
-      slug: '03-mastra-project-structure',
-      title: 'Mastra Project Structure',
+      slug: 'project-structure',
+      title: 'Project Structure',
       durationMin: 4,
       status: 'published',
       youtubeId: 'lDKFFWLmt1Q',
-      module: 'Getting Started',
+      module: 'Agents',
       preview: {
         intro:
           'Connect what you see in Studio to the project layout created by create-mastra. Use the scaffolded Weather agent, workflow, and tool as your reference point.',
@@ -75,18 +73,18 @@ Head to Module 1 to start building with Guil.`,
         ],
       },
       seo: {
-        title: 'Mastra Project Structure | Mastra 101',
+        title: 'Project Structure | Mastra',
         description:
           'Understand the Mastra project structure — agents, tools, workflows, config, and how Studio maps to your source files.',
       },
     },
     {
-      slug: '04-create-a-new-agent',
-      title: 'Create a New Agent',
+      slug: 'create-an-agent',
+      title: 'Create an Agent',
       durationMin: 5,
       status: 'published',
       youtubeId: 'lwhJxPl_loQ',
-      module: 'Getting Started',
+      module: 'Agents',
       preview: {
         intro:
           'Build your own agent from scratch in code, register it in the Mastra setup, and confirm it appears in Studio. This becomes the agent you keep extending for the rest of the course.',
@@ -97,7 +95,7 @@ Head to Module 1 to start building with Guil.`,
         ],
       },
       seo: {
-        title: 'Create a New Agent | Mastra 101',
+        title: 'Create an Agent | Mastra',
         description:
           'Build a custom AI agent with instructions and model config, register it in Mastra, and run it in Studio.',
       },
@@ -105,7 +103,7 @@ Head to Module 1 to start building with Guil.`,
 
     // Module 2: Tools
     {
-      slug: '05-create-a-tool',
+      slug: 'create-a-tool',
       title: 'Create a Tool',
       durationMin: 7,
       status: 'published',
@@ -122,7 +120,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '06-build-with-ai',
+      slug: 'build-with-ai',
       title: 'Build with AI',
       durationMin: 3,
       status: 'published',
@@ -139,8 +137,8 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '07-fetch-live-data',
-      title: 'Fetch Live Data with Tools',
+      slug: 'fetch-live-data',
+      title: 'Fetch Live Data',
       durationMin: 7,
       status: 'published',
       youtubeId: 'CMofx-DhpoY',
@@ -156,8 +154,8 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '08-connect-agents-to-mcp-servers',
-      title: 'Connect Agents to MCP Servers',
+      slug: 'connect-to-mcp',
+      title: 'Connect to MCP',
       durationMin: 7,
       status: 'published',
       youtubeId: 'b8rNHmL4s2s',
@@ -175,7 +173,7 @@ Head to Module 1 to start building with Guil.`,
 
     // Module 3: Workflows
     {
-      slug: '09-build-a-workflow',
+      slug: 'build-a-workflow',
       title: 'Build a Workflow',
       durationMin: 5,
       status: 'comingSoon',
@@ -191,7 +189,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '10-agents-vs-workflows',
+      slug: 'agents-vs-workflows',
       title: 'Agents vs. Workflows',
       durationMin: 3,
       status: 'comingSoon',
@@ -206,7 +204,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '11-connect-agents-and-workflows',
+      slug: 'connect-agents-and-workflows',
       title: 'Connect Agent to a Workflow',
       durationMin: 5,
       status: 'comingSoon',
@@ -224,7 +222,7 @@ Head to Module 1 to start building with Guil.`,
 
     // Module 4: Memory
     {
-      slug: '12-why-agents-forget',
+      slug: 'why-agents-forget',
       title: 'Why Agents "Forget"',
       durationMin: 4,
       status: 'comingSoon',
@@ -240,7 +238,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '13-turn-on-memory',
+      slug: 'turn-on-memory',
       title: 'Turn On Memory',
       durationMin: 5,
       status: 'comingSoon',
@@ -256,7 +254,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '14-working-memory',
+      slug: 'working-memory',
       title: 'Working Memory with a Template, Plus Scope',
       durationMin: 4,
       status: 'comingSoon',
@@ -274,7 +272,7 @@ Head to Module 1 to start building with Guil.`,
 
     // Module 5: Production
     {
-      slug: '15-debug-with-traces',
+      slug: 'debug-with-traces',
       title: 'Debug with Traces and One Simple Scorer',
       durationMin: 5,
       status: 'comingSoon',
@@ -290,7 +288,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '16-basic-rag',
+      slug: 'basic-rag',
       title: 'Basic RAG: Add a Knowledge Base',
       durationMin: 5,
       status: 'comingSoon',
@@ -306,7 +304,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '17-add-voice',
+      slug: 'add-voice',
       title: 'Add Voice to an Agent: STT/TTS',
       durationMin: 4,
       status: 'comingSoon',
@@ -322,7 +320,7 @@ Head to Module 1 to start building with Guil.`,
       },
     },
     {
-      slug: '18-deployment-and-next-steps',
+      slug: 'deployment-and-next-steps',
       title: 'Deployment and Next Steps',
       durationMin: 4,
       status: 'comingSoon',
