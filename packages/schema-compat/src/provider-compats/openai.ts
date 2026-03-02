@@ -19,11 +19,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
+    const model = this.getModel();
     if (
-      !this.getModel().supportsStructuredOutputs &&
-      (this.getModel().provider.includes(`openai`) ||
-        this.getModel().modelId.includes(`openai`) ||
-        this.getModel().provider.includes(`groq`))
+      !model.supportsStructuredOutputs &&
+      (model.provider.includes(`openai`) || model.modelId?.includes(`openai`) || model.provider.includes(`groq`))
     ) {
       return true;
     }
@@ -101,7 +100,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       const model = this.getModel();
       const checks = ['emoji'] as const;
 
-      if (model.modelId.includes('gpt-4o-mini')) {
+      if (model.modelId?.includes('gpt-4o-mini')) {
         return this.defaultZodStringHandler(value, ['emoji', 'regex']);
       }
 
