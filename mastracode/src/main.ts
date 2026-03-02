@@ -52,6 +52,10 @@ async function main() {
     for (const s of failed) {
       console.info(`MCP: Failed to connect to "${s.name}": ${s.error}`);
     }
+    const skipped = mcpManager.getSkippedServers();
+    for (const s of skipped) {
+      console.info(`MCP: Skipped "${s.name}": ${s.reason}`);
+    }
   }
 
   const logFile = path.join(getAppDataDir(), 'debug.log');
