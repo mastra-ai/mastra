@@ -11,7 +11,7 @@ import { getMarkdownTheme, theme } from '../theme.js';
 
 let _compId = 0;
 function asmDebugLog(...args: unknown[]) {
-  if (process.env.DEBUG_MASTRA_CODE !== `true`) {
+  if (process.env.MASTRA_DEBUG !== `true`) {
     return;
   }
   const line = `[ASM ${new Date().toISOString()}] ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`;
