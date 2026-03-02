@@ -2429,11 +2429,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    const result = resolvedHarnessTools
-      ? { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools }
-      : { harnessBuiltIn: builtInTools };
-
-    return resolvedToolsets ? { ...result, ...resolvedToolsets } : result;
+    const result: ToolsetsInput = { harnessBuiltIn: builtInTools };
+    if (resolvedHarnessTools) result.harness = resolvedHarnessTools;
+    if (resolvedToolsets) Object.assign(result, resolvedToolsets);
+    return result;
   }
 
   /**
