@@ -166,6 +166,8 @@ async function createProviderFlow(ctx: SlashCommandContext): Promise<void> {
   upsertCustomProviderInSettings(settings, { name, url, apiKey, models: [] });
   saveSettings(settings);
   ctx.showInfo(`Added custom provider: ${name}`);
+
+  await manageProviderFlow(ctx, providerId);
 }
 
 async function editProviderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
