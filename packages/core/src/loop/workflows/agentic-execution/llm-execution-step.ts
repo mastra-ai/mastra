@@ -821,7 +821,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     },
                   });
                 },
-                shouldThrowError: !isLastModel,
+                shouldThrowError: true,
               }),
           });
         } else {
