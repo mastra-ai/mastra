@@ -101,22 +101,22 @@ export function DatasetItemsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
-        {isSelectionActive && !maxSelection && (
-          <ItemList.LabelCell className="">
-            <Checkbox
-              checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-              onCheckedChange={handleSelectAllToggle}
-              aria-label="Select all items"
-            />
-          </ItemList.LabelCell>
-        )}
-        {columns?.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
+        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
+          {isSelectionActive && !maxSelection && (
+            <ItemList.LabelCell>
+              <Checkbox
+                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                onCheckedChange={handleSelectAllToggle}
+                aria-label="Select all items"
+              />
+            </ItemList.LabelCell>
+          )}
+          {columns?.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
         <ItemList.Items>
           {items.length === 0 && searchQuery ? (
             <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
@@ -174,27 +174,6 @@ export function DatasetItemsList({
           hasMore={hasNextPage}
         />
       </ItemList.Scroller>
-    </ItemList>
-  );
-}
-
-function DatasetItemListSkeleton({ columns = [] }: { columns?: { name: string; label: string; size: string }[] }) {
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns} />
-      <ItemList.Items>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={columns}>
-              {columns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
     </ItemList>
   );
 }
