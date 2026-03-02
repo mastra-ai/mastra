@@ -114,7 +114,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
 
   const server = http.createServer((req, res) => {
     const url = req.url || '/';
-    const [rawPathname = '/', query = ''] = url.split('?');
+    const queryStart = url.indexOf('?');
+    const rawPathname = queryStart >= 0 ? url.slice(0, queryStart) : url;
+    const query = queryStart >= 0 ? url.slice(queryStart + 1) : '';
     const pathname = rawPathname || '/';
 
     const pathWithoutBase =

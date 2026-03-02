@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,6 +29,24 @@ function createStudioFixture() {
   return dir;
 }
 
+function request(url: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    http
+      .get(url, response => {
+        const chunks: string[] = [];
+        response.setEncoding('utf8');
+        response.on('data', chunk => chunks.push(chunk));
+        response.on('end', () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            body: chunks.join(''),
+          });
+        });
+      })
+      .on('error', reject);
+  });
+}
+
 afterEach(() => {
   delete process.env.MASTRA_STUDIO_BASE_PATH;
 
@@ -47,18 +66,35 @@ describe('studio base path support', () => {
     const port = typeof address === 'object' && address ? address.port : 0;
 
     try {
-      const htmlResponse = await fetch(`http://127.0.0.1:${port}/agents`);
-      const html = await htmlResponse.text();
+      const htmlResponse = await request(`http://127.0.0.1:${port}/agents`);
 
       expect(htmlResponse.status).toBe(200);
-      expect(html).toContain('<base href="/agents/"');
-      expect(html).toContain("window.MASTRA_STUDIO_BASE_PATH = '/agents'");
+      expect(htmlResponse.body).toContain('<base href="/agents/"');
+      expect(htmlResponse.body).toContain("window.MASTRA_STUDIO_BASE_PATH = '/agents'");
 
-      const assetResponse = await fetch(`http://127.0.0.1:${port}/agents/assets/app.js`);
-      const assetBody = await assetResponse.text();
+      const assetResponse = await request(`http://127.0.0.1:${port}/agents/assets/app.js`);
 
       expect(assetResponse.status).toBe(200);
-      expect(assetBody).toContain('console.log("ok")');
+      expect(assetResponse.body).toContain('console.log("ok")');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
+  it('preserves the full query string when rewriting asset requests', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const assetResponse = await request(`http://127.0.0.1:${port}/agents/assets/app.js?first=1?second=2`);
+
+      expect(assetResponse.status).toBe(200);
+      expect(assetResponse.body).toContain('console.log("ok")');
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }
