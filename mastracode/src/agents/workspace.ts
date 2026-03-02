@@ -1,15 +1,14 @@
-import fs from 'node:fs';
-import { existsSync } from 'node:fs';
+import fs, { existsSync } from 'node:fs';
 import os from 'node:os';
-import path, { dirname } from 'node:path';
-import { join } from 'node:path';
+import path, { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Workspace, LocalFilesystem, LocalSandbox, type LSPConfig } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import type { LSPConfig } from '@mastra/core/workspace';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
-import { fileURLToPath } from 'node:url';
 
 // =============================================================================
 // Create Workspace with Skills
