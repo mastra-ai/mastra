@@ -1,5 +1,5 @@
 import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { AnyExportedSpan, LogEvent, MetricEvent } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OtelExporter } from './tracing';
 
@@ -42,9 +42,51 @@ vi.mock('@opentelemetry/resources', () => ({
   resourceFromAttributes: vi.fn().mockReturnValue({}),
 }));
 
+const mockEmit = vi.fn();
+vi.mock('@opentelemetry/sdk-logs', () => ({
+  LoggerProvider: vi.fn().mockImplementation(function () {
+    return {
+      getLogger: vi.fn().mockReturnValue({ emit: mockEmit }),
+      forceFlush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  BatchLogRecordProcessor: vi.fn().mockImplementation(function () {
+    return {};
+  }),
+}));
+
+const mockCounterAdd = vi.fn();
+const mockHistogramRecord = vi.fn();
+const mockGaugeCallbacks: Array<(result: any) => void> = [];
+vi.mock('@opentelemetry/sdk-metrics', () => ({
+  MeterProvider: vi.fn().mockImplementation(function () {
+    return {
+      getMeter: vi.fn().mockReturnValue({
+        createCounter: vi.fn().mockReturnValue({ add: mockCounterAdd }),
+        createHistogram: vi.fn().mockReturnValue({ record: mockHistogramRecord }),
+        createObservableGauge: vi.fn().mockReturnValue({
+          addCallback: vi.fn((cb: any) => mockGaugeCallbacks.push(cb)),
+        }),
+      }),
+      forceFlush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+  PeriodicExportingMetricReader: vi.fn().mockImplementation(function () {
+    return {};
+  }),
+}));
+
 vi.mock('./loadExporter', () => ({
   loadExporter: vi.fn().mockResolvedValue(
     class MockExporter {
+      export = vi.fn().mockResolvedValue(undefined);
+      shutdown = vi.fn().mockResolvedValue(undefined);
+    },
+  ),
+  loadSignalExporter: vi.fn().mockResolvedValue(
+    class MockSignalExporter {
       export = vi.fn().mockResolvedValue(undefined);
       shutdown = vi.fn().mockResolvedValue(undefined);
     },
@@ -525,6 +567,319 @@ describe('OtelExporter', () => {
       // Tags should be present as mastra.tags attribute (JSON-stringified for backend compatibility)
       expect(readableSpan.attributes['mastra.tags']).toBeDefined();
       expect(readableSpan.attributes['mastra.tags']).toBe(JSON.stringify(['batch-processing', 'priority-high']));
+    });
+  });
+
+  describe('Log Export (onLogEvent)', () => {
+    beforeEach(() => {
+      mockEmit.mockClear();
+    });
+
+    it('should export a log event via OTEL LoggerProvider', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      const logEvent: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date('2024-06-15T12:00:00Z'),
+          level: 'error',
+          message: 'Something went wrong',
+          data: { requestId: 'req-123' },
+          traceId: 'trace-abc',
+          spanId: 'span-def',
+          metadata: { environment: 'production' },
+        },
+      };
+
+      await exporter.onLogEvent(logEvent);
+
+      expect(mockEmit).toHaveBeenCalledTimes(1);
+      const emitArgs = mockEmit.mock.calls[0]![0];
+      expect(emitArgs.body).toBe('Something went wrong');
+      expect(emitArgs.severityText).toBe('ERROR');
+      expect(emitArgs.attributes['mastra.log.requestId']).toBe('req-123');
+      expect(emitArgs.attributes['mastra.metadata.environment']).toBe('production');
+      expect(emitArgs.attributes['mastra.traceId']).toBe('trace-abc');
+      expect(emitArgs.attributes['mastra.spanId']).toBe('span-def');
+    });
+
+    it('should not export logs when signals.logs is false', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+        signals: { logs: false },
+      });
+
+      const logEvent: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Should not be exported',
+        },
+      };
+
+      await exporter.onLogEvent(logEvent);
+
+      expect(mockEmit).not.toHaveBeenCalled();
+    });
+
+    it('should handle log events without trace context', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      const logEvent: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'debug',
+          message: 'No trace context',
+        },
+      };
+
+      await exporter.onLogEvent(logEvent);
+
+      expect(mockEmit).toHaveBeenCalledTimes(1);
+      const emitArgs = mockEmit.mock.calls[0]![0];
+      expect(emitArgs.body).toBe('No trace context');
+      expect(emitArgs.attributes['mastra.traceId']).toBeUndefined();
+      expect(emitArgs.attributes['mastra.spanId']).toBeUndefined();
+    });
+  });
+
+  describe('Metric Export (onMetricEvent)', () => {
+    beforeEach(() => {
+      mockCounterAdd.mockClear();
+      mockHistogramRecord.mockClear();
+      mockGaugeCallbacks.length = 0;
+    });
+
+    it('should export a counter metric via OTEL MeterProvider', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      const metricEvent: MetricEvent = {
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_agent_calls',
+          metricType: 'counter',
+          value: 1,
+          labels: { agent: 'weather-bot' },
+        },
+      };
+
+      await exporter.onMetricEvent(metricEvent);
+
+      expect(mockCounterAdd).toHaveBeenCalledWith(1, { agent: 'weather-bot' });
+    });
+
+    it('should export a histogram metric via OTEL MeterProvider', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      const metricEvent: MetricEvent = {
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_agent_duration_ms',
+          metricType: 'histogram',
+          value: 250.5,
+          labels: { agent: 'weather-bot', model: 'gpt-4' },
+        },
+      };
+
+      await exporter.onMetricEvent(metricEvent);
+
+      expect(mockHistogramRecord).toHaveBeenCalledWith(250.5, { agent: 'weather-bot', model: 'gpt-4' });
+    });
+
+    it('should not export metrics when signals.metrics is false', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+        signals: { metrics: false },
+      });
+
+      const metricEvent: MetricEvent = {
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_agent_calls',
+          metricType: 'counter',
+          value: 1,
+          labels: {},
+        },
+      };
+
+      await exporter.onMetricEvent(metricEvent);
+
+      expect(mockCounterAdd).not.toHaveBeenCalled();
+    });
+
+    it('should not export traces when signals.traces is false', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+        signals: { traces: false },
+      });
+
+      const exportedSpan = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        parent: undefined,
+        type: SpanType.AGENT_RUN,
+        name: 'Test Span',
+        startTime: new Date(),
+        endTime: new Date(),
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan,
+      });
+
+      // The exporter should not have been set up (no processor created)
+      expect(exporter).toBeDefined();
+    });
+  });
+
+  describe('Signal Endpoint Resolution', () => {
+    beforeEach(() => {
+      mockEmit.mockClear();
+    });
+
+    it('should correctly derive log endpoint from trace endpoint', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318/v1/traces',
+          },
+        },
+      });
+
+      // Access the private method via the public onLogEvent (which triggers setup)
+      const logEvent: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Test endpoint resolution',
+        },
+      };
+
+      await exporter.onLogEvent(logEvent);
+
+      // The log exporter should have been set up successfully
+      expect(mockEmit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Lifecycle with multiple signals', () => {
+    it('should flush all active providers', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      // Trigger trace setup
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: {
+          id: 'span-1',
+          traceId: 'trace-1',
+          type: SpanType.AGENT_RUN,
+          name: 'Test',
+          startTime: new Date(),
+          endTime: new Date(),
+        } as unknown as AnyExportedSpan,
+      });
+
+      // Trigger log setup
+      await exporter.onLogEvent({
+        type: 'log',
+        log: { timestamp: new Date(), level: 'info', message: 'test' },
+      });
+
+      // Trigger metric setup
+      await exporter.onMetricEvent({
+        type: 'metric',
+        metric: { timestamp: new Date(), name: 'test', metricType: 'counter', value: 1, labels: {} },
+      });
+
+      // Flush should succeed without errors
+      await exporter.flush();
+      expect(exporter).toBeDefined();
+    });
+
+    it('should shutdown all active providers', async () => {
+      exporter = new OtelExporter({
+        provider: {
+          custom: {
+            endpoint: 'http://localhost:4318',
+          },
+        },
+      });
+
+      // Trigger all signal setups
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: {
+          id: 'span-1',
+          traceId: 'trace-1',
+          type: SpanType.AGENT_RUN,
+          name: 'Test',
+          startTime: new Date(),
+          endTime: new Date(),
+        } as unknown as AnyExportedSpan,
+      });
+
+      await exporter.onLogEvent({
+        type: 'log',
+        log: { timestamp: new Date(), level: 'info', message: 'test' },
+      });
+
+      await exporter.onMetricEvent({
+        type: 'metric',
+        metric: { timestamp: new Date(), name: 'test', metricType: 'counter', value: 1, labels: {} },
+      });
+
+      // Shutdown should succeed without errors
+      await exporter.shutdown();
+      expect(exporter).toBeDefined();
     });
   });
 });

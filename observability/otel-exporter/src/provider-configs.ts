@@ -10,6 +10,7 @@ import type {
   NewRelicConfig,
   TraceloopConfig,
   LaminarConfig,
+  GrafanaCloudConfig,
   CustomConfig,
 } from './types.js';
 
@@ -19,24 +20,50 @@ export interface ResolvedProviderConfig {
   protocol: ExportProtocol;
 }
 
-export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderConfig | null {
+export function resolveProviderConfig(config: ProviderConfig, debug?: boolean): ResolvedProviderConfig | null {
+  const providerName = Object.keys(config)[0];
+
+  if (debug) {
+    console.info(`[OtelExporter:debug] Resolving provider config for: ${providerName}`);
+  }
+
+  let resolved: ResolvedProviderConfig | null;
+
   if ('dash0' in config) {
-    return resolveDash0Config(config.dash0);
+    resolved = resolveDash0Config(config.dash0);
   } else if ('signoz' in config) {
-    return resolveSignozConfig(config.signoz);
+    resolved = resolveSignozConfig(config.signoz);
   } else if ('newrelic' in config) {
-    return resolveNewRelicConfig(config.newrelic);
+    resolved = resolveNewRelicConfig(config.newrelic);
   } else if ('traceloop' in config) {
-    return resolveTraceloopConfig(config.traceloop);
+    resolved = resolveTraceloopConfig(config.traceloop);
   } else if ('laminar' in config) {
-    return resolveLaminarConfig(config.laminar);
+    resolved = resolveLaminarConfig(config.laminar);
+  } else if ('grafanaCloud' in config) {
+    resolved = resolveGrafanaCloudConfig(config.grafanaCloud, debug);
   } else if ('custom' in config) {
-    return resolveCustomConfig(config.custom);
+    resolved = resolveCustomConfig(config.custom);
   } else {
     // TypeScript exhaustiveness check
     const _exhaustive: never = config;
     return _exhaustive;
   }
+
+  if (debug && resolved) {
+    const maskedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(resolved.headers)) {
+      maskedHeaders[key] = value.length > 12 ? value.slice(0, 8) + '...' + value.slice(-4) : '***';
+    }
+    console.info(`[OtelExporter:debug] Provider "${providerName}" resolved:`, {
+      endpoint: resolved.endpoint,
+      protocol: resolved.protocol,
+      headers: maskedHeaders,
+    });
+  } else if (debug && !resolved) {
+    console.info(`[OtelExporter:debug] Provider "${providerName}" resolution returned null (disabled)`);
+  }
+
+  return resolved;
 }
 
 function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null {
@@ -195,6 +222,76 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
     endpoint,
     headers,
     protocol: 'http/protobuf', // Use HTTP/protobuf instead of gRPC for better compatibility
+  };
+}
+
+function resolveGrafanaCloudConfig(config: GrafanaCloudConfig, debug?: boolean): ResolvedProviderConfig | null {
+  // Read from config or environment variables
+  const instanceId = config.instanceId ?? process.env.GRAFANA_CLOUD_INSTANCE_ID;
+  const apiToken = config.apiToken ?? process.env.GRAFANA_CLOUD_API_TOKEN;
+  const configEndpoint = config.endpoint ?? process.env.GRAFANA_CLOUD_OTLP_ENDPOINT;
+
+  if (debug) {
+    console.info('[OtelExporter:debug] Grafana Cloud config sources:', {
+      instanceId: instanceId ? `${instanceId.slice(0, 4)}...` : '(missing)',
+      instanceIdSource: config.instanceId ? 'config' : process.env.GRAFANA_CLOUD_INSTANCE_ID ? 'env' : 'none',
+      apiToken: apiToken ? `${apiToken.slice(0, 8)}...` : '(missing)',
+      apiTokenSource: config.apiToken ? 'config' : process.env.GRAFANA_CLOUD_API_TOKEN ? 'env' : 'none',
+      endpoint: configEndpoint ?? '(missing)',
+      endpointSource: config.endpoint ? 'config' : process.env.GRAFANA_CLOUD_OTLP_ENDPOINT ? 'env' : 'none',
+    });
+  }
+
+  if (!instanceId) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires instanceId. ' +
+        'Set GRAFANA_CLOUD_INSTANCE_ID environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  if (!apiToken) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires apiToken. ' +
+        'Set GRAFANA_CLOUD_API_TOKEN environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  if (!configEndpoint) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires endpoint (e.g. https://otlp-gateway-prod-us-east-3.grafana.net/otlp). ' +
+        'Set GRAFANA_CLOUD_OTLP_ENDPOINT environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  // Grafana Cloud OTLP uses HTTP Basic Auth: username = instanceId, password = apiToken
+  const basicAuth = Buffer.from(`${instanceId}:${apiToken}`).toString('base64');
+
+  if (debug) {
+    console.info('[OtelExporter:debug] Grafana Cloud Basic Auth constructed:', {
+      format: '<instanceId>:<apiToken> -> base64',
+      authHeaderPrefix: `Basic ${basicAuth.slice(0, 12)}...`,
+    });
+  }
+
+  // Append /v1/traces if the endpoint doesn't already have a signal path
+  let endpoint = configEndpoint;
+  if (!endpoint.endsWith('/v1/traces') && !endpoint.endsWith('/v1/logs') && !endpoint.endsWith('/v1/metrics')) {
+    endpoint = endpoint.replace(/\/$/, '') + '/v1/traces';
+  }
+
+  if (debug) {
+    console.info(`[OtelExporter:debug] Grafana Cloud endpoint: ${configEndpoint} -> ${endpoint}`);
+  }
+
+  return {
+    endpoint,
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+    },
+    protocol: 'http/json',
   };
 }
 
