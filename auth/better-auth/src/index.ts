@@ -90,6 +90,7 @@ export class MastraAuthBetterAuth
 {
   protected auth: Auth;
   protected signUpEnabledConfig: boolean;
+  public sessionCookieName: string;
 
   constructor(options: MastraAuthBetterAuthOptions) {
     super({ name: options?.name ?? 'better-auth' });
@@ -102,6 +103,11 @@ export class MastraAuthBetterAuth
 
     this.auth = options.auth;
     this.signUpEnabledConfig = options.signUpEnabled ?? true;
+
+    // Derive the session cookie name from Better Auth's cookiePrefix option
+    const authWithOptions = this.auth as unknown as { options?: { advanced?: { cookiePrefix?: string } } };
+    const prefix = authWithOptions.options?.advanced?.cookiePrefix ?? 'better-auth';
+    this.sessionCookieName = `${prefix}.session_token`;
 
     this.registerOptions(options);
   }
@@ -181,29 +187,29 @@ export class MastraAuthBetterAuth
    */
   async authenticateToken(token: string, request: HonoRequest): Promise<BetterAuthUser | null> {
     try {
-      // Better Auth expects the token to be passed via headers
-      // We need to construct headers with the Authorization bearer token
+      // Better Auth's api.getSession() reads session tokens from the Cookie header
       const headers = new Headers();
 
-      // Copy relevant headers from the request.
       // The auth middleware may pass a raw Request (c.req.raw) instead of HonoRequest,
       // so unwrap via 'raw' property detection and use the standard Web API.
       const rawRequest: Request = 'raw' in request ? (request as any).raw : (request as unknown as Request);
-      const authHeader = rawRequest.headers.get('Authorization');
-      if (authHeader) {
-        headers.set('Authorization', authHeader);
-      } else if (token) {
-        // If no auth header but token is provided, set it
-        headers.set('Authorization', `Bearer ${token}`);
-      }
 
-      // Copy cookie header if present (Better Auth can use cookies for sessions)
       const cookieHeader = rawRequest.headers.get('Cookie');
       if (cookieHeader) {
         headers.set('Cookie', cookieHeader);
       }
 
-      // Use Better Auth's API to get the session
+      // Convert Bearer token to a session cookie if not already present.
+      // better-auth ignores the Authorization header — it only reads from Cookie.
+      const hasSessionCookie = !!cookieHeader?.split(';').some(pair => {
+        const [key] = pair.trim().split('=');
+        return key?.trim() === this.sessionCookieName;
+      });
+      if (token && !hasSessionCookie) {
+        const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
+        headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
+      }
+
       const result = await this.auth.api.getSession({
         headers,
       });
@@ -217,7 +223,6 @@ export class MastraAuthBetterAuth
         user: result.user,
       };
     } catch {
-      // Session verification failed
       return null;
     }
   }
@@ -356,11 +361,10 @@ export class MastraAuthBetterAuth
    * Clears Better Auth's default session cookies.
    */
   getClearSessionHeaders(): Record<string, string> {
-    // Better Auth uses these cookie names by default
     // Clear both the session token and its signature cookie
     const cookies = [
-      'better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
-      'better-auth.session_token_sig=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      `${this.sessionCookieName}_sig=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
     ];
     return {
       'Set-Cookie': cookies.join(', '),
