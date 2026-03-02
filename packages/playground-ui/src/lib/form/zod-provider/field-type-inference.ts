@@ -1,54 +1,59 @@
 import { FieldConfig } from '@autoform/core';
-import { z } from 'zod';
-import { z as zV3 } from 'zod/v3';
+import { getDef, getStringChecks, hasDateTimeCheck, getUnionOptions, getShape, getLiteralValue } from './compat';
 
-export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig): string {
+export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
   if (fieldConfig?.fieldType) {
     return fieldConfig.fieldType;
   }
 
-  if (schema instanceof z.ZodObject) return 'object';
-  if (schema instanceof z.ZodIntersection) return 'object';
-  if (schema instanceof z.ZodNumber) return 'number';
-  if (schema instanceof z.ZodBoolean) return 'boolean';
-  if (schema instanceof z.ZodString) {
-    const checks = schema._zod.def.checks || [];
-    const hasDateTimeCheck = checks.some(
-      //@ts-expect-error - zod string_format check has format property
-      check => check._zod.def.check === 'string_format' && check._zod.def.format === 'datetime',
-    );
-    if (hasDateTimeCheck) return 'date';
+  const constructorName = schema?.constructor?.name;
+  const def = getDef(schema);
+  const typeName = def?.typeName ?? constructorName;
+
+  if (typeName === 'ZodObject') return 'object';
+  if (typeName === 'ZodIntersection') return 'object';
+  if (typeName === 'ZodNumber') return 'number';
+  if (typeName === 'ZodBoolean') return 'boolean';
+
+  if (typeName === 'ZodString') {
+    const checks = getStringChecks(schema);
+    if (hasDateTimeCheck(checks)) return 'date';
     return 'string';
   }
-  if (schema instanceof z.ZodEnum) return 'select';
-  //ZodNativeEnum is not supported in zod@v4, This makes is backwards compatible with zod@v3
-  if (schema instanceof zV3.ZodNativeEnum) return 'select';
-  if (schema instanceof z.ZodArray) return 'array';
-  if (schema instanceof z.ZodRecord) return 'record';
-  if (schema instanceof z.ZodUnion) {
-    const options = schema._zod.def.options;
-    const hasLiteral = options.every(option => {
-      if ('shape' in option._zod.def) {
-        return Object.values(option._zod.def.shape as Record<string, z.ZodTypeAny>).some(
-          value => value instanceof z.ZodLiteral,
-        );
+
+  if (typeName === 'ZodEnum') return 'select';
+  // ZodNativeEnum is not supported in zod@v4, this makes it backwards compatible with zod@v3
+  if (typeName === 'ZodNativeEnum') return 'select';
+  if (typeName === 'ZodArray') return 'array';
+  if (typeName === 'ZodRecord') return 'record';
+
+  if (typeName === 'ZodUnion') {
+    const options = getUnionOptions(schema);
+    if (options) {
+      const hasLiteral = options.every((option: any) => {
+        const optShape = getShape(option);
+        if (optShape) {
+          return Object.values(optShape).some((value: any) => {
+            const vName = value?.constructor?.name;
+            const vDef = getDef(value);
+            return vName === 'ZodLiteral' || vDef?.typeName === 'ZodLiteral' || vDef?.type === 'literal';
+          });
+        }
+        return false;
+      });
+      if (hasLiteral) {
+        return 'discriminated-union';
       }
-      return false;
-    });
-    if (hasLiteral) {
-      return 'discriminated-union';
     }
     return 'union';
   }
-  if (schema instanceof z.ZodDiscriminatedUnion) {
+
+  if (typeName === 'ZodDiscriminatedUnion') {
     return 'discriminated-union';
   }
-  if (schema instanceof z.ZodLiteral) {
-    // For literal types, infer the field type based on the literal value
-    // Support both Zod v3 (_def.value) and Zod v4 (_zod.def.values)
-    const v4Values = (schema as any)._zod?.def?.values;
-    const v3Value = (schema as any)._def?.value;
-    const literalValue = v4Values !== undefined ? (Array.isArray(v4Values) ? v4Values[0] : v4Values) : v3Value;
+
+  if (typeName === 'ZodLiteral') {
+    const literalValue = getLiteralValue(schema);
     if (typeof literalValue === 'number') return 'number';
     if (typeof literalValue === 'boolean') return 'boolean';
     return 'string';
