@@ -1132,7 +1132,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
 
       const response = await agent.stream(messageInput as any, streamOptions as any);
-      await this.processStream(response);
+      await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
         const reason = this.abortRequested ? 'aborted' : 'complete';
@@ -1152,7 +1152,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         });
         this.followUpQueue.push({
           content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-          requestContext,
+          requestContext: runtimeContext,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
       } else {
@@ -1358,7 +1358,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
-  private async processStream(response: { fullStream: AsyncIterable<any> }): Promise<{ message: HarnessMessage }> {
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContext: RequestContext,
+  ): Promise<{ message: HarnessMessage }> {
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1963,7 +1966,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
   private async handleToolDecline({
@@ -1993,7 +1996,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
   // ===========================================================================
