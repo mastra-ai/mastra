@@ -1,0 +1,181 @@
+name: Detect New Packages
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '**/package.json'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-new-packages:
+    if: github.repository == 'mastra-ai/mastra'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect unpublished packages
+        id: detect
+        run: |
+          # Get all package.json files added in this PR
+          ADDED_PKG_FILES=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD -- '**/package.json')
+
+          if [ -z "$ADDED_PKG_FILES" ]; then
+            echo "No new package.json files detected."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "New package.json files found:"
+          echo "$ADDED_PKG_FILES"
+
+          UNPUBLISHED=""
+
+          for pkg_file in $ADDED_PKG_FILES; do
+            # Skip root package.json
+            if [ "$pkg_file" = "package.json" ]; then
+              continue
+            fi
+
+            # Skip files in node_modules, examples, docs, e2e
+            if echo "$pkg_file" | grep -qE '(node_modules|examples/|docs/|e2e/)'; then
+              continue
+            fi
+
+            # Read package name and private flag
+            PKG_NAME=$(jq -r '.name // empty' "$pkg_file" 2>/dev/null)
+            IS_PRIVATE=$(jq -r '.private // false' "$pkg_file" 2>/dev/null)
+
+            if [ -z "$PKG_NAME" ] || [ "$IS_PRIVATE" = "true" ]; then
+              continue
+            fi
+
+            # Only check publishable packages (@mastra/*, mastra, create-mastra, mastracode)
+            case "$PKG_NAME" in
+              @mastra/*|mastra|create-mastra|mastracode|@internal/playground)
+                ;;
+              *)
+                continue
+                ;;
+            esac
+
+            # Check if package exists on npm
+            echo "Checking npm for $PKG_NAME..."
+            if ! npm view "$PKG_NAME" version > /dev/null 2>&1; then
+              echo "  -> NOT on npm: $PKG_NAME"
+              if [ -z "$UNPUBLISHED" ]; then
+                UNPUBLISHED="$PKG_NAME"
+              else
+                UNPUBLISHED="$UNPUBLISHED\n$PKG_NAME"
+              fi
+            else
+              echo "  -> Already on npm: $PKG_NAME"
+            fi
+          done
+
+          if [ -z "$UNPUBLISHED" ]; then
+            echo "All new packages already exist on npm."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            # Write to a file to preserve newlines
+            echo -e "$UNPUBLISHED" > /tmp/unpublished_packages.txt
+            echo "Unpublished packages:"
+            cat /tmp/unpublished_packages.txt
+          fi
+
+      - name: Comment on PR
+        if: steps.detect.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const packages = fs.readFileSync('/tmp/unpublished_packages.txt', 'utf8')
+              .trim()
+              .split('\n')
+              .map(p => `\`${p.trim()}\``)
+              .join('\n- ');
+
+            const marker = '<!-- detect-new-packages -->';
+            const body = `${marker}
+            ## ⚠️ New Package Detected
+
+            This PR adds packages that have **never been published to npm**:
+
+            - ${packages}
+
+            **Before merging**, these packages must be manually published for the first time — OIDC-based publishing only works for packages that already exist on the registry.
+
+            **To publish a new package manually:**
+            1. Build the package locally
+            2. Run \`npm publish --access public\` from the package directory (using a token with publish permissions)
+            3. Verify the package appears on npm
+
+            Once the initial publish is done, all subsequent releases (alpha, stable, snapshot) will work automatically.
+
+            cc @mastra-ai/maintainers`;
+
+            // Check for existing comment to avoid duplicates
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Notify Slack
+        if: steps.detect.outputs.found == 'true' && env.SLACK_BOT_TOKEN != ''
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: |
+          PACKAGES=$(cat /tmp/unpublished_packages.txt | sed 's/^/• /' | tr '\n' '\n')
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          curl -s -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg channel "$CHANNEL_ID" \
+              --arg text "⚠️ New unpublished package(s) detected in PR: $PR_URL" \
+              --arg packages "$PACKAGES" \
+              --arg pr_url "$PR_URL" \
+              --arg pr_title "$PR_TITLE" \
+              '{
+                channel: $channel,
+                text: $text,
+                blocks: [
+                  {
+                    type: "section",
+                    text: {
+                      type: "mrkdwn",
+                      text: ("⚠️ *New unpublished package(s) detected*\n\nPR: <" + $pr_url + "|" + $pr_title + ">\n\nThe following packages need to be *manually published* before merging:\n" + $packages + "\n\nOIDC publishing only works for packages that already exist on npm.")
+                    }
+                  }
+                ]
+              }'
+            )"
