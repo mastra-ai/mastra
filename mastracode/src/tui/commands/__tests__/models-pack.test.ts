@@ -25,6 +25,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     preferences: { yolo: null, theme: 'auto' },
     storage,
     customModelPacks: [],
+    customProviders: [],
     modelUseCounts: {},
     ...overrides,
   };
