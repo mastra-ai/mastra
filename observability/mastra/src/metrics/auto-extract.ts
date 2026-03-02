@@ -126,7 +126,8 @@ export class AutoExtractedMetrics {
 
     // Use generic entity_type / entity_name for all span types
     if (span.entityType) labels.entity_type = span.entityType;
-    if (span.entityName) labels.entity_name = span.entityName;
+    const entityName = span.entityName ?? span.entityId;
+    if (entityName) labels.entity_name = entityName;
 
     // Model-specific labels (only on MODEL_GENERATION spans)
     if (span.type === SpanType.MODEL_GENERATION) {
