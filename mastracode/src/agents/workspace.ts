@@ -9,6 +9,7 @@ import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace
 import type { LSPConfig } from '@mastra/core/workspace';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
+import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
 // Create Workspace with Skills
@@ -109,10 +110,11 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
+
   const planModeTools = {
-    mastra_workspace_write_file: { enabled: false },
-    mastra_workspace_edit_file: { enabled: false },
-    mastra_workspace_ast_edit: { enabled: false },
+    mastra_workspace_write_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_write_file, enabled: false },
+    mastra_workspace_edit_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_edit_file, enabled: false },
+    mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
   };
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
@@ -125,7 +127,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   if (existing) {
     existing.filesystem.setAllowedPaths(allowedPaths);
-    existing.setToolsConfig(isPlanMode ? planModeTools : undefined);
+    existing.setToolsConfig(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES);
     return existing;
   }
 
@@ -157,7 +159,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
         DEBIAN_FRONTEND: 'noninteractive',
       },
     }),
-    ...(isPlanMode ? { tools: planModeTools } : {}),
+    tools: isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES,
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });
