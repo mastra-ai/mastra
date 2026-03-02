@@ -98,6 +98,7 @@
     "@mastra/voice-deepgram": "0.12.0",
     "@mastra/voice-elevenlabs": "0.12.0",
     "@mastra/voice-gladia": "0.12.0",
+    "@mastra/voice-hume": "0.12.0",
     "@mastra/voice-google": "0.12.0",
     "@mastra/voice-google-gemini-live": "0.11.2",
     "@mastra/voice-murf": "0.12.0",
