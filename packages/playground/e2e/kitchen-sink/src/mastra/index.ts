@@ -8,7 +8,12 @@ import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workfl
 import { simpleMcpServer } from './mcps';
 import { registerApiRoute } from '@mastra/core/server';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
-import { loggingProcessor, contentFilterProcessor } from './processors';
+import {
+  loggingProcessor,
+  contentFilterProcessor,
+  loggingProcessorProvider,
+  contentFilterProcessorProvider,
+} from './processors';
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
@@ -18,7 +23,12 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
-  editor: new MastraEditor(),
+  editor: new MastraEditor({
+    processorProviders: {
+      'logging-processor': loggingProcessorProvider,
+      'content-filter': contentFilterProcessorProvider,
+    },
+  }),
   mcpServers: {
     simpleMcpServer,
   },

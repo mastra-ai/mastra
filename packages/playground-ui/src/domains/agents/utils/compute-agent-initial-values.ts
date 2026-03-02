@@ -10,6 +10,7 @@ import {
   normalizeWorkspaceFromApi,
   mapInstructionBlocksFromApi,
   parseObservationalMemoryFromApi,
+  parseInputProcessorsFromApi,
 } from './agent-form-mappers';
 
 export interface AgentDataSource {
@@ -24,6 +25,7 @@ export interface AgentDataSource {
   scorers?: unknown;
   memory?: unknown;
   mcpClients?: unknown;
+  inputProcessors?: unknown;
   skills?: StoredAgentResponse['skills'];
   workspace?: StoredAgentResponse['workspace'];
   requestContextSchema?: unknown;
@@ -92,6 +94,9 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
         }
       : undefined,
     instructionBlocks,
+    inputProcessors: parseInputProcessorsFromApi(
+      dataSource.inputProcessors as Parameters<typeof parseInputProcessorsFromApi>[0],
+    ),
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],

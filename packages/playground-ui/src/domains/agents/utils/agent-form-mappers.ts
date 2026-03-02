@@ -1,4 +1,10 @@
-import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
+import type {
+  AgentInstructionBlock,
+  StorageConditionalVariant,
+  StoredProcessorGraph,
+  ProcessorGraphEntry,
+  ProcessorGraphStep,
+} from '@mastra/core/storage';
 import type { StoredAgentSkillConfig, StoredWorkspaceRef, ConditionalField } from '@mastra/client-js';
 
 import type {
@@ -378,6 +384,57 @@ type ApiObservationalMemory =
         bufferActivation?: number;
       };
     };
+
+// ---------------------------------------------------------------------------
+// Input Processors
+// ---------------------------------------------------------------------------
+
+type InputProcessorsForm = NonNullable<AgentFormValues['inputProcessors']>;
+
+/** Convert form input processors to API StoredProcessorGraph format. */
+export const mapInputProcessorsToApi = (
+  processors: InputProcessorsForm | undefined,
+): StoredProcessorGraph | undefined => {
+  if (!processors || Object.keys(processors).length === 0) return undefined;
+
+  const steps: ProcessorGraphEntry[] = Object.entries(processors).map(([providerId, config]) => ({
+    type: 'step' as const,
+    step: {
+      id: providerId,
+      providerId,
+      config: config.config ?? {},
+      enabledPhases: (config.enabledPhases ?? []) as ProcessorGraphStep['enabledPhases'],
+    },
+  }));
+
+  return { steps };
+};
+
+/** Parse API StoredProcessorGraph to form input processors format. */
+export const parseInputProcessorsFromApi = (
+  raw: StoredProcessorGraph | StorageConditionalVariant<StoredProcessorGraph>[] | undefined,
+): InputProcessorsForm => {
+  if (!raw) return {};
+
+  let graph: StoredProcessorGraph;
+  if (Array.isArray(raw)) {
+    // Conditional variants — merge all
+    graph = { steps: raw.flatMap(v => v.value?.steps ?? []) };
+  } else {
+    graph = raw;
+  }
+
+  const result: InputProcessorsForm = {};
+  for (const entry of graph.steps) {
+    if (entry.type === 'step') {
+      result[entry.step.providerId] = {
+        config: entry.step.config,
+        enabledPhases: entry.step.enabledPhases as string[],
+      };
+    }
+  }
+  return result;
+};
 
 /** Parse API observational memory config into the form representation. */
 export const parseObservationalMemoryFromApi = (

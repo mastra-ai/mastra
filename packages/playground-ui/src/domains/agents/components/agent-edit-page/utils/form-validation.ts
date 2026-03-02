@@ -238,6 +238,16 @@ export const agentFormSchema = z.object({
     .optional()
     .default([]),
   mcpClientsToDelete: z.array(z.string()).optional().default([]),
+  inputProcessors: z
+    .record(
+      z.string(),
+      z.object({
+        config: z.record(z.string(), z.unknown()).optional(),
+        enabledPhases: z.array(z.string()).optional(),
+      }),
+    )
+    .optional()
+    .default({}),
   skills: z.record(z.string(), skillConfigSchema).optional().default({}),
   workspace: z
     .discriminatedUnion('type', [

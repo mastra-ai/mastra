@@ -14,6 +14,7 @@ const SIDEBAR_PATHS: Record<string, string> = {
   Agents: '/agents',
   Scorers: '/scorers',
   Workflows: '/workflows',
+  Preprocessors: '/processors',
   Memory: '/memory',
   Variables: '/variables',
 };
@@ -677,6 +678,139 @@ test.describe('Agent Creation Persistence - Variables', () => {
 
     await expect(page.getByPlaceholder('Variable name').first()).toHaveValue('firstName', { timeout: 10000 });
     await expect(page.getByPlaceholder('Variable name').nth(1)).toHaveValue('age');
+  });
+});
+
+test.describe('Agent Creation Persistence - Preprocessors', () => {
+  // Helper: find a provider's toggle switch by locating the provider name, then traversing
+  // up to the header row (EntityName -> EntityContent -> flex div) and finding the switch.
+  function getProviderToggle(page: Page, providerName: string) {
+    return page.getByText(providerName, { exact: true }).locator('..').locator('..').getByRole('switch');
+  }
+
+  test('displays available processor providers', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    await clickSidebarLink(page, 'Preprocessors');
+
+    await expect(page.getByText('Logging Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Content Filter Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+  });
+
+  test('toggling processor on enables phase switches', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    await clickSidebarLink(page, 'Preprocessors');
+    await expect(page.getByText('Logging Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Toggle logging processor on
+    const loggingToggle = getProviderToggle(page, 'Logging Processor');
+    await loggingToggle.click();
+    await expect(loggingToggle).toBeChecked();
+
+    // Phase label "Process Input" should appear with its switch checked by default
+    await expect(page.getByText('Process Input')).toBeVisible({ timeout: 5000 });
+    const processInputSwitch = page.getByText('Process Input').locator('..').getByRole('switch');
+    await expect(processInputSwitch).toBeChecked();
+  });
+
+  test('processor selection persists after agent creation', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Processor');
+    await fillRequiredFields(page, agentName);
+
+    // Enable logging processor
+    await clickSidebarLink(page, 'Preprocessors');
+    await expect(page.getByText('Logging Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+    const loggingToggle = getProviderToggle(page, 'Logging Processor');
+    await loggingToggle.click();
+    await expect(loggingToggle).toBeChecked();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/processors`);
+    await page.waitForTimeout(2000);
+
+    // Logging processor toggle should be checked
+    const editLoggingToggle = getProviderToggle(page, 'Logging Processor');
+    await expect(editLoggingToggle).toBeChecked({ timeout: 10000 });
+
+    // Content filter should remain unchecked
+    const editContentToggle = getProviderToggle(page, 'Content Filter Processor');
+    await expect(editContentToggle).not.toBeChecked();
+  });
+
+  test('phase toggle changes persist after agent creation', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Phase Toggle');
+    await fillRequiredFields(page, agentName);
+
+    // Enable content filter processor
+    await clickSidebarLink(page, 'Preprocessors');
+    await expect(page.getByText('Content Filter Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+    const contentToggle = getProviderToggle(page, 'Content Filter Processor');
+    await contentToggle.click();
+    await expect(contentToggle).toBeChecked();
+
+    // Both phases should be enabled by default
+    await expect(page.getByText('Process Output Result')).toBeVisible({ timeout: 5000 });
+
+    // Toggle off Process Output Result phase
+    const processOutputSwitch = page.getByText('Process Output Result').locator('..').getByRole('switch');
+    await processOutputSwitch.click();
+    await expect(processOutputSwitch).not.toBeChecked();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/processors`);
+    await page.waitForTimeout(2000);
+
+    // Content filter should be enabled
+    const editContentToggle = getProviderToggle(page, 'Content Filter Processor');
+    await expect(editContentToggle).toBeChecked({ timeout: 10000 });
+
+    // Process Output Result should be unchecked (we toggled it off)
+    const editProcessOutputSwitch = page.getByText('Process Output Result').locator('..').getByRole('switch');
+    await expect(editProcessOutputSwitch).not.toBeChecked();
+  });
+
+  test('multiple processors can be enabled simultaneously', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Multi Processor');
+    await fillRequiredFields(page, agentName);
+
+    await clickSidebarLink(page, 'Preprocessors');
+    await expect(page.getByText('Logging Processor', { exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Enable both processors by name
+    const loggingToggle = getProviderToggle(page, 'Logging Processor');
+    await loggingToggle.click();
+    await expect(loggingToggle).toBeChecked();
+
+    const contentToggle = getProviderToggle(page, 'Content Filter Processor');
+    await contentToggle.click();
+    await expect(contentToggle).toBeChecked();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/processors`);
+    await page.waitForTimeout(2000);
+
+    // Both providers should be enabled
+    const editLoggingToggle = getProviderToggle(page, 'Logging Processor');
+    await expect(editLoggingToggle).toBeChecked({ timeout: 10000 });
+    const editContentToggle = getProviderToggle(page, 'Content Filter Processor');
+    await expect(editContentToggle).toBeChecked({ timeout: 10000 });
+
+    // Content filter's unique phase "Process Output Result" should be checked
+    const editProcessOutputSwitch = page.getByText('Process Output Result').locator('..').getByRole('switch');
+    await expect(editProcessOutputSwitch).toBeChecked();
   });
 });
 

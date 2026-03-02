@@ -16,6 +16,7 @@ import {
   mapScorersToApi,
   buildObservationalMemoryForApi,
   transformIntegrationToolsForApi,
+  mapInputProcessorsToApi,
 } from '../utils/agent-form-mappers';
 
 type CreateOptions = {
@@ -140,6 +141,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
         scorers: mapScorersToApi(values.scorers),
+        inputProcessors: mapInputProcessorsToApi(values.inputProcessors),
         skills: values.skills,
         workspace: values.workspace,
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
