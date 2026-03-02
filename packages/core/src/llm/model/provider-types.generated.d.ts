@@ -606,8 +606,6 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
     'gpt-5.3-codex',
-    'kimi-k2',
-    'kimi-k2-thinking',
     'kimi-k2.5',
     'minimax-m2.1',
     'minimax-m2.5',
@@ -1151,6 +1149,7 @@ export type ProviderModelsMap = {
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
     'google/gemini-3.1-pro-preview',
+    'google/gemini-3.1-pro-preview-customtools',
     'google/gemma-2-9b-it',
     'google/gemma-3-12b-it',
     'google/gemma-3-12b-it:free',
@@ -2150,9 +2149,8 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-6',
   ];
   readonly friendli: readonly [
-    'LGAI-EXAONE/EXAONE-4.0.1-32B',
-    'LGAI-EXAONE/K-EXAONE-236B-A23B',
     'MiniMaxAI/MiniMax-M2.1',
+    'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',

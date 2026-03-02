@@ -27,6 +27,7 @@ import {
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
+  handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleThemeCommand,
 } from './commands/index.js';
@@ -136,6 +137,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'review':
       await handleReviewCmd(buildCtx(), args);
+      return true;
+    case 'report-issue':
+      await handleReportIssueCmd(buildCtx(), args);
       return true;
     case 'setup':
       await handleSetupCommand(buildCtx());

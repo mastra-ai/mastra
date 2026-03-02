@@ -69,7 +69,7 @@ const claudeCodeMiddleware: LanguageModelMiddleware = {
  * - System prompts and instructions (rarely change)
  * - Conversation history up to the last message
  */
-const promptCacheMiddleware: LanguageModelMiddleware = {
+export const promptCacheMiddleware: LanguageModelMiddleware = {
   specificationVersion: 'v3',
   transformParams: async ({ params }) => {
     const prompt = [...params.prompt];

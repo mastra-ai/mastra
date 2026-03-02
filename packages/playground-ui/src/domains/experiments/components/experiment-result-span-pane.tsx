@@ -1,8 +1,10 @@
 'use client';
 
-import { BracesIcon } from 'lucide-react';
+import { BracesIcon, XIcon } from 'lucide-react';
 import { getShortId } from '@/ds/components/Text';
-import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
+import { Column } from '@/ds/components/Columns/column';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { Button } from '@/ds/components/Button';
 import { MainHeader } from '@/ds/components/MainHeader';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentTraceSpanDetails } from './experiment-trace-span-details';
@@ -27,17 +29,19 @@ export function ExperimentResultSpanPane({
 
   return (
     <>
-      <ListAndDetails.ColumnToolbar>
-        <ListAndDetails.NextPrevNavigation
+      <Column.Toolbar>
+        <PrevNextNav
           onPrevious={onPrevious}
           onNext={onNext}
           previousAriaLabel="View previous span details"
           nextAriaLabel="View next span details"
         />
-        <ListAndDetails.CloseButton onClick={onClose} aria-label="Close span details" />
-      </ListAndDetails.ColumnToolbar>
+        <Button variant="standard" size="default" onClick={onClose} aria-label="Close span details">
+          <XIcon />
+        </Button>
+      </Column.Toolbar>
 
-      <ListAndDetails.ColumnContent>
+      <Column.Content>
         <MainHeader withMargins={false}>
           <MainHeader.Column>
             <MainHeader.Title size="smaller">
@@ -47,7 +51,7 @@ export function ExperimentResultSpanPane({
         </MainHeader>
 
         <ExperimentTraceSpanDetails span={span} />
-      </ListAndDetails.ColumnContent>
+      </Column.Content>
     </>
   );
 }
