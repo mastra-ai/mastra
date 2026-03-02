@@ -2417,10 +2417,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       });
     }
 
-    if (resolvedHarnessTools) {
-      return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
+    // Resolve user-configured toolsets (provider-scoped tool groups)
+    let resolvedToolsets;
+    if (this.config.toolsets) {
+      const toolsets =
+        typeof this.config.toolsets === 'function'
+          ? await this.config.toolsets(this.getCurrentModelId(), requestContext)
+          : this.config.toolsets;
+      if (toolsets) {
+        resolvedToolsets = toolsets;
+      }
     }
-    return { harnessBuiltIn: builtInTools };
+
+    const result = resolvedHarnessTools
+      ? { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools }
+      : { harnessBuiltIn: builtInTools };
+
+    return resolvedToolsets ? { ...result, ...resolvedToolsets } : result;
   }
 
   /**

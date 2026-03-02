@@ -1,9 +1,10 @@
 import type { z } from 'zod';
 
 import type { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraMemory } from '../memory/memory';
+import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
@@ -136,6 +137,32 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * the request context and returns tools per-request.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+
+  /**
+   * Provider-scoped tool groups passed through to the AI SDK as toolsets.
+   * Use this for provider-defined tools like Anthropic's native web search
+   * (e.g., `{ anthropic: { web_search: webSearchTool } }`).
+   *
+   * Can be a static toolsets object or a function that receives the current
+   * model ID and request context, returning the appropriate toolsets for
+   * that provider.
+   *
+   * @example
+   * ```ts
+   * toolsets: (modelId) => {
+   *   if (modelId.startsWith('anthropic/'))
+   *     return { anthropic: { web_search: anthropic.tools.webSearch_20250305() } };
+   *   if (modelId.startsWith('openai/'))
+   *     return { openai: { web_search: openai.tools.webSearch() } };
+   * }
+   * ```
+   */
+  toolsets?:
+    | ToolsetsInput
+    | ((
+        modelId: string,
+        requestContext: RequestContext,
+      ) => ToolsetsInput | undefined | Promise<ToolsetsInput | undefined>);
 
   /**
    * Workspace configuration.
