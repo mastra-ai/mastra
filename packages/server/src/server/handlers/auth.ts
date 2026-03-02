@@ -8,16 +8,14 @@
  * - Logout users
  */
 
-import { buildCapabilities } from '@mastra/core/auth';
 import type {
   IUserProvider,
   ISessionProvider,
   ISSOProvider,
   ICredentialsProvider,
-  IRBACProvider,
-  EEUser,
   SSOCallbackResult,
 } from '@mastra/core/auth';
+import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { HTTPException } from '../http-exception';
@@ -31,6 +29,22 @@ import {
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+
+type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any }) => Promise<any>;
+let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
+function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
+  if (!_buildCapabilitiesPromise) {
+    _buildCapabilitiesPromise = import('@mastra/core/auth/ee')
+      .then(m => m.buildCapabilities as BuildCapabilitiesFn)
+      .catch(() => {
+        console.error(
+          '[@mastra/server] EE auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _buildCapabilitiesPromise;
+}
 
 /**
  * Helper to get auth provider from Mastra instance.
@@ -97,7 +111,10 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
-      // Use buildCapabilities from core/ee
+      const buildCapabilities = await loadBuildCapabilities();
+      if (!buildCapabilities) {
+        return { enabled: false, login: null };
+      }
       const capabilities = await buildCapabilities(auth, request, { rbac });
 
       return capabilities;

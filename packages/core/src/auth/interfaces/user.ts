@@ -1,12 +1,12 @@
 /**
- * User provider interface for EE authentication.
+ * User provider interface for authentication.
  * Enables user awareness in Studio.
  */
 
 /**
- * Base user type for EE authentication.
+ * Base user type for authentication.
  */
-export interface EEUser {
+export interface User {
   /** Unique user identifier */
   id: string;
   /** User email address */
@@ -15,8 +15,6 @@ export interface EEUser {
   name?: string;
   /** Avatar URL */
   avatarUrl?: string;
-  /** Additional metadata */
-  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -42,7 +40,7 @@ export interface EEUser {
  * }
  * ```
  */
-export interface IUserProvider<TUser extends EEUser = EEUser> {
+export interface IUserProvider<TUser extends User = User> {
   /**
    * Get current user from request (session cookie, token, etc.)
    *

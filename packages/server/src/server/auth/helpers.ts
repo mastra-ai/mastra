@@ -1,4 +1,4 @@
-import type { IRBACProvider, EEUser } from '@mastra/core/auth';
+import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
 

@@ -1,7 +1,8 @@
 /**
  * @mastra/core/auth
  *
- * Enterprise authentication capabilities for Mastra.
+ * Authentication capabilities for Mastra.
+ * For enterprise features (RBAC, ACL, license validation), see `@mastra/core/auth/ee`.
  *
  * @packageDocumentation
  */
@@ -9,11 +10,5 @@
 // Interfaces
 export * from './interfaces';
 
-// Capabilities
-export * from './capabilities';
-
-// License
-export { validateLicense, isLicenseValid, isEELicenseValid, isFeatureEnabled, type LicenseInfo } from './license';
-
-// Default implementations
+// Default implementations (session providers)
 export * from './defaults';

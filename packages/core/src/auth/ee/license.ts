@@ -122,3 +122,26 @@ export function clearLicenseCache(): void {
   cachedLicense = null;
   cacheTimestamp = 0;
 }
+
+/**
+ * Check if running in a development/testing environment.
+ * In dev, EE features work without a license per the ee/LICENSE terms.
+ */
+export function isDevEnvironment(): boolean {
+  return (
+    process.env['MASTRA_DEV'] === 'true' ||
+    process.env['MASTRA_DEV'] === '1' ||
+    (process.env['NODE_ENV'] !== 'production' && process.env['NODE_ENV'] !== 'prod')
+  );
+}
+
+/**
+ * Check if EE features should be active.
+ * Returns true if running in dev/test environment (always allowed) or if a valid license is present.
+ */
+export function isEEEnabled(): boolean {
+  if (isDevEnvironment()) {
+    return true;
+  }
+  return isLicenseValid();
+}
