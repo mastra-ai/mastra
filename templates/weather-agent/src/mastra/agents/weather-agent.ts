@@ -1,16 +1,7 @@
 import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools';
-import { scorers } from '../scorers';
-import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-
-// Initialize memory with LibSQLStore for persistence
-const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'weather-agent-memory-storage',
-    url: 'file:../mastra.db', // Or your database URL
-  }),
-});
+import { weatherTool } from '../tools/weather-tool';
+import { scorers } from '../scorers/weather-scorer';
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -29,9 +20,8 @@ export const weatherAgent = new Agent({
 
       Use the weatherTool to fetch current weather data.
 `,
-  model: process.env.MODEL || 'openai/gpt-4o',
+  model: 'openai/gpt-4o',
   tools: { weatherTool },
-  memory,
   scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
@@ -55,4 +45,5 @@ export const weatherAgent = new Agent({
       },
     },
   },
+  memory: new Memory(),
 });

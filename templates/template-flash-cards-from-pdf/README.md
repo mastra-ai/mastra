@@ -10,14 +10,6 @@ This template shows how you can generate images with an agent, and how to build 
 
 This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
-## Features
-
-- Self-evaluating research loops that identify gaps and keep searching
-- Human-in-the-loop with suspend/resume for clarifying questions
-- Multiple specialized agents coordinating on a single task
-- Web search and page scraping via Exa
-- Sourced answers with citations
-
 ## Prerequisites
 
 - [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
