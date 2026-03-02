@@ -205,6 +205,31 @@ describe('Structured Output Processor Mode — errorStrategy forwarding (repro)'
     expect(object).toBeUndefined();
   }, 30000);
 
+  it('should throw from result.object with strict strategy when validation fails (not return undefined)', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'Describe colors.',
+      model: mainModel,
+    });
+
+    const result = await agent.stream('Tell me about the sky color.', {
+      structuredOutput: {
+        schema: colorSchema,
+        model: createSchemaInvalidModel(),
+        errorStrategy: 'strict',
+      },
+      modelSettings: { maxRetries: 0 },
+    });
+
+    const text = await result.text;
+    expect(text).toContain('beautiful shade of blue');
+
+    // With the fix: strict mode now rejects result.object with a meaningful error
+    // instead of silently resolving to undefined (which caused ZodError when users called schema.parse(undefined))
+    await expect(result.object).rejects.toThrow();
+  }, 30000);
+
   it('should use fallback value when inner model throws entirely', async () => {
     const throwingModel = new MockLanguageModelV2({
       doStream: async () => {

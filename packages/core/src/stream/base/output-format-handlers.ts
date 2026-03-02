@@ -666,6 +666,12 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         object: structuredOutput?.fallbackValue,
       });
     } else {
+      // strict mode: always log for visibility so users can diagnose why result.object is undefined
+      if (logger) {
+        logger.warn(`[Mastra] Structured output validation failed: ${error.message}`);
+      } else {
+        console.warn(`[Mastra] Structured output validation failed: ${error.message}`);
+      }
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',
