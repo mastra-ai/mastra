@@ -29,7 +29,7 @@ function isEmptyZodObject(schema: unknown): boolean {
 
   const intersection = getIntersection(schema);
   if (intersection) {
-    return isEmptyZodObject(intersection.left) || isEmptyZodObject(intersection.right);
+    return isEmptyZodObject(intersection.left) && isEmptyZodObject(intersection.right);
   }
 
   return false;

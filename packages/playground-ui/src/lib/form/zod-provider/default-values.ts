@@ -24,6 +24,10 @@ export function getDefaultValueInZodStack(schema: any): any {
     return getDefaultValueInZodStack(def.innerType);
   }
 
+  if ('schema' in def) {
+    return getDefaultValueInZodStack(def.schema);
+  }
+
   // ZodObject — recurse into shape
   const shape = getShape(schema);
   if (shape && !('left' in def)) {

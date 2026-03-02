@@ -20,6 +20,9 @@ export function isV4(schema: AnySchema): boolean {
  * v4: schema._zod.def
  */
 export function getDef(schema: AnySchema): any {
+  if (schema == null || typeof schema !== 'object') {
+    return undefined;
+  }
   if (isV4(schema)) {
     return schema._zod.def;
   }
@@ -190,23 +193,6 @@ export function hasDateTimeCheck(checks: any[]): boolean {
     // v3 format
     return check.kind === 'datetime';
   });
-}
-
-/**
- * Check if a schema is an instance of a particular type name.
- * Works across both v3 and v4 by checking constructor name and internal typeName.
- */
-export function isSchemaType(schema: AnySchema, typeName: string): boolean {
-  const constructorName = schema?.constructor?.name;
-  if (constructorName === typeName) return true;
-
-  // v3: check _def.typeName
-  if (schema?._def?.typeName === `Zod${typeName.replace('Zod', '')}`) return true;
-
-  // v4: check _zod.def.type or constructor
-  if (schema?._zod?.def?.type === typeName.toLowerCase()) return true;
-
-  return false;
 }
 
 /**

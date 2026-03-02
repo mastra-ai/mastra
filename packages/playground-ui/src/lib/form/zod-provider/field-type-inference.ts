@@ -6,9 +6,12 @@ export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
     return fieldConfig.fieldType;
   }
 
-  const constructorName = schema?.constructor?.name;
+  //starts with an underscore, so we want to pick from second character
+  const constructorName = schema?.constructor?.name ? schema.constructor.name.slice(1) : undefined;
   const def = getDef(schema);
-  const typeName = def?.typeName ?? constructorName;
+  const v4Type =
+    typeof def?.type === 'string' ? `Zod${def.type.charAt(0).toUpperCase()}${def.type.slice(1)}` : undefined;
+  const typeName = def?.typeName ?? v4Type ?? constructorName;
 
   if (typeName === 'ZodObject') return 'object';
   if (typeName === 'ZodIntersection') return 'object';

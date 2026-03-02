@@ -1,7 +1,5 @@
 ---
 '@mastra/playground-ui': patch
-'mastra': patch
-'create-mastra': patch
 ---
 
 Add dual Zod v3/v4 compatibility to playground-ui form system
