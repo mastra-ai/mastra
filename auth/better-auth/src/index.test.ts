@@ -215,7 +215,7 @@ describe('MastraAuthBetterAuth', () => {
 
     it('should use custom cookiePrefix when converting Bearer token to cookie', async () => {
       const customAuth = { ...mockAuth, options: { advanced: { cookiePrefix: 'myapp' } } };
-      mockAuth.api.getSession.mockResolvedValue({
+      customAuth.api.getSession.mockResolvedValue({
         session: mockSession,
         user: mockUser,
       });
@@ -226,7 +226,7 @@ describe('MastraAuthBetterAuth', () => {
       });
       await auth.authenticateToken('my-bearer-token', mockRequest);
 
-      const call = mockAuth.api.getSession.mock.calls[0][0];
+      const call = customAuth.api.getSession.mock.calls[0][0];
       expect(call.headers.get('Cookie')).toBe('myapp.session_token=my-bearer-token');
     });
 

@@ -70,7 +70,10 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
     }
 
     this.auth = options.auth;
-    const prefix = (this.auth as any).options?.advanced?.cookiePrefix || 'better-auth';
+    // Better Auth does not publicly export its options type, so we use a
+    // minimal inline interface instead of `as any` to document the assumed shape.
+    const authWithOptions = this.auth as unknown as { options?: { advanced?: { cookiePrefix?: string } } };
+    const prefix = authWithOptions.options?.advanced?.cookiePrefix ?? 'better-auth';
     this.sessionCookieName = `${prefix}.session_token`;
 
     this.registerOptions(options);
