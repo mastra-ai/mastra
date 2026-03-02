@@ -9,7 +9,7 @@ packages:
 
 # Message History
 
-Message history is the most basic and important form of memory. It gives the LLM a view of recent messages in the context window, enabling your agent to reference earlier exchanges and respond coherently. 
+Message history is the most basic and important form of memory. It gives the LLM a view of recent messages in the context window, enabling your agent to reference earlier exchanges and respond coherently.
 
 You can also retrieve message history to display past conversations in your UI.
 
@@ -28,73 +28,70 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 Message history requires a storage adapter to persist conversations. Configure storage on your Mastra instance if you haven't already:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
-});
+})
 ```
 
 Give your agent a `Memory`:
 
 ```typescript title="src/mastra/agents/your-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  id: "test-agent",
+  id: 'test-agent',
   memory: new Memory({
     options: {
       lastMessages: 10,
     },
   }),
-});
+})
 ```
 
 When you call the agent, messages are automatically saved to the database. You can specify a `threadId`, `resourceId`, and optional `metadata`:
 
 <Tabs>
   <TabItem value="generate" label="Generate">
-
-```typescript
-await agent.generate("Hello", {
-  memory: {
-    thread: {
-      id: "thread-123",
-      title: "Support conversation",
-      metadata: { category: "billing" },
-    },
-    resource: "user-456",
-  },
-});
-```
-
+    ```typescript
+    await agent.generate('Hello', {
+      memory: {
+        thread: {
+          id: 'thread-123',
+          title: 'Support conversation',
+          metadata: { category: 'billing' },
+        },
+        resource: 'user-456',
+      },
+    })
+    ```
   </TabItem>
+
   <TabItem value="stream" label="Stream">
-
-```typescript
-await agent.stream("Hello", {
-  memory: {
-    thread: {
-      id: "thread-123",
-      title: "Support conversation",
-      metadata: { category: "billing" },
-    },
-    resource: "user-456",
-  },
-});
-```
-
+    ```typescript
+    await agent.stream('Hello', {
+      memory: {
+        thread: {
+          id: 'thread-123',
+          title: 'Support conversation',
+          metadata: { category: 'billing' },
+        },
+        resource: 'user-456',
+      },
+    })
+    ```
   </TabItem>
 </Tabs>
 
 :::info
 
-Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class). 
+Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class).
 
 :::
 
@@ -108,8 +105,8 @@ There are two ways to use this history:
 To access memory functions for querying, cloning, or deleting threads and messages, call `getMemory()` on an agent:
 
 ```typescript
-const agent = mastra.getAgent("weatherAgent");
-const memory = await agent.getMemory();
+const agent = mastra.getAgent('weatherAgent')
+const memory = await agent.getMemory()
 ```
 
 The `Memory` instance gives you access to functions for listing threads, recalling messages, cloning conversations, and more.
@@ -128,22 +125,22 @@ Use [`listThreads()`](/reference/memory/listThreads) to retrieve threads for a r
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: "user-123" },
+  filter: { resourceId: 'user-123' },
   perPage: false,
-});
+})
 ```
 
 Paginate through threads:
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: "user-123" },
+  filter: { resourceId: 'user-123' },
   page: 0,
   perPage: 10,
-});
+})
 
-console.log(result.threads); // thread objects
-console.log(result.hasMore); // more pages available?
+console.log(result.threads) // thread objects
+console.log(result.hasMore) // more pages available?
 ```
 
 You can also filter by metadata and control sort order:
@@ -151,17 +148,17 @@ You can also filter by metadata and control sort order:
 ```typescript
 const result = await memory.listThreads({
   filter: {
-    resourceId: "user-123",
-    metadata: { status: "active" },
+    resourceId: 'user-123',
+    metadata: { status: 'active' },
   },
-  orderBy: { field: "createdAt", direction: "DESC" },
-});
+  orderBy: { field: 'createdAt', direction: 'DESC' },
+})
 ```
 
 To fetch a single thread by ID, use [`getThreadById()`](/reference/memory/getThreadById):
 
 ```typescript
-const thread = await memory.getThreadById({ threadId: "thread-123" });
+const thread = await memory.getThreadById({ threadId: 'thread-123' })
 ```
 
 ### Messages
@@ -172,70 +169,70 @@ Basic recall returns all messages from a thread:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   perPage: false,
-});
+})
 ```
 
 Paginate through messages:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   page: 0,
   perPage: 50,
-});
+})
 ```
 
 Filter by date range:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   filter: {
     dateRange: {
-      start: new Date("2025-01-01"),
-      end: new Date("2025-06-01"),
+      start: new Date('2025-01-01'),
+      end: new Date('2025-06-01'),
     },
   },
-});
+})
 ```
 
 Fetch a single message by ID:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
-  include: [{ id: "msg-123" }],
-});
+  threadId: 'thread-123',
+  include: [{ id: 'msg-123' }],
+})
 ```
 
 Fetch multiple messages by ID with surrounding context:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
+  threadId: 'thread-123',
   include: [
-    { id: "msg-123" },
+    { id: 'msg-123' },
     {
-      id: "msg-456",
+      id: 'msg-456',
       withPreviousMessages: 3,
       withNextMessages: 1,
     },
   ],
-});
+})
 ```
 
 Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup):
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: "thread-123",
-  vectorSearchString: "project deadline discussion",
+  threadId: 'thread-123',
+  vectorSearchString: 'project deadline discussion',
   threadConfig: {
     semanticRecall: true,
   },
-});
+})
 ```
 
 ### UI format
@@ -248,12 +245,12 @@ Thread cloning creates a copy of an existing thread with its messages. This is u
 
 ```typescript
 const { thread, clonedMessages } = await memory.cloneThread({
-  sourceThreadId: "thread-123",
-  title: "Branched conversation",
-});
+  sourceThreadId: 'thread-123',
+  title: 'Branched conversation',
+})
 ```
 
-You can filter which messages get cloned (by count or date range), specify custom thread IDs, and use utility methods to inspect clone relationships. 
+You can filter which messages get cloned (by count or date range), specify custom thread IDs, and use utility methods to inspect clone relationships.
 
 See [`cloneThread()`](/reference/memory/cloneThread) and [clone utilities](/reference/memory/clone-utilities) for the full API.
 

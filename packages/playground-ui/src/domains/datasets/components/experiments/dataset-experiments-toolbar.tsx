@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/ds/components/Button';
-import { Badge } from '@/ds/components/Badge';
+import { Chip } from '@/ds/components/Chip';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { SelectField } from '@/ds/components/FormFields';
 import { Icon } from '@/ds/icons/Icon';
@@ -54,7 +54,9 @@ export function DatasetExperimentsToolbar({
       <div className="flex items-center justify-end gap-4 w-full">
         <div className="flex gap-5">
           <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
-            <Badge className="text-ui-md">{selectedCount}</Badge>
+            <Chip size="large" color={selectedCount < 2 ? 'red' : 'green'}>
+              {selectedCount}
+            </Chip>
             <span>of 2 experiments selected</span>
             <MoveRightIcon />
           </div>

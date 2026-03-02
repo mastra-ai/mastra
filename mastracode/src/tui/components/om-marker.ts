@@ -4,7 +4,7 @@
  */
 
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")
@@ -86,7 +86,7 @@ function formatMarker(data: OMMarkerData): string {
   switch (data.type) {
     case 'om_observation_start': {
       const tokens = data.tokensToObserve > 0 ? ` ~${formatTokens(data.tokensToObserve)} tokens` : '';
-      return fg('muted', `  🧠 ${label} in progress${tokens}...`);
+      return theme.fg('muted', `  🧠 ${label} in progress${tokens}...`);
     }
     case 'om_observation_end': {
       const observed = formatTokens(data.tokensObserved);
@@ -97,15 +97,15 @@ function formatMarker(data: OMMarkerData): string {
           : '';
       const duration = (data.durationMs / 1000).toFixed(1);
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return fg('success', `  🧠 Observed: ${observed} → ${compressed} tokens${ratioStr} in ${duration}s ✓`);
+      return theme.fg('success', `  🧠 Observed: ${observed} → ${compressed} tokens${ratioStr} in ${duration}s ✓`);
     }
     case 'om_observation_failed': {
       const tokens = data.tokensAttempted ? ` (${formatTokens(data.tokensAttempted)} tokens)` : '';
-      return fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
+      return theme.fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
     }
     case 'om_buffering_start': {
       const tokens = data.tokensToBuffer > 0 ? ` ~${formatTokens(data.tokensToBuffer)} tokens` : '';
-      return fg('muted', `  ⟳ Buffering ${label.toLowerCase()}${tokens}...`);
+      return theme.fg('muted', `  ⟳ Buffering ${label.toLowerCase()}${tokens}...`);
     }
     case 'om_buffering_end': {
       const input = formatTokens(data.tokensBuffered);
@@ -119,16 +119,16 @@ function formatMarker(data: OMMarkerData): string {
       const output = formatTokens(outputTokens);
       const ratio =
         data.tokensBuffered > 0 && outputTokens > 0 ? ` (${Math.round(data.tokensBuffered / outputTokens)}x)` : '';
-      return fg('success', `  ✓ Buffered ${label.toLowerCase()}: ${input} → ${output} tokens${ratio}`);
+      return theme.fg('success', `  ✓ Buffered ${label.toLowerCase()}: ${input} → ${output} tokens${ratio}`);
     }
     case 'om_buffering_failed': {
-      return fg('error', `  ✗ Buffering ${label.toLowerCase()} failed: ${data.error}`);
+      return theme.fg('error', `  ✗ Buffering ${label.toLowerCase()} failed: ${data.error}`);
     }
     case 'om_activation': {
       const kind = data.operationType === 'reflection' ? 'reflection' : 'observations';
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      return fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+      return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
     }
   }
 }

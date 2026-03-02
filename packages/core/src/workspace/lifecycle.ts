@@ -38,15 +38,7 @@ export interface Lifecycle<TInfo = unknown> {
    */
   destroy?(): void | Promise<void>;
 
-  /**
-   * Check if ready for operations.
-   *
-   * Returns true if the provider is ready to handle requests.
-   * Use for checking:
-   * - Connection health
-   * - Instance status
-   * - Resource availability
-   */
+  /** @deprecated Use `status === 'running'` instead. */
   isReady?(): boolean | Promise<boolean>;
 
   /**

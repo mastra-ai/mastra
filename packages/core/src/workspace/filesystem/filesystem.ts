@@ -19,6 +19,7 @@
  * ```
  */
 
+import type { RequestContext } from '../../request-context';
 import type { FilesystemLifecycle, ProviderStatus } from '../lifecycle';
 import type { FilesystemMountConfig, FilesystemIcon } from './mount';
 
@@ -191,9 +192,10 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    * Get instructions describing how this filesystem works.
    * Used in tool descriptions to help agents understand path semantics.
    *
+   * @param opts - Optional options including request context for per-request customisation
    * @returns A string describing how to use this filesystem
    */
-  getInstructions?(): string;
+  getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   /**
    * Get mount configuration for this filesystem.
@@ -276,6 +278,19 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
   // ---------------------------------------------------------------------------
   // Path Operations
   // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   *
+   * Used by LSP and other features that need the real filesystem location
+   * of a file. The resolution depends on the filesystem's containment mode:
+   * - `contained: true` — `/file.ts` resolves to `basePath/file.ts`
+   * - `contained: false` — `/file.ts` stays as `/file.ts` (real host path)
+   *
+   * Returns `undefined` if the filesystem doesn't support disk-path resolution
+   * (e.g., remote/in-memory filesystems).
+   */
+  resolveAbsolutePath?(path: string): string | undefined;
 
   /**
    * Check if a path exists.

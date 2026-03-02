@@ -825,7 +825,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           thread: randomUUID(),
           resource: randomUUID(),
         };
-        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+        const stream = await agentOne.stream('Find the name, email, age and profession of the user - Dero Israel', {
           memory,
         });
         for await (const _chunk of stream.fullStream) {

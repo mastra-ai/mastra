@@ -153,6 +153,14 @@ export function detectProject(projectPath: string): ProjectInfo {
 }
 
 /**
+ * Get the current git branch for a given directory.
+ * Lightweight alternative to detectProject() for refreshing just the branch.
+ */
+export function getCurrentGitBranch(cwd: string): string | undefined {
+  return git('rev-parse --abbrev-ref HEAD', cwd);
+}
+
+/**
  * Get the application data directory for mastracode
  * - macOS: ~/Library/Application Support/mastracode
  * - Linux: ~/.local/share/mastracode
@@ -191,63 +199,159 @@ export function getDatabasePath(): string {
   return path.join(getAppDataDir(), 'mastra.db');
 }
 
+import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
+
 /**
- * Storage configuration for LibSQLStore.
- * Either a local file URL or a remote Turso URL with auth token.
+ * LibSQL storage configuration.
  */
-export interface StorageConfig {
+export interface LibSQLStorageConfig {
+  backend: 'libsql';
   url: string;
   authToken?: string;
   isRemote: boolean;
 }
 
 /**
- * Get the storage configuration for LibSQLStore.
+ * PostgreSQL storage configuration.
+ */
+export interface PgStorageConfig {
+  backend: 'pg';
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  schemaName?: string;
+  disableInit?: boolean;
+  skipDefaultIndexes?: boolean;
+}
+
+/**
+ * Resolved storage configuration for either backend.
+ */
+export type StorageConfig = LibSQLStorageConfig | PgStorageConfig;
+
+/**
+ * Get the resolved storage configuration.
  *
  * Priority (highest to lowest):
- *   1. Environment variables: MASTRA_DB_URL + MASTRA_DB_AUTH_TOKEN
- *   2. Project config: .mastracode/database.json
- *   3. Global config: ~/.mastracode/database.json
- *   4. Local file database (default)
+ *   1. Environment variables: MASTRA_STORAGE_BACKEND + backend-specific vars
+ *   2. Global settings (from /settings): settings.storage
+ *   3. Legacy config files: .mastracode/database.json (LibSQL only)
+ *   4. Local file database (LibSQL default)
+ *
+ * For PG, the env vars are:
+ *   MASTRA_STORAGE_BACKEND=pg
+ *   MASTRA_PG_CONNECTION_STRING or MASTRA_PG_HOST/PORT/DATABASE/USER/PASSWORD
+ *   MASTRA_PG_SCHEMA_NAME (optional)
+ *
+ * For LibSQL, the legacy env vars still work:
+ *   MASTRA_DB_URL + MASTRA_DB_AUTH_TOKEN
  */
-export function getStorageConfig(projectDir?: string): StorageConfig {
-  // 1. Environment variables
-  if (process.env.MASTRA_DB_URL) {
+export function getStorageConfig(projectDir?: string, storageSettings?: StorageSettings): StorageConfig {
+  // 1. Environment variable — explicit backend selection
+  const envBackend = process.env.MASTRA_STORAGE_BACKEND as StorageBackend | undefined;
+
+  if (envBackend === 'pg') {
+    return resolvePgFromEnv();
+  }
+
+  // Legacy LibSQL env vars (MASTRA_DB_URL) — treat as explicit libsql
+  if (envBackend === 'libsql' || process.env.MASTRA_DB_URL) {
+    return resolveLibSQLFromEnv();
+  }
+
+  // 2. Global settings (from /settings)
+  if (storageSettings && storageSettings.backend === 'pg') {
+    return resolvePgFromSettings(storageSettings);
+  }
+
+  if (storageSettings && storageSettings.backend === 'libsql' && storageSettings.libsql.url) {
     return {
-      url: process.env.MASTRA_DB_URL,
-      authToken: process.env.MASTRA_DB_AUTH_TOKEN,
-      isRemote: !process.env.MASTRA_DB_URL.startsWith('file:'),
+      backend: 'libsql',
+      url: storageSettings.libsql.url,
+      authToken: storageSettings.libsql.authToken,
+      isRemote: !storageSettings.libsql.url.startsWith('file:'),
     };
   }
 
-  // 2. Project-level config
+  // 3. Legacy project/global config files (.mastracode/database.json)
   if (projectDir) {
     const projectConfig = loadDatabaseConfig(path.join(projectDir, '.mastracode', 'database.json'));
     if (projectConfig) return projectConfig;
   }
-
-  // 3. Global config
   const globalConfig = loadDatabaseConfig(path.join(os.homedir(), '.mastracode', 'database.json'));
   if (globalConfig) return globalConfig;
 
-  // 4. Default: local file database
+  // 4. Default: local LibSQL file database
   return {
+    backend: 'libsql',
     url: `file:${getDatabasePath()}`,
     isRemote: false,
   };
 }
 
+function resolveLibSQLFromEnv(): LibSQLStorageConfig {
+  const url = process.env.MASTRA_DB_URL!;
+  return {
+    backend: 'libsql',
+    url,
+    authToken: process.env.MASTRA_DB_AUTH_TOKEN,
+    isRemote: !url.startsWith('file:'),
+  };
+}
+
+function resolvePgFromEnv(): PgStorageConfig {
+  const connectionString = process.env.MASTRA_PG_CONNECTION_STRING;
+  if (connectionString) {
+    return {
+      backend: 'pg',
+      connectionString,
+      schemaName: process.env.MASTRA_PG_SCHEMA_NAME,
+    };
+  }
+
+  // Host/port style
+  return {
+    backend: 'pg',
+    host: process.env.MASTRA_PG_HOST,
+    port: process.env.MASTRA_PG_PORT ? parseInt(process.env.MASTRA_PG_PORT, 10) : undefined,
+    database: process.env.MASTRA_PG_DATABASE,
+    user: process.env.MASTRA_PG_USER,
+    password: process.env.MASTRA_PG_PASSWORD,
+    schemaName: process.env.MASTRA_PG_SCHEMA_NAME,
+  };
+}
+
+function resolvePgFromSettings(settings: StorageSettings): PgStorageConfig {
+  const pg = settings.pg;
+  return {
+    backend: 'pg',
+    connectionString: pg.connectionString,
+    host: pg.host,
+    port: pg.port,
+    database: pg.database,
+    user: pg.user,
+    password: pg.password,
+    schemaName: pg.schemaName,
+    disableInit: pg.disableInit,
+    skipDefaultIndexes: pg.skipDefaultIndexes,
+  };
+}
+
 /**
- * Load database config from a JSON file.
+ * Load database config from a legacy JSON file.
  * Expected format: { "url": "libsql://...", "authToken": "..." }
  */
-function loadDatabaseConfig(filePath: string): StorageConfig | null {
+function loadDatabaseConfig(filePath: string): LibSQLStorageConfig | null {
   try {
     if (!fs.existsSync(filePath)) return null;
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
     if (typeof parsed?.url === 'string' && parsed.url) {
       return {
+        backend: 'libsql',
         url: parsed.url,
         authToken: typeof parsed.authToken === 'string' ? parsed.authToken : undefined,
         isRemote: !parsed.url.startsWith('file:'),

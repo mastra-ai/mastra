@@ -50,14 +50,14 @@ Configure the Vite plugins:
 ```typescript title="vite.config.ts" {3-4,7-12}
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from "path"
+import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
 })
@@ -66,37 +66,35 @@ export default defineConfig({
 Replace everything in `src/index.css` with the following:
 
 ```css title="src/index.css"
-@import "tailwindcss";
+@import 'tailwindcss';
 ```
 
 Add these `compilerOptions` to `tsconfig.json`:
 
-```ts title="tsconfig.json"
+```jsonc title="tsconfig.json"
 {
   // ...
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
+      "@/*": ["./src/*"],
+    },
+  },
 }
 ```
 
 Edit `tsconfig.app.json` to resolve paths:
 
-```ts title="tsconfig.app.json"
+```jsonc title="tsconfig.app.json"
 {
   "compilerOptions": {
     // ...
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+      "@/*": ["./src/*"],
+    },
     // ...
-  }
+  },
 }
 ```
 
@@ -110,9 +108,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your chat UI in the next steps.
 
@@ -137,20 +135,20 @@ This downloads the entire AI Elements UI component library into a `@/components/
 Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](/reference/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
 
 ```ts title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core/mastra'
 // Existing imports...
-import { chatRoute } from "@mastra/ai-sdk"
+import { chatRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
   // Existing config...
   server: {
     apiRoutes: [
       chatRoute({
-        path: '/chat/:agentId'
-      })
-    ]
-  }
-});
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+})
 ```
 
 ## Add the chat UI
@@ -158,70 +156,58 @@ export const mastra = new Mastra({
 Replace the `src/App.tsx` file to create a chat interface:
 
 ```tsx title="src/App.tsx"
-import * as React from 'react';
-import { DefaultChatTransport, type ToolUIPart } from 'ai';
-import { useChat } from '@ai-sdk/react';
+import * as React from 'react'
+import { DefaultChatTransport, type ToolUIPart } from 'ai'
+import { useChat } from '@ai-sdk/react'
 
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
-} from '@/components/ai-elements/prompt-input';
+} from '@/components/ai-elements/prompt-input'
 
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
+} from '@/components/ai-elements/conversation'
 
-import {
-  Message,
-  MessageContent,
-  MessageResponse
-} from '@/components/ai-elements/message';
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from '@/components/ai-elements/tool';
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 
 export default function App() {
-  const [input, setInput] = React.useState<string>('');
+  const [input, setInput] = React.useState<string>('')
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: 'http://localhost:4111/chat/weather-agent',
     }),
-  });
+  })
 
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input.trim()) return
 
-    sendMessage({ text: input });
-    setInput('');
-  };
+    sendMessage({ text: input })
+    setInput('')
+  }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 relative size-full h-screen">
-      <div className="flex flex-col h-full">
+    <div className="relative mx-auto size-full h-screen max-w-4xl p-6">
+      <div className="flex h-full flex-col">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message) => (
+            {messages.map(message => (
               <div key={message.id}>
                 {message.parts?.map((part, i) => {
                   if (part.type === 'text') {
                     return (
-                      <Message
-                        key={`${message.id}-${i}`}
-                        from={message.role}>
-                          <MessageContent>
-                            <MessageResponse>{part.text}</MessageResponse>
-                          </MessageContent>
+                      <Message key={`${message.id}-${i}`} from={message.role}>
+                        <MessageContent>
+                          <MessageResponse>{part.text}</MessageResponse>
+                        </MessageContent>
                       </Message>
-                    );
+                    )
                   }
 
                   if (part.type?.startsWith('tool-')) {
@@ -240,10 +226,10 @@ export default function App() {
                           />
                         </ToolContent>
                       </Tool>
-                    );
+                    )
                   }
 
-                  return null;
+                  return null
                 })}
               </div>
             ))}
@@ -253,7 +239,7 @@ export default function App() {
         <PromptInput onSubmit={handleSubmit} className="mt-20">
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               className="md:leading-10"
               value={input}
               placeholder="Ask about the weather..."
@@ -263,7 +249,7 @@ export default function App() {
         </PromptInput>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -277,15 +263,15 @@ In order to test your agent with the chat interface, you need to run both the Ma
 
 1. Start the Mastra development server:
 
-    ```bash npm2yarn
-    npx mastra dev
-    ```
+   ```bash npm2yarn
+   npx mastra dev
+   ```
 1. In a separate terminal window, start the Vite development server:
 
-    ```bash npm2yarn
-    npm run dev
-    ```
-1. Open your application at http://localhost:5173
+   ```bash npm2yarn
+   npm run dev
+   ```
+1. Open your application at [http://localhost:5173](http://localhost:5173)
 1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps

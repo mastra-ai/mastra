@@ -12,48 +12,48 @@ The `getScorer()` method retrieves a specific scorer that was registered with th
 ## Usage Example
 
 ```typescript
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
 // Get a specific scorer by key
-const relevancyScorer = mastra.getScorer("relevancyScorer");
+const relevancyScorer = mastra.getScorer('relevancyScorer')
 
-const weatherAgent = mastra.getAgent("weatherAgent");
+const weatherAgent = mastra.getAgent('weatherAgent')
 
 // Use the scorer to evaluate an AI output
-await weatherAgent.generate("What is the weather in Rome", {
+await weatherAgent.generate('What is the weather in Rome', {
   scorers: {
     answerRelevancy: {
       scorer: relevancyScorer,
     },
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "key",
-      type: "string",
-      description:
-        "The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.",
-      isOptional: false,
-    },
-  ]}
+{
+name: "key",
+type: "string",
+description:
+"The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scorer",
-      type: "MastraScorer",
-      description:
-        "The MastraScorer instance associated with the provided key.",
-    },
-  ]}
+{
+name: "scorer",
+type: "MastraScorer",
+description:
+"The MastraScorer instance associated with the provided key.",
+},
+]}
 />
 
 ## Error Handling
@@ -65,10 +65,10 @@ This method throws a `MastraError` if:
 
 ```typescript
 try {
-  const scorer = mastra.getScorer("nonExistentScorer");
+  const scorer = mastra.getScorer('nonExistentScorer')
 } catch (error) {
-  if (error.id === "MASTRA_GET_SCORER_NOT_FOUND") {
-    console.log("Scorer not found, using default evaluation");
+  if (error.id === 'MASTRA_GET_SCORER_NOT_FOUND') {
+    console.log('Scorer not found, using default evaluation')
   }
 }
 ```

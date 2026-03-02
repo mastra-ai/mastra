@@ -16,6 +16,10 @@ function onCancel(message = 'Interrupted...'): never {
   process.exit(0);
 }
 
+function nonEmptyArray(arr: string[]): boolean {
+  return arr.filter(Boolean).length > 0;
+}
+
 function parseArguments(args: string[]): CliArgs {
   const parsedArgs = mri<{
     message: string;
@@ -115,6 +119,23 @@ async function main() {
   try {
     // Detect changed packages
     const changedPackages = await detectChangedPackages();
+
+    // No changes detected, exit early
+    if (changedPackages.length === 0) {
+      p.outro('No changed packages detected. Exiting.');
+      process.exit(0);
+    }
+
+    // Error early if --skipPrompt is used but no --major, --minor, or --patch flags are provided
+    if (parsedArgs.skipPrompt) {
+      const hasVersionBumps =
+        nonEmptyArray(parsedArgs.major) || nonEmptyArray(parsedArgs.minor) || nonEmptyArray(parsedArgs.patch);
+
+      if (!hasVersionBumps) {
+        p.cancel(`Please provide at least one of --major, --minor, or --patch flags when using --skipPrompt.`);
+        process.exit(1);
+      }
+    }
 
     // Prepare version bump inputs
     const versionBumpInputs = prepareVersionBumpInputs(changedPackages, parsedArgs);

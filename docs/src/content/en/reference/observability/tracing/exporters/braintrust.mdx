@@ -13,7 +13,7 @@ Sends Tracing data to Braintrust for eval and observability.
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new BraintrustExporter(config: BraintrustExporterConfig)
 ```
 
@@ -21,57 +21,58 @@ new BraintrustExporter(config: BraintrustExporterConfig)
 
 ```typescript
 interface BraintrustExporterConfig extends BaseExporterConfig {
-  apiKey?: string;
-  endpoint?: string;
-  projectName?: string;
-  tuningParameters?: Record<string, any>;
+  apiKey?: string
+  endpoint?: string
+  projectName?: string
+  tuningParameters?: Record<string, any>
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.",
-      required: false,
-    },
-    {
-      name: "projectName",
-      type: "string",
-      description: "Project name (default: 'mastra-tracing')",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "tuningParameters",
-      type: "Record<string, any>",
-      description: "Tuning parameters for Braintrust",
-      required: false,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.",
+required: false,
+},
+{
+name: "endpoint",
+type: "string",
+description: "Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.",
+required: false,
+},
+{
+name: "projectName",
+type: "string",
+description: "Project name (default: 'mastra-tracing')",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "tuningParameters",
+type: "Record<string, any>",
+description: "Tuning parameters for Braintrust",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -79,7 +80,7 @@ Exports a tracing event to Braintrust.
 
 ### export
 
-```typescript
+```typescript prettier:false
 async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
@@ -87,7 +88,7 @@ Batch exports spans to Braintrust.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -95,7 +96,7 @@ Force flushes any buffered spans to Braintrust without shutting down the exporte
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -106,31 +107,31 @@ Flushes pending data and shuts down the client.
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { BraintrustExporter } from "@mastra/braintrust";
+import { BraintrustExporter } from '@mastra/braintrust'
 
 // Reads from BRAINTRUST_API_KEY, BRAINTRUST_ENDPOINT
-const exporter = new BraintrustExporter();
+const exporter = new BraintrustExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { BraintrustExporter } from "@mastra/braintrust";
+import { BraintrustExporter } from '@mastra/braintrust'
 
 const exporter = new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY,
-  projectName: "my-ai-project",
-});
+  projectName: 'my-ai-project',
+})
 ```
 
 ## Span Type Mapping
 
-| Span Type                | Braintrust Type |
-| --------------------------- | --------------- |
-| `MODEL_GENERATION`          | `llm`           |
-| `MODEL_CHUNK`               | `llm`           |
-| `TOOL_CALL`                 | `tool`          |
-| `MCP_TOOL_CALL`             | `tool`          |
-| `WORKFLOW_CONDITIONAL_EVAL` | `function`      |
-| `WORKFLOW_WAIT_EVENT`       | `function`      |
-| All others                  | `task`          |
+| Span Type | Braintrust Type |
+| - | - |
+| `MODEL_GENERATION` | `llm` |
+| `MODEL_CHUNK` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_CONDITIONAL_EVAL` | `function` |
+| `WORKFLOW_WAIT_EVENT` | `function` |
+| All others | `task` |

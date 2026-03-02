@@ -30,95 +30,95 @@ npm install @mastra/koa@latest koa koa-bodyparser
 ## Usage example
 
 ```typescript title="server.ts"
-import Koa from 'koa';
-import bodyParser from 'koa-bodyparser';
-import { MastraServer } from '@mastra/koa';
-import { mastra } from './mastra';
+import Koa from 'koa'
+import bodyParser from 'koa-bodyparser'
+import { MastraServer } from '@mastra/koa'
+import { mastra } from './mastra'
 
-const app = new Koa();
-app.use(bodyParser());
+const app = new Koa()
+app.use(bodyParser())
 
-const server = new MastraServer({ app, mastra });
+const server = new MastraServer({ app, mastra })
 
-await server.init();
+await server.init()
 
 app.listen(3000, () => {
-  console.log('Server running on http://localhost:3000');
-});
+  console.log('Server running on http://localhost:3000')
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "app",
-      type: "Koa",
-      description: "Koa app instance",
-      isOptional: false,
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Mastra instance",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Route path prefix (e.g., `/api/v2`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "openapiPath",
-      type: "string",
-      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
-      isOptional: true,
-      defaultValue: "''",
-    },
-    {
-      name: "bodyLimitOptions",
-      type: "BodyLimitOptions",
-      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
-      description: "Request body size limits",
-      isOptional: true,
-    },
-    {
-      name: "streamOptions",
-      type: "StreamOptions",
-      typeDescription: "{ redact?: boolean }",
-      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
-      isOptional: true,
-      defaultValue: "{ redact: true }",
-    },
-    {
-      name: "customRouteAuthConfig",
-      type: "Map<string, boolean>",
-      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
-      isOptional: true,
-    },
-    {
-      name: "tools",
-      type: "ToolsInput",
-      typeDescription: "Record<string, ToolAction | VercelTool>",
-      description: "Available tools for the server",
-      isOptional: true,
-    },
-    {
-      name: "taskStore",
-      type: "InMemoryTaskStore",
-      description: "Task store for A2A (Agent-to-Agent) operations",
-      isOptional: true,
-    },
-    {
-      name: "mcpOptions",
-      type: "MCPOptions",
-      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "app",
+type: "Koa",
+description: "Koa app instance",
+isOptional: false,
+},
+{
+name: "mastra",
+type: "Mastra",
+description: "Mastra instance",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Route path prefix (e.g., `/api/v2`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "openapiPath",
+type: "string",
+description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+isOptional: true,
+defaultValue: "''",
+},
+{
+name: "bodyLimitOptions",
+type: "BodyLimitOptions",
+typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+description: "Request body size limits",
+isOptional: true,
+},
+{
+name: "streamOptions",
+type: "StreamOptions",
+typeDescription: "{ redact?: boolean }",
+description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+isOptional: true,
+defaultValue: "{ redact: true }",
+},
+{
+name: "customRouteAuthConfig",
+type: "Map<string, boolean>",
+description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+isOptional: true,
+},
+{
+name: "tools",
+type: "ToolsInput",
+typeDescription: "Record<string, ToolAction | VercelTool>",
+description: "Available tools for the server",
+isOptional: true,
+},
+{
+name: "taskStore",
+type: "InMemoryTaskStore",
+description: "Task store for A2A (Agent-to-Agent) operations",
+isOptional: true,
+},
+{
+name: "mcpOptions",
+type: "MCPOptions",
+typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
+isOptional: true,
+},
+]}
 />
 
 ## Error handling
@@ -126,22 +126,22 @@ app.listen(3000, () => {
 The Koa adapter propagates errors from route handlers up through Koa's middleware chain, following Koa's standard error handling pattern. This means you can use regular Koa error-handling middleware:
 
 ```typescript title="server.ts"
-const app = new Koa();
-app.use(bodyParser());
+const app = new Koa()
+app.use(bodyParser())
 
 // Your error middleware catches errors from Mastra route handlers
 app.use(async (ctx, next) => {
   try {
-    await next();
+    await next()
   } catch (err) {
-    ctx.status = err.status || 500;
-    ctx.body = { error: err.message };
+    ctx.status = err.status || 500
+    ctx.body = { error: err.message }
     // Log, report to Sentry, etc.
   }
-});
+})
 
-const server = new MastraServer({ app, mastra });
-await server.init();
+const server = new MastraServer({ app, mastra })
+await server.init()
 ```
 
 The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it is called before the error propagates to middleware, and its response is used directly:
@@ -150,11 +150,11 @@ The [`server.onError`](/reference/configuration#serveronerror) hook is also supp
 const mastra = new Mastra({
   server: {
     onError: (err, c) => {
-      console.error('Unhandled error:', err);
-      return c.json({ error: err.message }, 500);
+      console.error('Unhandled error:', err)
+      return c.json({ error: err.message }, 500)
     },
   },
-});
+})
 ```
 
 When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention.

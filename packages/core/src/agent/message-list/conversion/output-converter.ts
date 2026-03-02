@@ -79,7 +79,17 @@ export function sanitizeV5UIMessages(
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
         // This filters out input-available (incomplete client-side tool calls) and input-streaming
         if (filterIncompleteToolCalls) {
-          return p.state === 'output-available' || p.state === 'output-error';
+          if (p.state === 'output-available' || p.state === 'output-error') {
+            // Strip completed provider-executed tools (e.g. Anthropic web_search). The provider
+            // already handled these internally — sending tool_result for server_tool_use is invalid.
+            if (p.providerExecuted) return false;
+            return true;
+          }
+          // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
+          // because no client-side result is added. Keep them so the provider API sees the
+          // server_tool_use block and can execute the deferred tool on the next request.
+          if (p.state === 'input-available' && p.providerExecuted) return true;
+          return false;
         }
 
         // When processing response messages FROM the LLM: keep input-available states
