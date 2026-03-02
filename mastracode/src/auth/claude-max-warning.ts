@@ -8,4 +8,4 @@
 export const ANTHROPIC_OAUTH_PROVIDER_ID = 'anthropic';
 
 export const CLAUDE_MAX_OAUTH_WARNING_MESSAGE =
-  'OAuth with a Claude Max plan is a grey area and may violate your Terms of Service with Anthropic. Proceed at your own risk.';
+  'OAuth with a Claude Max plan is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, and it may violate Anthropic Terms of Service. Proceed at your own risk.';
