@@ -9,9 +9,7 @@ async function seed() {
   const client = createClient({ url: DB_PATH });
 
   // Check if already seeded
-  const existing = await client.execute(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='companies'",
-  );
+  const existing = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='companies'");
   if (existing.rows.length > 0) {
     console.log('Database already seeded, skipping.');
     return;

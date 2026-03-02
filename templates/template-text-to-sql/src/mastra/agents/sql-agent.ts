@@ -40,5 +40,5 @@ You have two tools:
 - If the query returns no results, explain possible reasons.
 - If you're unsure about the schema, call introspect-database again.`,
   tools: { introspectDatabase, executeSql },
-  memory: new Memory()
+  memory: new Memory(),
 });

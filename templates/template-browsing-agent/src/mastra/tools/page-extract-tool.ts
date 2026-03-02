@@ -17,19 +17,11 @@ export const pageExtractTool = createTool({
       content: z.string(),
     };
 
-    return await performWebExtraction(
-      input.url,
-      input.instruction,
-      input.schema || defaultSchema,
-    );
+    return await performWebExtraction(input.url, input.instruction, input.schema || defaultSchema);
   },
 });
 
-const performWebExtraction = async (
-  url?: string,
-  instruction?: string,
-  schemaObj?: Record<string, any>,
-) => {
+const performWebExtraction = async (url?: string, instruction?: string, schemaObj?: Record<string, any>) => {
   console.log(`Starting extraction${url ? ` for ${url}` : ''} with instruction: ${instruction}`);
 
   try {

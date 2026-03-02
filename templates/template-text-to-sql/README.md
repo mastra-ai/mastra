@@ -35,6 +35,7 @@ Open Studio and start chatting with the SQL agent. The agent can introspect the 
 ## Making it yours
 
 This template is a starting point. Here are some ideas to make it your own:
+
 - Connect to a different database (PostgreSQL, MySQL, etc.) by swapping out the database client and adjusting the introspection and execution tools.
 - Add authentication and user management to control access to the database.
 - Implement more advanced SQL features like JOINs, subqueries, or transactions.

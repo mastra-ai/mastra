@@ -8,7 +8,7 @@ const BLOCKED_PATTERNS = [
   /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE)\b/i,
   /\b(ATTACH|DETACH)\b/i,
   /\b(PRAGMA)\b/i,
-  /;.*\S/,  // multiple statements
+  /;.*\S/, // multiple statements
 ];
 
 export const executeSql = createTool({

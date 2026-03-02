@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory'
+import { Memory } from '@mastra/memory';
 import { mcpClient } from '../mcp/mcp-client';
 
 export const docsAgent = new Agent({
@@ -23,5 +23,5 @@ When users ask questions:
 Focus on practical usage examples and best practices. Help users understand not just what each function does, but how to use it effectively in their projects. When showing function arguments, explain the expected data types and formats clearly.`,
   model: 'openai/gpt-5-mini',
   tools: await mcpClient.listTools(),
-  memory: new Memory()
+  memory: new Memory(),
 });

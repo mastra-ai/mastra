@@ -1,10 +1,7 @@
 import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
-import {
-  getAssistantMessageFromRunOutput,
-  getUserMessageFromRunInput,
-} from '@mastra/evals/scorers/utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
 import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
@@ -18,8 +15,7 @@ export const completenessScorer = createCompletenessScorer();
 export const translationScorer = createScorer({
   id: 'translation-quality-scorer',
   name: 'Translation Quality',
-  description:
-    'Checks that non-English location names are translated and used correctly',
+  description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
     model: 'openai/gpt-4o',
@@ -36,8 +32,7 @@ export const translationScorer = createScorer({
     return { userText, assistantText };
   })
   .analyze({
-    description:
-      'Extract location names and detect language/translation adequacy',
+    description: 'Extract location names and detect language/translation adequacy',
     outputSchema: z.object({
       nonEnglish: z.boolean(),
       translated: z.boolean(),
@@ -70,8 +65,7 @@ export const translationScorer = createScorer({
   .generateScore(({ results }) => {
     const r = (results as any)?.analyzeStepResult || {};
     if (!r.nonEnglish) return 1; // If not applicable, full credit
-    if (r.translated)
-      return Math.max(0, Math.min(1, 0.7 + 0.3 * (r.confidence ?? 1)));
+    if (r.translated) return Math.max(0, Math.min(1, 0.7 + 0.3 * (r.confidence ?? 1)));
     return 0; // Non-English but not translated
   })
   .generateReason(({ results, score }) => {

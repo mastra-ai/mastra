@@ -1,6 +1,6 @@
 import { Stagehand } from '@browserbasehq/stagehand';
-import dotenv from "dotenv";
-dotenv.config({ path: ".env" });
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env' });
 
 class StagehandSessionManager {
   private static instance: StagehandSessionManager;

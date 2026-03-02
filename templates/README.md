@@ -25,7 +25,7 @@ Your template folder **must** include the following files:
 
 Follow this template for your `README.md`:
 
-````markdown
+```markdown
 # Title
 
 Introductory paragraph describing what this template does.
@@ -60,13 +60,13 @@ Explain how they can use it and how they can customize it for their needs.
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
-````
+```
 
 ### d. `CONTRIBUTING.md`
 
 Create a `CONTRIBUTING.md` file:
 
-````markdown
+```markdown
 # Contributing
 
 This repository is auto-generated from the [Mastra monorepo](https://github.com/mastra-ai/mastra). Pull requests opened here will be ignored.
@@ -79,4 +79,4 @@ To contribute:
 4. Open a pull request against the monorepo
 
 A bot syncs accepted changes to this repository.
-````
+```
