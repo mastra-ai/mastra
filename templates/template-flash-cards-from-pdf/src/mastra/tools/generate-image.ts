@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import { experimental_generateImage as generateImageAI } from 'ai';
+import { generateImage as generateImageAI } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { writeFile, mkdir } from 'fs/promises';
