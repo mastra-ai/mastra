@@ -96,8 +96,14 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
         headers.set('Cookie', cookieHeader);
       }
 
-      // Convert Bearer token to a session cookie so Better Auth can verify it
-      if (token && (!cookieHeader || !cookieHeader.includes(`${this.sessionCookieName}=`))) {
+      // Convert Bearer token to a session cookie so Better Auth can verify it.
+      // Use exact key matching (not substring) to avoid false positives when the
+      // cookie name appears inside another cookie's value.
+      const hasSessionCookieInHeader = !!cookieHeader?.split(';').some(pair => {
+        const [key] = pair.trim().split('=');
+        return key?.trim() === this.sessionCookieName;
+      });
+      if (token && !hasSessionCookieInHeader) {
         const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
         headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
       }

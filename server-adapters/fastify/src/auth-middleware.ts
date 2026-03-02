@@ -47,7 +47,12 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
   // Check for cookie-based credentials matching the provider's session cookie
   const cookieHeader = request.headers.cookie;
   const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
-  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
+  const hasSessionCookie = sessionCookieName
+    ? !!cookieHeader?.split(';').some(pair => {
+        const [key] = pair.trim().split('=');
+        return key?.trim() === sessionCookieName;
+      })
+    : false;
 
   if (!token && !hasSessionCookie) {
     return reply.status(401).send({ error: 'Authentication required' });

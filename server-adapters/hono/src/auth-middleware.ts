@@ -47,7 +47,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
   // Check for cookie-based credentials matching the provider's session cookie
   const cookieHeader = c.req.header('Cookie');
   const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
-  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
+  const hasSessionCookie = sessionCookieName
+    ? !!cookieHeader?.split(';').some(pair => {
+        const [key] = pair.trim().split('=');
+        return key?.trim() === sessionCookieName;
+      })
+    : false;
 
   if (!token && !hasSessionCookie) {
     return c.json({ error: 'Authentication required' }, 401);

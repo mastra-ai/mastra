@@ -249,6 +249,29 @@ describe('MastraAuthBetterAuth', () => {
       // Should append the session cookie alongside existing non-session cookies
       expect(call.headers.get('Cookie')).toBe('other_cookie=value; better-auth.session_token=my-bearer-token');
     });
+
+    it('should add session cookie when session name appears only inside a cookie value (not as a key)', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      // The session cookie name appears as part of another cookie's VALUE, not as a key
+      mockRequest.header.mockImplementation((name: string) => {
+        if (name === 'Cookie') return 'other_cookie=contains_better-auth.session_token=xyz';
+        return undefined;
+      });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('my-bearer-token', mockRequest);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      // The session cookie key is not present (only appears in a value), so the Bearer token must be injected
+      expect(call.headers.get('Cookie')).toBe(
+        'other_cookie=contains_better-auth.session_token=xyz; better-auth.session_token=my-bearer-token',
+      );
+    });
   });
 
   describe('authorizeUser', () => {

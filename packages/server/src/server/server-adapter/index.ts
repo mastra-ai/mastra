@@ -284,7 +284,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Check for cookie-based credentials matching the provider's session cookie
     const cookieHeader = context.getHeader('cookie');
     const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
-    const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
+    const hasSessionCookie = sessionCookieName
+      ? !!cookieHeader?.split(';').some(pair => {
+          const [key] = pair.trim().split('=');
+          return key?.trim() === sessionCookieName;
+        })
+      : false;
 
     if (!token && !hasSessionCookie) {
       return { status: 401, error: 'Authentication required' };
