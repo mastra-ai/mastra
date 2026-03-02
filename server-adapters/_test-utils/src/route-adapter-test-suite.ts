@@ -62,7 +62,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         acc[category].push(route);
         return acc;
       },
-      {} as Record<string, typeof deprecatedRoutes>
+      {} as Record<string, typeof deprecatedRoutes>,
     );
 
     Object.entries(deprecatedByCategory).forEach(([category, routes]) => {
