@@ -112,6 +112,7 @@ export class MastraTUI {
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
+      handleSlashCommand: (command: string) => this.handleSlashCommand(command),
     });
   }
 

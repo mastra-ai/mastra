@@ -14,6 +14,7 @@ export {
 } from './components/tool-execution-enhanced.js';
 export type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 export { UserMessageComponent } from './components/user-message.js';
+export { SearchableListOverlay, type SearchableListOverlayOptions } from './components/searchable-list-overlay.js';
 export { ModelSelectorComponent, type ModelItem, type ModelSelectorOptions } from './components/model-selector.js';
 export { LoginSelectorComponent } from './components/login-selector.js';
 export { LoginDialogComponent } from './components/login-dialog.js';

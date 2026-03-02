@@ -13,6 +13,7 @@ import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
+import { openCommandPalette } from './commands/command-palette.js';
 import { showError, showInfo } from './display.js';
 import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
@@ -28,6 +29,7 @@ export function setupKeyboardShortcuts(
   callbacks: {
     stop: () => void;
     doubleCtrlCMs: number;
+    handleSlashCommand: (command: string) => Promise<boolean>;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -149,6 +151,14 @@ export function setupKeyboardShortcuts(
       });
     }
   });
+
+  // Ctrl+K - open command palette
+  state.editor.onAction('commandPalette', async () => {
+    const command = await openCommandPalette(state);
+    if (command) {
+      await callbacks.handleSlashCommand(command);
+    }
+  });
 }
 
 // =============================================================================
@@ -179,7 +189,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   if (state.harness.listModes().length > 1) {
     hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
-  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
+  hintParts.push(`${theme.fg('accent', 'Ctrl+K')} ${theme.fg('muted', 'commands')}`);
   const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));

@@ -66,6 +66,7 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
     { key: 'Ctrl+Z', description: 'Undo last clear' },
+    { key: 'Ctrl+K', description: 'Command palette' },
   ];
 
   if (modes > 1) {

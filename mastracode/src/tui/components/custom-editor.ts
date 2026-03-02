@@ -17,7 +17,8 @@ export type AppAction =
   | 'expandTools' // Ctrl+E
   | 'followUp' // Alt+Enter - queue follow-up while streaming
   | 'cycleMode' // Shift+Tab - cycle harness modes
-  | 'toggleYolo'; // Ctrl+Y - toggle YOLO mode
+  | 'toggleYolo' // Ctrl+Y - toggle YOLO mode
+  | 'commandPalette'; // Ctrl+K - open command palette
 
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => void> = new Map();
@@ -153,6 +154,15 @@ export class CustomEditor extends Editor {
     // Ctrl+Y - toggle YOLO mode
     if (matchesKey(data, 'ctrl+y')) {
       const handler = this.actionHandlers.get('toggleYolo');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    // Ctrl+K - command palette
+    if (matchesKey(data, 'ctrl+k')) {
+      const handler = this.actionHandlers.get('commandPalette');
       if (handler) {
         handler();
         return;
