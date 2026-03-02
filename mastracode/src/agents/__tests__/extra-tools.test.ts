@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import z from 'zod';
 
 import { getToolCategory } from '../../permissions.js';
+import { MC_TOOLS } from '../../tool-names.js';
 import { buildToolGuidance } from '../prompts/tool-guidance.js';
 import { createDynamicTools } from '../tools.js';
 
@@ -102,10 +103,10 @@ describe('getToolCategory – extra tools', () => {
   });
 
   it('should still categorize built-in tools correctly', () => {
-    expect(getToolCategory('view')).toBe('read');
-    expect(getToolCategory('search_content')).toBe('read');
-    expect(getToolCategory('string_replace_lsp')).toBe('edit');
-    expect(getToolCategory('execute_command')).toBe('execute');
+    expect(getToolCategory(MC_TOOLS.VIEW)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
+    expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });
 
   it('should return null for always-allowed tools', () => {
@@ -185,32 +186,32 @@ describe('createDynamicTools – denied tool filtering', () => {
 describe('buildToolGuidance – denied tool filtering', () => {
   it('should omit guidance for denied tools', () => {
     const guidance = buildToolGuidance('build', {
-      deniedTools: new Set(['execute_command']),
+      deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND]),
     });
 
-    expect(guidance).not.toContain('**execute_command**');
-    expect(guidance).toContain('**view**');
-    expect(guidance).toContain('**search_content**');
+    expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.SEARCH_CONTENT}**`);
   });
 
   it('should omit multiple denied tools from guidance', () => {
     const guidance = buildToolGuidance('build', {
-      deniedTools: new Set(['execute_command', 'write_file', 'subagent']),
+      deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND, MC_TOOLS.WRITE_FILE, 'subagent']),
     });
 
-    expect(guidance).not.toContain('**execute_command**');
-    expect(guidance).not.toContain('**write_file**');
+    expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
+    expect(guidance).not.toContain(`**${MC_TOOLS.WRITE_FILE}**`);
     expect(guidance).not.toContain('**subagent**');
-    expect(guidance).toContain('**view**');
-    expect(guidance).toContain('**string_replace_lsp**');
+    expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
   });
 
   it('should include all tools when no denied set is provided', () => {
     const guidance = buildToolGuidance('build');
 
-    expect(guidance).toContain('**execute_command**');
-    expect(guidance).toContain('**view**');
-    expect(guidance).toContain('**string_replace_lsp**');
+    expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
     expect(guidance).toContain('**subagent**');
   });
 });
