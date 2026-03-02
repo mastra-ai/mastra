@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -464,6 +464,13 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
+  /** Observer-specific context options */
+  observer: {
+    /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
+    previousObservationTokens?: number | false;
+    /** Include pending buffered reflection context in observer calls */
+    useBufferedReflection: boolean;
+  };
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
 }
@@ -1175,6 +1182,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      observer: {
+        previousObservationTokens: config.observation?.observer?.previousObservationTokens,
+        useBufferedReflection: config.observation?.observer?.useBufferedReflection ?? false,
+      },
       instruction: config.observation?.instruction,
     };
 
@@ -1389,6 +1400,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       if (!this.observationConfig.bufferTokens) {
         throw new Error(
           `observation.blockAfter requires observation.bufferTokens to be set (blockAfter only applies when async buffering is enabled)`,
+        );
+      }
+    }
+
+    // Validate observer context optimization options
+    if (
+      this.observationConfig.observer.previousObservationTokens !== undefined &&
+      this.observationConfig.observer.previousObservationTokens !== false
+    ) {
+      if (
+        !Number.isFinite(this.observationConfig.observer.previousObservationTokens) ||
+        this.observationConfig.observer.previousObservationTokens < 0
+      ) {
+        throw new Error(
+          `observation.observer.previousObservationTokens must be false or a finite number >= 0, got ${this.observationConfig.observer.previousObservationTokens}`,
         );
       }
     }
@@ -2195,13 +2221,220 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Prepare optimized observer context by applying truncation and buffered-reflection inclusion.
+   *
+   * Returns the (possibly optimized) observations string to pass as "Previous Observations"
+   * to the observer prompt. When no optimization options are set, returns the input unchanged.
+   */
+  private prepareObserverContext(
+    existingObservations: string | undefined,
+    record?: ObservationalMemoryRecord | null,
+  ): string | undefined {
+    const { previousObservationTokens, useBufferedReflection } = this.observationConfig.observer;
+    const tokenBudget =
+      previousObservationTokens === undefined || previousObservationTokens === false
+        ? undefined
+        : previousObservationTokens;
+
+    // Fast path: no optimization options configured — preserve legacy behavior
+    if (tokenBudget === undefined && !useBufferedReflection) {
+      return existingObservations;
+    }
+
+    if (!existingObservations) {
+      return existingObservations;
+    }
+
+    // Start with the baseline (full observations)
+    let optimized = existingObservations;
+
+    // 1. Optionally append buffered reflection content
+    if (useBufferedReflection && record?.bufferedReflection) {
+      optimized = `${optimized}\n\n--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`;
+    }
+
+    // 2. Apply tail truncation to previousObservationTokens (keep most recent observations)
+    if (tokenBudget !== undefined) {
+      if (tokenBudget === 0) {
+        return '';
+      }
+
+      const currentTokens = this.tokenCounter.countObservations(optimized);
+      if (currentTokens > tokenBudget) {
+        optimized = this.truncateObservationsToTokenBudget(optimized, tokenBudget);
+      }
+    }
+
+    return optimized;
+  }
+
+  /**
+   * Truncate observations to fit within a token budget.
+   *
+   * Strategy:
+   * 1. Keep a raw tail of recent observations (end of block).
+   * 2. Add a truncation marker: [X hidden observations], placed at the hidden gap.
+   * 3. Try to preserve important observations (🔴) from older context, newest-first.
+   * 4. Enforce that at least 50% of kept observations remain raw tail observations.
+   */
+  private truncateObservationsToTokenBudget(observations: string, budget: number): string {
+    if (budget === 0) {
+      return '';
+    }
+
+    if (this.tokenCounter.countObservations(observations) <= budget) {
+      return observations;
+    }
+
+    const lines = observations.split('\n');
+    const totalCount = lines.length;
+
+    const buildCandidate = (tailStart: number, importantFromHeadCount: number) => {
+      const headImportantIndexes: number[] = [];
+      for (let i = 0; i < tailStart; i++) {
+        if (lines[i]?.includes('🔴')) {
+          headImportantIndexes.push(i);
+        }
+      }
+
+      const selectedImportantIndexes =
+        importantFromHeadCount > 0
+          ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - importantFromHeadCount))
+          : [];
+
+      const keptIndexes = [
+        ...selectedImportantIndexes,
+        ...Array.from({ length: lines.length - tailStart }, (_, i) => tailStart + i),
+      ].sort((a, b) => a - b);
+
+      if (keptIndexes.length === 0) {
+        return `[${totalCount} hidden observations]`;
+      }
+
+      const outputLines: string[] = [];
+      let previousKeptIndex = -1;
+
+      for (const keptIndex of keptIndexes) {
+        const hiddenCount = keptIndex - previousKeptIndex - 1;
+        if (hiddenCount > 0) {
+          outputLines.push(`[${hiddenCount} hidden observations]`);
+        }
+
+        outputLines.push(lines[keptIndex]!);
+        previousKeptIndex = keptIndex;
+      }
+
+      const trailingHiddenCount = lines.length - previousKeptIndex - 1;
+      if (trailingHiddenCount > 0) {
+        outputLines.push(`[${trailingHiddenCount} hidden observations]`);
+      }
+
+      return outputLines.join('\n');
+    };
+
+    // Evaluate possible raw tails and choose one that preserves important observations best,
+    // while still keeping at least 50% raw-tail observations.
+    let bestCandidate: string | undefined;
+    let bestImportantCount = -1;
+    let bestRawTailLength = -1;
+
+    for (let tailStart = 1; tailStart < lines.length; tailStart++) {
+      const rawTailLength = lines.length - tailStart;
+      const headImportantCount = lines.slice(0, tailStart).filter(line => line.includes('🔴')).length;
+      const maxImportantByRatio = rawTailLength;
+
+      let importantToKeep = Math.min(headImportantCount, maxImportantByRatio);
+      let candidate = buildCandidate(tailStart, importantToKeep);
+
+      // If over budget, drop important observations from the beginning (oldest first).
+      while (importantToKeep > 0 && this.tokenCounter.countObservations(candidate) > budget) {
+        importantToKeep -= 1;
+        candidate = buildCandidate(tailStart, importantToKeep);
+      }
+
+      if (this.tokenCounter.countObservations(candidate) > budget) {
+        continue;
+      }
+
+      if (
+        importantToKeep > bestImportantCount ||
+        (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
+      ) {
+        bestCandidate = candidate;
+        bestImportantCount = importantToKeep;
+        bestRawTailLength = rawTailLength;
+      }
+    }
+
+    if (!bestCandidate) {
+      return `[${totalCount} hidden observations]`;
+    }
+
+    return bestCandidate;
+  }
+
+  private isObserverDebugEnabled(): boolean {
+    return process.env.OBSERVER_DEBUG === '1' || process.env.OBSERVER_DEBUG === 'true';
+  }
+
+  private writeObserverDebugArtifacts(params: {
+    mode: 'single' | 'multi-thread';
+    systemPrompt: string;
+    userPrompt: string;
+    output: string;
+    messages: unknown;
+    metadata?: Record<string, unknown>;
+  }): void {
+    if (!this.isObserverDebugEnabled()) return;
+
+    try {
+      const timestamp = new Date().toISOString().replace(/[.:]/g, '-');
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const debugDir = join(process.cwd(), '.mastra-observer-debug', `${timestamp}-${suffix}`);
+
+      mkdirSync(debugDir, { recursive: true });
+
+      writeFileSync(
+        join(debugDir, 'messages.json'),
+        `${JSON.stringify(
+          {
+            mode: params.mode,
+            metadata: params.metadata,
+            messages: params.messages,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      writeFileSync(join(debugDir, 'observation-system-prompt.md'), `${params.systemPrompt}\n`);
+
+      writeFileSync(
+        join(debugDir, 'observation-input.md'),
+        `# Observer Input\n\n## User Prompt\n\n${params.userPrompt}\n`,
+      );
+
+      writeFileSync(join(debugDir, 'observation-output.md'), `${params.output}\n`);
+    } catch (error) {
+      omDebug(
+        `[OM:OBSERVER_DEBUG] Failed to write observer debug artifacts: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
    * Call the Observer agent to extract observations.
    */
   private async callObserver(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
+    options?: {
+      skipContinuationHints?: boolean;
+      requestContext?: RequestContext;
+      priorCurrentTask?: string;
+      priorSuggestedResponse?: string;
+    },
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -2209,11 +2442,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
+    const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
 
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
+    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, {
+      skipContinuationHints: options?.skipContinuationHints,
+      priorCurrentTask: options?.priorCurrentTask,
+      priorSuggestedResponse: options?.priorSuggestedResponse,
+    });
 
     const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
+      const result = await this.withAbortCheck(async () => {
         const streamResult = await agent.stream(prompt, {
           modelSettings: {
             ...this.observationConfig.modelSettings,
@@ -2225,6 +2463,25 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
         return streamResult.getFullOutput();
       }, abortSignal);
+
+      this.writeObserverDebugArtifacts({
+        mode: 'single',
+        systemPrompt,
+        userPrompt: prompt,
+        output: result.text,
+        messages: messagesToObserve,
+        metadata: {
+          existingObservations,
+          priorCurrentTask: options?.priorCurrentTask,
+          priorSuggestedResponse: options?.priorSuggestedResponse,
+          observerConfig: {
+            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
+            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
+          },
+        },
+      });
+
+      return result;
     };
 
     let result = await doGenerate();
@@ -2268,6 +2525,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
   ): Promise<{
@@ -2282,14 +2540,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
+    const systemPrompt = buildObserverSystemPrompt(true, this.observationConfig.instruction);
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
+      instructions: systemPrompt,
     });
 
-    const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);
+    const prompt = buildMultiThreadObserverPrompt(
+      existingObservations,
+      messagesByThread,
+      threadOrder,
+      priorMetadataByThread,
+    );
 
     // Flatten all messages for context dump
     const allMessages: MastraDBMessage[] = [];
@@ -2303,7 +2567,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
+      const result = await this.withAbortCheck(async () => {
         const streamResult = await agent.stream(prompt, {
           modelSettings: {
             ...this.observationConfig.modelSettings,
@@ -2315,6 +2579,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
         return streamResult.getFullOutput();
       }, abortSignal);
+
+      this.writeObserverDebugArtifacts({
+        mode: 'multi-thread',
+        systemPrompt,
+        userPrompt: prompt,
+        output: result.text,
+        messages: Object.fromEntries(Array.from(messagesByThread.entries())),
+        metadata: {
+          threadOrder,
+          existingObservations,
+          priorMetadataByThread: priorMetadataByThread
+            ? Object.fromEntries(Array.from(priorMetadataByThread.entries()))
+            : {},
+          observerConfig: {
+            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
+            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
+          },
+        },
+      });
+
+      return result;
     };
 
     let result = await doGenerate();
@@ -4229,12 +4514,17 @@ ${formattedMessages}
         }
       }
 
-      const result = await this.callObserver(
+      const observerContext = this.prepareObserverContext(
         freshRecord?.activeObservations ?? record.activeObservations,
-        messagesToObserve,
-        abortSignal,
-        { requestContext },
+        freshRecord ?? record,
       );
+      const thread = await this.storage.getThreadById({ threadId });
+      const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+      const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, {
+        requestContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+      });
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
@@ -4613,14 +4903,24 @@ ${formattedMessages}
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
-    // Call observer with combined context
+    // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
+    const observerContext = this.prepareObserverContext(combinedObservations, record);
+
+    // Call observer with optimized context
     // Allow the observer to produce suggestedResponse/currentTask so they survive
     // activation and maintain continuity when the context window shrinks
+    const thread = await this.storage.getThreadById({ threadId });
+    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+
     const result = await this.callObserver(
-      combinedObservations,
+      observerContext,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { requestContext },
+      {
+        requestContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+      },
     );
 
     // If the observer returned empty observations, skip buffering
@@ -5201,11 +5501,18 @@ ${formattedMessages}
 
     // First, get all threads for this resource to access their per-thread lastObservedAt
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
-    const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+    const threadMetadataMap = new Map<
+      string,
+      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string }
+    >();
 
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
-      threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
+      threadMetadataMap.set(thread.id, {
+        lastObservedAt: omMetadata?.lastObservedAt,
+        currentTask: omMetadata?.currentTask,
+        suggestedResponse: omMetadata?.suggestedResponse,
+      });
     }
 
     // Load messages per-thread using each thread's own cursor
@@ -5345,9 +5652,13 @@ ${formattedMessages}
         }
       }
 
-      const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const rawExistingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
-      // ═════════════════════════════════════════���══════════════════
+      // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
+      const existingObservations =
+        this.prepareObserverContext(rawExistingObservations, freshRecord ?? record) ?? rawExistingObservations;
+
+      // ════════════════════════════════════════════════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
       // This is much more efficient than calling the Observer for each thread individually
       // ════════════════════════════════════════════════════════════
@@ -5447,10 +5758,22 @@ ${formattedMessages}
 
       // Process batches in parallel
       const batchPromises = batches.map(async batch => {
+        const batchPriorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>();
+        for (const threadId of batch.threadIds) {
+          const metadata = threadMetadataMap.get(threadId);
+          if (metadata?.currentTask || metadata?.suggestedResponse) {
+            batchPriorMetadata.set(threadId, {
+              currentTask: metadata.currentTask,
+              suggestedResponse: metadata.suggestedResponse,
+            });
+          }
+        }
+
         const batchResult = await this.callMultiThreadObserver(
           existingObservations,
           batch.threadMap,
           batch.threadIds,
+          batchPriorMetadata,
           abortSignal,
           requestContext,
         );

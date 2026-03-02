@@ -242,6 +242,55 @@ Async buffering is not supported with `scope: 'resource'`. It is automatically d
 
 :::
 
+## Observer Context Optimization
+
+By default, the Observer receives the full observation history as context when processing new messages. The Observer also receives prior `current-task` and `suggested-response` metadata (when available), so it can stay oriented even when observation context is truncated. For long-running conversations where observations grow large, you can opt into context optimization to reduce Observer input costs.
+
+Both settings are opt-in and disabled by default — existing behavior is preserved unless you explicitly enable them.
+
+### Token budget truncation
+
+Set `observer.previousObservationTokens` to limit how many tokens of previous observations are sent to the Observer. Observations are tail-truncated, keeping the most recent entries. You can also set `0` for full truncation (empty previous-observations context) or `false` to disable truncation explicitly:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        observer: {
+          previousObservationTokens: 10_000, // keep only ~10k tokens of recent observations
+        },
+      },
+    },
+  },
+})
+```
+
+- `previousObservationTokens: 0` → omit previous observations completely.
+- `previousObservationTokens: false` (or unset) → keep full previous observations.
+
+### Buffered reflection in observer context
+
+When async reflection is buffering in the background, the Observer normally doesn't see it. Enable `observer.useBufferedReflection` to give the Observer access to pending reflection content:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        observer: {
+          useBufferedReflection: true,
+        },
+      },
+    },
+  },
+})
+```
+
+This is useful when combined with `observer.previousObservationTokens` — the truncated context can be supplemented with the richer reflection summary.
+
 ## Migrating existing threads
 
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.

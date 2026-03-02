@@ -524,6 +524,29 @@ export interface ObservationalMemoryObservationConfig {
   blockAfter?: number;
 
   /**
+   * Observer-specific context options.
+   */
+  observer?: {
+    /**
+     * Optional token budget for observer context.
+     * When set, the "Previous Observations" section is truncated from the end
+     * to keep the most recent observations within this budget.
+     * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+     *
+     * @default undefined (disabled)
+     */
+    previousObservationTokens?: number | false;
+
+    /**
+     * Include pending buffered reflection content in observer context before activation.
+     * Useful for giving the observer richer context while reflection is still buffered.
+     *
+     * @default false
+     */
+    useBufferedReflection?: boolean;
+  };
+
+  /**
    * Custom instructions appended to the Observer agent's system prompt.
    * Use this to customize what the Observer focuses on or how it formats observations.
    *
@@ -1095,6 +1118,13 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferActivation?: number;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Observer-specific serialized context options */
+  observer?: {
+    /** Optional token budget for observer context (0 = full truncation, false = disabled) */
+    previousObservationTokens?: number | false;
+    /** Include buffered reflection content in observer context */
+    useBufferedReflection?: boolean;
+  };
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

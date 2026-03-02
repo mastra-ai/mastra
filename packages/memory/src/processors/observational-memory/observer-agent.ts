@@ -506,8 +506,10 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
 
   let prompt = '';
 
@@ -518,6 +520,34 @@ export function buildMultiThreadObserverPrompt(
   }
 
   prompt += `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n`;
+
+  const threadMetadataLines = threadOrder
+    .map(threadId => {
+      const metadata = priorMetadataByThread?.get(threadId);
+      if (!metadata?.currentTask && !metadata?.suggestedResponse) {
+        return '';
+      }
+
+      const lines = [`- thread ${threadId}`];
+      if (metadata.currentTask) {
+        lines.push(`  - prior current-task: ${metadata.currentTask}`);
+      }
+      if (metadata.suggestedResponse) {
+        lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
+      }
+      return lines.join('\n');
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  if (threadMetadataLines) {
+    prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use each thread's prior current-task and suggested-response as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
+  }
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, and suggested-response.\n\n`;
@@ -623,9 +653,14 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
 export function buildObserverPrompt(
   existingObservations: string | undefined,
   messagesToObserve: MastraDBMessage[],
-  options?: { skipContinuationHints?: boolean },
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+  },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
 
   let prompt = '';
 
@@ -636,6 +671,23 @@ export function buildObserverPrompt(
   }
 
   prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
+
+  const priorMetadataLines: string[] = [];
+  if (options?.priorCurrentTask) {
+    priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
+  }
+  if (options?.priorSuggestedResponse) {
+    priorMetadataLines.push(`- prior suggested-response: ${options.priorSuggestedResponse}`);
+  }
+
+  if (priorMetadataLines.length > 0) {
+    prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use the prior current-task and suggested-response as continuity hints, then update them based on the new messages.\n\n---\n\n`;
+  }
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;

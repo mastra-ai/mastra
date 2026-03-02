@@ -148,6 +148,23 @@ export interface ObservationConfig {
   blockAfter?: number;
 
   /**
+   * Observer-specific context options.
+   */
+  observer?: {
+    /**
+     * Optional token budget for observer context.
+     * When set, "Previous Observations" is tail-truncated to preserve the most recent entries.
+     * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+     */
+    previousObservationTokens?: number | false;
+
+    /**
+     * Include pending buffered reflection content in observer context before activation.
+     */
+    useBufferedReflection?: boolean;
+  };
+
+  /**
    * Custom instructions to append to the Observer's system prompt.
    * Use this to customize observation behavior for specific use cases.
    */

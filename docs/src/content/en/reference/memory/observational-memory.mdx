@@ -151,6 +151,22 @@ description:
 isOptional: true,
 defaultValue: "1.2 (when bufferTokens is set)",
 },
+{
+name: "observer.previousObservationTokens",
+type: "number | false",
+description:
+"Optional token budget for the observer's 'Previous Observations' context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget, keeping the most recent observations. Set to `0` for full truncation (omit previous observations entirely), or `false` to disable truncation explicitly. Useful for controlling Observer input costs when observation history is large.",
+isOptional: true,
+defaultValue: "undefined (disabled)",
+},
+{
+name: "observer.useBufferedReflection",
+type: "boolean",
+description:
+"When `true`, pending buffered reflection content is included in the observer's context. This gives the Observer richer context while a reflection is still buffered and waiting for activation. Only has an effect when async reflection buffering is enabled and a buffered reflection exists.",
+isOptional: true,
+defaultValue: "false",
+},
 ]}
 />
 
