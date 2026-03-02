@@ -471,6 +471,57 @@ export class Mastra<
   }
 
   /**
+   * Sets the observability instance for this Mastra instance, replacing any existing one.
+   *
+   * If a non-noop observability instance already exists, it will be shut down before
+   * the new one is set.
+   *
+   * @param observability - An ObservabilityEntrypoint instance with a `getDefaultInstance` method
+   * @throws {MastraError} When the provided observability instance is invalid
+   *
+   * @example
+   * ```typescript
+   * import { Observability, DefaultExporter } from '@mastra/observability';
+   *
+   * const mastra = new Mastra();
+   * mastra.setObservability(new Observability({
+   *   configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   * }));
+   * ```
+   */
+  public setObservability(observability: ObservabilityEntrypoint): void {
+    if (typeof observability.getDefaultInstance !== 'function') {
+      throw new MastraError({
+        id: 'MASTRA_SET_OBSERVABILITY_INVALID',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Expected an Observability instance with getDefaultInstance method.',
+      });
+    }
+    // Shutdown existing observability if it's not the no-op
+    if (!(this.#observability instanceof NoOpObservability)) {
+      this.#observability.shutdown().catch(() => {});
+    }
+    this.#observability = observability;
+    this.#observability.setLogger({ logger: this.#logger });
+    this.#observability.setMastraContext({ mastra: this });
+  }
+
+  /**
+   * Sets the server configuration for this Mastra instance.
+   *
+   * @param server - The server configuration object
+   *
+   * @example
+   * ```typescript
+   * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
+   * ```
+   */
+  public setServer(server: ServerConfig): void {
+    this.#server = server;
+  }
+
+  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
