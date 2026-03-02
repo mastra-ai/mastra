@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
@@ -953,10 +953,14 @@ export class DaytonaSandbox extends MastraSandbox {
       try {
         sandbox = await this._daytona!.get(this.sandboxName);
       } catch (error) {
-        if (!(error instanceof DaytonaNotFoundError)) {
-          throw error;
+        if (error instanceof DaytonaNotFoundError) {
+          // Not found by name — fall through to label lookup
+        } else if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
+          throw error; // Auth failure — propagate immediately
+        } else {
+          // Transient/network error (ETIMEDOUT, 5xx, etc.) — fall through
+          this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by name: ${error}`);
         }
-        // Not found by name — fall through to label lookup
       }
     }
 
@@ -965,10 +969,18 @@ export class DaytonaSandbox extends MastraSandbox {
       try {
         sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
       } catch (error) {
-        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof Error && error.message.includes('No sandbox found'))) {
-          throw error;
+        if (
+          error instanceof DaytonaNotFoundError ||
+          (error instanceof Error && error.message.includes('No sandbox found'))
+        ) {
+          // Not found by label either — create a fresh sandbox
+          return null;
         }
-        // Not found by label either — create a fresh sandbox
+        if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
+          throw error; // Auth failure — propagate immediately
+        }
+        // Transient/network error — fall through to create fresh sandbox
+        this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by label: ${error}`);
         return null;
       }
     }
@@ -976,9 +988,7 @@ export class DaytonaSandbox extends MastraSandbox {
     const state = sandbox.state;
 
     if (state && DEAD_STATES.includes(state)) {
-      this.logger.debug(
-        `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
-      );
+      this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`);
       try {
         await this._daytona!.delete(sandbox);
       } catch {
@@ -1025,14 +1035,8 @@ export class DaytonaSandbox extends MastraSandbox {
     let current = sandbox;
 
     // Phase 1: Poll until the reported state is no longer transitional
-    while (
-      current.state &&
-      DaytonaSandbox.TRANSITIONAL_STATES.includes(current.state) &&
-      Date.now() < deadline
-    ) {
-      this.logger.debug(
-        `${LOG_PREFIX} Sandbox ${current.id} is in transitional state (${current.state}), waiting...`,
-      );
+    while (current.state && DaytonaSandbox.TRANSITIONAL_STATES.includes(current.state) && Date.now() < deadline) {
+      this.logger.debug(`${LOG_PREFIX} Sandbox ${current.id} is in transitional state (${current.state}), waiting...`);
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
       current = await this._daytona!.get(current.id);
     }

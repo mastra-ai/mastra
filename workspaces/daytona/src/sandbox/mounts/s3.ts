@@ -43,6 +43,23 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
 
   const quotedMountPath = shellQuote(mountPath);
 
+  // Validate credentials before any network calls — this gives the user a clear,
+  // immediate error instead of a confusing connectivity failure.
+  const hasAccessKey = !!config.accessKeyId;
+  const hasSecretKey = !!config.secretAccessKey;
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
+  }
+  const hasCredentials = hasAccessKey && hasSecretKey;
+
+  if (!hasCredentials && config.endpoint) {
+    throw new Error(
+      `S3-compatible storage requires credentials. ` +
+        `Detected endpoint: ${config.endpoint}. ` +
+        `The public_bucket option only works for AWS S3 public buckets, not R2, MinIO, etc.`,
+    );
+  }
+
   // For S3-compatible storage (R2, MinIO, etc.), check connectivity to the custom endpoint.
   // AWS S3 endpoints are whitelisted in Daytona's proxy so no check needed for the default case.
   if (config.endpoint) {
@@ -98,24 +115,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     );
   }
 
-  const hasAccessKey = !!config.accessKeyId;
-  const hasSecretKey = !!config.secretAccessKey;
-  if (hasAccessKey !== hasSecretKey) {
-    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
-  }
-  const hasCredentials = hasAccessKey && hasSecretKey;
-
   // Use a mount-specific credentials path to avoid races with concurrent mounts
   const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
-
-  if (!hasCredentials && config.endpoint) {
-    throw new Error(
-      `S3-compatible storage requires credentials. ` +
-        `Detected endpoint: ${config.endpoint}. ` +
-        `The public_bucket option only works for AWS S3 public buckets, not R2, MinIO, etc.`,
-    );
-  }
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
   // These are no-ops if already configured.

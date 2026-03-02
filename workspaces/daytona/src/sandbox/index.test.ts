@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { DaytonaSandbox } from './index';
 
 // Use vi.hoisted to define mocks before vi.mock is hoisted
-const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi.hoisted(() => {
+const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError } = vi.hoisted(() => {
   const mockSandbox = {
     id: 'mock-sandbox-id',
     state: 'started',
@@ -81,14 +81,23 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
     mockSandbox.delete.mockResolvedValue(undefined);
   };
 
-  class DaytonaNotFoundError extends Error {
+  class DaytonaError extends Error {
+    statusCode?: number;
+    constructor(message?: string, statusCode?: number) {
+      super(message ?? 'Error');
+      this.name = 'DaytonaError';
+      this.statusCode = statusCode;
+    }
+  }
+
+  class DaytonaNotFoundError extends DaytonaError {
     constructor(message?: string) {
-      super(message ?? 'Not found');
+      super(message ?? 'Not found', 404);
       this.name = 'DaytonaNotFoundError';
     }
   }
 
-  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError };
+  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError };
 });
 
 // Mock the Daytona SDK — must use `function` (not arrow) so `new Daytona()` works
@@ -96,6 +105,7 @@ vi.mock('@daytonaio/sdk', () => ({
   Daytona: vi.fn().mockImplementation(function () {
     return mockDaytona;
   }),
+  DaytonaError,
   DaytonaNotFoundError,
   SandboxState: {
     CREATING: 'creating',

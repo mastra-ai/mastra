@@ -33,10 +33,7 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   // gcsfuse needs to reach Google Cloud Storage APIs at runtime.
   // Daytona's free/restricted tiers block access to Google services.
   // Fail fast with a clear message instead of hanging on the mount command.
-  const connectivityCheck = await run(
-    'curl -sS --max-time 5 http://storage.googleapis.com 2>&1',
-    10_000,
-  );
+  const connectivityCheck = await run('curl -sS --max-time 5 http://storage.googleapis.com 2>&1', 10_000);
   const checkOutput = connectivityCheck.stdout.trim();
   // Daytona's restricted tiers return HTTP 200 with a plain-text restriction message
   // for HTTP requests, or reset the connection for HTTPS. Detect either case.
@@ -64,7 +61,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     await run('sudo apt-get update -qq 2>&1', 60_000);
     const prepResult = await run('sudo apt-get install -y curl gnupg fuse 2>&1', 120_000);
     if (prepResult.exitCode !== 0) {
-      throw new Error(`Failed to install gcsfuse prerequisites (curl, gnupg, fuse): ${prepResult.stderr || prepResult.stdout}`);
+      throw new Error(
+        `Failed to install gcsfuse prerequisites (curl, gnupg, fuse): ${prepResult.stderr || prepResult.stdout}`,
+      );
     }
 
     // Detect distro ID and codename from /etc/os-release (more reliable than lsb_release).
