@@ -1,6 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
+import { FilesystemStore } from '@mastra/editor/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
@@ -45,9 +47,15 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 
-const storage = new LibSQLStore({
+const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
   url: 'file:./mastra.db',
+});
+
+const storage = new MastraCompositeStore({
+  id: 'composite-storage',
+  default: libsqlStore,
+  editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
 const testScorer = createScorer({
