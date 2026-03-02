@@ -584,16 +584,36 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
-      await memoryStorage.saveThread({
-        thread: {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title!,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-        },
-      });
+      try {
+        await memoryStorage.saveThread({
+          thread: {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title!,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          },
+        });
+      } catch (err) {
+        // saveThread failed after lock was swapped; restore previous lock state
+        if (this.config.threadLock) {
+          try {
+            await this.config.threadLock.release(thread.id);
+          } catch {
+            // Best-effort release of new thread lock
+          }
+          if (oldThreadId) {
+            try {
+              await this.config.threadLock.acquire(oldThreadId);
+            } catch {
+              // Best-effort re-acquire of old thread lock
+            }
+          }
+        }
+        this.currentThreadId = oldThreadId;
+        throw err;
+      }
     }
 
     this.currentThreadId = thread.id;
@@ -635,7 +655,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     await memoryStorage.deleteThread({ threadId });
 
     if (isDeletingCurrentThread) {
-      await this.config.threadLock?.release(threadId);
+      try {
+        await this.config.threadLock?.release(threadId);
+      } catch {
+        // Lock release failed; proceed with state cleanup regardless
+      }
       this.currentThreadId = null;
       this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     }
