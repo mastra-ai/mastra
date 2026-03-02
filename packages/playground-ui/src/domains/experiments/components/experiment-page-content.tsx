@@ -175,7 +175,9 @@ export function ExperimentPageContent({ experimentId, results, isLoading }: Expe
 
           {featuredResult && (
             <MultiColumn
-              numOfColumns={1 + (!featuredTraceId && featuredScoreId ? 1 : 0) + (featuredTraceId ? 1 : 0) + (featuredSpanId ? 1 : 0)}
+              numOfColumns={
+                1 + (!featuredTraceId && featuredScoreId ? 1 : 0) + (featuredTraceId ? 1 : 0) + (featuredSpanId ? 1 : 0)
+              }
               minColumnWidth="35rem"
             >
               {featuredResult && (
