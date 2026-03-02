@@ -157,10 +157,6 @@ export function toCustomProviderModelId(providerName: string, modelName: string)
   if (trimmedModelName.startsWith(providerPrefix)) {
     return trimmedModelName;
   }
-  const legacyProviderPrefix = `custom-${providerId}/`;
-  if (trimmedModelName.startsWith(legacyProviderPrefix)) {
-    return `${providerId}/${trimmedModelName.slice(legacyProviderPrefix.length)}`;
-  }
   return `${providerId}/${trimmedModelName}`;
 }
 
@@ -187,10 +183,6 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
                 const providerPrefix = `${providerId}/`;
                 if (model.startsWith(providerPrefix)) {
                   return model.slice(providerPrefix.length);
-                }
-                const legacyProviderPrefix = `custom-${providerId}/`;
-                if (model.startsWith(legacyProviderPrefix)) {
-                  return model.slice(legacyProviderPrefix.length);
                 }
                 return model;
               }),

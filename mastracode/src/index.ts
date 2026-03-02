@@ -273,8 +273,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
 
       const customProvider = loadSettings().customProviders.find(entry => {
-        const normalizedProviderId = getCustomProviderId(entry.name);
-        return provider === normalizedProviderId || provider === `custom-${normalizedProviderId}`;
+        return provider === getCustomProviderId(entry.name);
       });
       if (customProvider) {
         return true;

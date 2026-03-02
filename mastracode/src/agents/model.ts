@@ -65,9 +65,7 @@ export function resolveModel(
   const customProvider =
     providerId && modelName
       ? settings.customProviders.find(provider => {
-          const normalizedProviderId = getCustomProviderId(provider.name);
-          const legacyProviderId = `custom-${normalizedProviderId}`;
-          return providerId === normalizedProviderId || providerId === legacyProviderId;
+          return providerId === getCustomProviderId(provider.name);
         })
       : undefined;
 
