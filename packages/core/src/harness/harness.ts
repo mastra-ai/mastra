@@ -544,7 +544,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   async getKnownResourceIds(): Promise<string[]> {
     const threads = await this.listThreads({ allResources: true });
     const ids = new Set(threads.map(t => t.resourceId));
-    return [...ids];
+    return [...ids].sort();
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {

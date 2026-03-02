@@ -2,4 +2,11 @@
 '@mastra/core': patch
 ---
 
-Added `getDefaultResourceId()` and `getKnownResourceIds()` methods to the Harness class. `getDefaultResourceId()` returns the original resource ID from config, while `getKnownResourceIds()` returns all unique resource IDs found across stored threads.
+Added support for reading resource IDs from `Harness`.
+
+You can now get the default resource ID and list known resource IDs from stored threads.
+
+```ts
+const defaultId = harness.getDefaultResourceId();
+const knownIds = await harness.getKnownResourceIds();
+```
