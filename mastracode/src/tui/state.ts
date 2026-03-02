@@ -110,6 +110,7 @@ export interface TUIState {
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
+  quietMode: boolean;
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -207,6 +208,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
+    quietMode: false,
 
     // Thread / conversation
     pendingNewThread: false,

@@ -234,8 +234,8 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'threads', description: 'Switch between threads' },
-    { name: 'models', description: 'Configure model (global/thread/mode)' },
-    { name: 'models:pack', description: 'Switch model pack' },
+    { name: 'models', description: 'Switch model pack' },
+    { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
@@ -272,6 +272,7 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'exit', description: 'Exit the TUI' },
