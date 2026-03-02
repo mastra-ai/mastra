@@ -15,6 +15,7 @@ import {
   handleModeCommand,
   handleSkillsCommand,
   handleNewCommand,
+  handleCloneCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
@@ -65,6 +66,9 @@ export async function dispatchSlashCommand(
   switch (command) {
     case 'new':
       handleNewCommand(buildCtx());
+      return true;
+    case 'clone':
+      await handleCloneCommand(buildCtx());
       return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());

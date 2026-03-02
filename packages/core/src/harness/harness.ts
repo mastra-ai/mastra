@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
@@ -668,6 +669,68 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         thread: { ...thread, title, updatedAt: new Date() },
       });
     }
+  }
+
+  async cloneThread({
+    sourceThreadId,
+    title,
+    resourceId,
+  }: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  } = {}): Promise<HarnessThread> {
+    const sourceId = sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.resourceId,
+      title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(clonedThread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
@@ -2528,6 +2591,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================
