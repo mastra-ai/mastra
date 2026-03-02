@@ -4,13 +4,13 @@ import { MCPServer } from '@mastra/mcp';
 import { docsTool } from './tools/docs-tool';
 import { config } from 'dotenv';
 
-config();
+config({ quiet: true });
 
-// Create MCP server with tools for HTTP/SSE transport
+// Create MCP server with tools for SSE transport
 const mcpServer = new MCPServer({
-  name: 'Kepler docs MCP server',
+  name: 'Kepler Docs MCP Server',
   version: '1.0.0',
-  description: 'Provides access to documentation and planet information tools via HTTP/SSE',
+  description: 'Provides access to documentation and planet information tools via SSE',
 
   // Expose individual tools
   tools: {
@@ -18,8 +18,8 @@ const mcpServer = new MCPServer({
   },
 });
 
-// Function to start the server via HTTP/SSE
-export async function startHttpServer(port: number = 4111) {
+// Function to start the server via SSE
+export async function startHttpServer(port: number = 4112) {
   const { createServer } = await import('http');
 
   const baseUrl = process.env.SERVER_BASE_URL || `http://localhost:${port}`;
@@ -40,15 +40,15 @@ export async function startHttpServer(port: number = 4111) {
 
     await mcpServer.startSSE({
       url,
-      ssePath: '/mcp',
-      messagePath: '/mcp/message',
+      ssePath: '/sse',
+      messagePath: '/message',
       req,
       res,
     });
   });
 
   httpServer.listen(port, () => {
-    console.log(`MCP server running on ${baseUrl}/mcp`);
+    console.log(`MCP server running on ${baseUrl}/sse`);
   });
 
   // Graceful shutdown
@@ -66,6 +66,6 @@ export async function startHttpServer(port: number = 4111) {
 
 // If this file is run directly, start the HTTP server
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const port = parseInt(process.env.MCP_PORT || '4111', 10);
+  const port = parseInt(process.env.MCP_PORT || '4112', 10);
   startHttpServer(port).catch(console.error);
 }
