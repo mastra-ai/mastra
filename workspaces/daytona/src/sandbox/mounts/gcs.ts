@@ -57,12 +57,15 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
 
-    // Ensure prerequisites (curl, gpg, fuse) are available before setting up the repo
+    // Ensure curl and gpg are available for downloading the gcsfuse apt key.
+    // Do NOT pre-install fuse here — the fuse package post-install script fails in containers
+    // (can't run modprobe), leaving dpkg in a broken state that prevents gcsfuse from installing.
+    // The gcsfuse apt package handles the fuse/fuse3 dependency automatically when installed.
     await run('sudo apt-get update -qq 2>&1', 60_000);
-    const prepResult = await run('sudo apt-get install -y curl gnupg fuse 2>&1', 120_000);
+    const prepResult = await run('sudo apt-get install -y curl gnupg 2>&1', 120_000);
     if (prepResult.exitCode !== 0) {
       throw new Error(
-        `Failed to install gcsfuse prerequisites (curl, gnupg, fuse): ${prepResult.stderr || prepResult.stdout}`,
+        `Failed to install gcsfuse prerequisites (curl, gnupg): ${prepResult.stderr || prepResult.stdout}`,
       );
     }
 
@@ -123,14 +126,15 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       installResult = await run('sudo apt-get install -y gcsfuse 2>&1', 120_000);
     }
 
-    if (installResult.exitCode !== 0) {
-      throw new Error(`Failed to install gcsfuse: ${installResult.stderr || installResult.stdout}`);
-    }
-
-    // Verify installation
+    // Verify installation by checking the binary directly.
+    // dpkg may report a non-zero exit if fuse's post-install script fails in containers
+    // (can't run modprobe), but gcsfuse is still unpacked and usable in that case.
     const verifyResult = await run('which gcsfuse 2>/dev/null || echo "not found"', 30_000);
     if (verifyResult.stdout.includes('not found')) {
-      throw new Error('gcsfuse installation appeared to succeed but binary not found on PATH');
+      throw new Error(`Failed to install gcsfuse: ${installResult.stderr || installResult.stdout}`);
+    }
+    if (installResult.exitCode !== 0) {
+      logger.warn(`${LOG_PREFIX} gcsfuse install reported dpkg errors (likely fuse post-install in container) but binary is present — proceeding`);
     }
   }
 
