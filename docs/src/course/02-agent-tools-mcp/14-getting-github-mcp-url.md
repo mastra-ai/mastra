@@ -31,7 +31,7 @@ If you prefer to run the GitHub MCP server locally instead of using the hosted e
 ```typescript
 github: {
   command: 'npx',
-  args: ['-y', '@github/mcp'],
+  args: ['-y', '@modelcontextprotocol/server-github'],
   env: { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN },
 }
 ```
