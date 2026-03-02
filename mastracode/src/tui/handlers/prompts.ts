@@ -40,6 +40,10 @@ export async function handleAskQuestion(
   const { state } = ctx;
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
+      // Capture the current ask_user component reference now, before it can be
+      // overwritten by a subsequent parallel tool call.
+      const askUserComponent = state.lastAskUserComponent;
+
       const activate = () => {
         // Inline mode: Add question component to chat
         const questionComponent = new AskQuestionInlineComponent(
@@ -66,10 +70,10 @@ export async function handleAskQuestion(
         state.activeInlineQuestion = questionComponent;
 
         // Insert the question right after the ask_user tool component
-        if (state.lastAskUserComponent) {
+        if (askUserComponent) {
           // Find the position of the ask_user component
           const children = [...state.chatContainer.children];
-          const askUserIndex = children.indexOf(state.lastAskUserComponent as any);
+          const askUserIndex = children.indexOf(askUserComponent as any);
 
           if (askUserIndex >= 0) {
             // Clear and rebuild with question in the right place
