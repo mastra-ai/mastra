@@ -7,7 +7,7 @@ export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
   }
 
   //starts with an underscore, so we want to pick from second character
-  const constructorName = schema?.constructor?.name ? schema.constructor.name.slice(1) : undefined;
+  const constructorName = schema?.constructor?.name?.slice(1);
   const def = getDef(schema);
   const v4Type =
     typeof def?.type === 'string' ? `Zod${def.type.charAt(0).toUpperCase()}${def.type.slice(1)}` : undefined;
@@ -37,7 +37,7 @@ export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
         const optShape = getShape(option);
         if (optShape) {
           return Object.values(optShape).some((value: any) => {
-            const vName = value?.constructor?.name;
+            const vName = value?.constructor?.name?.slice(1);
             const vDef = getDef(value);
             return vName === 'ZodLiteral' || vDef?.typeName === 'ZodLiteral' || vDef?.type === 'literal';
           });

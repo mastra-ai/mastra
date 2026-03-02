@@ -215,7 +215,9 @@ export function isDefaultSchema(schema: AnySchema): boolean {
  */
 export function isLiteralSchema(schema: AnySchema): boolean {
   const def = getDef(schema);
-  return def?.typeName === 'ZodLiteral' || def?.type === 'literal' || schema?.constructor?.name === 'ZodLiteral';
+  return (
+    def?.typeName === 'ZodLiteral' || def?.type === 'literal' || schema?.constructor?.name?.slice(1) === 'ZodLiteral'
+  );
 }
 
 /**
@@ -228,6 +230,6 @@ export function isIntersectionSchema(schema: AnySchema): boolean {
   return (
     def?.typeName === 'ZodIntersection' ||
     def?.type === 'intersection' ||
-    schema?.constructor?.name === 'ZodIntersection'
+    schema?.constructor?.name?.slice(1) === 'ZodIntersection'
   );
 }

@@ -14,7 +14,7 @@ export function getDefaultValueInZodStack(schema: any): any {
   const literalVal = getLiteralValue(schema);
   if (
     literalVal !== undefined &&
-    (def.typeName === 'ZodLiteral' || def.type === 'literal' || schema?.constructor?.name === 'ZodLiteral')
+    (def.typeName === 'ZodLiteral' || def.type === 'literal' || schema?.constructor?.name?.slice(1) === 'ZodLiteral')
   ) {
     return literalVal;
   }

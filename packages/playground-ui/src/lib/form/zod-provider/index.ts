@@ -72,7 +72,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
   }
 
   const unionOptions = getUnionOptions(baseSchema);
-  const constructorName = baseSchema?.constructor?.name;
+  const constructorName = baseSchema?.constructor?.name?.slice(1);
   const baseDef = getDef(baseSchema);
   const baseTypeName = baseDef?.typeName ?? constructorName;
 
