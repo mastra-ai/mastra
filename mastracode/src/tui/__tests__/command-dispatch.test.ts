@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
+  handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ vi.mock('../commands/index.js', () => ({
   handleThreadTagDirCommand: vi.fn(),
   handleSandboxCommand: vi.fn(),
   handleModelsPackCommand: mocks.handleModelsPackCommand,
+  handleCustomProvidersCommand: mocks.handleCustomProvidersCommand,
   handleSubagentsCommand: vi.fn(),
   handleOMCommand: vi.fn(),
   handleSettingsCommand: vi.fn(),
@@ -47,6 +49,7 @@ import { dispatchSlashCommand } from '../command-dispatch.js';
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
     mocks.handleModelsPackCommand.mockClear();
+    mocks.handleCustomProvidersCommand.mockClear();
     mocks.showError.mockClear();
   });
 
@@ -59,6 +62,17 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /custom-providers to handleCustomProvidersCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/custom-providers', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleCustomProvidersCommand).toHaveBeenCalledWith(ctx);
   });
 
   it('treats /models:pack as unknown command', async () => {
