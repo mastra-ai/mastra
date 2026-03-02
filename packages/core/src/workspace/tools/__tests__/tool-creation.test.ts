@@ -179,6 +179,25 @@ describe('createWorkspaceTools', () => {
       expect(tools['view'].requireApproval).toBe(true);
     });
 
+    it('should update tool id to match remapped name', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+          mastra_workspace_edit_file: { name: 'string_replace_lsp' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      // The tool id should be updated to match the exposed name so that
+      // fallback-by-id resolution doesn't allow calling by the old name
+      expect((tools['view'] as any).id).toBe('view');
+      expect((tools['string_replace_lsp'] as any).id).toBe('string_replace_lsp');
+
+      // Non-remapped tools should keep their default id
+      expect((tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE] as any).id).toBe(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    });
+
     it('should remap sandbox tools', () => {
       const workspace = new Workspace({
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
