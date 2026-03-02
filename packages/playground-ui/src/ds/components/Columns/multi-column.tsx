@@ -5,12 +5,13 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '../Button';
 
-export type ListAndDetailsDetailsProps = {
+export type MultiColumnProps = {
   children?: React.ReactNode;
   numOfColumns?: number;
+  minColumnWidth?: string;
 };
 
-export function ListAndDetailsDetails({ children, numOfColumns = 1 }: ListAndDetailsDetailsProps): React.JSX.Element {
+export function MultiColumn({ children, numOfColumns = 1, minColumnWidth }: MultiColumnProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -87,14 +88,14 @@ export function ListAndDetailsDetails({ children, numOfColumns = 1 }: ListAndDet
   };
 
   return (
-    <div className={cn('DETAILS relative w-full h-full overflow-hidden')}>
+    <div className={cn('MULTI_COLUMN relative w-full h-full overflow-hidden')}>
       {canScrollLeft && <ScrollArrow direction="left" onClick={() => scrollToColumn('left')} />}
       {canScrollRight && <ScrollArrow direction="right" onClick={() => scrollToColumn('right')} />}
       <div
         ref={scrollRef}
         className="grid overflow-x-auto w-full overflow-y-auto h-full"
         style={{
-          gridTemplateColumns: `repeat(${numOfColumns}, 1fr)`,
+          gridTemplateColumns: `repeat(${numOfColumns}, minmax(${minColumnWidth ?? '0'}, 1fr))`,
         }}
       >
         {children}
@@ -110,7 +111,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
   return (
     <div
       className={cn(
-        'absolute top-0 bottom-0 z-10 w-20 flex items-center justify-center px-5 bg-surface2',
+        'absolute top-0 bottom-0 z-20 w-20 flex items-center justify-center px-5 bg-surface2',
         isLeft ? 'left-0' : 'right-0',
       )}
     >

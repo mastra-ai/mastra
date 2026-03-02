@@ -72,6 +72,25 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       await this.sandbox.ensureRunning();
       const handle = await impl.spawn(...args);
       handle.command = args[0];
+
+      // Wire abort signal to handle.kill() so all providers get abort support automatically.
+      const abortSignal = args[1]?.abortSignal;
+      if (abortSignal) {
+        const onAbort = () => {
+          handle.kill().catch(() => {});
+        };
+        if (abortSignal.aborted) {
+          handle.kill().catch(() => {});
+        } else {
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+          // Clean up listener when process exits
+          handle.wait().then(
+            () => abortSignal.removeEventListener('abort', onAbort),
+            () => abortSignal.removeEventListener('abort', onAbort),
+          );
+        }
+      }
+
       return handle;
     };
 
