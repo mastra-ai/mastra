@@ -8,7 +8,7 @@
       },
       {
         "type": "prompt_block",
-        "content": "test test"
+        "content": "test test test"
       }
     ],
     "model": {
