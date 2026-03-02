@@ -815,6 +815,7 @@ export class ProcessorRunner {
       modelSettings: args.modelSettings,
       structuredOutput: args.structuredOutput,
       retryCount: args.retryCount ?? 0,
+      workspace: args.workspace,
     };
 
     // Append the trailing assistant guard when the resolved model is Claude 4.6
@@ -879,6 +880,7 @@ export class ProcessorRunner {
         modelSettings: stepInput.modelSettings,
         structuredOutput: stepInput.structuredOutput,
         requestContext,
+        workspace: stepInput.workspace,
       };
 
       // Use the current span (the step span) as the parent for processor spans

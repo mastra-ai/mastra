@@ -638,6 +638,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               modelSettings,
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
+              workspace: currentStep.workspace,
               writer: inputStepWriter,
               abortSignal: options?.abortSignal,
             });

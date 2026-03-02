@@ -6,6 +6,7 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
+import type { Workspace } from '../workspace/workspace';
 import type { StructuredOutputOptions } from './processors';
 
 // =========================================================================
@@ -524,6 +525,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
     .optional()
     .describe('Structured output configuration'),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
+  workspace: z.custom<Workspace>().optional().describe('Workspace for file operations'),
 });
 
 /**
@@ -630,6 +632,9 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
   structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
+
+  // Workspace for file operations
+  workspace: z.custom<Workspace>().optional(),
 });
 
 /**
