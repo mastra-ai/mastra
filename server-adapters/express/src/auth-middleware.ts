@@ -43,10 +43,12 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
     token = (req.query.apiKey as string) || null;
   }
 
-  // Check for cookie-based credentials (e.g. better-auth session cookies)
-  const hasCookies = !!req.headers.cookie;
+  // Check for cookie-based credentials matching the provider's session cookie
+  const cookieHeader = req.headers.cookie;
+  const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
+  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
 
-  if (!token && !hasCookies) {
+  if (!token && !hasSessionCookie) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 

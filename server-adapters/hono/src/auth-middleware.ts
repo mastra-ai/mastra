@@ -44,11 +44,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     token = c.req.query('apiKey') || null;
   }
 
-  // Check for cookie-based credentials (e.g. better-auth session cookies)
-  const hasCookies = !!c.req.header('Cookie');
+  // Check for cookie-based credentials matching the provider's session cookie
+  const cookieHeader = c.req.header('Cookie');
+  const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
+  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
 
-  // Handle missing credentials — no token AND no cookies
-  if (!token && !hasCookies) {
+  if (!token && !hasSessionCookie) {
     return c.json({ error: 'Authentication required' }, 401);
   }
 

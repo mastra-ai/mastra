@@ -70,6 +70,8 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
     }
 
     this.auth = options.auth;
+    const prefix = (this.auth as any).options?.advanced?.cookiePrefix || 'better-auth';
+    this.sessionCookieName = `${prefix}.session_token`;
 
     this.registerOptions(options);
   }
@@ -95,9 +97,9 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
       }
 
       // Convert Bearer token to a session cookie so Better Auth can verify it
-      if (token && (!cookieHeader || !cookieHeader.includes('better-auth.session_token='))) {
+      if (token && (!cookieHeader || !cookieHeader.includes(`${this.sessionCookieName}=`))) {
         const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
-        headers.set('Cookie', `${existingCookies}better-auth.session_token=${token}`);
+        headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
       }
 
       // Use Better Auth's API to get the session

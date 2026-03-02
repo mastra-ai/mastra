@@ -281,11 +281,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
-    // Check for cookie-based credentials (e.g. better-auth session cookies)
-    const hasCookies = !!context.getHeader('cookie');
+    // Check for cookie-based credentials matching the provider's session cookie
+    const cookieHeader = context.getHeader('cookie');
+    const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
+    const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
 
-    // No token AND no cookies — reject immediately
-    if (!token && !hasCookies) {
+    if (!token && !hasSessionCookie) {
       return { status: 401, error: 'Authentication required' };
     }
 

@@ -44,10 +44,12 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
     token = query.apiKey || null;
   }
 
-  // Check for cookie-based credentials (e.g. better-auth session cookies)
-  const hasCookies = !!request.headers.cookie;
+  // Check for cookie-based credentials matching the provider's session cookie
+  const cookieHeader = request.headers.cookie;
+  const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
+  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
 
-  if (!token && !hasCookies) {
+  if (!token && !hasSessionCookie) {
     return reply.status(401).send({ error: 'Authentication required' });
   }
 

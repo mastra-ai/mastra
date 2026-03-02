@@ -19,6 +19,13 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
   public protected?: MastraAuthConfig['protected'];
   public public?: MastraAuthConfig['public'];
 
+  /**
+   * The session cookie name this provider uses.
+   * When set, the auth middleware only treats requests with this specific cookie
+   * as having cookie-based credentials. Without it, any cookie header is accepted.
+   */
+  public sessionCookieName?: string;
+
   constructor(options?: MastraAuthProviderOptions<TUser>) {
     super({ component: 'AUTH', name: options?.name });
 

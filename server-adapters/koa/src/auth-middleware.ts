@@ -44,10 +44,12 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
     token = query.apiKey || null;
   }
 
-  // Check for cookie-based credentials (e.g. better-auth session cookies)
-  const hasCookies = !!ctx.headers.cookie;
+  // Check for cookie-based credentials matching the provider's session cookie
+  const cookieHeader = ctx.headers.cookie;
+  const sessionCookieName = 'sessionCookieName' in authConfig ? (authConfig as any).sessionCookieName : undefined;
+  const hasSessionCookie = sessionCookieName ? !!cookieHeader?.includes(`${sessionCookieName}=`) : !!cookieHeader;
 
-  if (!token && !hasCookies) {
+  if (!token && !hasSessionCookie) {
     ctx.status = 401;
     ctx.body = { error: 'Authentication required' };
     return;
