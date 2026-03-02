@@ -1,3 +1,4 @@
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -81,27 +82,32 @@ export const useDatasetExperimentResults = ({
 };
 
 /**
- * Hook to fetch scores for an experiment, transformed to Record<itemId, ScoreData[]>
- * ScoreData matches ResultsTable expectation: { id, scorerId, score, reason? }
+ * Hook to fetch all scores for an experiment, transformed to Record<entityId, ClientScoreRowData[]>
+ * Paginates through all pages to ensure no scores are silently dropped.
  */
 export const useScoresByExperimentId = (experimentId: string) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-experiment-scores', experimentId],
     queryFn: async () => {
-      const response = await client.listScoresByRunId({ runId: experimentId });
-      // Transform flat array to Record<entityId, ScoreData[]>
-      const grouped: Record<string, Array<{ id: string; scorerId: string; score: number; reason?: string }>> = {};
-      for (const row of response.scores) {
+      const allScores: ClientScoreRowData[] = [];
+      let page = 0;
+      const perPage = 100;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await client.listScoresByRunId({ runId: experimentId, page, perPage });
+        allScores.push(...response.scores);
+        if (!response.pagination.hasMore) break;
+        page++;
+      }
+
+      const grouped: Record<string, ClientScoreRowData[]> = {};
+      for (const row of allScores) {
         if (!grouped[row.entityId]) {
           grouped[row.entityId] = [];
         }
-        grouped[row.entityId].push({
-          id: row.id,
-          scorerId: row.scorerId,
-          score: row.score,
-          reason: row.reason ?? undefined,
-        });
+        grouped[row.entityId].push(row);
       }
       return grouped;
     },

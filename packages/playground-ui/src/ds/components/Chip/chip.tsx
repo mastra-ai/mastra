@@ -43,7 +43,7 @@ export const Chip = ({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-md uppercase px-[0.6em] gap-[0.4em] tracking-wide font-normal',
+        'inline-flex items-center rounded-md uppercase px-[0.5em] gap-[0.4em] tracking-wide font-normal',
         // general styles for svg icons within the chip
         '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:translate-y-[-0.02em] [&>svg]:mx-[-0.2em]',
         // if the chip has only one child and it's an svg, make it fully opaque
