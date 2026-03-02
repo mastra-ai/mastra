@@ -43,8 +43,10 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
     token = (req.query.apiKey as string) || null;
   }
 
-  // Handle missing token
-  if (!token) {
+  // Check for cookie-based credentials (e.g. better-auth session cookies)
+  const hasCookies = !!req.headers.cookie;
+
+  if (!token && !hasCookies) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
@@ -57,7 +59,7 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
       // Note: Express doesn't have HonoRequest, so we pass the Express Request
       // The auth config function signature accepts HonoRequest, but in practice
       // it should work with any request object that has the necessary properties
-      user = await authConfig.authenticateToken(token, req as any);
+      user = await authConfig.authenticateToken(token ?? '', req as any);
     } else {
       throw new Error('No token verification method configured');
     }

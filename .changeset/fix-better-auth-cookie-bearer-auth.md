@@ -1,6 +1,9 @@
 ---
 '@mastra/auth-better-auth': patch
 '@mastra/hono': patch
+'@mastra/express': patch
+'@mastra/fastify': patch
+'@mastra/koa': patch
 '@mastra/server': patch
 ---
 

@@ -44,8 +44,10 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
     token = query.apiKey || null;
   }
 
-  // Handle missing token
-  if (!token) {
+  // Check for cookie-based credentials (e.g. better-auth session cookies)
+  const hasCookies = !!ctx.headers.cookie;
+
+  if (!token && !hasCookies) {
     ctx.status = 401;
     ctx.body = { error: 'Authentication required' };
     return;
@@ -59,7 +61,7 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
     if (typeof authConfig.authenticateToken === 'function') {
       // Note: The auth config function signature accepts HonoRequest, but in practice
       // it should work with any request object that has the necessary properties
-      user = await authConfig.authenticateToken(token, ctx.request as any);
+      user = await authConfig.authenticateToken(token ?? '', ctx.request as any);
     } else {
       throw new Error('No token verification method configured');
     }
