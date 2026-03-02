@@ -1,15 +1,13 @@
 import type {
-  EEUser,
-  IRBACProvider,
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
-  RoleMapping,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@mastra/core/auth';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth';
+import type { EEUser, IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 

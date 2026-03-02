@@ -10,11 +10,11 @@ import type {
   IUserProvider,
   ISSOProvider,
   ISessionProvider,
-  EEUser,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@mastra/core/auth';
+import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 import { AuthService, sessionEncryption } from '@workos/authkit-session';

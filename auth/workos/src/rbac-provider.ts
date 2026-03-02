@@ -5,8 +5,8 @@
  * permission-based access control system.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth';
+import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
 

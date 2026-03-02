@@ -1,4 +1,5 @@
-import type { IUserProvider, ICredentialsProvider, EEUser, CredentialsResult } from '@mastra/core/auth';
+import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@mastra/core/auth';
+import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 

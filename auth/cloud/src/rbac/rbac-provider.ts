@@ -5,8 +5,8 @@
  * using configurable role-to-permission mappings.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth';
+import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
 
 import type { CloudUser } from '../types';
 

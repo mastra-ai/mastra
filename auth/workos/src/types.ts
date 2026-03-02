@@ -2,7 +2,7 @@
  * Shared types for WorkOS integration.
  */
 
-import type { EEUser, RoleMapping } from '@mastra/core/auth';
+import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
