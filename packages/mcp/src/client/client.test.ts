@@ -284,6 +284,132 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   });
 });
 
+describe('MastraMCPClient - outputSchema Zod stripping', () => {
+  // Reproduces the bug where the Zod output schema converted from the MCP tool's
+  // JSON Schema strips unknown keys from the result. This happens because Zod's
+  // default mode is "strip" which silently removes unknown keys.
+  //
+  // Example: FastMCP server returns structuredContent with fields like
+  // { success, events, count, message, tool } but the outputSchema only defines
+  // { events, count } — Zod strips success, message, and tool.
+  //
+  // Worse case: outputSchema is { type: "object" } with no properties, which
+  // produces z.object({}) and strips ALL keys, returning {}.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'zod-stripping-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not strip extra fields from structuredContent when outputSchema has fewer properties', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    // outputSchema only defines "count" and "events", but the server returns
+    // additional fields like "success", "message", and "tool"
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calendar_search',
+          description: 'Search calendar events',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              startdate: { type: 'string' },
+              enddate: { type: 'string' },
+            },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              count: { type: 'number' },
+              events: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      ],
+    });
+
+    const fullResult = {
+      success: true,
+      events: [{ id: 1, title: 'Meeting' }],
+      count: 1,
+      message: 'Found 1 calendar event(s)',
+      tool: 'microsoft_calendar_search',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'text', text: JSON.stringify(fullResult) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['calendar_search'];
+    const result = await tool.execute?.({
+      startdate: '2026-02-27T00:00:00Z',
+      enddate: '2026-02-27T23:59:59Z',
+    });
+
+    // All fields should be preserved, including those not in the outputSchema
+    expect(result).toEqual(fullResult);
+  });
+
+  it('should not return {} when outputSchema is a generic object with no properties', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    // outputSchema is just { type: "object" } with no properties defined
+    // This converts to z.object({}) which strips ALL keys by default
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'generic_tool',
+          description: 'A tool with generic output',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+          },
+        },
+      ],
+    });
+
+    const fullResult = { data: 'hello', count: 42 };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'text', text: JSON.stringify(fullResult) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['generic_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    // Should return the full result, not {}
+    expect(result).toEqual(fullResult);
+  });
+});
+
 describe('MastraMCPClient - Elicitation Tests', () => {
   let testServer: {
     httpServer: HttpServer;
