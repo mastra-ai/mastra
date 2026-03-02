@@ -21,6 +21,14 @@ export const MastraClientProvider = ({ children, baseUrl, headers, apiPrefix }: 
 
 export const useMastraClient = () => useContext(MastraClientContext);
 
+const IPV4_LOOPBACK_RE = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+const isIPv4Loopback = (hostname: string): boolean => {
+  const m = IPV4_LOOPBACK_RE.exec(hostname);
+  if (!m) return false;
+  return +m[1]! <= 255 && +m[2]! <= 255 && +m[3]! <= 255;
+};
+
 export const isLocalUrl = (url?: string): boolean => {
   if (!url) return true;
   try {
@@ -28,7 +36,7 @@ export const isLocalUrl = (url?: string): boolean => {
     return (
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||
-      hostname.startsWith('127.') ||
+      isIPv4Loopback(hostname) ||
       hostname === '::1' ||
       hostname === '[::1]'
     );

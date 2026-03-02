@@ -47,6 +47,11 @@ describe('isLocalUrl', () => {
     expect(isLocalUrl('http://dev.localhost')).toBe(true);
   });
 
+  it('should return false for hostnames that start with 127 but are not IPv4 loopback', () => {
+    expect(isLocalUrl('http://127.example.com')).toBe(false);
+    expect(isLocalUrl('http://127.0.0.256')).toBe(false);
+  });
+
   it('should return false for remote URLs', () => {
     expect(isLocalUrl('https://api.example.com')).toBe(false);
     expect(isLocalUrl('https://my-app.vercel.app')).toBe(false);
