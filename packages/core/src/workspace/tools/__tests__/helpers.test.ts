@@ -159,8 +159,19 @@ describe('getEditDiagnosticsText', () => {
     expect(result).toBe('');
   });
 
-  it('returns empty string when diagnostics are empty', async () => {
+  it('returns no-issues message when LSP ran but found nothing', async () => {
     const { workspace } = createMockLSPWorkspace([]);
+    const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x = 1');
+    expect(result).toContain('No errors or warnings');
+  });
+
+  it('returns empty string when no LSP client is available (null)', async () => {
+    const mockLsp = {
+      root: '/project',
+      getDiagnostics: vi.fn().mockResolvedValue(null),
+    };
+    const workspace = createMockWorkspace({ sandbox: true });
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
     const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x = 1');
     expect(result).toBe('');
   });

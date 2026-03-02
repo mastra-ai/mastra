@@ -428,6 +428,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 
@@ -457,7 +471,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
+   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
+   * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     try {
@@ -471,7 +486,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       >;
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const models: AvailableModel[] = [];
+      const modelsById = new Map<string, AvailableModel>();
+
+      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+        if (!model.id || !model.provider || !model.modelName) return;
+        modelsById.set(model.id, {
+          ...model,
+          useCount: useCounts[model.id] ?? 0,
+        });
+      };
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
@@ -487,20 +510,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         if (providerConfig?.models && Array.isArray(providerConfig.models)) {
           for (const modelName of providerConfig.models) {
-            const id = `${provider}/${modelName}`;
-            models.push({
-              id,
+            upsertModel({
+              id: `${provider}/${modelName}`,
               provider,
               modelName,
               hasApiKey,
               apiKeyEnvVar: apiKeyEnvVar || undefined,
-              useCount: useCounts[id] ?? 0,
             });
           }
         }
       }
 
-      return models;
+      if (this.config.customModelCatalogProvider) {
+        try {
+          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+          for (const model of customModels) {
+            upsertModel({
+              id: model.id,
+              provider: model.provider,
+              modelName: model.modelName,
+              hasApiKey: model.hasApiKey,
+              apiKeyEnvVar: model.apiKeyEnvVar,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load custom available models:', error);
+        }
+      }
+
+      return [...modelsById.values()];
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
@@ -819,6 +857,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
           });
         }
+      }
+
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -1794,6 +1840,22 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
             });
+          }
+          break;
+        }
+
+        // Sandbox streaming data chunks (from workspace execute_command tool)
+        case 'data-sandbox-stdout': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+          }
+          break;
+        }
+        case 'data-sandbox-stderr': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
           }
           break;
         }
