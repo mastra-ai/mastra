@@ -93,6 +93,13 @@ describe('setupDebugLogging', () => {
     expect(console.warn).not.toBe(originalWarn);
   });
 
+  it('should silence console when MASTRA_DEBUG=false', () => {
+    vi.stubEnv('MASTRA_DEBUG', 'false');
+    setupDebugLogging();
+    expect(console.error).not.toBe(originalError);
+    expect(console.warn).not.toBe(originalWarn);
+  });
+
   it('should redirect console.error and console.warn to file when MASTRA_DEBUG=true', async () => {
     vi.stubEnv('MASTRA_DEBUG', 'true');
     // Point getAppDataDir to our tmp dir
