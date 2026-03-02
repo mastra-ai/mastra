@@ -1,10 +1,5 @@
 import { Spacer } from '@mariozechner/pi-tui';
-import {
-  getCustomProviderId,
-  loadSettings,
-  saveSettings,
-  toCustomProviderModelId,
-} from '../../onboarding/settings.js';
+import { getCustomProviderId, loadSettings, saveSettings, toCustomProviderModelId } from '../../onboarding/settings.js';
 import type { CustomProviderSetting, GlobalSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
@@ -42,7 +37,9 @@ export function upsertCustomProviderInSettings(
 }
 
 export function removeCustomProviderFromSettings(settings: GlobalSettings, providerId: string): void {
-  settings.customProviders = settings.customProviders.filter(provider => getCustomProviderId(provider.name) !== providerId);
+  settings.customProviders = settings.customProviders.filter(
+    provider => getCustomProviderId(provider.name) !== providerId,
+  );
 }
 
 export function addModelToCustomProviderInSettings(
@@ -107,7 +104,11 @@ function askText(
   });
 }
 
-async function askOptionalText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | undefined> {
+async function askOptionalText(
+  ctx: SlashCommandContext,
+  question: string,
+  defaultValue?: string,
+): Promise<string | undefined> {
   const answer = await askText(ctx, `${question} (leave blank to skip)`, defaultValue, true);
   return answer?.trim() || undefined;
 }

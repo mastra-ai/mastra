@@ -74,34 +74,34 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command           | Description                                  |
-| ----------------- | -------------------------------------------- |
-| `/new`            | Start a new conversation thread              |
-| `/threads`        | List and switch between threads              |
-| `/models`         | Switch/manage model packs (built-in/custom)  |
+| Command             | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `/new`              | Start a new conversation thread                  |
+| `/threads`          | List and switch between threads                  |
+| `/models`           | Switch/manage model packs (built-in/custom)      |
 | `/custom-providers` | Manage custom OpenAI-compatible providers/models |
-| `/mode`           | Switch agent mode                            |
-| `/subagents`      | Configure subagent model defaults            |
-| `/om`             | Configure Observational Memory models        |
-| `/think`          | Set thinking level (Anthropic)               |
-| `/skills`         | List available skills                        |
-| `/diff`           | Show modified files or git diff              |
-| `/name`           | Rename current thread                        |
-| `/cost`           | Show token usage and estimated costs         |
-| `/review`         | Review a GitHub pull request                 |
-| `/hooks`          | Show/reload configured hooks                 |
-| `/mcp`            | Show/reload MCP server connections           |
-| `/sandbox`        | Manage allowed paths (add/remove dirs)       |
-| `/permissions`    | View/manage tool approval permissions        |
-| `/settings`       | General settings (notifications, YOLO, etc.) |
-| `/yolo`           | Toggle YOLO mode (auto-approve all tools)    |
-| `/resource`       | Show/switch resource ID (tag for sharing)    |
-| `/thread:tag-dir` | Tag current thread with this directory       |
-| `/login`          | Authenticate with OAuth providers            |
-| `/logout`         | Log out from a provider                      |
-| `/setup`          | Re-run the interactive setup wizard          |
-| `/help`           | Show available commands                      |
-| `/exit`           | Exit the TUI                                 |
+| `/mode`             | Switch agent mode                                |
+| `/subagents`        | Configure subagent model defaults                |
+| `/om`               | Configure Observational Memory models            |
+| `/think`            | Set thinking level (Anthropic)                   |
+| `/skills`           | List available skills                            |
+| `/diff`             | Show modified files or git diff                  |
+| `/name`             | Rename current thread                            |
+| `/cost`             | Show token usage and estimated costs             |
+| `/review`           | Review a GitHub pull request                     |
+| `/hooks`            | Show/reload configured hooks                     |
+| `/mcp`              | Show/reload MCP server connections               |
+| `/sandbox`          | Manage allowed paths (add/remove dirs)           |
+| `/permissions`      | View/manage tool approval permissions            |
+| `/settings`         | General settings (notifications, YOLO, etc.)     |
+| `/yolo`             | Toggle YOLO mode (auto-approve all tools)        |
+| `/resource`         | Show/switch resource ID (tag for sharing)        |
+| `/thread:tag-dir`   | Tag current thread with this directory           |
+| `/login`            | Authenticate with OAuth providers                |
+| `/logout`           | Log out from a provider                          |
+| `/setup`            | Re-run the interactive setup wizard              |
+| `/help`             | Show available commands                          |
+| `/exit`             | Exit the TUI                                     |
 
 ### Keyboard shortcuts
 
