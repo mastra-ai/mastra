@@ -4,34 +4,22 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
-import {
-  createWebSearchTool,
-  createWebExtractTool,
-  hasTavilyKey,
-  requestSandboxAccessTool,
-  createStringReplaceLspTool,
-  createAstSmartEditTool,
-  createWriteFileTool,
-} from '../tools';
+import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
 
-    const projectPath = state?.projectPath;
     const modelId = state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
     const isOpenAIModel = modelId?.startsWith('openai/');
 
-    // Filesystem, grep, glob, execute_command, and process management tools
-    // are provided by the workspace (see workspace.ts).
-    // Edit tools are wired here so they pick up the project root from harness state.
+    // Filesystem, grep, glob, edit, write, execute_command, and process
+    // management tools are now provided by the workspace (see workspace.ts).
+    // Only tools without a workspace equivalent remain here.
     const tools: Record<string, any> = {
       request_sandbox_access: requestSandboxAccessTool,
-      string_replace_lsp: createStringReplaceLspTool(projectPath),
-      ast_smart_edit: createAstSmartEditTool(projectPath),
-      write_file: createWriteFileTool(projectPath),
     };
 
     if (hasTavilyKey()) {
