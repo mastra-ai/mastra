@@ -3,8 +3,10 @@
 'mastracode': patch
 ---
 
-Switch mastracode to use workspace tools for filesystem, grep, glob, edit, write, and command execution instead of built-in tool implementations
+Switched Mastra Code to workspace tools and enabled LSP by default
 
-- Map sandbox `data-sandbox-stdout`/`data-sandbox-stderr` data chunks to `shell_output` harness events for TUI streaming
-- Add TUI rendering for process management tools (`get_process_output`, `kill_process`)
-- Fix TUI edit file diff rendering to support workspace tool arg names (`old_string`/`new_string`)
+- Switched from built-in tool implementations to workspace tools for file operations, search, edit, write, and command execution
+- Enabled LSP (language server) by default with automatic package runner detection and bundled binary resolution
+- Added real-time stdout/stderr streaming in the TUI for workspace command execution
+- Added TUI rendering for process management tools (view output, kill processes)
+- Fixed edit diff preview in the TUI to work with workspace tool arg names (`old_string`/`new_string`)
