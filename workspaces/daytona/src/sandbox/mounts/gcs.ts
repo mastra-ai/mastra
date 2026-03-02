@@ -134,7 +134,9 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
       throw new Error(`Failed to install gcsfuse: ${installResult.stderr || installResult.stdout}`);
     }
     if (installResult.exitCode !== 0) {
-      logger.warn(`${LOG_PREFIX} gcsfuse install reported dpkg errors (likely fuse post-install in container) but binary is present — proceeding`);
+      logger.warn(
+        `${LOG_PREFIX} gcsfuse install reported dpkg errors (likely fuse post-install in container) but binary is present — proceeding`,
+      );
     }
   }
 
