@@ -1708,9 +1708,10 @@ export class Agent<
           text: `User added URL: ${part.source.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
+        const fileUrl = (part as Record<string, unknown>).url as string | undefined;
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType ?? part.mimeType} file: ${fileUrl?.substring(0, 100) ?? '(binary)'}`,
         });
       }
     }
