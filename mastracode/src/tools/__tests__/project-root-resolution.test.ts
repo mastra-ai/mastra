@@ -113,5 +113,4 @@ describe('tool project-root path resolution', () => {
     expect(result.isError).toBe(false);
     expect(fs.readFileSync(targetPath, 'utf-8')).toBe('created from write_file');
   });
-
 });
