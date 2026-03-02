@@ -82,7 +82,7 @@ export const useDatasetExperimentResults = ({
 };
 
 /**
- * Hook to fetch all scores for an experiment, transformed to Record<itemId, ClientScoreRowData[]>
+ * Hook to fetch all scores for an experiment, transformed to Record<entityId, ClientScoreRowData[]>
  * Paginates through all pages to ensure no scores are silently dropped.
  */
 export const useScoresByExperimentId = (experimentId: string) => {
