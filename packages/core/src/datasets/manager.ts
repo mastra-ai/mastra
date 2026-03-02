@@ -93,11 +93,14 @@ export class DatasetsManager {
     description?: string;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    defaultRequestContext?: unknown;
+    requestContextSchema?: unknown;
     metadata?: Record<string, unknown>;
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 
-    let { inputSchema, groundTruthSchema, ...rest } = input;
+    let { inputSchema, groundTruthSchema, requestContextSchema: requestContextSchemaInput, ...rest } = input;
+    let requestContextSchema = requestContextSchemaInput;
 
     if (inputSchema !== undefined && isZodType(inputSchema)) {
       inputSchema = zodToJsonSchema(inputSchema);
@@ -105,11 +108,15 @@ export class DatasetsManager {
     if (groundTruthSchema !== undefined && isZodType(groundTruthSchema)) {
       groundTruthSchema = zodToJsonSchema(groundTruthSchema);
     }
+    if (requestContextSchema !== undefined && isZodType(requestContextSchema)) {
+      requestContextSchema = zodToJsonSchema(requestContextSchema);
+    }
 
     const result = await store.createDataset({
       ...rest,
       inputSchema: inputSchema as Record<string, unknown> | undefined,
       groundTruthSchema: groundTruthSchema as Record<string, unknown> | undefined,
+      requestContextSchema: requestContextSchema as Record<string, unknown> | undefined,
     });
 
     return new Dataset(result.id, this.#mastra);

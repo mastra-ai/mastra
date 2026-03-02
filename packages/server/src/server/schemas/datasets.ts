@@ -63,6 +63,8 @@ export const createDatasetBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
+  defaultRequestContext: z.unknown().optional().describe('Default request context for experiment execution'),
+  requestContextSchema: jsonSchemaField.describe('JSON Schema for validating item requestContext'),
 });
 
 export const updateDatasetBodySchema = z.object({
@@ -71,17 +73,21 @@ export const updateDatasetBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
+  defaultRequestContext: z.unknown().optional().describe('Default request context for experiment execution'),
+  requestContextSchema: jsonSchemaField.describe('JSON Schema for validating item requestContext'),
 });
 
 export const addItemBodySchema = z.object({
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  requestContext: z.unknown().optional().describe('Request context for experiment execution'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
 export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  requestContext: z.unknown().optional().describe('Request context for experiment execution'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
@@ -110,6 +116,8 @@ export const datasetResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   inputSchema: z.record(z.unknown()).optional(),
   groundTruthSchema: z.record(z.unknown()).optional(),
+  defaultRequestContext: z.unknown().optional(),
+  requestContextSchema: z.record(z.unknown()).optional(),
   version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -122,6 +130,7 @@ export const datasetItemResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  requestContext: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -278,6 +287,7 @@ export const itemVersionResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  requestContext: z.unknown().optional(),
   metadata: z.record(z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
@@ -311,6 +321,7 @@ export const batchInsertItemsBodySchema = z.object({
     z.object({
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
+      requestContext: z.unknown().optional(),
       metadata: z.record(z.unknown()).optional(),
     }),
   ),

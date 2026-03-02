@@ -142,12 +142,16 @@ export class Workflow extends BaseResource {
   async getSchema(): Promise<{
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
   }> {
     const details = await this.details();
     return {
       inputSchema: details.inputSchema ? (parseSuperJsonString(details.inputSchema) as Record<string, unknown>) : null,
       outputSchema: details.outputSchema
         ? (parseSuperJsonString(details.outputSchema) as Record<string, unknown>)
+        : null,
+      requestContextSchema: details.requestContextSchema
+        ? (parseSuperJsonString(details.requestContextSchema) as Record<string, unknown>)
         : null,
     };
   }

@@ -114,10 +114,13 @@ export class Dataset {
     metadata?: Record<string, unknown>;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    defaultRequestContext?: unknown;
+    requestContextSchema?: unknown;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
-    let { inputSchema, groundTruthSchema, ...rest } = input;
+    let { inputSchema, groundTruthSchema, requestContextSchema: requestContextSchemaInput, ...rest } = input;
+    let requestContextSchema = requestContextSchemaInput;
 
     if (inputSchema !== undefined && inputSchema !== null && isZodType(inputSchema)) {
       inputSchema = zodToJsonSchema(inputSchema);
@@ -125,12 +128,16 @@ export class Dataset {
     if (groundTruthSchema !== undefined && groundTruthSchema !== null && isZodType(groundTruthSchema)) {
       groundTruthSchema = zodToJsonSchema(groundTruthSchema);
     }
+    if (requestContextSchema !== undefined && requestContextSchema !== null && isZodType(requestContextSchema)) {
+      requestContextSchema = zodToJsonSchema(requestContextSchema);
+    }
 
     return store.updateDataset({
       id: this.id,
       ...rest,
       inputSchema: inputSchema as Record<string, unknown> | null | undefined,
       groundTruthSchema: groundTruthSchema as Record<string, unknown> | null | undefined,
+      requestContextSchema: requestContextSchema as Record<string, unknown> | null | undefined,
     });
   }
 
@@ -144,6 +151,7 @@ export class Dataset {
   async addItem(input: {
     input: unknown;
     groundTruth?: unknown;
+    requestContext?: unknown;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
@@ -151,6 +159,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      requestContext: input.requestContext,
       metadata: input.metadata,
     });
   }
@@ -162,6 +171,7 @@ export class Dataset {
     items: Array<{
       input: unknown;
       groundTruth?: unknown;
+      requestContext?: unknown;
       metadata?: Record<string, unknown>;
     }>;
   }): Promise<DatasetItem[]> {
@@ -210,6 +220,7 @@ export class Dataset {
     itemId: string;
     input?: unknown;
     groundTruth?: unknown;
+    requestContext?: unknown;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
@@ -218,6 +229,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      requestContext: input.requestContext,
       metadata: input.metadata,
     });
   }
