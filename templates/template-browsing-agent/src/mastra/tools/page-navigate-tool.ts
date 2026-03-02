@@ -22,8 +22,8 @@ export const pageNavigateTool = createTool({
       if (!page) {
         return {
           success: false,
-          message: 'No pages available in browser context'
-        }
+          message: 'No pages available in browser context',
+        };
       }
 
       // Navigate to the URL
