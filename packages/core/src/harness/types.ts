@@ -184,6 +184,12 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   modelUseCountTracker?: ModelUseCountTracker;
 
   /**
+   * Optional catalog hook for additional models (e.g., user-defined custom providers).
+   * Returned entries are merged into `listAvailableModels()`.
+   */
+  customModelCatalogProvider?: CustomModelCatalogProvider;
+
+  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
@@ -290,6 +296,16 @@ export interface AvailableModel {
   /** Number of times this model has been used (from external tracking) */
   useCount: number;
 }
+
+/**
+ * Additional model entries supplied by the app layer.
+ */
+export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
+
+/**
+ * Provides additional model catalog entries for `listAvailableModels()`.
+ */
+export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
 
 /**
  * Custom auth checker for model providers.
