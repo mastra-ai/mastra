@@ -9,6 +9,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
+import { MC_TOOLS } from '../../tool-names.js';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -150,10 +151,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
    */
   appendStreamingOutput(output: string): void {
     if (
-      this.toolName !== 'execute_command' &&
-      this.toolName !== 'mastra_workspace_execute_command' &&
-      this.toolName !== 'mastra_workspace_get_process_output' &&
-      this.toolName !== 'mastra_workspace_kill_process'
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      this.toolName !== MC_TOOLS.GET_PROCESS_OUTPUT &&
+      this.toolName !== MC_TOOLS.KILL_PROCESS
     ) {
       return;
     }
@@ -185,12 +185,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   private updateBgColor(): void {
     // For shell, view, edit, and process commands, skip background - we use bordered box style instead
-    const isShellCommand = this.toolName === 'execute_command' || this.toolName === 'mastra_workspace_execute_command';
-    const isViewCommand = this.toolName === 'view' || this.toolName === 'mastra_workspace_read_file';
-    const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
-    const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
-    const isProcessCommand =
-      this.toolName === 'mastra_workspace_get_process_output' || this.toolName === 'mastra_workspace_kill_process';
+    const isShellCommand = this.toolName === MC_TOOLS.EXECUTE_COMMAND;
+    const isViewCommand = this.toolName === MC_TOOLS.VIEW;
+    const isEditCommand = this.toolName === MC_TOOLS.STRING_REPLACE_LSP;
+    const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
+    const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
     const isTaskWrite = this.toolName === 'task_write';
 
     if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
@@ -216,28 +215,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.collapsible = undefined;
 
     switch (this.toolName) {
-      case 'view':
-      case 'mastra_workspace_read_file':
+      case MC_TOOLS.VIEW:
         this.renderViewToolEnhanced();
         break;
-      case 'execute_command':
-      case 'mastra_workspace_execute_command':
+      case MC_TOOLS.EXECUTE_COMMAND:
         this.renderBashToolEnhanced();
         break;
-      case 'string_replace_lsp':
-      case 'mastra_workspace_edit_file':
+      case MC_TOOLS.STRING_REPLACE_LSP:
         this.renderEditToolEnhanced();
         break;
-      case 'write_file':
-      case 'mastra_workspace_write_file':
+      case MC_TOOLS.WRITE_FILE:
         this.renderWriteToolEnhanced();
         break;
-      case 'find_files':
-      case 'mastra_workspace_list_files':
+      case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
         break;
-      case 'mastra_workspace_get_process_output':
-      case 'mastra_workspace_kill_process':
+      case MC_TOOLS.GET_PROCESS_OUTPUT:
+      case MC_TOOLS.KILL_PROCESS:
         this.renderProcessToolEnhanced();
         break;
       case 'task_write':
@@ -434,7 +428,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private renderProcessToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const pid = argsObj?.pid ? Number(argsObj.pid) : 0;
-    const isKill = this.toolName === 'mastra_workspace_kill_process';
+    const isKill = this.toolName === MC_TOOLS.KILL_PROCESS;
     const isWait = !isKill && argsObj?.wait === true;
 
     const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();

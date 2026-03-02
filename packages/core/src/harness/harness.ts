@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
@@ -67,6 +68,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
+  private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
@@ -100,6 +102,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
+    this.defaultResourceId = this.resourceId;
 
     // Initialize state from schema defaults + initial state
     this.state = {
@@ -428,6 +431,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 
@@ -457,7 +474,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
+   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
+   * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     try {
@@ -471,7 +489,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       >;
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const models: AvailableModel[] = [];
+      const modelsById = new Map<string, AvailableModel>();
+
+      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+        if (!model.id || !model.provider || !model.modelName) return;
+        modelsById.set(model.id, {
+          ...model,
+          useCount: useCounts[model.id] ?? 0,
+        });
+      };
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
@@ -487,20 +513,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         if (providerConfig?.models && Array.isArray(providerConfig.models)) {
           for (const modelName of providerConfig.models) {
-            const id = `${provider}/${modelName}`;
-            models.push({
-              id,
+            upsertModel({
+              id: `${provider}/${modelName}`,
               provider,
               modelName,
               hasApiKey,
               apiKeyEnvVar: apiKeyEnvVar || undefined,
-              useCount: useCounts[id] ?? 0,
             });
           }
         }
       }
 
-      return models;
+      if (this.config.customModelCatalogProvider) {
+        try {
+          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+          for (const model of customModels) {
+            upsertModel({
+              id: model.id,
+              provider: model.provider,
+              modelName: model.modelName,
+              hasApiKey: model.hasApiKey,
+              apiKeyEnvVar: model.apiKeyEnvVar,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load custom available models:', error);
+        }
+      }
+
+      return [...modelsById.values()];
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
@@ -533,6 +574,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
+  }
+
+  getDefaultResourceId(): string {
+    return this.defaultResourceId;
+  }
+
+  async getKnownResourceIds(): Promise<string[]> {
+    const threads = await this.listThreads({ allResources: true });
+    const ids = new Set(threads.map(t => t.resourceId));
+    return [...ids].sort();
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
@@ -618,6 +669,68 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         thread: { ...thread, title, updatedAt: new Date() },
       });
     }
+  }
+
+  async cloneThread({
+    sourceThreadId,
+    title,
+    resourceId,
+  }: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  } = {}): Promise<HarnessThread> {
+    const sourceId = sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.resourceId,
+      title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(clonedThread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
@@ -756,6 +869,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
           });
         }
+      }
+
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -2470,6 +2591,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================
