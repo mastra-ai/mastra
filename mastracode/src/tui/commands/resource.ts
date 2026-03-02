@@ -16,8 +16,9 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
       ...knownIds.map((id: string) => `  ${id === current ? '* ' : '  '}${id}`),
       '',
       'Usage:',
-      '  /resource <id>    - Switch to a resource ID (resumes latest thread)',
-      '  /resource reset   - Reset to auto-detected ID',
+      '  /resource          - Show current resource and known IDs',
+      '  /resource <id>     - Switch to a resource ID (resumes latest thread)',
+      '  /resource reset    - Reset to auto-detected ID',
     ];
     ctx.showInfo(lines.join('\n'));
     return;
