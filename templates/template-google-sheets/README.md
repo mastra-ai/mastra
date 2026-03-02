@@ -38,9 +38,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 1. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-Open Studio and navigate to "Financial Modeling Agent". In the system prompt you'll find a redirect URL to authenticate with Google. Open that URL and complete the OAuth flow. Afterwards the prompt will update itself and all the tools are available.
+Open Studio and navigate to "Financial Modeling Agent". In the system prompt you'll find a redirect URL to authenticate with Google. Open that URL and complete the OAuth flow. Afterward the prompt will update itself and all the tools are available.
 
-Start conversing with the agent by saying "Hello". It'll tell you to create a new Google sheet and paste the ID/URL to the agent. Afterwards tell the agent what you want to build.
+Start conversing with the agent by saying "Hello". It'll tell you to create a new Google sheet and paste the ID/URL to the agent. Afterward tell the agent what you want to build.
 
 ## About Mastra templates
 

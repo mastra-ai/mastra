@@ -33,7 +33,7 @@ Open Studio and navigate to the `csv-to-questions` workflow. Enter a CSV URL and
 
 ## Making it yours
 
-Swap in a different embedding model, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent, tools, and workflow are all in `src/` — edit them directly to fit your use case.
+Swap in a different model, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent, tools, and workflow are all in `src/` — edit them directly to fit your use case.
 
 ## About Mastra templates
 

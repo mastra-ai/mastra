@@ -27,7 +27,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 Select the **Flash Card Agent** and attach a PDF file using the attachment button in the chat. You can use the `assets/example.pdf` file included in the repo for testing. Ask the agent: "Create flash cards from this PDF". Optionally, afterwards ask for images: "Generate flash cards with images for the key concepts".
 
-Swap in a different image generation provider, add your instructions, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent is in `src/agents` — edit it directly to fit your use case.
+Swap in a different image generation provider, add your instructions, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent is in `src/mastra/agents` — edit it directly to fit your use case.
 
 ## About Mastra templates
 

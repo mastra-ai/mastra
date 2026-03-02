@@ -68,7 +68,7 @@ export const csvFetcherTool = createTool({
   execute: async (inputData, context) => {
     const { csvUrl } = inputData;
 
-    console.log('Downloading CSV from URL:', csvUrl);
+    console.log('Downloading CSV from URL');
 
     try {
       // Step 1: Download the CSV

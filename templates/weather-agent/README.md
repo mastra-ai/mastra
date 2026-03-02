@@ -1,6 +1,6 @@
 # Weather Agent
 
-A template that provides an agent and workflow to fetch weather information for a given location. The workflow provides activity suggestions base on the weather. Built with [Mastra](https://mastra.ai).
+A template that provides an agent and workflow to fetch weather information for a given location. The workflow provides activity suggestions based on the weather. Built with [Mastra](https://mastra.ai).
 
 ## Why we built this
 
@@ -19,7 +19,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 1. **Clone the template**
    - Run `npx create-mastra@latest --template weather-agent` to scaffold the project locally.
 2. **Add your API keys**
-   - Copy `.env.example` to `.env` and fill in your keys.
+   - Copy `.env.example` to `.env` and fill in your key.
 3. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 

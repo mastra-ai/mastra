@@ -22,7 +22,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 ## Prerequisites
 
 - [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
-- [Browserbase API key](http://browserbase.com/) — for page scraping
+- [Browserbase API key](https://browserbase.com/) — for page scraping
 
 ## Quickstart 🚀
 

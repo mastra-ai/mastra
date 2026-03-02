@@ -22,7 +22,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 ## Quickstart 🚀
 
 1. **Clone the template**
-   - Run `npx create-mastra@latest --template TEMPLATE_NAME` to scaffold the project locally.
+   - Run `npx create-mastra@latest --template docs-chatbot` to scaffold the project locally.
 2. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
 3. **Start the dev server**

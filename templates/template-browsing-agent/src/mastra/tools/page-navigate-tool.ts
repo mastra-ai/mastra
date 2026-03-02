@@ -19,6 +19,13 @@ export const pageNavigateTool = createTool({
       const stagehand = await sessionManager.ensureStagehand();
       const page = stagehand.context.pages()[0]; // Use the first page in the context
 
+      if (!page) {
+        return {
+          success: false,
+          message: 'No pages available in browser context'
+        }
+      }
+
       // Navigate to the URL
       await page.goto(input.url);
 
