@@ -33,7 +33,7 @@ export function truncateLogFile(logFile: string): void {
  * oversized). Otherwise silences them to avoid corrupting the TUI.
  */
 export function setupDebugLogging(): void {
-  const debugEnabled = process.env.MASTRA_DEBUG === 'true';
+  const debugEnabled = ['true', '1'].includes(process.env.MASTRA_DEBUG!);
 
   if (debugEnabled) {
     const logFile = path.join(getAppDataDir(), 'debug.log');

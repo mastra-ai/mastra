@@ -116,4 +116,23 @@ describe('setupDebugLogging', () => {
 
     spy.mockRestore();
   });
+
+  it('should redirect console.error and console.warn to file when MASTRA_DEBUG=1', async () => {
+    vi.stubEnv('MASTRA_DEBUG', '1');
+    const projectMod = await import('../project.js');
+    const spy = vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
+
+    setupDebugLogging();
+
+    console.error('test error via 1');
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const logFile = path.join(tmpDir, 'debug.log');
+    const content = fs.readFileSync(logFile, 'utf-8');
+    expect(content).toContain('[ERROR]');
+    expect(content).toContain('test error via 1');
+
+    spy.mockRestore();
+  });
 });
