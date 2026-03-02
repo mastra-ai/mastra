@@ -109,10 +109,27 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
+
+  // Remap workspace tool names to match mastracode's tool guidance and prompts
+  const toolNameOverrides = {
+    mastra_workspace_read_file: { name: 'view' },
+    mastra_workspace_write_file: { name: 'write_file' },
+    mastra_workspace_edit_file: { name: 'string_replace_lsp' },
+    mastra_workspace_list_files: { name: 'find_files' },
+    mastra_workspace_delete: { name: 'delete_file' },
+    mastra_workspace_file_stat: { name: 'file_stat' },
+    mastra_workspace_mkdir: { name: 'mkdir' },
+    mastra_workspace_grep: { name: 'search_content' },
+    mastra_workspace_ast_edit: { name: 'ast_smart_edit' },
+    mastra_workspace_execute_command: { name: 'execute_command' },
+    mastra_workspace_get_process_output: { name: 'get_process_output' },
+    mastra_workspace_kill_process: { name: 'kill_process' },
+  };
+
   const planModeTools = {
-    mastra_workspace_write_file: { enabled: false },
-    mastra_workspace_edit_file: { enabled: false },
-    mastra_workspace_ast_edit: { enabled: false },
+    mastra_workspace_write_file: { ...toolNameOverrides.mastra_workspace_write_file, enabled: false },
+    mastra_workspace_edit_file: { ...toolNameOverrides.mastra_workspace_edit_file, enabled: false },
+    mastra_workspace_ast_edit: { ...toolNameOverrides.mastra_workspace_ast_edit, enabled: false },
   };
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
@@ -125,7 +142,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   if (existing) {
     existing.filesystem.setAllowedPaths(allowedPaths);
-    existing.setToolsConfig(isPlanMode ? planModeTools : undefined);
+    existing.setToolsConfig(isPlanMode ? { ...toolNameOverrides, ...planModeTools } : toolNameOverrides);
     return existing;
   }
 
@@ -157,7 +174,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
         DEBIAN_FRONTEND: 'noninteractive',
       },
     }),
-    ...(isPlanMode ? { tools: planModeTools } : {}),
+    tools: isPlanMode ? { ...toolNameOverrides, ...planModeTools } : toolNameOverrides,
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });

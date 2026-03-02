@@ -134,6 +134,89 @@ describe('createWorkspaceTools', () => {
     expect(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS).toBe('mastra_workspace_kill_process');
   });
 
+  describe('tool name remapping', () => {
+    it('should use custom name as dictionary key when name is provided', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+          mastra_workspace_grep: { name: 'search_content' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools).toHaveProperty('search_content');
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    });
+
+    it('should keep default names for non-remapped tools', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    });
+
+    it('should preserve config options when name is remapped', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view', requireApproval: true },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools['view'].requireApproval).toBe(true);
+    });
+
+    it('should remap sandbox tools', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          mastra_workspace_execute_command: { name: 'execute_command' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('execute_command');
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+    });
+
+    it('should throw on duplicate custom names', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'my_tool' },
+          mastra_workspace_grep: { name: 'my_tool' },
+        },
+      });
+
+      expect(() => createWorkspaceTools(workspace)).toThrow(/Duplicate workspace tool name "my_tool"/);
+    });
+
+    it('should throw when custom name conflicts with a default name', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          // Remap read_file to the default name of grep — conflict
+          mastra_workspace_read_file: { name: WORKSPACE_TOOLS.FILESYSTEM.GREP },
+        },
+      });
+
+      expect(() => createWorkspaceTools(workspace)).toThrow(/Duplicate workspace tool name/);
+    });
+  });
+
   describe('background process tools', () => {
     it('should register process tools when sandbox has processes (LocalSandbox)', () => {
       const workspace = new Workspace({
