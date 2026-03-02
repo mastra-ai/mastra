@@ -75,6 +75,7 @@ describe('setupDebugLogging', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     console.error = originalError;
     console.warn = originalWarn;
     vi.unstubAllEnvs();
@@ -104,11 +105,12 @@ describe('setupDebugLogging', () => {
     vi.stubEnv('MASTRA_DEBUG', 'true');
     // Point getAppDataDir to our tmp dir
     const projectMod = await import('../project.js');
-    const spy = vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
+    vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
 
     setupDebugLogging();
 
     console.error('test error message');
+    console.error(new Error('test stack path'));
     console.warn('test warn message');
 
     // Give the write stream a moment to flush
@@ -118,16 +120,15 @@ describe('setupDebugLogging', () => {
     const content = fs.readFileSync(logFile, 'utf-8');
     expect(content).toContain('[ERROR]');
     expect(content).toContain('test error message');
+    expect(content).toContain('Error: test stack path');
     expect(content).toContain('[WARN]');
     expect(content).toContain('test warn message');
-
-    spy.mockRestore();
   });
 
   it('should redirect console.error and console.warn to file when MASTRA_DEBUG=1', async () => {
     vi.stubEnv('MASTRA_DEBUG', '1');
     const projectMod = await import('../project.js');
-    const spy = vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
+    vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
 
     setupDebugLogging();
 
@@ -139,7 +140,5 @@ describe('setupDebugLogging', () => {
     const content = fs.readFileSync(logFile, 'utf-8');
     expect(content).toContain('[ERROR]');
     expect(content).toContain('test error via 1');
-
-    spy.mockRestore();
   });
 });
