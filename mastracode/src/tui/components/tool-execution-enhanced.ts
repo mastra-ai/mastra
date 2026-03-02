@@ -498,7 +498,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // If both old_str/old_string and new_str/new_string are available, show a bordered diff preview
       const oldStr = argsObj?.old_str ?? argsObj?.old_string;
       const newStr = argsObj?.new_str ?? argsObj?.new_string;
-      if (oldStr && newStr) {
+      if (oldStr != null && newStr != null) {
         const border = (char: string) => theme.bold(theme.fg('accent', char));
         const termWidth = process.stdout.columns || 80;
         const maxLineWidth = termWidth - 6;
@@ -568,7 +568,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // For edits, show the diff
     const finalOldStr = argsObj?.old_str ?? argsObj?.old_string;
     const finalNewStr = argsObj?.new_str ?? argsObj?.new_string;
-    if (finalOldStr && finalNewStr && !this.result.isError) {
+    if (finalOldStr != null && finalNewStr != null && !this.result.isError) {
       const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(String(finalOldStr), String(finalNewStr));
 
       // Limit lines when collapsed, windowed around first change
@@ -881,7 +881,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // Extract summary line (e.g. "5 directories, 9 files") from tree output for the header
       const lines = output.split('\n');
       const lastLine = lines[lines.length - 1]?.trim() || '';
-      const summaryMatch = lastLine.match(/\d+\s+director|file/);
+      const summaryMatch = lastLine.match(/^\d+\s+directories?,\s+\d+\s+files?$/);
       const summaryDisplay = summaryMatch ? ' ' + theme.fg('muted', lastLine) : '';
 
       this.collapsible = new CollapsibleComponent(
