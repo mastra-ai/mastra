@@ -343,7 +343,10 @@ describe('MastraAuthStudio', () => {
         permissions: ['projects:read', 'projects:write'],
       });
       expect(result.tokens.accessToken).toBe('new-sealed-token');
-      expect(result.cookies).toContain('wos-session=new-sealed-token; HttpOnly; Path=/');
+      // cookies should NOT be returned — the Mastra server fallback path
+      // calls createSession() + getSessionHeaders() to build a cookie
+      // scoped to the deployed instance's domain instead.
+      expect(result.cookies).toBeUndefined();
 
       // Verify the callback URL was constructed correctly
       const callUrl = fetchSpy.mock.calls[0]![0] as string;
