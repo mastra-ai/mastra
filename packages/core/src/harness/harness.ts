@@ -1314,9 +1314,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
         case 'file':
+          if (typeof part.data !== 'string') {
+            break;
+          }
           content.push({
             type: 'file',
-            data: typeof part.data === 'string' ? part.data : '',
+            data: part.data,
             mediaType:
               (part as { mediaType?: string }).mediaType ??
               (part as { mimeType?: string }).mimeType ??
