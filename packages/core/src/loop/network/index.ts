@@ -602,7 +602,7 @@ export async function createNetworkLoop({
                     }
 
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
-                    `,
+                    `.trim(),
         },
       ];
 

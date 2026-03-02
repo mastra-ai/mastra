@@ -764,6 +764,7 @@ export type HarnessMessageContent =
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
   | { type: 'image'; data: string; mimeType: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
       type: 'om_observation_start';
       tokensToObserve: number;
