@@ -28,7 +28,7 @@ jobs:
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./explorations/**/*" --filter "!@internal/playground" lint
       - name: Format
-        run: pnpm prettier --check .
+        run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
 
   check-bundle:
     name: Validate build outputs

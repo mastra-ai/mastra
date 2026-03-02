@@ -213,5 +213,6 @@ jobs:
         run: pnpm validate:reference-sidebar
 
       - name: Check for docs not linked in sidebars
+        if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
         run: pnpm validate:sidebar-docs
