@@ -152,7 +152,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (
       this.toolName !== 'execute_command' &&
       this.toolName !== 'mastra_workspace_execute_command' &&
+      this.toolName !== 'get_process_output' &&
       this.toolName !== 'mastra_workspace_get_process_output' &&
+      this.toolName !== 'kill_process' &&
       this.toolName !== 'mastra_workspace_kill_process'
     ) {
       return;
@@ -190,7 +192,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
     const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
     const isProcessCommand =
-      this.toolName === 'mastra_workspace_get_process_output' || this.toolName === 'mastra_workspace_kill_process';
+      this.toolName === 'get_process_output' ||
+      this.toolName === 'mastra_workspace_get_process_output' ||
+      this.toolName === 'kill_process' ||
+      this.toolName === 'mastra_workspace_kill_process';
     const isTaskWrite = this.toolName === 'task_write';
 
     if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
@@ -236,7 +241,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       case 'mastra_workspace_list_files':
         this.renderListFilesEnhanced();
         break;
+      case 'get_process_output':
       case 'mastra_workspace_get_process_output':
+      case 'kill_process':
       case 'mastra_workspace_kill_process':
         this.renderProcessToolEnhanced();
         break;
@@ -434,7 +441,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private renderProcessToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const pid = argsObj?.pid ? Number(argsObj.pid) : 0;
-    const isKill = this.toolName === 'mastra_workspace_kill_process';
+    const isKill = this.toolName === 'kill_process' || this.toolName === 'mastra_workspace_kill_process';
     const isWait = !isKill && argsObj?.wait === true;
 
     const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();
