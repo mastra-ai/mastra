@@ -82,16 +82,28 @@ export const useDatasetExperimentResults = ({
 };
 
 /**
- * Hook to fetch scores for an experiment, transformed to Record<itemId, ClientScoreRowData[]>
+ * Hook to fetch all scores for an experiment, transformed to Record<itemId, ClientScoreRowData[]>
+ * Paginates through all pages to ensure no scores are silently dropped.
  */
 export const useScoresByExperimentId = (experimentId: string) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-experiment-scores', experimentId],
     queryFn: async () => {
-      const response = await client.listScoresByRunId({ runId: experimentId, perPage: 10000 });
+      const allScores: ClientScoreRowData[] = [];
+      let page = 0;
+      const perPage = 100;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await client.listScoresByRunId({ runId: experimentId, page, perPage });
+        allScores.push(...response.scores);
+        if (!response.pagination.hasMore) break;
+        page++;
+      }
+
       const grouped: Record<string, ClientScoreRowData[]> = {};
-      for (const row of response.scores) {
+      for (const row of allScores) {
         if (!grouped[row.entityId]) {
           grouped[row.entityId] = [];
         }
