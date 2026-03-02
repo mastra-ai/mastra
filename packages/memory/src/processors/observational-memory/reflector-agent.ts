@@ -1,4 +1,10 @@
-import { OBSERVER_EXTRACTION_INSTRUCTIONS, OBSERVER_OUTPUT_FORMAT_BASE, OBSERVER_GUIDELINES } from './observer-agent';
+import {
+  OBSERVER_EXTRACTION_INSTRUCTIONS,
+  OBSERVER_OUTPUT_FORMAT_BASE,
+  OBSERVER_GUIDELINES,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
+} from './observer-agent';
 import type { ReflectorResult as BaseReflectorResult } from './types';
 
 /**
@@ -229,11 +235,19 @@ ${guidance}`;
  * Uses XML tag parsing for structured extraction.
  */
 export function parseReflectorOutput(output: string): ReflectorResult {
+  // Check for degenerate repetition before parsing
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      degenerate: true,
+    };
+  }
+
   const parsed = parseReflectorSectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,

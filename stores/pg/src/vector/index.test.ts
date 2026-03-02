@@ -47,6 +47,118 @@ describe('PgVector', () => {
     });
   });
 
+  describe('Metadata-Only Query', () => {
+    const metadataQueryIndex = 'test_metadata_only_query';
+
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: metadataQueryIndex, dimension: 3 });
+      await vectorDB.upsert({
+        indexName: metadataQueryIndex,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+          [1, 1, 0],
+        ],
+        metadata: [
+          { category: 'A', priority: 1, tag: 'first' },
+          { category: 'B', priority: 2, tag: 'second' },
+          { category: 'A', priority: 3, tag: 'third' },
+          { category: 'B', priority: 4, tag: 'fourth' },
+        ],
+        ids: ['v1', 'v2', 'v3', 'v4'],
+      });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex({ indexName: metadataQueryIndex });
+    });
+
+    it('should query by metadata filter without queryVector', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { category: 'A' },
+        topK: 10,
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.category === 'A')).toBe(true);
+      const ids = results.map(r => r.id).sort();
+      expect(ids).toEqual(['v1', 'v3']);
+    });
+
+    it('should return score 0 for metadata-only queries', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { category: 'B' },
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.score === 0)).toBe(true);
+    });
+
+    it('should respect topK for metadata-only queries', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { category: 'A' },
+        topK: 1,
+      });
+      expect(results).toHaveLength(1);
+    });
+
+    it('should include vector when requested in metadata-only query', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { category: 'B', priority: 2 },
+        includeVector: true,
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]!.id).toBe('v2');
+      expect(results[0]!.vector).toBeDefined();
+      expect(results[0]!.vector).toEqual([0, 1, 0]);
+    });
+
+    it('should support complex filters in metadata-only queries', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { $and: [{ category: 'A' }, { priority: { $gte: 3 } }] },
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]!.id).toBe('v3');
+    });
+
+    it('should return empty array when filter matches nothing', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        filter: { category: 'nonexistent' },
+      });
+      expect(results).toHaveLength(0);
+    });
+
+    it('should throw when neither queryVector nor filter is provided', async () => {
+      await expect(vectorDB.query({ indexName: metadataQueryIndex } as any)).rejects.toThrow(
+        'Either queryVector or filter must be provided',
+      );
+    });
+
+    it('should throw when queryVector is undefined and filter is empty', async () => {
+      await expect(vectorDB.query({ indexName: metadataQueryIndex, filter: {} })).rejects.toThrow(
+        'Either queryVector or filter must be provided',
+      );
+    });
+
+    it('should still work with both queryVector and filter (similarity search)', async () => {
+      const results = await vectorDB.query({
+        indexName: metadataQueryIndex,
+        queryVector: [1, 0, 0],
+        filter: { category: 'A' },
+        topK: 10,
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.category === 'A')).toBe(true);
+      // v1=[1,0,0] has cosine similarity 1.0 with queryVector [1,0,0]
+      expect(results[0]!.score).toBeCloseTo(1, 5);
+    });
+  });
+
   describe('PgVector Specific Tests', () => {
     describe('Public Fields Access', () => {
       let testDB: PgVector;

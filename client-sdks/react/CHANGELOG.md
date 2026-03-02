@@ -1,5 +1,55 @@
 # @mastra/react
 
+## 0.2.7
+
+### Patch Changes
+
+- Added completionResult to MastraUIMessageMetadata ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+- Updated dependencies:
+  - @mastra/client-js@1.7.1
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- Added completionResult to MastraUIMessageMetadata ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+- Updated dependencies:
+  - @mastra/client-js@1.7.1-alpha.0
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [[`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc)]:
+  - @mastra/client-js@1.7.0
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc)]:
+  - @mastra/client-js@1.7.0-alpha.0
+
+## 0.2.5
+
+### Patch Changes
+
+- dependencies updates: ([#13308](https://github.com/mastra-ai/mastra/pull/13308))
+  - Updated dependency [`tailwind-merge@^3.4.1` ↗︎](https://www.npmjs.com/package/tailwind-merge/v/3.4.1) (from `^3.3.1`, in `dependencies`)
+- Updated dependencies [[`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`3f8f1b3`](https://github.com/mastra-ai/mastra/commit/3f8f1b31146d2a8316157171962ad825628aa251)]:
+  - @mastra/client-js@1.6.0
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13308](https://github.com/mastra-ai/mastra/pull/13308))
+  - Updated dependency [`tailwind-merge@^3.4.1` ↗︎](https://www.npmjs.com/package/tailwind-merge/v/3.4.1) (from `^3.3.1`, in `dependencies`)
+- Updated dependencies [[`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`3f8f1b3`](https://github.com/mastra-ai/mastra/commit/3f8f1b31146d2a8316157171962ad825628aa251)]:
+  - @mastra/client-js@1.6.0-alpha.0
+
 ## 0.2.4
 
 ### Patch Changes

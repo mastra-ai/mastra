@@ -38,7 +38,9 @@ export function createMcpManager(projectDir: string): McpManager {
   let serverStatuses = new Map<string, McpServerStatus>();
   let initialized = false;
 
-  function buildServerDefs(servers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>) {
+  function buildServerDefs(
+    servers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>,
+  ) {
     const defs: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
     for (const [name, cfg] of Object.entries(servers)) {
       defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env };

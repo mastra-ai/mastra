@@ -14,7 +14,7 @@ Sends Tracing data to Datadog's LLM Observability product for monitoring and ana
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new DatadogExporter(config: DatadogExporterConfig)
 ```
 
@@ -22,72 +22,73 @@ new DatadogExporter(config: DatadogExporterConfig)
 
 ```typescript
 interface DatadogExporterConfig extends BaseExporterConfig {
-  apiKey?: string;
-  mlApp?: string;
-  site?: string;
-  service?: string;
-  env?: string;
-  agentless?: boolean;
-  integrationsEnabled?: boolean;
+  apiKey?: string
+  mlApp?: string
+  site?: string
+  service?: string
+  env?: string
+  agentless?: boolean
+  integrationsEnabled?: boolean
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "mlApp",
-      type: "string",
-      description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
-      required: false,
-    },
-    {
-      name: "site",
-      type: "string",
-      description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
-      required: false,
-    },
-    {
-      name: "service",
-      type: "string",
-      description: "Service name for the application. Defaults to mlApp value.",
-      required: false,
-    },
-    {
-      name: "env",
-      type: "string",
-      description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
-      required: false,
-    },
-    {
-      name: "agentless",
-      type: "boolean",
-      description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
-      required: false,
-    },
-    {
-      name: "integrationsEnabled",
-      type: "boolean",
-      description: "Enable dd-trace automatic integrations. Default: false.",
-      required: false,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
+required: false,
+},
+{
+name: "mlApp",
+type: "string",
+description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
+required: false,
+},
+{
+name: "site",
+type: "string",
+description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+required: false,
+},
+{
+name: "service",
+type: "string",
+description: "Service name for the application. Defaults to mlApp value.",
+required: false,
+},
+{
+name: "env",
+type: "string",
+description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+required: false,
+},
+{
+name: "agentless",
+type: "boolean",
+description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
+required: false,
+},
+{
+name: "integrationsEnabled",
+type: "boolean",
+description: "Enable dd-trace automatic integrations. Default: false.",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -95,7 +96,7 @@ Exports a tracing event to Datadog LLM Observability.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -103,7 +104,7 @@ Force flushes any buffered spans to Datadog without shutting down the exporter. 
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -114,33 +115,33 @@ Flushes pending data and shuts down the exporter. Cancels any pending cleanup ti
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { DatadogExporter } from "@mastra/datadog";
+import { DatadogExporter } from '@mastra/datadog'
 
 // Reads from DD_LLMOBS_ML_APP, DD_API_KEY, DD_SITE, DD_ENV
-const exporter = new DatadogExporter();
+const exporter = new DatadogExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { DatadogExporter } from "@mastra/datadog";
+import { DatadogExporter } from '@mastra/datadog'
 
 const exporter = new DatadogExporter({
-  mlApp: "my-llm-app",
+  mlApp: 'my-llm-app',
   apiKey: process.env.DD_API_KEY,
-  site: "datadoghq.com",
-  env: "production",
-});
+  site: 'datadoghq.com',
+  env: 'production',
+})
 ```
 
 ### With Local Datadog Agent
 
 ```typescript
 const exporter = new DatadogExporter({
-  mlApp: "my-llm-app",
+  mlApp: 'my-llm-app',
   agentless: false, // Use local Datadog Agent
-  env: "production",
-});
+  env: 'production',
+})
 ```
 
 ## Span Mapping
@@ -148,7 +149,7 @@ const exporter = new DatadogExporter({
 Mastra span types are mapped to Datadog LLMObs span kinds:
 
 | Mastra SpanType | Datadog Kind |
-|-----------------|--------------|
+| - | - |
 | `AGENT_RUN` | `agent` |
 | `MODEL_GENERATION` | `workflow` |
 | `MODEL_STEP` | `llm` |
@@ -164,7 +165,7 @@ All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, an
 The exporter reads configuration from these environment variables:
 
 | Variable | Description |
-|----------|-------------|
+| - | - |
 | `DD_API_KEY` | Datadog API key |
 | `DD_LLMOBS_ML_APP` | ML application name |
 | `DD_SITE` | Datadog site |

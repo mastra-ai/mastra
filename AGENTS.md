@@ -57,9 +57,7 @@ This file provides guidance to coding agents when working with code in this repo
 
 The `@docs/` directory contains the source code and contents of the documentation site.
 
-Whenever you change or add code, you MUST update/add related documentation for those changes.
-
-Read `@docs/AGENTS.md` to learn more about how to work with documentation.
+Whenever you change or add code, you MUST update/add related documentation for those changes. You always need to follow `@docs/styleguides/DOC.md` when writing documentation. The `@docs/styleguides/` folder also contains styleguides for specific types of documentation. Read `@docs/AGENTS.md` to learn more about how to work with documentation.
 
 ## Changelogs
 

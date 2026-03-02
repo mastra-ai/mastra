@@ -177,11 +177,14 @@ describe('runEvals', () => {
       });
 
       expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext: undefined,
-      });
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should pass requestContext when provided', async () => {
@@ -200,11 +203,14 @@ describe('runEvals', () => {
       });
 
       expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext,
-      });
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext,
+        }),
+      );
     });
   });
 
@@ -226,11 +232,13 @@ describe('runEvals', () => {
         target: mockAgent,
       });
 
-      expect(mockScorers[0].run).toHaveBeenCalledWith({
-        input: mockResponse.scoringData.input,
-        output: mockResponse.scoringData.output,
-        groundTruth: 'truth',
-      });
+      expect(mockScorers[0].run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: mockResponse.scoringData.input,
+          output: mockResponse.scoringData.output,
+          groundTruth: 'truth',
+        }),
+      );
     });
 
     it('should handle missing scoringData gracefully', async () => {
@@ -242,11 +250,13 @@ describe('runEvals', () => {
         target: mockAgent,
       });
 
-      expect(mockScorers[0].run).toHaveBeenCalledWith({
-        input: undefined,
-        output: undefined,
-        groundTruth: 'truth',
-      });
+      expect(mockScorers[0].run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: undefined,
+          output: undefined,
+          groundTruth: 'truth',
+        }),
+      );
     });
   });
 
@@ -422,12 +432,14 @@ describe('runEvals', () => {
       });
 
       // Verify the scorer was called with step-specific data
-      expect(scorerSpy).toHaveBeenCalledWith({
-        input: { input: 'Test input' }, // step payload
-        output: { output: 'Processed: Test input' }, // step output
-        groundTruth: 'Expected',
-        requestContext: undefined,
-      });
+      expect(scorerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { input: 'Test input' }, // step payload
+          output: { output: 'Processed: Test input' }, // step output
+          groundTruth: 'Expected',
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should capture step scorer results in experiment output', async () => {
@@ -707,6 +719,187 @@ describe('runEvals', () => {
           source: 'TEST',
         }),
       );
+    });
+  });
+
+  describe('targetOptions', () => {
+    it('should pass targetOptions to agent.generate (modern path)', async () => {
+      const mockAgent = createMockAgentV2();
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: mockScorers,
+        target: mockAgent,
+        targetOptions: { maxSteps: 3 },
+      });
+
+      expect(mockAgent.generate).toHaveBeenCalledWith('test input', expect.objectContaining({ maxSteps: 3 }));
+    });
+
+    it('should not allow targetOptions to override scorers or returnScorerData', async () => {
+      const mockAgent = createMockAgentV2();
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: mockScorers,
+        target: mockAgent,
+        targetOptions: { scorers: { evil: { scorer: 'evil' } } as any, returnScorerData: false } as any,
+      });
+
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+        }),
+      );
+    });
+
+    it('should not pass targetOptions to generateLegacy (legacy path)', async () => {
+      const mockLegacyAgent = createMockAgent();
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: mockScorers,
+        target: mockLegacyAgent,
+        targetOptions: { maxSteps: 5 } as any,
+      });
+
+      // Legacy path should not receive targetOptions
+      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext: undefined,
+        }),
+      );
+    });
+
+    it('should pass targetOptions to workflow run.start', async () => {
+      const mockStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => {
+          return { output: `Processed: ${inputData.input}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(mockStep)
+        .commit();
+
+      const startSpy = vi.fn();
+      const origCreateRun = workflow.createRun.bind(workflow);
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
+        const run = await origCreateRun(opts);
+        startSpy.mockImplementation(run.start.bind(run));
+        run.start = startSpy;
+        return run;
+      });
+
+      await runEvals({
+        data: [{ input: { input: 'Test' }, groundTruth: 'Expected' }],
+        scorers: [mockScorers[0]],
+        target: workflow,
+        targetOptions: { perStep: true },
+      });
+
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ perStep: true }));
+    });
+  });
+
+  describe('startOptions (per-item workflow options)', () => {
+    it('should pass startOptions to run.start for each item', async () => {
+      const mockStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => {
+          return { output: `Processed: ${inputData.input}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(mockStep)
+        .commit();
+
+      const startSpy = vi.fn();
+      const origCreateRun = workflow.createRun.bind(workflow);
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
+        const run = await origCreateRun(opts);
+        startSpy.mockImplementation(run.start.bind(run));
+        run.start = startSpy;
+        return run;
+      });
+
+      const initialState = { counter: 1 };
+
+      await runEvals({
+        data: [{ input: { input: 'Test' }, groundTruth: 'Expected', startOptions: { initialState } }],
+        scorers: [mockScorers[0]],
+        target: workflow,
+      });
+
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ initialState }));
+    });
+
+    it('per-item startOptions should override targetOptions for the same key', async () => {
+      const mockStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => {
+          return { output: `Processed: ${inputData.input}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(mockStep)
+        .commit();
+
+      const startSpy = vi.fn();
+      const origCreateRun = workflow.createRun.bind(workflow);
+      vi.spyOn(workflow, 'createRun').mockImplementation(async opts => {
+        const run = await origCreateRun(opts);
+        startSpy.mockImplementation(run.start.bind(run));
+        run.start = startSpy;
+        return run;
+      });
+
+      const globalState = { counter: 0 };
+      const itemState = { counter: 42 };
+
+      await runEvals({
+        data: [
+          {
+            input: { input: 'Test' },
+            groundTruth: 'Expected',
+            startOptions: { initialState: itemState },
+          },
+        ],
+        scorers: [mockScorers[0]],
+        target: workflow,
+        targetOptions: { initialState: globalState },
+      });
+
+      expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ initialState: itemState }));
     });
   });
 });

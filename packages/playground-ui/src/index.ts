@@ -4,6 +4,7 @@ export * from './domains/agents/index';
 export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';
+export * from './domains/prompt-blocks/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
@@ -55,7 +56,6 @@ export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
-export * from './ds/components/ListAndDetails';
 export * from './ds/components/MainContent';
 export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
@@ -81,11 +81,11 @@ export * from './ds/components/ContentBlocks';
 export * from './lib/rule-engine';
 
 // DS Components - New
-export * from './ds/components/ListAndDetails';
 export * from './ds/components/Columns';
 export * from './ds/components/CodeDiff';
 export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
+export * from './ds/components/Chip';
 export * from './ds/components/Tree';
 
 // Form utilities (AutoForm)

@@ -4,6 +4,7 @@ import {
   PackageIcon,
   GlobeIcon,
   BookIcon,
+  FileTextIcon,
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
@@ -27,6 +28,7 @@ import {
   SettingsIcon,
   MastraVersionFooter,
   useMastraPlatform,
+  useIsCmsAvailable,
   NavLink,
   useAuthCapabilities,
   isAuthenticated,
@@ -42,6 +44,12 @@ const mainNavigation: NavSection[] = [
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Prompts',
+        url: '/prompts',
+        icon: <FileTextIcon />,
         isOnMastraPlatform: true,
       },
       {
@@ -179,11 +187,16 @@ export function AppSidebar() {
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
 
   // Check if user is authenticated (small avatar) vs not (wide login button)
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
+  const cmsOnlyLinks = new Set(['/prompts']);
 
   const filterPlatformLink = (link: NavLink) => {
+    if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }

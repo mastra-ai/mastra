@@ -1,5 +1,237 @@
 # @mastra/playground-ui
 
+## 15.0.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (1.5.0) ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+### Patch Changes
+
+- Target type and target ID fields in the experiment dialog are now searchable dropdowns. Scorers can be selected via a multi-select dropdown. All three dropdowns share a consistent searchable style and visual behavior. ([#13463](https://github.com/mastra-ai/mastra/pull/13463))
+
+- Show completion result UI for supervisor pattern delegations. Previously, completion check results were only displayed when `metadata.mode === 'network'`. Now they display for any response that includes `completionResult` metadata, supporting the new supervisor pattern. ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+- Updated dependencies [[`df170fd`](https://github.com/mastra-ai/mastra/commit/df170fd139b55f845bfd2de8488b16435bd3d0da), [`ae55343`](https://github.com/mastra-ai/mastra/commit/ae5534397fc006fd6eef3e4f80c235bcdc9289ef), [`c290cec`](https://github.com/mastra-ai/mastra/commit/c290cec5bf9107225de42942b56b487107aa9dce), [`f03e794`](https://github.com/mastra-ai/mastra/commit/f03e794630f812b56e95aad54f7b1993dc003add), [`aa4a5ae`](https://github.com/mastra-ai/mastra/commit/aa4a5aedb80d8d6837bab8cbb2e301215d1ba3e9), [`de3f584`](https://github.com/mastra-ai/mastra/commit/de3f58408752a8d80a295275c7f23fc306cf7f4f), [`d3fb010`](https://github.com/mastra-ai/mastra/commit/d3fb010c98f575f1c0614452667396e2653815f6), [`702ee1c`](https://github.com/mastra-ai/mastra/commit/702ee1c41be67cc532b4dbe89bcb62143508f6f0), [`f495051`](https://github.com/mastra-ai/mastra/commit/f495051eb6496a720f637fc85b6d69941c12554c), [`b8f636a`](https://github.com/mastra-ai/mastra/commit/b8f636a83c5260a9817eec97c202b7ca7d613524), [`e622f1d`](https://github.com/mastra-ai/mastra/commit/e622f1d3ab346a8e6aca6d1fe2eac99bd961e50b), [`8d14a59`](https://github.com/mastra-ai/mastra/commit/8d14a591d46fbbbe81baa33c9c267d596f790329), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`861f111`](https://github.com/mastra-ai/mastra/commit/861f11189211b20ddb70d8df81a6b901fc78d11e), [`00f43e8`](https://github.com/mastra-ai/mastra/commit/00f43e8e97a80c82b27d5bd30494f10a715a1df9), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`96a1702`](https://github.com/mastra-ai/mastra/commit/96a1702ce362c50dda20c8b4a228b4ad1a36a17a), [`cb9f921`](https://github.com/mastra-ai/mastra/commit/cb9f921320913975657abb1404855d8c510f7ac5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`72df4a8`](https://github.com/mastra-ai/mastra/commit/72df4a8f9bf1a20cfd3d9006a4fdb597ad56d10a)]:
+  - @mastra/core@1.8.0
+  - @mastra/ai-sdk@1.1.0
+  - @mastra/schema-compat@1.1.3
+  - @mastra/react@0.2.7
+  - @mastra/client-js@1.7.1
+
+## 15.0.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (1.5.0) ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+### Patch Changes
+
+- Target type and target ID fields in the experiment dialog are now searchable dropdowns. Scorers can be selected via a multi-select dropdown. All three dropdowns share a consistent searchable style and visual behavior. ([#13463](https://github.com/mastra-ai/mastra/pull/13463))
+
+- Show completion result UI for supervisor pattern delegations. Previously, completion check results were only displayed when `metadata.mode === 'network'`. Now they display for any response that includes `completionResult` metadata, supporting the new supervisor pattern. ([#13323](https://github.com/mastra-ai/mastra/pull/13323))
+
+- Updated dependencies [[`df170fd`](https://github.com/mastra-ai/mastra/commit/df170fd139b55f845bfd2de8488b16435bd3d0da), [`ae55343`](https://github.com/mastra-ai/mastra/commit/ae5534397fc006fd6eef3e4f80c235bcdc9289ef), [`c290cec`](https://github.com/mastra-ai/mastra/commit/c290cec5bf9107225de42942b56b487107aa9dce), [`f03e794`](https://github.com/mastra-ai/mastra/commit/f03e794630f812b56e95aad54f7b1993dc003add), [`aa4a5ae`](https://github.com/mastra-ai/mastra/commit/aa4a5aedb80d8d6837bab8cbb2e301215d1ba3e9), [`de3f584`](https://github.com/mastra-ai/mastra/commit/de3f58408752a8d80a295275c7f23fc306cf7f4f), [`d3fb010`](https://github.com/mastra-ai/mastra/commit/d3fb010c98f575f1c0614452667396e2653815f6), [`702ee1c`](https://github.com/mastra-ai/mastra/commit/702ee1c41be67cc532b4dbe89bcb62143508f6f0), [`f495051`](https://github.com/mastra-ai/mastra/commit/f495051eb6496a720f637fc85b6d69941c12554c), [`b8f636a`](https://github.com/mastra-ai/mastra/commit/b8f636a83c5260a9817eec97c202b7ca7d613524), [`e622f1d`](https://github.com/mastra-ai/mastra/commit/e622f1d3ab346a8e6aca6d1fe2eac99bd961e50b), [`8d14a59`](https://github.com/mastra-ai/mastra/commit/8d14a591d46fbbbe81baa33c9c267d596f790329), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`861f111`](https://github.com/mastra-ai/mastra/commit/861f11189211b20ddb70d8df81a6b901fc78d11e), [`00f43e8`](https://github.com/mastra-ai/mastra/commit/00f43e8e97a80c82b27d5bd30494f10a715a1df9), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`96a1702`](https://github.com/mastra-ai/mastra/commit/96a1702ce362c50dda20c8b4a228b4ad1a36a17a), [`cb9f921`](https://github.com/mastra-ai/mastra/commit/cb9f921320913975657abb1404855d8c510f7ac5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`72df4a8`](https://github.com/mastra-ai/mastra/commit/72df4a8f9bf1a20cfd3d9006a4fdb597ad56d10a)]:
+  - @mastra/core@1.8.0-alpha.0
+  - @mastra/ai-sdk@1.1.0-alpha.0
+  - @mastra/schema-compat@1.1.3-alpha.0
+  - @mastra/react@0.2.7-alpha.0
+  - @mastra/client-js@1.7.1-alpha.0
+
+## 14.0.0
+
+### Minor Changes
+
+- Added prompt block management to the Playground. You can now create, edit, version, and publish reusable prompt blocks from a dedicated "Prompts" tab in the sidebar. ([#13351](https://github.com/mastra-ai/mastra/pull/13351))
+
+  **Prompt block editor features:**
+  - Draft/published versioning with version history dropdown
+  - Variables editor (JSON schema) for defining template variables
+  - Display conditions for conditional block rendering
+  - Variable highlighting in the content editor
+
+  **Agent instruction block improvements:**
+  - Added support for referencing saved prompt blocks in agent instructions via a new "Reference saved prompt block" option in the add block dropdown
+  - Fixed save/publish button behavior — "Save" is now disabled when no changes have been made, and "Publish" is only enabled when there are unpublished drafts
+
+- Added nested folder creation support in the skill tree editor for references and scripts folders ([#13453](https://github.com/mastra-ai/mastra/pull/13453))
+
+- Added new Chip component and expanded ItemList with Cell, LinkCell, IdCell, DateCell, and VersionCell sub-components. Improved dataset version comparison page with inline navigation links, version status indicators, and a refreshed row layout. ([#13399](https://github.com/mastra-ai/mastra/pull/13399))
+
+### Patch Changes
+
+- Improved comparison selection behavior: selecting a third item now replaces the most recent selection instead of being blocked. Applies to dataset version, item version, and dataset item comparison flows. ([#13406](https://github.com/mastra-ai/mastra/pull/13406))
+
+- Improved the score dialog to show "N/A" with an explanation instead of "null" for empty scorer fields. Code-based scorers show "N/A — code-based scorer does not use prompts" and LLM scorers with unconfigured steps show "N/A — step not configured". Detection uses the `hasJudge` metadata flag with a heuristic fallback for older data. ([#13386](https://github.com/mastra-ai/mastra/pull/13386))
+
+- Added workspace tools for background process management and improved sandbox execution UI. ([#13309](https://github.com/mastra-ai/mastra/pull/13309))
+  - `execute_command` now supports `background: true` to spawn long-running processes and return a PID
+  - New `get_process_output` tool to check output/status of background processes (supports `wait` to block until exit)
+  - New `kill_process` tool to terminate background processes
+  - Output truncation helpers with configurable tail lines
+  - Sandbox execution badge UI: terminal-style output display with streaming, exit codes, killed status, and workspace metadata
+
+- Fixed publish button in agent CMS to be disabled when no draft exists, preventing unnecessary error toasts. Also fixed stale agent data after saving a draft or publishing by invalidating the agent query cache. Fixed tool count in the CMS sidebar and tools page to correctly include integration tools. ([#13325](https://github.com/mastra-ai/mastra/pull/13325))
+
+- Updated dependencies [[`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`0c338b8`](https://github.com/mastra-ai/mastra/commit/0c338b87362dcd95ff8191ca00df645b6953f534), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/core@1.7.0
+  - @mastra/client-js@1.7.0
+  - @mastra/ai-sdk@1.0.5
+  - @mastra/react@0.2.6
+
+## 14.0.0-alpha.0
+
+### Minor Changes
+
+- Added prompt block management to the Playground. You can now create, edit, version, and publish reusable prompt blocks from a dedicated "Prompts" tab in the sidebar. ([#13351](https://github.com/mastra-ai/mastra/pull/13351))
+
+  **Prompt block editor features:**
+  - Draft/published versioning with version history dropdown
+  - Variables editor (JSON schema) for defining template variables
+  - Display conditions for conditional block rendering
+  - Variable highlighting in the content editor
+
+  **Agent instruction block improvements:**
+  - Added support for referencing saved prompt blocks in agent instructions via a new "Reference saved prompt block" option in the add block dropdown
+  - Fixed save/publish button behavior — "Save" is now disabled when no changes have been made, and "Publish" is only enabled when there are unpublished drafts
+
+- Added nested folder creation support in the skill tree editor for references and scripts folders ([#13453](https://github.com/mastra-ai/mastra/pull/13453))
+
+- Added new Chip component and expanded ItemList with Cell, LinkCell, IdCell, DateCell, and VersionCell sub-components. Improved dataset version comparison page with inline navigation links, version status indicators, and a refreshed row layout. ([#13399](https://github.com/mastra-ai/mastra/pull/13399))
+
+### Patch Changes
+
+- Improved comparison selection behavior: selecting a third item now replaces the most recent selection instead of being blocked. Applies to dataset version, item version, and dataset item comparison flows. ([#13406](https://github.com/mastra-ai/mastra/pull/13406))
+
+- Improved the score dialog to show "N/A" with an explanation instead of "null" for empty scorer fields. Code-based scorers show "N/A — code-based scorer does not use prompts" and LLM scorers with unconfigured steps show "N/A — step not configured". Detection uses the `hasJudge` metadata flag with a heuristic fallback for older data. ([#13386](https://github.com/mastra-ai/mastra/pull/13386))
+
+- Added workspace tools for background process management and improved sandbox execution UI. ([#13309](https://github.com/mastra-ai/mastra/pull/13309))
+  - `execute_command` now supports `background: true` to spawn long-running processes and return a PID
+  - New `get_process_output` tool to check output/status of background processes (supports `wait` to block until exit)
+  - New `kill_process` tool to terminate background processes
+  - Output truncation helpers with configurable tail lines
+  - Sandbox execution badge UI: terminal-style output display with streaming, exit codes, killed status, and workspace metadata
+
+- Fixed publish button in agent CMS to be disabled when no draft exists, preventing unnecessary error toasts. Also fixed stale agent data after saving a draft or publishing by invalidating the agent query cache. Fixed tool count in the CMS sidebar and tools page to correctly include integration tools. ([#13325](https://github.com/mastra-ai/mastra/pull/13325))
+
+- Updated dependencies [[`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/core@1.7.0-alpha.0
+  - @mastra/client-js@1.7.0-alpha.0
+  - @mastra/ai-sdk@1.0.5
+  - @mastra/react@0.2.6-alpha.0
+
+## 13.0.0
+
+### Minor Changes
+
+- Added `Tree.Input` component for inline file and folder creation within the Tree. Supports auto-focus, Enter to confirm, Escape to cancel, and blur handling with correct depth indentation. ([#13264](https://github.com/mastra-ai/mastra/pull/13264))
+
+  ```tsx
+  import { Tree } from '@mastra/playground-ui';
+
+  <Tree.Folder name="src" defaultOpen>
+    <Tree.Input
+      type="file"
+      placeholder="new-file.ts"
+      onSubmit={name => createFile(name)}
+      onCancel={() => setCreating(false)}
+    />
+    <Tree.File name="index.ts" />
+  </Tree.Folder>;
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13284](https://github.com/mastra-ai/mastra/pull/13284))
+  - Updated dependency [`sonner@^2.0.7` ↗︎](https://www.npmjs.com/package/sonner/v/2.0.7) (from `^2.0.5`, in `dependencies`)
+
+- dependencies updates: ([#13300](https://github.com/mastra-ai/mastra/pull/13300))
+  - Updated dependency [`superjson@^2.2.6` ↗︎](https://www.npmjs.com/package/superjson/v/2.2.6) (from `^2.2.2`, in `dependencies`)
+
+- Added per-tool selection for MCP clients in the agent editor. When connecting to an HTTP MCP server, each tool now has a toggle switch so you can choose exactly which tools the agent should use. Selected tools persist across saves and reloads. ([#13262](https://github.com/mastra-ai/mastra/pull/13262))
+
+- Fixed agent publish flow to no longer auto-save a draft. Publish now only activates the latest saved version. Save and Publish buttons are disabled when there are no changes or no unpublished draft, respectively. ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
+
+  Memory page improvements:
+  - Renamed "Last Messages" to "Message History" and added a toggle switch for consistency with other memory options.
+  - Moved Observational Memory to the top of the memory list.
+  - Observational Memory and Message History are now mutually exclusive — enabling one disables the other.
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Fixed the Experiment Result panel crashing with a type error when results contained nested objects instead of plain strings. ([#13275](https://github.com/mastra-ai/mastra/pull/13275))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+- Added skill editing and workspace support in the agent CMS. Agents can now toggle skills on/off and associate a workspace. Fixed auto-versioning to compare against the latest draft version instead of the published one, preventing stale draft configs from being returned after saves. ([#13314](https://github.com/mastra-ai/mastra/pull/13314))
+
+- Added a composable Tree component for displaying file-system-like views with collapsible folders, file type icons, selection support, and action slots ([#13259](https://github.com/mastra-ai/mastra/pull/13259))
+
+- Added a version history panel to the right side of the agent CMS edit page. The version selector moved from a combobox dropdown in the header to a dedicated side panel, making it easier to browse and switch between agent versions. ([#13279](https://github.com/mastra-ai/mastra/pull/13279))
+
+- Updated dependencies [[`e4034e5`](https://github.com/mastra-ai/mastra/commit/e4034e5442b27f1bcae80456bfd21be388962eb8), [`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`7184d87`](https://github.com/mastra-ai/mastra/commit/7184d87c9237d26862f500ccfd0c9f9eadd38ddf), [`5caa13d`](https://github.com/mastra-ai/mastra/commit/5caa13d1b2a496e2565ab124a11de9a51ad3e3b9), [`940163f`](https://github.com/mastra-ai/mastra/commit/940163fc492401d7562301e6f106ccef4fefe06f), [`47892c8`](https://github.com/mastra-ai/mastra/commit/47892c85708eac348209f99f10f9a5f5267e11c0), [`3f8f1b3`](https://github.com/mastra-ai/mastra/commit/3f8f1b31146d2a8316157171962ad825628aa251), [`45bb78b`](https://github.com/mastra-ai/mastra/commit/45bb78b70bd9db29678fe49476cd9f4ed01bfd0b), [`70eef84`](https://github.com/mastra-ai/mastra/commit/70eef84b8f44493598fdafa2980a0e7283415eda), [`d84e52d`](https://github.com/mastra-ai/mastra/commit/d84e52d0f6511283ddd21ed5fe7f945449d0f799), [`24b80af`](https://github.com/mastra-ai/mastra/commit/24b80af87da93bb84d389340181e17b7477fa9ca), [`608e156`](https://github.com/mastra-ai/mastra/commit/608e156def954c9604c5e3f6d9dfce3bcc7aeab0), [`2b2e157`](https://github.com/mastra-ai/mastra/commit/2b2e157a092cd597d9d3f0000d62b8bb4a7348ed), [`59d30b5`](https://github.com/mastra-ai/mastra/commit/59d30b5d0cb44ea7a1c440e7460dfb57eac9a9b5), [`453693b`](https://github.com/mastra-ai/mastra/commit/453693bf9e265ddccecef901d50da6caaea0fbc6), [`78d1c80`](https://github.com/mastra-ai/mastra/commit/78d1c808ad90201897a300af551bcc1d34458a20), [`c204b63`](https://github.com/mastra-ai/mastra/commit/c204b632d19e66acb6d6e19b11c4540dd6ad5380), [`742a417`](https://github.com/mastra-ai/mastra/commit/742a417896088220a3b5560c354c45c5ca6d88b9)]:
+  - @mastra/react@0.2.5
+  - @mastra/core@1.6.0
+  - @mastra/client-js@1.6.0
+  - @mastra/schema-compat@1.1.2
+  - @mastra/ai-sdk@1.0.5
+
+## 13.0.0-alpha.0
+
+### Minor Changes
+
+- Added `Tree.Input` component for inline file and folder creation within the Tree. Supports auto-focus, Enter to confirm, Escape to cancel, and blur handling with correct depth indentation. ([#13264](https://github.com/mastra-ai/mastra/pull/13264))
+
+  ```tsx
+  import { Tree } from '@mastra/playground-ui';
+
+  <Tree.Folder name="src" defaultOpen>
+    <Tree.Input
+      type="file"
+      placeholder="new-file.ts"
+      onSubmit={name => createFile(name)}
+      onCancel={() => setCreating(false)}
+    />
+    <Tree.File name="index.ts" />
+  </Tree.Folder>;
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13284](https://github.com/mastra-ai/mastra/pull/13284))
+  - Updated dependency [`sonner@^2.0.7` ↗︎](https://www.npmjs.com/package/sonner/v/2.0.7) (from `^2.0.5`, in `dependencies`)
+
+- dependencies updates: ([#13300](https://github.com/mastra-ai/mastra/pull/13300))
+  - Updated dependency [`superjson@^2.2.6` ↗︎](https://www.npmjs.com/package/superjson/v/2.2.6) (from `^2.2.2`, in `dependencies`)
+
+- Added per-tool selection for MCP clients in the agent editor. When connecting to an HTTP MCP server, each tool now has a toggle switch so you can choose exactly which tools the agent should use. Selected tools persist across saves and reloads. ([#13262](https://github.com/mastra-ai/mastra/pull/13262))
+
+- Fixed agent publish flow to no longer auto-save a draft. Publish now only activates the latest saved version. Save and Publish buttons are disabled when there are no changes or no unpublished draft, respectively. ([#13292](https://github.com/mastra-ai/mastra/pull/13292))
+
+  Memory page improvements:
+  - Renamed "Last Messages" to "Message History" and added a toggle switch for consistency with other memory options.
+  - Moved Observational Memory to the top of the memory list.
+  - Observational Memory and Message History are now mutually exclusive — enabling one disables the other.
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Fixed the Experiment Result panel crashing with a type error when results contained nested objects instead of plain strings. ([#13275](https://github.com/mastra-ai/mastra/pull/13275))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+- Added skill editing and workspace support in the agent CMS. Agents can now toggle skills on/off and associate a workspace. Fixed auto-versioning to compare against the latest draft version instead of the published one, preventing stale draft configs from being returned after saves. ([#13314](https://github.com/mastra-ai/mastra/pull/13314))
+
+- Added a composable Tree component for displaying file-system-like views with collapsible folders, file type icons, selection support, and action slots ([#13259](https://github.com/mastra-ai/mastra/pull/13259))
+
+- Added a version history panel to the right side of the agent CMS edit page. The version selector moved from a combobox dropdown in the header to a dedicated side panel, making it easier to browse and switch between agent versions. ([#13279](https://github.com/mastra-ai/mastra/pull/13279))
+
+- Updated dependencies [[`e4034e5`](https://github.com/mastra-ai/mastra/commit/e4034e5442b27f1bcae80456bfd21be388962eb8), [`0d9efb4`](https://github.com/mastra-ai/mastra/commit/0d9efb47992c34aa90581c18b9f51f774f6252a5), [`7184d87`](https://github.com/mastra-ai/mastra/commit/7184d87c9237d26862f500ccfd0c9f9eadd38ddf), [`5caa13d`](https://github.com/mastra-ai/mastra/commit/5caa13d1b2a496e2565ab124a11de9a51ad3e3b9), [`940163f`](https://github.com/mastra-ai/mastra/commit/940163fc492401d7562301e6f106ccef4fefe06f), [`b260123`](https://github.com/mastra-ai/mastra/commit/b2601234bd093d358c92081a58f9b0befdae52b3), [`47892c8`](https://github.com/mastra-ai/mastra/commit/47892c85708eac348209f99f10f9a5f5267e11c0), [`3f8f1b3`](https://github.com/mastra-ai/mastra/commit/3f8f1b31146d2a8316157171962ad825628aa251), [`45bb78b`](https://github.com/mastra-ai/mastra/commit/45bb78b70bd9db29678fe49476cd9f4ed01bfd0b), [`70eef84`](https://github.com/mastra-ai/mastra/commit/70eef84b8f44493598fdafa2980a0e7283415eda), [`d84e52d`](https://github.com/mastra-ai/mastra/commit/d84e52d0f6511283ddd21ed5fe7f945449d0f799), [`24b80af`](https://github.com/mastra-ai/mastra/commit/24b80af87da93bb84d389340181e17b7477fa9ca), [`608e156`](https://github.com/mastra-ai/mastra/commit/608e156def954c9604c5e3f6d9dfce3bcc7aeab0), [`2b2e157`](https://github.com/mastra-ai/mastra/commit/2b2e157a092cd597d9d3f0000d62b8bb4a7348ed), [`59d30b5`](https://github.com/mastra-ai/mastra/commit/59d30b5d0cb44ea7a1c440e7460dfb57eac9a9b5), [`453693b`](https://github.com/mastra-ai/mastra/commit/453693bf9e265ddccecef901d50da6caaea0fbc6), [`78d1c80`](https://github.com/mastra-ai/mastra/commit/78d1c808ad90201897a300af551bcc1d34458a20), [`c204b63`](https://github.com/mastra-ai/mastra/commit/c204b632d19e66acb6d6e19b11c4540dd6ad5380), [`742a417`](https://github.com/mastra-ai/mastra/commit/742a417896088220a3b5560c354c45c5ca6d88b9)]:
+  - @mastra/react@0.2.5-alpha.0
+  - @mastra/core@1.6.0-alpha.0
+  - @mastra/client-js@1.6.0-alpha.0
+  - @mastra/schema-compat@1.1.2-alpha.0
+  - @mastra/ai-sdk@1.0.5
+
 ## 12.0.0
 
 ### Minor Changes

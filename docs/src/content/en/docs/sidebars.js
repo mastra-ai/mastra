@@ -74,6 +74,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
         },
@@ -665,6 +670,7 @@ const sidebars = {
         },
       ],
     },
+
     {
       type: 'category',
       label: 'Build with AI',

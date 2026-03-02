@@ -6,6 +6,7 @@ description: Build a complete development assistant that combines filesystem, sa
 # Building a Dev Assistant
 
 In this guide, you'll build a complete development assistant that combines all workspace features:
+
 - [Filesystem](/docs/workspace/filesystem) for file management
 - [Sandbox](/docs/workspace/sandbox) for code execution
 - [Skills](/docs/workspace/skills) for coding standards
@@ -34,10 +35,10 @@ The workspace uses a local filesystem to manage documentation files. The agent r
 Additionally, enable BM25 search indexing and load skills from the `skills` directory.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 // highlight-start
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 // highlight-end
 
 // highlight-start
@@ -47,13 +48,13 @@ const workspace = new Workspace({
   skills: ['/skills'],
   bm25: true,
   autoIndexPaths: ['/docs', '/src'],
-});
+})
 // highlight-end
 
 export const mastra = new Mastra({
   // highlight-next-line
   workspace,
-});
+})
 ```
 
 At the root of your project, create a new folder called `workspace`. This is where all files will be stored and managed by the agent.
@@ -71,35 +72,35 @@ Get started by creating a `workspace/src/utils/string-helpers.ts` file with some
 
 ```typescript title="workspace/src/utils/string-helpers.ts"
 export function capitalize(str: string): string {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  if (!str) return str
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
 export function slugify(str: string): string {
   return str
     .toLowerCase()
     .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-');
+    .replace(/\s+/g, '-')
 }
 ```
 
 ```typescript title="workspace/tests/string-helpers.test.ts"
-import { describe, it, expect } from 'vitest';
-import { capitalize, slugify } from '../src/utils/string-helpers';
+import { describe, it, expect } from 'vitest'
+import { capitalize, slugify } from '../src/utils/string-helpers'
 
 describe('String Helpers', () => {
   describe('capitalize', () => {
     it('capitalizes first letter', () => {
-      expect(capitalize('hello')).toBe('Hello');
-    });
-  });
+      expect(capitalize('hello')).toBe('Hello')
+    })
+  })
 
   describe('slugify', () => {
     it('converts to lowercase and replaces spaces', () => {
-      expect(slugify('Hello World')).toBe('hello-world');
-    });
-  });
-});
+      expect(slugify('Hello World')).toBe('hello-world')
+    })
+  })
+})
 ```
 
 Create a skill definition at `workspace/skills/coding-standards/SKILL.md`. This tells the agent how to write and test code:
@@ -113,16 +114,19 @@ description: Project coding standards and testing guidelines
 # Coding Standards
 
 ## Code Quality
+
 - Functions under 50 lines
 - Use descriptive variable names
 - Always add TypeScript types
 
 ## Testing
+
 - Test all exported functions
 - Use AAA pattern: Arrange, Act, Assert
 - Cover happy paths and edge cases
 
 ## Before Committing
+
 1. Write implementation
 2. Write comprehensive tests
 3. Run tests: `npm test`
@@ -139,14 +143,14 @@ Create a reference file at `workspace/skills/coding-standards/references/testing
 ```typescript
 it('descriptive test name', () => {
   // Arrange: Set up test data
-  const input = 'test';
+  const input = 'test'
 
   // Act: Execute the function
-  const result = doSomething(input);
+  const result = doSomething(input)
 
   // Assert: Verify the result
-  expect(result).toBe('expected');
-});
+  expect(result).toBe('expected')
+})
 ```
 
 ## What to Test
@@ -163,7 +167,7 @@ With the workspace set up, it's time to create the development assistant agent. 
 Create a new file `src/mastra/agents/dev-assistant.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/dev-assistant.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const devAssistant = new Agent({
   id: 'dev-assistant',
@@ -182,17 +186,17 @@ For every new feature: Write code → Write tests → Run tests → Update docs
 
 Always explain your reasoning and steps.`,
   model: 'openai/gpt-4o',
-});
+})
 ```
 
 Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Mastra } from '@mastra/core'
+import { resolve } from 'node:path'
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 // highlight-next-line
-import { devAssistant } from './agents/dev-assistant';
+import { devAssistant } from './agents/dev-assistant'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
@@ -200,13 +204,13 @@ const workspace = new Workspace({
   skills: ['/skills'],
   bm25: true,
   autoIndexPaths: ['/docs', '/src'],
-});
+})
 
 export const mastra = new Mastra({
   workspace,
   // highlight-next-line
   agents: { devAssistant },
-});
+})
 ```
 
 ## Test the assistant
@@ -230,35 +234,37 @@ Follow TDD: write tests first, then implementation.
 Since agent responses are non-deterministic, the exact output will vary. However, you should see the agent follow a process similar to this:
 
 1. Activate the coding-standards skill
+
 1. Search the workspace for similar code patterns
+
 1. Write tests first, for example:
 
-    ```typescript
-    describe('truncate', () => {
-      it('truncates long strings', () => {
-        expect(truncate('Hello World', 5)).toBe('He...');
-      });
+   ```typescript
+   describe('truncate', () => {
+     it('truncates long strings', () => {
+       expect(truncate('Hello World', 5)).toBe('He...')
+     })
 
-      it('keeps short strings unchanged', () => {
-        expect(truncate('Hi', 10)).toBe('Hi');
-      });
+     it('keeps short strings unchanged', () => {
+       expect(truncate('Hi', 10)).toBe('Hi')
+     })
 
-      it('handles edge cases', () => {
-        expect(truncate('', 5)).toBe('');
-      });
-    });
-    ```
+     it('handles edge cases', () => {
+       expect(truncate('', 5)).toBe('')
+     })
+   })
+   ```
 
 1. Write the implementation, for example:
 
-    ```typescript
-    export function truncate(str: string, maxLength: number): string {
-      if (!str || maxLength < 0) return str;
-      if (str.length <= maxLength) return str;
-      if (maxLength === 0) return '...';
-      return str.slice(0, maxLength - 3) + '...';
-    }
-    ```
+   ```typescript
+   export function truncate(str: string, maxLength: number): string {
+     if (!str || maxLength < 0) return str
+     if (str.length <= maxLength) return str
+     if (maxLength === 0) return '...'
+     return str.slice(0, maxLength - 3) + '...'
+   }
+   ```
 
 1. Run tests and verify they pass
 

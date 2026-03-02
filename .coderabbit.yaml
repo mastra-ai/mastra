@@ -39,10 +39,9 @@ reviews:
         - Write short, direct sentences that anyone can understand. Avoid commit messages, technical jargon, and acronyms. Use action-oriented verbs (Added, Fixed, Improved, Deprecated, Removed)
         - Avoid generic phrases like "Update code", "Miscellaneous improvements", or "Bug fixes"
         - Highlight outcomes! What does change for the end user? Do not focus on internal implementation details
-        - Add context like links to issues or PRs when relevant
-        - If the change is a breaking change or is adding a new feature, ensure that a code example is provided. This code example should show the public API usage (the before and after). Do not show code examples of internal implementation details.
+        - If the change is a breaking change or is adding a new feature, ensure that a short code example is provided. This code example should show the public API usage. Do not show code examples of internal implementation details.
+        - For breaking changes, include short, concise before/after instructions (and use migration guides in the docs for the complete instructions)
         - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
-        - For larger, more substantial changes, also answer the "Why" behind the changes
         - Each changeset file contains a YAML frontmatter at the top. It will be one or more package names followed by a colon and the type of change (patch, minor, major). Do not modify this frontmatter. Check that the description inside the changeset file only applies to the packages listed in the frontmatter. Do not allow descriptions that mention changes to packages not listed in the frontmatter. In these cases, the user must create a separate changeset file for those packages.
         - Very long changesets in one file (with multiple packages in the frontmatter) are an anti-pattern. This will lead to multiple packages having really large changelog entries. This must be avoided.
         - If the changes span multiple packages and each change is different from another, you MUST create multiple changeset files. Otherwise you'll mix different changes into changeset files where they don't belong. For this you must decide what logical groups exist.

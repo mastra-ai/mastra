@@ -26,6 +26,7 @@ import {
   agentWithAdvancedModeration,
   agentWithBranchingModeration,
   agentWithSequentialModeration,
+  supervisorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -62,6 +63,37 @@ const config = {
     schemaValidatedAgent,
     requestContextDemoAgent,
     chefModelV2Agent,
+    networkAgent,
+    moderatedAssistantAgent,
+    agentWithProcessorWorkflow,
+    simpleAssistantAgent,
+    agentWithBranchingWorkflow,
+    agentWithAdvancedModeration,
+    agentWithBranchingModeration,
+    agentWithSequentialModeration,
+    supervisorAgent,
+  },
+  processors: {
+    moderationProcessor,
+    piiDetectionProcessor,
+    toxicityCheckProcessor,
+    responseQualityProcessor,
+    sensitiveTopicBlocker,
+    stepLoggerProcessor,
+  },
+  storage,
+  mcpServers: {
+    myMcpServer,
+    myMcpServerTwo,
+  },
+  workflows: {
+    myWorkflow,
+    myWorkflowX,
+    lessComplexWorkflow,
+    nestedWorkflow,
+    contentModerationWorkflow,
+    advancedModerationWorkflow,
+    findUserWorkflow,
   },
   bundler: {
     sourcemap: true,
@@ -71,7 +103,6 @@ const config = {
     auth: mastraAuth,
     rbac: rbacProvider,
   },
-  storage,
 };
 
 export const mastra = new Mastra({
