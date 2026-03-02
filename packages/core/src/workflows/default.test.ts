@@ -320,4 +320,22 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     // step2 payload matches input (not step1.output since step1 failed), should be removed
     expect(result.steps.step2.payload).toBeUndefined();
   });
+
+  it('should not throw when payload contains non-JSON-serializable values', async () => {
+    // Circular reference would cause JSON.stringify to throw
+    const circular: any = { value: 1 };
+    circular.self = circular;
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: circular, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    // Should not throw — circular refs are treated as "not matching" and payload is preserved
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    // payload was not removed because circular ref comparison is treated as non-match
+    expect(result.steps.step1.payload).toBe(circular);
+  });
 });

@@ -540,11 +540,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         // Remove payload if it matches the output of the previous step (structural comparison
         // handles deserialized data where reference equality would fail)
-        if (
-          hasPreviousOutput &&
-          (optimizedStep.payload === previousOutput ||
-            JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput))
-        ) {
+        let payloadMatchesPrevious = false;
+        if (hasPreviousOutput) {
+          try {
+            payloadMatchesPrevious =
+              optimizedStep.payload === previousOutput ||
+              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+          } catch {
+            // Non-serializable values (e.g. circular refs, BigInt) — treat as not matching
+          }
+        }
+        if (payloadMatchesPrevious) {
           delete optimizedStep.payload;
         }
 
