@@ -240,6 +240,8 @@ export function isIntersectionSchema(schema: AnySchema): boolean {
   if (!intersection) return false;
   const def = getDef(schema);
   return (
-    def?.typeName === 'ZodIntersection' || def?.type === 'intersection' || schema?.constructor?.name === 'ZodIntersection'
+    def?.typeName === 'ZodIntersection' ||
+    def?.type === 'intersection' ||
+    schema?.constructor?.name === 'ZodIntersection'
   );
 }
