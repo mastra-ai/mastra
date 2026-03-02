@@ -202,8 +202,6 @@ export async function executeEntry(
   let entryRequestContext: Record<string, any> | undefined;
 
   if (entry.type === 'step') {
-    // Don't re-push the step ID when resuming it — it was already added to the path
-    // before the step suspended, and the path is restored from snapshot on resume.
     const isResumedStep = resume?.steps?.includes(entry.step.id) ?? false;
     if (!isResumedStep) {
       executionContext.stepExecutionPath?.push(entry.step.id);

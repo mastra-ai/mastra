@@ -547,7 +547,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               optimizedStep.payload === previousOutput ||
               JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
           } catch {
-            // Non-serializable values (e.g. circular refs, BigInt) — treat as not matching
+            // non-serializable payload — treat as not matching
           }
         }
         if (payloadMatchesPrevious) {

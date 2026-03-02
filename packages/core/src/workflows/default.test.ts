@@ -322,7 +322,6 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
   });
 
   it('should not throw when payload contains non-JSON-serializable values', async () => {
-    // Circular reference would cause JSON.stringify to throw
     const circular: any = { value: 1 };
     circular.self = circular;
 
@@ -332,10 +331,8 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     };
     const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
 
-    // Should not throw — circular refs are treated as "not matching" and payload is preserved
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
-    // payload was not removed because circular ref comparison is treated as non-match
     expect(result.steps.step1.payload).toBe(circular);
   });
 });
