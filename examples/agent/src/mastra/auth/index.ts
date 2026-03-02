@@ -7,6 +7,7 @@
  * - workos: Enterprise SSO (SAML, OIDC)
  * - cloud: Mastra Cloud OAuth with PKCE
  * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
+ * - studio: Shared API proxy auth for deployed instances
  *
  * Set AUTH_PROVIDER environment variable to switch between providers.
  */
@@ -37,9 +38,9 @@ async function initAuth(): Promise<AuthResult> {
       const { initComposite } = await import('./composite');
       return initComposite();
     }
-    case 'simple': {
-      const { initSimpleAuth } = await import('./simple');
-      return initSimpleAuth();
+    case 'studio': {
+      const { initStudio } = await import('./studio');
+      return initStudio();
     }
     default:
       return {};
