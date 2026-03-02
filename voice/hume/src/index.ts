@@ -223,9 +223,16 @@ export class HumeVoice extends MastraVoice {
       this.socket = null;
     });
 
-    this.socket.connect();
-    await this.socket.waitForOpen();
-    this.state = 'connected';
+    try {
+      this.socket.connect();
+      await this.socket.waitForOpen();
+      this.state = 'connected';
+    } catch (err) {
+      this.socket.close();
+      this.state = 'disconnected';
+      this.socket = null;
+      throw err;
+    }
   }
 
   private handleEviMessage(msg: { type: string; [key: string]: unknown }): void {

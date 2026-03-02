@@ -2,9 +2,7 @@
 '@mastra/voice-hume': minor
 ---
 
-feat(voice-hume): add realtime speech-to-speech via Hume EVI connect() WebSocket
-
-Added realtime Empathic Voice Interface (EVI) support to HumeVoice. Use `connect()`, `send()`, `answer()`, `close()`, and `on()`/`off()` for bidirectional speech-to-speech over WebSocket.
+HumeVoice now provides realtime empathic speech-to-speech, letting apps stream audio and receive emotion-aware synthesized responses over a live connection.
 
 **Usage:**
 ```typescript

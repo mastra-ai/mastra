@@ -31,6 +31,56 @@ describe('HumeVoice', () => {
     });
   });
 
+  describe('getSpeakers', () => {
+    it('should aggregate voices from multiple pages', async () => {
+      const voice = new HumeVoice({ speechModel: { apiKey: 'test-key' } });
+      const listSpy = vi.spyOn(voice['client'].tts.voices, 'list');
+      listSpy
+        .mockResolvedValueOnce({
+          response: {
+            totalPages: 2,
+            voicesPage: [{ id: 'v1', name: 'Voice 1' }],
+          },
+          data: [{ id: 'v1', name: 'Voice 1' }],
+        } as never)
+        .mockResolvedValueOnce({
+          response: {
+            totalPages: 2,
+            voicesPage: [{ id: 'v2', name: 'Voice 2' }],
+          },
+          data: [{ id: 'v2', name: 'Voice 2' }],
+        } as never)
+        .mockResolvedValueOnce({
+          response: { totalPages: 1, voicesPage: [] },
+          data: [],
+        } as never);
+
+      const speakers = await voice.getSpeakers();
+
+      expect(speakers).toEqual(
+        expect.arrayContaining([
+          { voiceId: 'v1', name: 'Voice 1' },
+          { voiceId: 'v2', name: 'Voice 2' },
+        ]),
+      );
+      expect(speakers).toHaveLength(2);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'HUME_AI', pageNumber: 0, pageSize: 100 }),
+      );
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'HUME_AI', pageNumber: 1, pageSize: 100 }),
+      );
+    });
+
+    it('should reject and propagate API errors', async () => {
+      const voice = new HumeVoice({ speechModel: { apiKey: 'test-key' } });
+      const apiError = new Error('Unauthorized');
+      vi.spyOn(voice['client'].tts.voices, 'list').mockRejectedValue(apiError);
+
+      await expect(voice.getSpeakers()).rejects.toThrow('Unauthorized');
+    });
+  });
+
   describe('getListener', () => {
     it('should return enabled: false', async () => {
       const voice = new HumeVoice({ speechModel: { apiKey: 'test-key' } });
