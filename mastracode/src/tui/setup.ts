@@ -271,6 +271,7 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'exit', description: 'Exit the TUI' },
