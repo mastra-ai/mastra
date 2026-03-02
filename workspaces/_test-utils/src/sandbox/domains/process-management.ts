@@ -132,12 +132,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           const chunks: string[] = [];
           let chunksBeforeWait = 0;
 
-          const handle = await processes.spawn(
-            'for i in 1 2 3; do echo "line-$i"; sleep 0.2; done',
-            {
-              onStdout: data => chunks.push(data),
-            },
-          );
+          const handle = await processes.spawn('for i in 1 2 3; do echo "line-$i"; sleep 0.2; done', {
+            onStdout: data => chunks.push(data),
+          });
 
           // Wait for at least one chunk to arrive while the process is still running
           const deadline = Date.now() + 5000;
@@ -167,12 +164,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
           const chunks: string[] = [];
           let chunksBeforeWait = 0;
 
-          const handle = await processes.spawn(
-            'for i in 1 2 3; do echo "err-$i" >&2; sleep 0.2; done',
-            {
-              onStderr: data => chunks.push(data),
-            },
-          );
+          const handle = await processes.spawn('for i in 1 2 3; do echo "err-$i" >&2; sleep 0.2; done', {
+            onStderr: data => chunks.push(data),
+          });
 
           // Wait for at least one chunk to arrive while the process is still running
           const deadline = Date.now() + 5000;
