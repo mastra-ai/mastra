@@ -17,8 +17,8 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint } from '../observability';
-import { NoOpObservability } from '../observability';
+import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../observability';
+import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -2486,6 +2486,26 @@ export class Mastra<
 
   get observability(): ObservabilityEntrypoint {
     return this.#observability;
+  }
+
+  /**
+   * Structured logging API for observability.
+   * Logs emitted via this API will not have trace correlation when used outside a span.
+   * Use for startup logs, background jobs, or other non-traced scenarios.
+   *
+   * Note: For the infrastructure logger (IMastraLogger), use getLogger() instead.
+   */
+  get loggerVNext(): LoggerContext {
+    return this.#observability.getDefaultInstance()?.getLoggerContext?.() ?? noOpLoggerContext;
+  }
+
+  /**
+   * Direct metrics API for use outside trace context.
+   * Metrics emitted via this API will not have auto-labels from spans.
+   * Use for background jobs, startup metrics, or other non-traced scenarios.
+   */
+  get metrics(): MetricsContext {
+    return this.#observability.getDefaultInstance()?.getMetricsContext?.() ?? noOpMetricsContext;
   }
 
   public getServerMiddleware() {

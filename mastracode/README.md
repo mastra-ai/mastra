@@ -8,6 +8,7 @@ A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi
 - 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
 - 🛠️ **Coding tools**: View files, edit code, run shell commands
+- 📋 **Plan persistence**: Approved plans are saved as markdown files for future reference
 - 📊 **Token tracking**: Monitor usage with persistent token counts per thread
 - 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
 
@@ -77,8 +78,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | ----------------- | -------------------------------------------- |
 | `/new`            | Start a new conversation thread              |
 | `/threads`        | List and switch between threads              |
-| `/models`         | Configure model (global/thread/mode)         |
-| `/models:pack`    | Switch model pack                            |
+| `/models`         | Switch/manage model packs (built-in/custom)  |
 | `/mode`           | Switch agent mode                            |
 | `/subagents`      | Configure subagent model defaults            |
 | `/om`             | Configure Observational Memory models        |
@@ -132,7 +132,32 @@ The SQLite database is stored in your system's application data directory:
 
 ### Authentication
 
-OAuth credentials are stored alongside the database in `auth.json`.
+For **Anthropic** models, mastracode supports two authentication methods:
+
+1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
+2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+
+When both are available, Claude Max OAuth takes priority.
+
+For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
+
+Credentials are stored alongside the database in `auth.json`.
+
+### Plan persistence
+
+When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
+
+- **macOS**: `~/Library/Application Support/mastracode/plans/<resourceId>/`
+- **Linux**: `~/.local/share/mastracode/plans/<resourceId>/`
+- **Windows**: `%APPDATA%/mastracode/plans/<resourceId>/`
+
+Files are named `<timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
+
+To save plans to a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+
+```bash
+export MASTRA_PLANS_DIR=.mastracode/plans
+```
 
 ## Architecture
 

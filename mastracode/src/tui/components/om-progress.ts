@@ -6,7 +6,7 @@ import { Container, Text } from '@mariozechner/pi-tui';
 import { defaultOMProgressState } from '@mastra/core/harness';
 import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { fg, mastra } from '../theme.js';
+import { theme, mastra } from '../theme.js';
 
 // Re-export types from core for backward compatibility
 export type { OMBufferedStatus, OMProgressState, OMStatus };
@@ -88,7 +88,7 @@ export class OMProgressComponent extends Container {
       if (this.state.thresholdPercent > 0) {
         const percent = Math.round(this.state.thresholdPercent);
         const bar = this.renderProgressBar(percent, 10);
-        this.statusText.setText(fg('muted', `OM ${bar} ${percent}%`));
+        this.statusText.setText(theme.fg('muted', `OM ${bar} ${percent}%`));
       } else {
         this.statusText.setText('');
       }
@@ -178,7 +178,7 @@ export function formatObservationStatus(
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
   const buffered =
     compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
+      ? theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
       : '';
   return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
 }
@@ -211,7 +211,7 @@ export function formatReflectionStatus(
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
     compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
-      ? fg('muted', ` ↓${formatTokensThreshold(savings)}`)
+      ? theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)
       : '';
   return label + colorByPercent(fraction, percent) + buffered;
 }

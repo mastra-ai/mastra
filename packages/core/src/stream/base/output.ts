@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { resolveObservabilityContext } from '../../observability';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -18,6 +19,7 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  StreamTransport,
   StepTripwireData,
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
@@ -188,6 +190,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #tripwire: StepTripwireData | undefined = undefined;
+  #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
+  #transportClosed = false;
 
   #delayedPromises: DelayedPromises<OUTPUT> = {
     suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
@@ -261,6 +265,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
+    this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
@@ -354,7 +359,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
-                options.tracingContext,
+                resolveObservabilityContext(options),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -647,6 +652,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 resumeSchema: undefined,
               });
 
+              self.#closeTransportIfNeeded();
+
               // Emit the tripwire chunk for listeners
               self.#emitChunk(chunk);
               // Pass the tripwire chunk through
@@ -735,7 +742,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
-                    options.tracingContext,
+                    resolveObservabilityContext(options),
                     self.#options.requestContext,
                     0,
                     outputResultWriter,
@@ -883,6 +890,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 await options?.onFinish?.(onFinishPayload);
               }
+
+              self.#closeTransportIfNeeded();
               break;
 
             case 'error':
@@ -899,6 +908,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               });
 
+              self.#closeTransportIfNeeded();
               break;
           }
           self.#emitChunk(chunk);
@@ -951,6 +961,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             }
           });
 
+          self.#closeTransportIfNeeded();
+
           // Emit finish event for EventEmitter streams
           self.#streamFinished = true;
           self.#emitter.emit('finish');
@@ -979,6 +991,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     for (const keyString in data) {
       const key = keyString as keyof PromiseResults<OUTPUT>;
       this.resolvePromise(key, data[key]);
+    }
+  }
+
+  #closeTransportIfNeeded() {
+    const transport = this.#transportRef?.current as StreamTransport | undefined;
+    if (!transport || !transport.closeOnFinish || this.#transportClosed) {
+      return;
+    }
+
+    this.#transportClosed = true;
+    try {
+      transport.close();
+    } catch {
+      // best-effort close
     }
   }
 
@@ -1091,6 +1117,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get request() {
     return this.#getDelayedPromise(this.#delayedPromises.request);
+  }
+
+  /**
+   * Transport handle for the current stream (when available).
+   */
+  get transport(): StreamTransport | undefined {
+    return this.#transportRef?.current as StreamTransport | undefined;
   }
 
   /**

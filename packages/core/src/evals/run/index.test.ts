@@ -177,11 +177,14 @@ describe('runEvals', () => {
       });
 
       expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext: undefined,
-      });
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should pass requestContext when provided', async () => {
@@ -200,11 +203,14 @@ describe('runEvals', () => {
       });
 
       expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext,
-      });
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext,
+        }),
+      );
     });
   });
 
@@ -226,11 +232,13 @@ describe('runEvals', () => {
         target: mockAgent,
       });
 
-      expect(mockScorers[0].run).toHaveBeenCalledWith({
-        input: mockResponse.scoringData.input,
-        output: mockResponse.scoringData.output,
-        groundTruth: 'truth',
-      });
+      expect(mockScorers[0].run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: mockResponse.scoringData.input,
+          output: mockResponse.scoringData.output,
+          groundTruth: 'truth',
+        }),
+      );
     });
 
     it('should handle missing scoringData gracefully', async () => {
@@ -242,11 +250,13 @@ describe('runEvals', () => {
         target: mockAgent,
       });
 
-      expect(mockScorers[0].run).toHaveBeenCalledWith({
-        input: undefined,
-        output: undefined,
-        groundTruth: 'truth',
-      });
+      expect(mockScorers[0].run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: undefined,
+          output: undefined,
+          groundTruth: 'truth',
+        }),
+      );
     });
   });
 
@@ -422,12 +432,14 @@ describe('runEvals', () => {
       });
 
       // Verify the scorer was called with step-specific data
-      expect(scorerSpy).toHaveBeenCalledWith({
-        input: { input: 'Test input' }, // step payload
-        output: { output: 'Processed: Test input' }, // step output
-        groundTruth: 'Expected',
-        requestContext: undefined,
-      });
+      expect(scorerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { input: 'Test input' }, // step payload
+          output: { output: 'Processed: Test input' }, // step output
+          groundTruth: 'Expected',
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should capture step scorer results in experiment output', async () => {
@@ -754,11 +766,14 @@ describe('runEvals', () => {
       });
 
       // Legacy path should not receive targetOptions
-      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith('test input', {
-        scorers: {},
-        returnScorerData: true,
-        requestContext: undefined,
-      });
+      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          scorers: {},
+          returnScorerData: true,
+          requestContext: undefined,
+        }),
+      );
     });
 
     it('should pass targetOptions to workflow run.start', async () => {

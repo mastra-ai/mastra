@@ -873,17 +873,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Safeguard: if the over boundary would eat into more than 95% of the
     // retention floor, fall back to the best under boundary instead.
     // This prevents edge cases where a large chunk overshoots dramatically.
-    // Additionally, never bias over if it would leave fewer than 1000 tokens
-    // remaining — at that level the agent may lose all meaningful context.
+    // Additionally, never bias over if it would leave fewer than the smaller of
+    // 1000 tokens or the retention floor — at that level the agent may lose
+    // all meaningful context.
     const maxOvershoot = retentionFloor * 0.95;
     const overshoot = bestOverTokens - targetMessageTokens;
     const remainingAfterOver = currentPendingTokens - bestOverTokens;
+    const remainingAfterUnder = currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+    const minRemaining = Math.min(1000, retentionFloor);
 
     let bestBoundaryMessageTokens: number;
 
-    if (bestOverBoundary > 0 && overshoot <= maxOvershoot && (remainingAfterOver >= 1000 || retentionFloor === 0)) {
+    if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
       bestBoundaryMessageTokens = bestOverTokens;
-    } else if (bestUnderBoundary > 0) {
+    } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
       bestBoundaryMessageTokens = bestUnderTokens;
     } else if (bestOverBoundary > 0) {
       // All boundaries are over and exceed the safeguard — still activate
@@ -1082,6 +1086,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
+    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
+      model === undefined || model === 'default';
+
+    const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
+    const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
+
+    const observationDefaultMaxOutputTokens =
+      config.observation?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(observationSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
+        : undefined);
+
+    const reflectionDefaultMaxOutputTokens =
+      config.reflection?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(reflectionSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
+        : undefined);
+
     // Total context budget when shared budget is enabled
     const totalBudget = messageTokens + observationTokens;
 
@@ -1128,9 +1150,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.observation?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
-        maxOutputTokens:
-          config.observation?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens,
+        ...(observationDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: observationDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
       maxTokensPerBatch:
@@ -1165,9 +1187,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.reflection?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
-        maxOutputTokens:
-          config.reflection?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
+        ...(reflectionDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
       bufferActivation: asyncBufferingDisabled
@@ -1415,9 +1437,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Resolve blockAfter config value.
-   * Values between 1 and 2 (exclusive) are treated as multipliers of the threshold.
+   * Values in [1, 100) are treated as multipliers of the threshold.
    * e.g. blockAfter: 1.5 with messageTokens: 20_000 → 30_000
-   * Values >= 2 are treated as absolute token counts.
+   * Values >= 100 are treated as absolute token counts.
    * Defaults to 1.2 (120% of threshold) when async buffering is enabled but blockAfter is omitted.
    */
   private resolveBlockAfter(
@@ -1427,8 +1449,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     if (blockAfter === undefined) return undefined;
     // Values between 1 (inclusive) and 2 (exclusive) are treated as multipliers of the threshold.
     // e.g. blockAfter: 1.5 means 1.5x the threshold. blockAfter: 1 means exactly at threshold.
-    // Values >= 2 are treated as absolute token counts.
-    if (blockAfter >= 1 && blockAfter < 2) {
+    // Values >= 100 are treated as absolute token counts.
+    if (blockAfter >= 1 && blockAfter < 100) {
       const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
       return Math.round(threshold * blockAfter);
     }
@@ -2191,19 +2213,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
 
     const doGenerate = async () => {
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-          }),
-        abortSignal,
-      );
-      return result;
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2282,18 +2303,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-          }),
-        abortSignal,
-      );
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2403,45 +2424,45 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       let chunkCount = 0;
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.reflectionConfig.modelSettings,
-            },
-            providerOptions: this.reflectionConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-            ...(attemptNumber === 1
-              ? {
-                  onChunk(chunk: any) {
-                    chunkCount++;
-                    if (chunkCount === 1 || chunkCount % 50 === 0) {
-                      const preview =
-                        chunk.type === 'text-delta'
-                          ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                          : chunk.type === 'tool-call'
-                            ? ` tool=${chunk.toolName}`
-                            : '';
-                      omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                    }
-                  },
-                  onFinish(event: any) {
-                    omDebug(
-                      `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                    );
-                  },
-                  onAbort(event: any) {
-                    omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                  },
-                  onError({ error }: { error: unknown }) {
-                    omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                  },
-                }
-              : {}),
-          }),
-        abortSignal,
-      );
+      const result = await this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.reflectionConfig.modelSettings,
+          },
+          providerOptions: this.reflectionConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+          ...(attemptNumber === 1
+            ? {
+                onChunk(chunk: any) {
+                  chunkCount++;
+                  if (chunkCount === 1 || chunkCount % 50 === 0) {
+                    const preview =
+                      chunk.type === 'text-delta'
+                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                        : chunk.type === 'tool-call'
+                          ? ` tool=${chunk.toolName}`
+                          : '';
+                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                  }
+                },
+                onFinish(event: any) {
+                  omDebug(
+                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                  );
+                },
+                onAbort(event: any) {
+                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                },
+                onError({ error }: { error: unknown }) {
+                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                },
+              }
+            : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -2935,20 +2956,19 @@ ${suggestedResponse}
             `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
           );
 
-          // Propagate continuation hints from activation to thread metadata
-          if (activationResult.suggestedContinuation || activationResult.currentTask) {
-            const thread = await this.storage.getThreadById({ threadId });
-            if (thread) {
-              const newMetadata = setThreadOMMetadata(thread.metadata, {
-                suggestedResponse: activationResult.suggestedContinuation,
-                currentTask: activationResult.currentTask,
-              });
-              await this.storage.updateThread({
-                id: threadId,
-                title: thread.title ?? '',
-                metadata: newMetadata,
-              });
-            }
+          // Propagate continuation hints from activation to thread metadata.
+          // Explicitly write undefined when omitted so stale values are cleared.
+          const thread = await this.storage.getThreadById({ threadId });
+          if (thread) {
+            const newMetadata = setThreadOMMetadata(thread.metadata, {
+              suggestedResponse: activationResult.suggestedContinuation,
+              currentTask: activationResult.currentTask,
+            });
+            await this.storage.updateThread({
+              id: threadId,
+              title: thread.title ?? '',
+              metadata: newMetadata,
+            });
           }
 
           // Note: lastBufferedBoundary is updated by the caller AFTER cleanupAfterObservation
@@ -3038,6 +3058,7 @@ ${suggestedResponse}
     resourceId: string | undefined,
     state: Record<string, unknown>,
     observedMessageIds?: string[],
+    minRemaining?: number,
   ): Promise<void> {
     const allMsgs = messageList.get.all.db();
     let markerIdx = -1;
@@ -3104,16 +3125,28 @@ ${suggestedResponse}
       const observedSet = new Set(observedMessageIds);
       const messagesToSave: MastraDBMessage[] = [];
       const idsToRemove: string[] = [];
+      const totalTokens = typeof minRemaining === 'number' ? this.tokenCounter.countMessages(allMsgs) : undefined;
+      let removedTokens = 0;
+      let skipped = 0;
 
       for (const msg of allMsgs) {
         if (msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id)) {
+          if (typeof minRemaining === 'number') {
+            const msgTokens = this.tokenCounter.countMessage(msg);
+            const remainingIfRemoved = (totalTokens ?? 0) - removedTokens - msgTokens;
+            if (remainingIfRemoved < minRemaining) {
+              skipped += 1;
+              continue;
+            }
+            removedTokens += msgTokens;
+          }
           messagesToSave.push(msg);
           idsToRemove.push(msg.id);
         }
       }
 
       omDebug(
-        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
+        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, skipped=${skipped}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
       );
 
       // Remove activated messages from context. No need to re-save — these were
@@ -3459,19 +3492,18 @@ ${suggestedResponse}
 
             // Propagate continuation hints from activation to thread metadata so
             // injectObservationsIntoContext can include them immediately.
-            if (activationResult.suggestedContinuation || activationResult.currentTask) {
-              const thread = await this.storage.getThreadById({ threadId });
-              if (thread) {
-                const newMetadata = setThreadOMMetadata(thread.metadata, {
-                  suggestedResponse: activationResult.suggestedContinuation,
-                  currentTask: activationResult.currentTask,
-                });
-                await this.storage.updateThread({
-                  id: threadId,
-                  title: thread.title ?? '',
-                  metadata: newMetadata,
-                });
-              }
+            // Explicitly write undefined when omitted so stale values are cleared.
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread) {
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                suggestedResponse: activationResult.suggestedContinuation,
+                currentTask: activationResult.currentTask,
+              });
+              await this.storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
             }
 
             // Check if reflection should be triggered or activated
@@ -3547,7 +3579,8 @@ ${suggestedResponse}
       // Buffered messages are "unobserved" (not yet in activeObservations) but have already been
       // sent to the observer — counting them would cause redundant buffering ops, especially
       // after activation resets lastBufferedBoundary to 0.
-      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.tokenCount ?? 0), 0);
+      // IMPORTANT: Use messageTokens (message tokens being removed), NOT tokenCount (observation tokens).
+      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
       const unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
 
       // Merge per-state sealedIds with static sealedMessageIds (survives across OM instances)
@@ -3562,7 +3595,7 @@ ${suggestedResponse}
       // ════════════════════════════════════════════════════════════════════════
 
       if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
-        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record, threshold);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
         omDebug(
           `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
         );
@@ -3581,7 +3614,7 @@ ${suggestedResponse}
         // Above threshold but we still need to check async buffering:
         // - At step 0, sync observation won't run, so we need chunks ready
         // - Below blockAfter, sync observation won't run, so we need chunks ready
-        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record, threshold);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
         omDebug(
           `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
         );
@@ -3636,10 +3669,22 @@ ${suggestedResponse}
             : Array.isArray(updatedRecord.observedMessageIds)
               ? updatedRecord.observedMessageIds
               : undefined;
+          const minRemaining =
+            typeof this.observationConfig.bufferActivation === 'number'
+              ? Math.min(1000, this.resolveRetentionFloor(this.observationConfig.bufferActivation, threshold))
+              : undefined;
           omDebug(
-            `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}`,
+            `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
           );
-          await this.cleanupAfterObservation(messageList, sealedIds, threadId, resourceId, state, observedIds);
+          await this.cleanupAfterObservation(
+            messageList,
+            sealedIds,
+            threadId,
+            resourceId,
+            state,
+            observedIds,
+            minRemaining,
+          );
 
           // Clean up sealed IDs for activated messages (prevents memory leak)
           if (activatedMessageIds?.length) {
@@ -4223,19 +4268,17 @@ ${formattedMessages}
       // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
       // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
       // when concurrent agents share a resourceId.
-      if (result.suggestedContinuation || result.currentTask) {
-        const thread = await this.storage.getThreadById({ threadId });
-        if (thread) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            suggestedResponse: result.suggestedContinuation,
-            currentTask: result.currentTask,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: thread.title ?? '',
-            metadata: newMetadata,
-          });
-        }
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          suggestedResponse: result.suggestedContinuation,
+          currentTask: result.currentTask,
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title ?? '',
+          metadata: newMetadata,
+        });
       }
 
       await this.storage.updateActiveObservations({
@@ -4513,7 +4556,7 @@ ${formattedMessages}
 
     try {
       omDebug(
-        `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${this.tokenCounter.countMessages(messagesToBuffer)}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
+        `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${tokensToBuffer}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
       );
       await this.doAsyncBufferedObservation(
         freshRecord,
@@ -4742,11 +4785,29 @@ ${formattedMessages}
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = this.resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-    // When above blockAfter, bypass the overshoot safeguard to aggressively reduce context.
-    // The system is about to do a synchronous observation anyway, so we should remove as much as possible.
+    // When above blockAfter, prefer the over boundary to reduce context, while still
+    // respecting the minimum remaining tokens safeguard.
     const forceMaxActivation = !!(
       this.observationConfig.blockAfter && effectivePendingTokens >= this.observationConfig.blockAfter
     );
+
+    const bufferTokens = this.observationConfig.bufferTokens ?? 0;
+    const retentionFloor = this.resolveRetentionFloor(bufferActivation, messageTokensThreshold);
+    const projectedMessageRemoval = this.calculateProjectedMessageRemoval(
+      freshChunks,
+      bufferActivation,
+      messageTokensThreshold,
+      effectivePendingTokens,
+    );
+    const projectedRemaining = Math.max(0, effectivePendingTokens - projectedMessageRemoval);
+    const maxRemaining = retentionFloor + bufferTokens;
+
+    if (!forceMaxActivation && bufferTokens > 0 && projectedRemaining > maxRemaining) {
+      omDebug(
+        `[OM:tryActivate] skipping activation: projectedRemaining=${projectedRemaining} > maxRemaining=${maxRemaining} (retentionFloor=${retentionFloor}, bufferTokens=${bufferTokens})`,
+      );
+      return { success: false };
+    }
 
     omDebug(
       `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, forceMax=${forceMaxActivation}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
@@ -5467,14 +5528,14 @@ ${formattedMessages}
 
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
-        // - currentTask, suggestedResponse: only if present in result
+        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
-            ...(result.suggestedContinuation && { suggestedResponse: result.suggestedContinuation }),
-            ...(result.currentTask && { currentTask: result.currentTask }),
+            suggestedResponse: result.suggestedContinuation,
+            currentTask: result.currentTask,
           });
           await this.storage.updateThread({
             id: threadId,

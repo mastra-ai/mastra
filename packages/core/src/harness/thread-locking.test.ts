@@ -72,6 +72,29 @@ describe('Harness thread locking', () => {
       // Old thread lock was never released
       expect(release).not.toHaveBeenCalled();
     });
+
+    it('waits for an async acquire promise before releasing previous thread lock', async () => {
+      await harness.createThread();
+      acquire.mockClear();
+      release.mockClear();
+
+      let resolveAcquire: (() => void) | undefined;
+      acquire.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            resolveAcquire = resolve;
+          }),
+      );
+
+      const createThreadPromise = harness.createThread();
+      await Promise.resolve();
+
+      expect(release).not.toHaveBeenCalled();
+      resolveAcquire?.();
+
+      await createThreadPromise;
+      expect(release).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('switchThread', () => {
@@ -118,6 +141,35 @@ describe('Harness thread locking', () => {
       await expect(harness.switchThread({ threadId: threadA.id })).rejects.toThrow(
         'Thread is locked by another process',
       );
+    });
+
+    it('waits for an async release promise before resolving switchThread', async () => {
+      const first = await harness.createThread({ title: 'first' });
+      await harness.createThread({ title: 'second' });
+      acquire.mockClear();
+      release.mockClear();
+
+      let resolveRelease: (() => void) | undefined;
+      release.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            resolveRelease = resolve;
+          }),
+      );
+
+      let settled = false;
+      const switchPromise = harness.switchThread({ threadId: first.id }).then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      expect(acquire).toHaveBeenCalledWith(first.id);
+
+      resolveRelease?.();
+      await switchPromise;
+
+      expect(settled).toBe(true);
     });
   });
 

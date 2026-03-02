@@ -1,7 +1,8 @@
-import type { RequestContext } from '../../di';
+import { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
-import type { TracingContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
 import type {
   EntryExecutionResult,
@@ -116,10 +117,8 @@ export async function persistStepUpdate(
       return;
     }
 
-    const requestContextObj: Record<string, any> = {};
-    requestContext.forEach((value, key) => {
-      requestContextObj[key] = value;
-    });
+    const ctx = requestContext instanceof RequestContext ? requestContext : new RequestContext(requestContext);
+    const requestContextObj: Record<string, any> = ctx.toJSON();
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
@@ -147,7 +146,7 @@ export async function persistStepUpdate(
   });
 }
 
-export interface ExecuteEntryParams {
+export interface ExecuteEntryParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -164,7 +163,6 @@ export interface ExecuteEntryParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  tracingContext: TracingContext;
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
@@ -189,14 +187,15 @@ export async function executeEntry(
     timeTravel,
     resume,
     executionContext,
-    tracingContext,
     pubsub,
     abortController,
     requestContext,
     outputWriter,
     disableScorers,
     perStep,
+    ...rest
   } = params;
+  const observabilityContext = resolveObservabilityContext(rest);
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
   let execResults: any;
@@ -216,7 +215,7 @@ export async function executeEntry(
       restart,
       resume,
       prevOutput,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -253,7 +252,7 @@ export async function executeEntry(
         activeStepsPath: executionContext.activeStepsPath,
         state: executionContext.state,
       },
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -286,7 +285,7 @@ export async function executeEntry(
       restart,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -325,7 +324,7 @@ export async function executeEntry(
           activeStepsPath: executionContext.activeStepsPath,
           state: executionContext.state,
         },
-        tracingContext,
+        ...observabilityContext,
         pubsub,
         abortController,
         requestContext,
@@ -361,7 +360,7 @@ export async function executeEntry(
           activeStepsPath: executionContext.activeStepsPath,
           state: executionContext.state,
         },
-        tracingContext,
+        ...observabilityContext,
         pubsub,
         abortController,
         requestContext,
@@ -397,7 +396,7 @@ export async function executeEntry(
       restart,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -417,7 +416,7 @@ export async function executeEntry(
       restart,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -438,7 +437,7 @@ export async function executeEntry(
       restart,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -493,7 +492,7 @@ export async function executeEntry(
       serializedStepGraph,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,
@@ -598,7 +597,7 @@ export async function executeEntry(
       serializedStepGraph,
       resume,
       executionContext,
-      tracingContext,
+      ...observabilityContext,
       pubsub,
       abortController,
       requestContext,

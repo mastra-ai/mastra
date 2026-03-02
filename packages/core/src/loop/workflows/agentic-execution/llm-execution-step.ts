@@ -8,10 +8,11 @@ import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, executeWithContextSync } from '../../../observability';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -23,6 +24,8 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamTransport,
+  StreamTransportRef,
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -47,6 +50,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  transportRef?: StreamTransportRef;
+  transportResolver?: () => StreamTransport | undefined;
 };
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -60,7 +65,11 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  transportRef,
+  transportResolver,
 }: ProcessOutputStreamOptions<OUTPUT>) {
+  let transportSet = false;
+
   for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -72,6 +81,14 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (!chunk) {
       continue;
+    }
+
+    if (!transportSet && transportRef && transportResolver) {
+      const transport = transportResolver();
+      if (transport) {
+        transportRef.current = transport;
+        transportSet = true;
+      }
     }
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
@@ -610,7 +627,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext: stepTracingContext,
+              ...createObservabilityContext(stepTracingContext),
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -835,6 +852,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
         });
 
+        let transportResolver: (() => StreamTransport | undefined) | undefined;
+        if (currentStep.model instanceof ModelRouterLanguageModel) {
+          const routerModel = currentStep.model;
+          transportResolver = () => routerModel._getStreamTransport();
+        }
+
         try {
           await processOutputStream({
             outputStream,
@@ -851,6 +874,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               rawResponse,
             },
             logger,
+            transportRef: _internal?.transportRef,
+            transportResolver,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1053,7 +1078,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext: outputStepTracingContext,
+            ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
             writer: processorWriter,

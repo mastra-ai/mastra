@@ -205,10 +205,72 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       );
     });
 
+    describe('abort signal', () => {
+      it(
+        'aborts a spawned process when signal fires',
+        async () => {
+          const controller = new AbortController();
+
+          const handle = await processes.spawn(
+            `node -e "process.stdout.write('started\\n'); setTimeout(() => {}, 30000)"`,
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
+          const result = await handle.wait();
+
+          expect(result.success).toBe(false);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'aborts immediately when signal is already aborted',
+        async () => {
+          const controller = new AbortController();
+          controller.abort();
+
+          const start = Date.now();
+          const handle = await processes.spawn('sleep 60', {
+            abortSignal: controller.signal,
+          });
+          const result = await handle.wait();
+
+          expect(result.success).toBe(false);
+          expect(Date.now() - start).toBeLessThan(2000);
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'captures partial output before abort',
+        async () => {
+          const controller = new AbortController();
+
+          const handle = await processes.spawn(
+            `node -e "process.stdout.write('before abort\\n'); setTimeout(() => {}, 30000)"`,
+            {
+              abortSignal: controller.signal,
+              onStdout: () => controller.abort(),
+            },
+          );
+          const result = await handle.wait();
+
+          expect(result.success).toBe(false);
+          expect(result.stdout).toContain('before abort');
+        },
+        getContext().testTimeout,
+      );
+    });
+
     describe('sendStdin', () => {
       it(
         'sends data to stdin',
         async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStdin) return;
+
           // Use head -1 to read one line then exit cleanly
           const handle = await processes.spawn('head -1');
           await handle.sendStdin('hello from stdin\n');
@@ -601,6 +663,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         async () => {
           const { capabilities } = getContext();
           if (!capabilities.supportsStreaming) return;
+          if (!capabilities.supportsStdin) return;
 
           const handle = await processes.spawn('head -1');
 

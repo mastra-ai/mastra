@@ -30,6 +30,10 @@ export {
   resolveToolConfig,
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
+  type ExecuteCommandToolConfig,
+  type BackgroundProcessConfig,
+  type BackgroundProcessMeta,
+  type BackgroundProcessExitMeta,
   // Individual standalone tools
   readFileTool,
   writeFileTool,

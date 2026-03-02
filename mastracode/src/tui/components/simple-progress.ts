@@ -4,7 +4,7 @@
  */
 
 import { Container, Text } from '@mariozechner/pi-tui';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 
 export interface SimpleProgressOptions {
   prefix?: string;
@@ -108,11 +108,11 @@ export class SimpleProgressComponent extends Container {
     // Add spinner or status icon
     if (this.isActive) {
       const spinner = this.getSpinner();
-      text += fg('accent', spinner) + ' ';
+      text += theme.fg('accent', spinner) + ' ';
     } else if (this.progress === 100) {
-      text += fg('success', '✓') + ' ';
+      text += theme.fg('success', '✓') + ' ';
     } else {
-      text += fg('error', '✗') + ' ';
+      text += theme.fg('error', '✗') + ' ';
     }
 
     // Add status text
@@ -120,13 +120,13 @@ export class SimpleProgressComponent extends Container {
 
     // Add progress percentage if enabled and available
     if (this.options.showPercentage && this.progress !== undefined) {
-      text += fg('dim', ` (${this.progress}%)`);
+      text += theme.fg('dim', ` (${this.progress}%)`);
     }
 
     // Add elapsed time if enabled
     if (this.options.showElapsed && this.isActive) {
       const elapsed = Math.floor((now - this.startTime) / 1000);
-      text += fg('dim', ` ${elapsed}s`);
+      text += theme.fg('dim', ` ${elapsed}s`);
     }
 
     this.addChild(new Text(text, 0, 0));

@@ -1,6 +1,6 @@
 import { Spacer } from '@mariozechner/pi-tui';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
-import { fg } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promise<void> {
@@ -26,7 +26,7 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(
       {
-        question: `Tag this thread with directory "${dirName}"?\n  ${fg('dim', projectPath)}`,
+        question: `Tag this thread with directory "${dirName}"?\n  ${theme.fg('dim', projectPath)}`,
         options: [{ label: 'Yes' }, { label: 'No' }],
         formatResult: answer => (answer === 'Yes' ? `Tagged thread with: ${dirName}` : `Thread not tagged`),
         onSubmit: async answer => {
