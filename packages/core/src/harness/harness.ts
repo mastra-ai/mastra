@@ -796,6 +796,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         }
       }
 
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
+      }
+
       if (Object.keys(updates).length > 0) {
         void this.setState(updates as Partial<z.infer<TState>>);
       }
