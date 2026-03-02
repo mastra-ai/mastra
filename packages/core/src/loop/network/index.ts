@@ -472,6 +472,42 @@ export async function createNetworkLoop({
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
 }) {
+  /**
+   * Shared abort handler for all primitive execution steps.
+   * Calls onAbort, writes the abort event to the stream, and returns the standard abort result.
+   */
+  async function handleAbort(opts: {
+    writer?: { write: (chunk: any) => Promise<void> } | null;
+    eventType: string;
+    primitiveType: string;
+    primitiveId: string;
+    iteration: number;
+    task: string;
+  }) {
+    await onAbort?.({
+      primitiveType: opts.primitiveType,
+      primitiveId: opts.primitiveId,
+      iteration: opts.iteration,
+    });
+    await opts.writer?.write({
+      type: opts.eventType,
+      runId,
+      from: ChunkFrom.NETWORK,
+      payload: {
+        primitiveType: opts.primitiveType,
+        primitiveId: opts.primitiveId,
+      },
+    });
+    return {
+      task: opts.task,
+      primitiveId: opts.primitiveId,
+      primitiveType: opts.primitiveType as z.infer<typeof PRIMITIVE_TYPES>,
+      result: 'Aborted' as const,
+      isComplete: true as const,
+      iteration: opts.iteration,
+    };
+  }
+
   // Get configured output processors from the agent for applying to saved messages
   const configuredOutputProcessors = await agent.listConfiguredOutputProcessors(requestContext);
 
@@ -513,29 +549,20 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        const base = await handleAbort({
+          writer,
+          eventType: 'routing-agent-abort',
           primitiveType: 'routing',
           primitiveId: 'routing-agent',
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'routing-agent-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'routing',
-            primitiveId: 'routing-agent',
-          },
+          task: inputData.task,
         });
         return {
-          task: inputData.task,
+          ...base,
           primitiveId: 'none',
           primitiveType: 'none' as const,
           prompt: '',
-          result: 'Aborted',
-          isComplete: true,
           selectionReason: 'Aborted',
-          iteration: inputData.iteration,
           conversationContext: [],
         };
       }
@@ -639,29 +666,20 @@ export async function createNetworkLoop({
         // If the abort signal fired during the routing LLM call, return an abort result
         // instead of re-throwing or attempting a fallback
         if (abortSignal?.aborted) {
-          await onAbort?.({
+          const base = await handleAbort({
+            writer,
+            eventType: 'routing-agent-abort',
             primitiveType: 'routing',
             primitiveId: 'routing-agent',
             iteration: iterationCount,
-          });
-          await writer?.write({
-            type: 'routing-agent-abort',
-            runId,
-            from: ChunkFrom.NETWORK,
-            payload: {
-              primitiveType: 'routing',
-              primitiveId: 'routing-agent',
-            },
+            task: inputData.task,
           });
           return {
-            task: inputData.task,
+            ...base,
             primitiveId: 'none',
             primitiveType: 'none' as const,
             prompt: '',
-            result: 'Aborted',
-            isComplete: true,
             selectionReason: 'Aborted',
-            iteration: iterationCount,
             conversationContext: [],
           };
         }
@@ -670,29 +688,20 @@ export async function createNetworkLoop({
 
       // Check if signal was aborted during routing LLM call
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        const base = await handleAbort({
+          writer,
+          eventType: 'routing-agent-abort',
           primitiveType: 'routing',
           primitiveId: 'routing-agent',
           iteration: iterationCount,
-        });
-        await writer?.write({
-          type: 'routing-agent-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'routing',
-            primitiveId: 'routing-agent',
-          },
+          task: inputData.task,
         });
         return {
-          task: inputData.task,
+          ...base,
           primitiveId: 'none',
           primitiveType: 'none' as const,
           prompt: '',
-          result: 'Aborted',
-          isComplete: true,
           selectionReason: 'Aborted',
-          iteration: iterationCount,
           conversationContext: [],
         };
       }
@@ -768,28 +777,14 @@ export async function createNetworkLoop({
     execute: async ({ inputData, writer, getInitData, suspend, resumeData }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        return handleAbort({
+          writer,
+          eventType: 'agent-execution-abort',
           primitiveType: 'agent',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'agent-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'agent',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       const agentsMap = await agent.listAgents({ requestContext });
@@ -947,28 +942,14 @@ export async function createNetworkLoop({
       // When the sub-agent was aborted, skip saving partial results to memory
       // and return immediately with the abort event
       if (agentCallAborted) {
-        await onAbort?.({
+        return handleAbort({
+          writer,
+          eventType: 'agent-execution-abort',
           primitiveType: 'agent',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'agent-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'agent',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       await saveMessagesWithProcessors(
@@ -1108,28 +1089,14 @@ export async function createNetworkLoop({
     execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        return handleAbort({
+          writer,
+          eventType: 'workflow-execution-abort',
           primitiveType: 'workflow',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'workflow-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'workflow',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
@@ -1300,23 +1267,14 @@ export async function createNetworkLoop({
 
       // When the workflow was cancelled due to abort, skip saving results to memory
       if (workflowCancelled && abortSignal?.aborted) {
-        await writer?.write({
-          type: 'workflow-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'workflow',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
-          task: inputData.task,
+        return handleAbort({
+          writer,
+          eventType: 'workflow-execution-abort',
+          primitiveType: 'workflow',
           primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
           iteration: inputData.iteration,
-        };
+          task: inputData.task,
+        });
       }
 
       await saveMessagesWithProcessors(
@@ -1446,28 +1404,14 @@ export async function createNetworkLoop({
 
       // Check if aborted before executing
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        return handleAbort({
+          writer,
+          eventType: 'tool-execution-abort',
           primitiveType: 'tool',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'tool-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'tool',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       const agentTools = await agent.listTools({ requestContext });
@@ -1570,28 +1514,14 @@ export async function createNetworkLoop({
       if (toolRequiresApproval) {
         // Check if abort fired before writing approval metadata or suspending
         if (abortSignal?.aborted) {
-          await onAbort?.({
+          return handleAbort({
+            writer,
+            eventType: 'tool-execution-abort',
             primitiveType: 'tool',
             primitiveId: inputData.primitiveId,
             iteration: inputData.iteration,
-          });
-          await writer?.write({
-            type: 'tool-execution-abort',
-            runId,
-            from: ChunkFrom.NETWORK,
-            payload: {
-              primitiveType: 'tool',
-              primitiveId: inputData.primitiveId,
-            },
-          });
-          return {
             task: inputData.task,
-            primitiveId: inputData.primitiveId,
-            primitiveType: inputData.primitiveType,
-            result: 'Aborted',
-            isComplete: true,
-            iteration: inputData.iteration,
-          };
+          });
         }
         if (!resumeData) {
           const requireApprovalResumeSchema = JSON.stringify(
@@ -1733,28 +1663,14 @@ export async function createNetworkLoop({
 
       // Check if abort fired during setup (tool lookup, input parsing, approval checks)
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        return handleAbort({
+          writer,
+          eventType: 'tool-execution-abort',
           primitiveType: 'tool',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'tool-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'tool',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       let toolSuspendPayload: any;
@@ -1857,29 +1773,15 @@ export async function createNetworkLoop({
       }
 
       if (abortSignal?.aborted) {
-        await onAbort?.({
+        // Skip saving aborted results to memory
+        return handleAbort({
+          writer,
+          eventType: 'tool-execution-abort',
           primitiveType: 'tool',
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
-        });
-        await writer?.write({
-          type: 'tool-execution-abort',
-          runId,
-          from: ChunkFrom.NETWORK,
-          payload: {
-            primitiveType: 'tool',
-            primitiveId: inputData.primitiveId,
-          },
-        });
-        // Skip saving aborted results to memory
-        return {
           task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: 'Aborted',
-          isComplete: true,
-          iteration: inputData.iteration,
-        };
+        });
       }
 
       await saveMessagesWithProcessors(
