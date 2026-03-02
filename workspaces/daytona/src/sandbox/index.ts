@@ -25,7 +25,6 @@ import type {
   MountManager,
   CommandResult,
   ExecuteCommandOptions,
-  SandboxProcessManager,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -157,8 +156,6 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   networkBlockAll?: boolean;
   /** Comma-separated list of allowed CIDR network addresses for the sandbox */
   networkAllowList?: string;
-  /** @internal Spike-only: override process manager for testing alternative implementations */
-  _processManagerOverride?: SandboxProcessManager<DaytonaSandbox>;
 }
 
 // =============================================================================
@@ -237,12 +234,10 @@ export class DaytonaSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'DaytonaSandbox',
-      processes:
-        options._processManagerOverride ??
-        new DaytonaProcessManager({
-          env: options.env,
-          defaultTimeout: options.timeout ?? 300_000,
-        }),
+      processes: new DaytonaProcessManager({
+        env: options.env,
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
     });
 
     this.id = options.id ?? this.generateId();
