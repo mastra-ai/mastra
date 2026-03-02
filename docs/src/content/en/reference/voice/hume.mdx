@@ -1,15 +1,17 @@
 ---
 title: "Reference: Hume | Voice"
-description: "Documentation for the Hume voice implementation, providing text-to-speech capabilities using Hume's Octave TTS API."
+description: "Documentation for the Hume voice implementation, providing text-to-speech and realtime speech-to-speech via Hume's Octave TTS and EVI APIs."
 packages:
   - "@mastra/voice-hume"
 ---
 
 # Hume
 
-The Hume voice implementation in Mastra provides text-to-speech capabilities using Hume's Octave TTS API. Hume offers expressive, emotionally-aware speech synthesis.
+The Hume voice implementation in Mastra provides text-to-speech (TTS) using Hume's Octave TTS API and realtime speech-to-speech via Hume's Empathic Voice Interface (EVI). Hume offers expressive, emotionally-aware speech synthesis.
 
 ## Usage Example
+
+### Text-to-Speech
 
 ```typescript
 import { HumeVoice } from '@mastra/voice-hume'
@@ -33,6 +35,40 @@ const audioStream = await voice.speak('Hello, world!', {
 })
 ```
 
+### Realtime Speech-to-Speech (EVI)
+
+```typescript
+import { HumeVoice } from '@mastra/voice-hume'
+
+const voice = new HumeVoice({
+  speechModel: { apiKey: process.env.HUME_API_KEY },
+  speaker: 'your-voice-id',
+  realtimeConfig: {
+    configId: 'your-evi-config-id', // Create via Hume dashboard
+    sessionSettings: {
+      systemPrompt: 'You are a helpful assistant.',
+      voiceId: 'your-voice-id',
+    },
+  },
+})
+
+await voice.connect()
+voice.on('speaking', ({ audio }) => {
+  // Play base64-encoded audio (WAV 48kHz)
+})
+voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`)
+})
+voice.on('error', ({ message }) => console.error(message))
+
+// Stream microphone audio
+await voice.send(microphoneStream)
+// Or send text for the assistant to speak
+await voice.answer({ text: 'Hello, how can I help?' })
+
+voice.close()
+```
+
 ## Constructor Parameters
 
 <PropertiesTable
@@ -49,6 +85,12 @@ type: "string",
 description: "Default voice name or ID from Hume Voice Library or custom voices",
 isOptional: true,
 },
+{
+name: "realtimeConfig",
+type: "HumeRealtimeConfig",
+description: "Configuration for realtime EVI speech-to-speech. Requires configId from Hume dashboard.",
+isOptional: true,
+},
 ]}
 />
 
@@ -61,6 +103,31 @@ name: "apiKey",
 type: "string",
 description:
 "Hume API key. Falls back to HUME_API_KEY environment variable",
+isOptional: true,
+},
+]}
+/>
+
+### HumeRealtimeConfig
+
+<PropertiesTable
+  content={[
+{
+name: "configId",
+type: "string",
+description: "EVI config ID (required). Create via Hume dashboard or API.",
+isOptional: false,
+},
+{
+name: "configVersion",
+type: "string | number",
+description: "Config version for pinned configs",
+isOptional: true,
+},
+{
+name: "sessionSettings",
+type: "object",
+description: "Session overrides: systemPrompt, voiceId, etc.",
 isOptional: true,
 },
 ]}
@@ -128,6 +195,53 @@ description: "Display name of the voice",
 ### listen()
 
 This method is not supported by Hume and will throw an error. Hume does not provide speech-to-text functionality. Use `CompositeVoice` with Deepgram or another provider for STT.
+
+### Realtime (EVI) Methods
+
+#### `connect(options?)`
+
+Establishes a WebSocket connection to Hume EVI for realtime speech-to-speech. Requires `configId` in `realtimeConfig` (constructor or `connect({ realtimeConfig: { configId } })`).
+
+```typescript
+await voice.connect()
+// Or pass config at connect time
+await voice.connect({ realtimeConfig: { configId: 'cfg-123' } })
+```
+
+#### `send(audioData)`
+
+Streams audio to the EVI session. Expects PCM 16-bit audio as `Int16Array` or `NodeJS.ReadableStream`. Hume recommends \~20ms chunks for optimal transcription.
+
+```typescript
+await voice.send(microphoneStream)
+await voice.send(int16ArrayChunk)
+```
+
+#### `answer(options?)`
+
+Sends text for the assistant to speak. Triggers the assistant to respond with that text as speech.
+
+```typescript
+await voice.answer({ text: 'Hello, how can I help you today?' })
+```
+
+#### `close()`
+
+Disconnects from the EVI WebSocket.
+
+```typescript
+voice.close()
+```
+
+#### `on(event, callback)` / `off(event, callback)`
+
+Register or remove event listeners. Events: `speaking` (audio base64), `writing` (text + role), `error`.
+
+```typescript
+voice.on('speaking', ({ audio }) => playBase64Audio(audio))
+voice.on('writing', ({ text, role }) => console.log(role, text))
+voice.on('error', ({ message }) => console.error(message))
+```
 
 ## Notes
 

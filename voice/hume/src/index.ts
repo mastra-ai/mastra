@@ -1,5 +1,7 @@
+import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 
+import type { VoiceEventMap, VoiceEventType } from '@mastra/core/voice';
 import { MastraVoice } from '@mastra/core/voice';
 import { HumeClient } from 'hume';
 
@@ -7,16 +9,37 @@ interface HumeVoiceConfig {
   apiKey?: string;
 }
 
+/** EVI realtime connection options passed at connect() */
+export interface HumeRealtimeConfig {
+  /** EVI config ID (required for realtime). Create via Hume dashboard or API. */
+  configId: string;
+  /** Config version for pinned configs */
+  configVersion?: string | number;
+  /** Session overrides: system prompt, voice, etc. */
+  sessionSettings?: {
+    systemPrompt?: string;
+    voiceId?: string;
+    [key: string]: unknown;
+  };
+}
+
 export class HumeVoice extends MastraVoice {
   private client: HumeClient;
+  private apiKey: string;
   private storedSpeaker?: string;
+  private realtimeConfig?: HumeRealtimeConfig;
+  private eventEmitter = new EventEmitter();
+  private socket: ReturnType<HumeClient['empathicVoice']['chat']['connect']> | null = null;
+  private state: 'disconnected' | 'connected' = 'disconnected';
 
   constructor({
     speechModel,
     speaker,
+    realtimeConfig,
   }: {
     speechModel?: HumeVoiceConfig;
     speaker?: string;
+    realtimeConfig?: HumeRealtimeConfig;
   } = {}) {
     const apiKey = speechModel?.apiKey ?? process.env.HUME_API_KEY;
 
@@ -32,8 +55,10 @@ export class HumeVoice extends MastraVoice {
       throw new Error('HUME_API_KEY is not set. Set it in environment variables or pass apiKey in speechModel config.');
     }
 
+    this.apiKey = apiKey;
     this.client = new HumeClient({ apiKey });
     this.storedSpeaker = speaker;
+    this.realtimeConfig = realtimeConfig;
   }
 
   /**
@@ -131,6 +156,177 @@ export class HumeVoice extends MastraVoice {
     throw new Error(
       'Hume does not support speech recognition. Use CompositeVoice with a provider like Deepgram for STT.',
     );
+  }
+
+  /**
+   * Establishes a WebSocket connection to Hume EVI for realtime speech-to-speech.
+   * Requires realtimeConfig.configId (create via Hume dashboard or API).
+   *
+   * @example
+   * ```typescript
+   * const voice = new HumeVoice({
+   *   speechModel: { apiKey: process.env.HUME_API_KEY },
+   *   realtimeConfig: { configId: 'your-evi-config-id' }
+   * });
+   * await voice.connect();
+   * voice.on('speaking', ({ audio }) => { /* play base64 audio *\/ });
+   * voice.on('writing', ({ text, role }) => { console.log(role, text); });
+   * ```
+   */
+  async connect(options?: { realtimeConfig?: HumeRealtimeConfig }): Promise<void> {
+    const config = options?.realtimeConfig ?? this.realtimeConfig;
+    if (!config?.configId) {
+      throw new Error(
+        'Hume EVI realtime requires configId. Pass realtimeConfig: { configId: "..." } in constructor or connect({ realtimeConfig: { configId: "..." } }).',
+      );
+    }
+
+    if (this.state === 'connected' && this.socket) {
+      return;
+    }
+
+    const apiKey = this.apiKey;
+    const sessionSettings = { ...(config.sessionSettings ?? {}) };
+    if (this.storedSpeaker && !sessionSettings.voiceId) {
+      sessionSettings.voiceId = this.storedSpeaker;
+    }
+
+    this.socket = this.client.empathicVoice.chat.connect({
+      configId: config.configId,
+      configVersion: config.configVersion,
+      sessionSettings,
+      apiKey,
+    });
+
+    this.socket.on('message', (msg: { type: string; [key: string]: unknown }) => {
+      this.handleEviMessage(msg);
+    });
+    this.socket.on('error', (err: Error) => {
+      this.emitEvent('error', { message: err.message, details: err });
+    });
+    this.socket.on('close', () => {
+      this.state = 'disconnected';
+      this.socket = null;
+    });
+
+    this.socket.connect();
+    await this.socket.waitForOpen();
+    this.state = 'connected';
+  }
+
+  private handleEviMessage(msg: { type: string; [key: string]: unknown }): void {
+    switch (msg.type) {
+      case 'audio_output': {
+        const data = msg.data as string | undefined;
+        if (data) {
+          this.emitEvent('speaking', { audio: data });
+        }
+        break;
+      }
+      case 'user_message': {
+        const content = (msg.message as { content?: string })?.content;
+        if (typeof content === 'string') {
+          this.emitEvent('writing', { text: content, role: 'user' });
+        }
+        break;
+      }
+      case 'assistant_message': {
+        const content = (msg.message as { content?: string })?.content;
+        if (typeof content === 'string') {
+          this.emitEvent('writing', { text: content, role: 'assistant' });
+        }
+        break;
+      }
+      case 'websocket_error': {
+        const message = (msg as { message?: string }).message ?? 'Hume EVI WebSocket error';
+        this.emitEvent('error', { message, code: 'websocket_error', details: msg });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  private emitEvent<E extends keyof VoiceEventMap>(event: E, data: VoiceEventMap[E]): void {
+    this.eventEmitter.emit(event, data);
+  }
+
+  /**
+   * Streams audio to the EVI session. Expects PCM 16-bit audio.
+   * For Int16Array, converts to base64 automatically.
+   * For streams, sends each chunk as it arrives (recommended ~20ms chunks).
+   */
+  async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+    if (this.state !== 'connected' || !this.socket) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+
+    if (audioData instanceof Int16Array) {
+      const buffer = Buffer.from(audioData.buffer, audioData.byteOffset, audioData.byteLength);
+      this.socket.sendAudioInput({ data: buffer.toString('base64') });
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const stream = audioData as NodeJS.ReadableStream;
+      stream.on('data', (chunk: Buffer | Uint8Array) => {
+        try {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          this.socket?.sendAudioInput({ data: buffer.toString('base64') });
+        } catch (err) {
+          if ('destroy' in stream && typeof (stream as { destroy?: () => void }).destroy === 'function') {
+            (stream as { destroy: () => void }).destroy();
+          }
+          reject(err);
+        }
+      });
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+  }
+
+  /**
+   * Sends text to the assistant to speak. Triggers the assistant to respond with that text as speech.
+   */
+  async answer(options?: { text?: string }): Promise<void> {
+    if (this.state !== 'connected' || !this.socket) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+    const text = options?.text ?? '';
+    if (text) {
+      this.socket.sendAssistantInput({ text });
+    }
+  }
+
+  /**
+   * Disconnects from the EVI WebSocket.
+   */
+  close(): void {
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    this.state = 'disconnected';
+  }
+
+  /**
+   * Register an event listener. Events: 'speaking', 'writing', 'error'.
+   */
+  on<E extends VoiceEventType>(
+    event: E,
+    callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
+  ): void {
+    this.eventEmitter.on(event as string, callback);
+  }
+
+  /**
+   * Remove an event listener.
+   */
+  off<E extends VoiceEventType>(
+    event: E,
+    callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
+  ): void {
+    this.eventEmitter.off(event as string, callback);
   }
 }
 
