@@ -37,12 +37,11 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   const threads = await harness.listThreads();
   const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
-  state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.allToolComponents = [];
-
   if (latest) {
     await harness.switchThread({ threadId: latest.id });
+    state.chatContainer.clear();
+    state.pendingTools.clear();
+    state.allToolComponents = [];
     state.pendingNewThread = false;
     await ctx.renderExistingMessages();
     ctx.showInfo(
@@ -51,6 +50,9 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
         : `Switched to resource: ${newId} — resumed thread: ${latest.title || latest.id}`,
     );
   } else {
+    state.chatContainer.clear();
+    state.pendingTools.clear();
+    state.allToolComponents = [];
     state.pendingNewThread = true;
     ctx.showInfo(
       sub === 'reset'
