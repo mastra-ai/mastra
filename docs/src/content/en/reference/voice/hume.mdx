@@ -1,0 +1,136 @@
+---
+title: "Reference: Hume | Voice"
+description: "Documentation for the Hume voice implementation, providing text-to-speech capabilities using Hume's Octave TTS API."
+packages:
+  - "@mastra/voice-hume"
+---
+
+# Hume
+
+The Hume voice implementation in Mastra provides text-to-speech capabilities using Hume's Octave TTS API. Hume offers expressive, emotionally-aware speech synthesis.
+
+## Usage Example
+
+```typescript
+import { HumeVoice } from '@mastra/voice-hume'
+
+// Initialize with default configuration (uses HUME_API_KEY environment variable)
+const voice = new HumeVoice()
+
+// Initialize with custom configuration
+const voice = new HumeVoice({
+  speechModel: {
+    apiKey: 'your-api-key',
+  },
+  speaker: 'your-voice-name', // Voice from Hume Voice Library or custom voice
+})
+
+// Convert text to speech
+const audioStream = await voice.speak('Hello, world!', {
+  speaker: 'voice-name', // Optional: override default voice
+  format: { type: 'mp3' }, // Optional: 'mp3' | 'wav' | 'pcm'
+  description: 'Warm and friendly tone', // Optional: delivery instructions
+})
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+{
+name: "speechModel",
+type: "HumeVoiceConfig",
+description: "Configuration for text-to-speech functionality",
+isOptional: true,
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice name or ID from Hume Voice Library or custom voices",
+isOptional: true,
+},
+]}
+/>
+
+### HumeVoiceConfig
+
+<PropertiesTable
+  content={[
+{
+name: "apiKey",
+type: "string",
+description:
+"Hume API key. Falls back to HUME_API_KEY environment variable",
+isOptional: true,
+},
+]}
+/>
+
+## Methods
+
+### speak()
+
+Converts text to speech using Hume's Octave TTS model.
+
+<PropertiesTable
+  content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. If a stream is provided, it will be converted to text first.",
+isOptional: false,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Override the default speaker for this request",
+isOptional: true,
+defaultValue: "Constructor's speaker value",
+},
+{
+name: "options.format",
+type: "{ type: 'mp3' | 'wav' | 'pcm' }",
+description: "Output audio format",
+isOptional: true,
+defaultValue: "{ type: 'mp3' }",
+},
+{
+name: "options.description",
+type: "string",
+description: "Acting/delivery instructions for the speech (tone, pacing, etc.)",
+isOptional: true,
+},
+]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+Returns an array of available voices from Hume's Voice Library and custom voices.
+
+<PropertiesTable
+  content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+},
+{
+name: "name",
+type: "string",
+description: "Display name of the voice",
+},
+]}
+/>
+
+### listen()
+
+This method is not supported by Hume and will throw an error. Hume does not provide speech-to-text functionality. Use `CompositeVoice` with Deepgram or another provider for STT.
+
+## Notes
+
+- Hume requires an API key for authentication
+- Speech-to-text functionality is not supported; use `CompositeVoice` with another provider for full voice capabilities
+- Hume supports voices from the [Voice Library](https://app.hume.ai/tts/voice-library) and custom voices you've created
