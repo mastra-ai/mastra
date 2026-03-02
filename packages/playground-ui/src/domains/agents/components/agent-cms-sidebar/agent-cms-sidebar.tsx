@@ -23,7 +23,7 @@ export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSi
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0" scrollBarOverContent={false}>
+      <ScrollArea className="flex-1 min-h-0">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
             {AGENT_CMS_SECTIONS.map((section, index) => (
