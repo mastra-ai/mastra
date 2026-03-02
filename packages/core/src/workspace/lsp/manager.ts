@@ -195,7 +195,8 @@ export class LSPManager {
 
   /**
    * Convenience method: open file, send content, wait for diagnostics, return normalized results.
-   * Returns an empty array on any failure (non-blocking).
+   * Returns null when no LSP client is available; otherwise returns diagnostics
+   * (or an empty array on runtime failures after client acquisition).
    * Uses a per-file lock to serialize concurrent calls for the same file.
    */
   async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[] | null> {

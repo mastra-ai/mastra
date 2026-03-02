@@ -462,17 +462,24 @@ describe('buildServerDefs', () => {
   describe('packageRunner fallback', () => {
     it('uses the provided runner for eslint when binary not found', () => {
       const defs = buildServerDefs({ packageRunner: 'npx --yes' });
-      expect(defs.eslint!.command(tempDir)).toBe('npx --yes vscode-eslint-language-server --stdio');
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, runner is not needed
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('npx --yes vscode-eslint-language-server --stdio');
     });
 
     it('works with pnpm dlx runner', () => {
       const defs = buildServerDefs({ packageRunner: 'pnpm dlx' });
-      expect(defs.eslint!.command(tempDir)).toBe('pnpm dlx vscode-eslint-language-server --stdio');
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('pnpm dlx vscode-eslint-language-server --stdio');
     });
 
     it('works with bunx runner', () => {
       const defs = buildServerDefs({ packageRunner: 'bunx' });
-      expect(defs.eslint!.command(tempDir)).toBe('bunx vscode-eslint-language-server --stdio');
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('bunx vscode-eslint-language-server --stdio');
     });
 
     it('uses the provided runner for python after PATH check when no binary found', () => {
@@ -485,7 +492,10 @@ describe('buildServerDefs', () => {
 
     it('returns undefined when no packageRunner set (default)', () => {
       const defs = buildServerDefs();
-      expect(defs.eslint!.command(tempDir)).toBeUndefined();
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, it returns the PATH command
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBeUndefined();
     });
 
     it('local binary takes priority over packageRunner', () => {

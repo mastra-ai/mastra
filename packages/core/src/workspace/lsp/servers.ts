@@ -172,10 +172,11 @@ export async function findProjectRootAsync(
  *  1. `config.binaryOverrides[id]` — explicit binary command override
  *  2. Project `node_modules/.bin/` binary
  *  3. `process.cwd()` `node_modules/.bin/` binary
- *  4. Global PATH lookup (system-installed binaries)
- *  5. `config.packageRunner` — package runner fallback (off by default)
+ *  4. `config.searchPaths` `node_modules/.bin/` binary lookup
+ *  5. Global PATH lookup (system-installed binaries)
+ *  6. `config.packageRunner` — package runner fallback (off by default)
  *
- * `config.searchPaths` extends TypeScript module resolution
+ * `config.searchPaths` also extends TypeScript module resolution
  * (used to locate typescript/lib/tsserver.js when it lives outside the project).
  */
 export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef> {
