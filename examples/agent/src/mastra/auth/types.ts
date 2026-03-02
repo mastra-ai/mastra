@@ -2,7 +2,7 @@
  * Shared types for auth providers.
  */
 
-import type { EEUser, StaticRBACProvider, IRBACProvider } from '@mastra/core/auth';
+import type { EEUser, StaticRBACProvider, IRBACProvider } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 export interface AuthResult {
