@@ -109,3 +109,36 @@ export const ChatMessages: Story = {
     </ScrollArea>
   ),
 };
+
+export const PermanentScrollbar: Story = {
+  render: () => (
+    <div className="flex gap-8">
+      <div>
+        <p className="text-xs text-neutral4 mb-2">permanentScrollbar: false (default)</p>
+        <ScrollArea className="h-[250px] w-[280px] rounded-md border border-border1">
+          <div className="space-y-2 ">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-md bg-surface3 px-3 py-2">
+                <div className="h-6 w-6 shrink-0 rounded-full bg-surface4" />
+                <p className="text-sm text-neutral5 truncate">Item {i + 1} — the scrollbar overlaps this row</p>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+      <div>
+        <p className="text-xs text-neutral4 mb-2">permanentScrollbar: true</p>
+        <ScrollArea permanentScrollbar className="h-[250px] w-[280px] rounded-md border border-border1">
+          <div className="space-y-2 p-2">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-md bg-surface3 px-3 py-2">
+                <div className="h-6 w-6 shrink-0 rounded-full bg-surface4" />
+                <p className="text-sm text-neutral5 truncate">Item {i + 1} — content is padded from scrollbar</p>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  ),
+};
