@@ -26,7 +26,14 @@ export { grepTool } from './grep';
 
 // Helpers
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';
-export { applyTail, applyCharLimit, truncateOutput, MAX_OUTPUT_CHARS, DEFAULT_TAIL_LINES } from './output-helpers';
+export {
+  applyTail,
+  applyTokenLimit,
+  applyTokenLimitSandwich,
+  truncateOutput,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_TAIL_LINES,
+} from './output-helpers';
 
 // Tree formatter
 export * from './tree-formatter';

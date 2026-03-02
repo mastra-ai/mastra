@@ -38,6 +38,16 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
+### Authentication priority for Anthropic
+
+When resolving Anthropic models, Mastra Code checks for credentials in this order:
+
+1. Claude Max OAuth (if logged in via `/login`)
+1. `ANTHROPIC_API_KEY` environment variable or stored API key credential
+1. OAuth login prompt (if nothing else is configured)
+
+To switch from OAuth to API key usage, log out with `/logout` and set your `ANTHROPIC_API_KEY` environment variable.
+
 ### Anthropic OAuth warning
 
 Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.

@@ -51,6 +51,17 @@ function createInMemoryStorage(): InMemoryMemory {
 }
 
 function createMockObserverModel() {
+  const observationText = `<observations>
+* User discussed topic X
+* Assistant explained Y
+</observations>
+<current-task>
+- Primary: Testing mid-loop observation
+</current-task>
+<suggested-response>
+Continue testing
+</suggested-response>`;
+
   return new MockLanguageModelV2({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -60,19 +71,38 @@ function createMockObserverModel() {
       content: [
         {
           type: 'text',
-          text: `<observations>
-* User discussed topic X
-* Assistant explained Y
-</observations>
-<current-task>
-- Primary: Testing mid-loop observation
-</current-task>
-<suggested-response>
-Continue testing
-</suggested-response>`,
+          text: observationText,
         },
       ],
     }),
+    doStream: async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'obs-1',
+            modelId: 'mock-observer-model',
+            timestamp: new Date(),
+          });
+          controller.enqueue({ type: 'text-start', id: 'text-1' });
+          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: observationText });
+          controller.enqueue({ type: 'text-end', id: 'text-1' });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          });
+          controller.close();
+        },
+      });
+
+      return {
+        stream,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
   } as any);
 }
 
@@ -136,7 +166,6 @@ describe('Mid-Loop Observation', () => {
       ];
 
       const totalTokens = tokenCounter.countMessages(messages);
-      console.log('Total tokens for 2 messages:', totalTokens);
 
       expect(totalTokens).toBeGreaterThan(0);
     });
@@ -150,7 +179,6 @@ describe('Mid-Loop Observation', () => {
       }
 
       const totalTokens = tokenCounter.countMessages(messages);
-      console.log('Total tokens for 20 messages:', totalTokens);
 
       // With 500 token threshold, 20 150-char messages should exceed it
       expect(totalTokens).toBeGreaterThan(500);
@@ -179,9 +207,6 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      console.log('Messages in list:', messageList.get.all.db().length);
-      console.log('Total tokens:', tokenCounter.countMessages(messageList.get.all.db()));
-
       // Step 0: Initialize the record (no observation yet)
       await om.processInputStep({
         messageList,
@@ -194,14 +219,6 @@ describe('Mid-Loop Observation', () => {
         model: createMockObserverModel() as any,
         retryCount: 0,
         abort: new AbortController().signal,
-      });
-
-      // Check record was created
-      const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
-      console.log('Record after step 0:', {
-        id: recordAfterStep0?.id,
-        lastObservedAt: recordAfterStep0?.lastObservedAt,
-        activeObservations: recordAfterStep0?.activeObservations?.slice(0, 50),
       });
 
       // Step 1: Should trigger observation since threshold is exceeded
@@ -220,11 +237,6 @@ describe('Mid-Loop Observation', () => {
 
       // Check observation was triggered
       const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
-      console.log('Record after step 1:', {
-        id: recordAfterStep1?.id,
-        lastObservedAt: recordAfterStep1?.lastObservedAt,
-        activeObservations: recordAfterStep1?.activeObservations?.slice(0, 100),
-      });
 
       // Observations should be saved
       expect(recordAfterStep1?.activeObservations).toBeTruthy();
@@ -264,11 +276,6 @@ describe('Mid-Loop Observation', () => {
 
       // Check record was created but no observations yet
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      console.log('Record after step 0:', {
-        id: record?.id,
-        lastObservedAt: record?.lastObservedAt,
-        activeObservations: record?.activeObservations,
-      });
 
       // No observations should be saved on step 0
       expect(record?.activeObservations).toBeFalsy();
@@ -313,8 +320,6 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      console.log('Step 0 - Total tokens:', tokenCounter.countMessages(messageList.get.all.db()));
-
       await omWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
@@ -337,18 +342,6 @@ describe('Mid-Loop Observation', () => {
         recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
       }
 
-      console.log('Record after step 0:', {
-        id: recordAfterStep0?.id,
-        lastObservedAt: recordAfterStep0?.lastObservedAt,
-        activeObservations: recordAfterStep0?.activeObservations?.slice(0, 50),
-        bufferedChunks: recordAfterStep0?.bufferedObservationChunks?.length,
-        bufferedChunkDetails: recordAfterStep0?.bufferedObservationChunks?.map(c => ({
-          cycleId: c.cycleId,
-          messageTokens: c.messageTokens,
-          tokenCount: c.tokenCount,
-        })),
-      });
-
       // Should have buffered chunks but no active observations yet (below threshold).
       expect(recordAfterStep0?.bufferedObservationChunks?.length).toBeGreaterThan(0);
       expect(recordAfterStep0?.activeObservations).toBeFalsy();
@@ -365,8 +358,6 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      console.log('Step 1 - Total tokens:', tokenCounter.countMessages(messageList.get.all.db()));
-
       await omWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
@@ -381,18 +372,6 @@ describe('Mid-Loop Observation', () => {
       });
 
       const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
-      console.log('Record after step 1:', {
-        id: recordAfterStep1?.id,
-        lastObservedAt: recordAfterStep1?.lastObservedAt,
-        activeObservations: recordAfterStep1?.activeObservations?.slice(0, 100),
-        bufferedChunks: recordAfterStep1?.bufferedObservationChunks?.length,
-        bufferedChunkDetails: recordAfterStep1?.bufferedObservationChunks?.map(c => ({
-          cycleId: c.cycleId?.slice(0, 20),
-          messageTokens: c.messageTokens,
-          tokenCount: c.tokenCount,
-          messageIds: c.messageIds?.slice(0, 3),
-        })),
-      });
 
       // CRITICAL ASSERTION: Mid-step activation should have happened on step 1.
       // If this fails (activeObservations is empty), it means activation was deferred
