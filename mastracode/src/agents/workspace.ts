@@ -99,12 +99,13 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
   const state = ctx?.getState?.();
   const modeId = ctx?.modeId ?? 'build';
-  const projectPath = state?.projectPath;
+  const rawProjectPath = state?.projectPath;
 
-  if (!projectPath) {
+  if (!rawProjectPath) {
     throw new Error('Project path is required');
   }
 
+  const projectPath = path.resolve(rawProjectPath);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
