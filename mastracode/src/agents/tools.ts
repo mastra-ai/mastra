@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { HookManager } from '../hooks';
@@ -59,6 +60,7 @@ export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<
 
     const modelId = state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
+    const isOpenAIModel = modelId?.startsWith('openai/');
 
     const projectPath = state?.projectPath ?? '';
 
@@ -93,6 +95,9 @@ export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<
     } else if (isAnthropicModel) {
       const anthropic = createAnthropic({});
       tools.web_search = anthropic.tools.webSearch_20250305();
+    } else if (isOpenAIModel) {
+      const openai = createOpenAI({});
+      tools.web_search = openai.tools.webSearch();
     }
 
     if (mcpManager) {
