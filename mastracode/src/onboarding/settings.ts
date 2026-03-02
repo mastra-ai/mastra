@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -95,6 +96,8 @@ export interface GlobalSettings {
   customModelPacks: CustomPack[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // LSP configuration forwarded to the workspace
+  lsp?: LSPConfig;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -127,6 +130,7 @@ const DEFAULTS: GlobalSettings = {
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   modelUseCounts: {},
+  lsp: {},
 };
 
 export function getSettingsPath(): string {
@@ -170,6 +174,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -280,6 +285,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
     // Migrate legacy omModelId → omModelOverride
