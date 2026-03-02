@@ -21,7 +21,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       module: 'Agents',
       preview: {
         intro:
-          'Define what makes an agent different from a basic chat experience, introduce Mastra and the kinds of AI-powered apps you canin TypeScript  buil with it, and preview the Theme Park Companion Agent you will build throughout the course.',
+          'Define what makes an agent different from a basic chat experience, introduce Mastra and the kinds of AI-powered apps you can build with it in TypeScript, and preview the Theme Park Companion Agent you will build throughout the course.',
         bullets: [
           'What makes an agent different from a chatbot',
           'The core Mastra building blocks: agents, tools, workflows, memory, retrieval, observability',
