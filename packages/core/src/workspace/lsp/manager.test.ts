@@ -66,7 +66,15 @@ vi.mock('./servers', () => ({
   }),
   getServersForFile: vi.fn().mockImplementation(function getServersForFile(filePath: string) {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-      return [mockTsServerDef];
+      return [
+        {
+          id: 'typescript',
+          name: 'TypeScript Language Server',
+          languageIds: ['typescript', 'typescriptreact'],
+          markers: ['tsconfig.json', 'package.json'],
+          command: () => 'typescript-language-server --stdio',
+        },
+      ];
     }
     return [];
   }),

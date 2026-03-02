@@ -505,7 +505,7 @@ describe('buildServerDefs', () => {
       const defs = buildServerDefs({ searchPaths: [tempDir] });
       const init = defs.typescript!.initialization!(tempDir);
       expect(init).toBeDefined();
-      expect((init as any).tsserver.path).toContain('tsserver.js');
+      expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
     });
 
     it('finds binary in searchPaths node_modules/.bin', () => {

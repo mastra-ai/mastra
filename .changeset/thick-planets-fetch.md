@@ -12,7 +12,7 @@ Previously, workspace LSP diagnostics only worked when language server binaries 
 - `searchPaths`: Additional directories to search when resolving Node.js modules (e.g. `typescript/lib/tsserver.js`). Each entry should be a directory whose `node_modules` contains the required packages.
 - `packageRunner`: Package runner to use as a last-resort fallback when no binary is found (e.g. `'npx --yes'`, `'pnpm dlx'`, `'bunx'`). Off by default — package runners can hang in monorepos with workspace links.
 
-Binary resolution order per server: explicit `binaryOverrides` override → project `node_modules/.bin/` → `process.cwd()` `node_modules/.bin/` → global PATH → `packageRunner` fallback.
+Binary resolution order per server: explicit `binaryOverrides` override → project `node_modules/.bin/` → `process.cwd()` `node_modules/.bin/` → `searchPaths` `node_modules/.bin/` → global PATH → `packageRunner` fallback.
 
 ```ts
 const workspace = new Workspace({
