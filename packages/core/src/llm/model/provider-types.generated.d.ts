@@ -606,8 +606,6 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
     'gpt-5.3-codex',
-    'kimi-k2',
-    'kimi-k2-thinking',
     'kimi-k2.5',
     'minimax-m2.1',
     'minimax-m2.5',
