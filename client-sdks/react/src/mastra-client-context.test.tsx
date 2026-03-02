@@ -30,10 +30,16 @@ describe('isLocalUrl', () => {
     expect(isLocalUrl('http://[::1]')).toBe(true);
   });
 
-  it('should return true for .local hostnames', () => {
-    expect(isLocalUrl('http://mastra.local:4000')).toBe(true);
-    expect(isLocalUrl('http://mastra.local')).toBe(true);
-    expect(isLocalUrl('https://my-app.local:3000')).toBe(true);
+  it('should return false for .local hostnames', () => {
+    expect(isLocalUrl('http://mastra.local:4000')).toBe(false);
+    expect(isLocalUrl('http://mastra.local')).toBe(false);
+    expect(isLocalUrl('https://my-app.local:3000')).toBe(false);
+  });
+
+  it('should return true for 127.x.x.x loopback range', () => {
+    expect(isLocalUrl('http://127.0.0.1:4000')).toBe(true);
+    expect(isLocalUrl('http://127.0.0.2')).toBe(true);
+    expect(isLocalUrl('http://127.255.255.255')).toBe(true);
   });
 
   it('should return true for .localhost hostnames', () => {
