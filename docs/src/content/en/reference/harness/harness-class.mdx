@@ -484,7 +484,7 @@ const session = await harness.getSession()
 
 ### Messages
 
-#### `sendMessage({ content, images?, requestContext? })`
+#### `sendMessage({ content, files?, requestContext? })`
 
 Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically. If you provide `requestContext`, the harness forwards it to tools and subagents during the run.
 
