@@ -20,9 +20,11 @@ import {
   useAgents,
   useWorkflows,
   useScorers,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { EntityType } from '@mastra/core/observability';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
@@ -79,14 +81,13 @@ export default function Observability() {
     },
   });
 
-  useEffect(() => {
-    if (traceId) {
-      setSelectedTraceId(traceId);
-      setDialogIsOpen(true);
-    }
-  }, [traceId]);
+  // Sync URL traceId to state
+  if (traceId && traceId !== selectedTraceId) {
+    setSelectedTraceId(traceId);
+    setDialogIsOpen(true);
+  }
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
+  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.id,
     label: value.name,
     type: EntityType.AGENT,
@@ -104,15 +105,12 @@ export default function Observability() {
     ...workflowOptions,
   ];
 
-  useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
-    }
-  }, [searchParams, selectedEntityOption, entityOptions]);
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
@@ -131,7 +129,7 @@ export default function Observability() {
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) setSearchParams({ entity: option.value });
   };
 
   const handleTraceClick = (id: string) => {
@@ -143,6 +141,35 @@ export default function Observability() {
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
+
+  // 403 check - permission denied for traces
+  if (TracesError && is403ForbiddenError(TracesError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Observability
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Observability documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="traces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 

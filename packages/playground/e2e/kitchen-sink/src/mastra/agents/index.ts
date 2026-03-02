@@ -175,8 +175,21 @@ export const weatherAgent = new Agent({
     console.log({ fixture });
     const fixtureData = fixtures[fixture];
 
+    // Default response for API tests that don't set a fixture
+    const defaultResponse = {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text' as const, text: 'Mock response' }],
+      warnings: [],
+    };
+
     return new aiTest.MockLanguageModelV2({
       doGenerate: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return defaultResponse;
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
@@ -204,6 +217,14 @@ export const weatherAgent = new Agent({
         };
       },
       doStream: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return {
+            stream: createDelayedStream([{ type: 'text-delta', delta: 'Mock response' }, { type: 'finish' }], 0),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
