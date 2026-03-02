@@ -31,6 +31,10 @@ function DatasetExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
+  if (!datasetId || !experimentId) {
+    return null;
+  }
+
   if (experimentLoading) {
     return (
       <MainContentLayout>
