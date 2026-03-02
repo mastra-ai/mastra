@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType } from 'react'
 
 export const contentModules: Record<string, () => Promise<{ default: ComponentType }>> = {
   'what-is-an-agent': () => import('./content/what-is-an-agent.mdx'),
@@ -9,4 +9,4 @@ export const contentModules: Record<string, () => Promise<{ default: ComponentTy
   'build-with-ai': () => import('./content/build-with-ai.mdx'),
   'fetch-live-data': () => import('./content/fetch-live-data.mdx'),
   'connect-to-mcp': () => import('./content/connect-to-mcp.mdx'),
-};
+}

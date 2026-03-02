@@ -48,7 +48,10 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
     <aside className={cn('learn-sidebar-container', className)}>
       <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
         <div className="px-4 pb-4">
-          <Link to="/learn" className="learn-link block max-w-[200px] text-sm font-semibold text-(--mastra-text-primary)">
+          <Link
+            to="/learn"
+            className="learn-link block max-w-[200px] text-sm font-semibold text-(--mastra-text-primary)"
+          >
             {course.title.replace('AI ', '')}
           </Link>
           <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mt-3" />

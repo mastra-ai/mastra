@@ -65,7 +65,9 @@ function LandingContent() {
 
       {/* Hero */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">{course.title.replace('AI ', '')}</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">
+          {course.title.replace('AI ', '')}
+        </h1>
         {course.description.split('\n\n').map((para, i) => (
           <p key={i} className="mt-2 text-(--mastra-text-tertiary)">
             {para}

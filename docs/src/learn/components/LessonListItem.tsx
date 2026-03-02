@@ -31,18 +31,12 @@ function ProgressDot({ status }: { status: LessonProgressStatus }) {
 
 function PlayButton() {
   return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200 transition-transform group-hover:scale-110">
-      <svg
-        width="12"
-        height="14"
-        viewBox="0 0 12 14"
-        fill="currentColor"
-        className="ml-0.5"
-      >
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-200 text-neutral-700 transition-transform group-hover:scale-110 dark:bg-neutral-700 dark:text-neutral-200">
+      <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor" className="ml-0.5">
         <path d="M0 0v14l12-7L0 0z" />
       </svg>
     </span>
-  );
+  )
 }
 
 export function LessonListItem({ lesson, index, storage, className }: LessonListItemProps) {
@@ -51,7 +45,7 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
 
   const buttonLabel = (() => {
     if (isComingSoon) {
-      return lesson.module === 'Production' ? 'Coming soon' : 'Coming next week';
+      return lesson.module === 'Production' ? 'Coming soon' : 'Coming next week'
     }
     if (progressStatus === 'in-progress') return 'Continue'
     if (progressStatus === 'completed') return 'Review'
@@ -97,9 +91,7 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-(--mastra-text-primary) no-underline">
-            {lesson.title}
-          </span>
+          <span className="truncate text-sm font-medium text-(--mastra-text-primary) no-underline">{lesson.title}</span>
         </div>
         <span className="text-xs text-(--mastra-text-tertiary)">{lesson.durationMin} min</span>
       </div>
