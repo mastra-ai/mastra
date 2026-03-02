@@ -1708,10 +1708,14 @@ export class Agent<
           text: `User added URL: ${part.source.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
-        const fileUrl = (part as Record<string, unknown>).url as string | undefined;
+        const fileUrl = typeof (part as { url?: unknown }).url === 'string' ? (part as { url: string }).url : undefined;
+        const fileType =
+          ('mediaType' in part && typeof part.mediaType === 'string' ? part.mediaType : undefined) ??
+          ('mimeType' in part && typeof part.mimeType === 'string' ? part.mimeType : undefined) ??
+          'unknown';
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mediaType ?? part.mimeType} file: ${fileUrl?.substring(0, 100) ?? '(binary)'}`,
+          text: `User added ${fileType} file: ${fileUrl ? fileUrl.slice(0, 100) : '(binary)'}`,
         });
       }
     }
