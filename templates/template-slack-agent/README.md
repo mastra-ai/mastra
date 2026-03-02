@@ -1,138 +1,48 @@
-# Slack + Mastra
+# Slack Agent
 
-A pattern for connecting Slack bots to Mastra agents with streaming responses and conversation memory.
+A Mastra template for building Slack bots powered by AI agents with streaming responses and thread-based conversation memory. Each agent gets its own Slack app and webhook route. Built with [Mastra](https://mastra.ai).
 
-This example includes two demo agents (reverse, caps) — each gets its own Slack app and webhook route.
+## Why we built this
 
-## How It Works
+Connecting AI agents to Slack is one of the most common integration patterns — whether for internal tools, customer support, or team automation. This template shows how to wire up Mastra agents to Slack with proper streaming, thread memory, and multi-agent support. It includes two demo agents (reverse, caps) to demonstrate the pattern, so you can swap in your own agents and be up and running quickly.
 
-```
-Slack message → /slack/{app}/events → Mastra agent → streaming response back to Slack
-```
+## Demo
 
-- **One Slack app per agent** — each agent has its own bot token and signing secret
-- **Streaming updates** — shows typing indicators while the agent thinks/uses tools
-- **Thread memory** — conversations are scoped to Slack threads via Mastra memory
+This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
-## Setup
+## Prerequisites
 
-### 1. Install
+- [OpenAI API key](https://platform.openai.com/api-keys): Used by default, but you can swap in any model
+- [Slack app](https://api.slack.com/apps) with bot token and signing secret (one per agent)
+- [ngrok](https://ngrok.com) or similar tunnel for local development
 
-```bash
-pnpm install
-```
+## Quickstart 🚀
 
-### 2. Environment Variables
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template slack-agent` to scaffold the project locally.
+2. **Add your API keys**
+   - Copy `.env.example` to `.env` and fill in your OpenAI API key and Slack credentials.
+3. **Create Slack apps**
+   - For each agent, create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**.
+   - **OAuth & Permissions** → add scopes: `app_mentions:read`, `channels:history`, `chat:write`, `im:history`. Copy the Bot User OAuth Token to `.env`.
+   - **Event Subscriptions** → enable and set the Request URL to `https://your-server.com/slack/{agentName}/events`.
+   - Subscribe to bot events: `app_mention`, `message.im`.
+   - **Agents & AI Apps** → toggle on.
+   - **Basic Information** → copy Signing Secret to `.env`.
+4. **Start the dev server**
+   - Run `ngrok http 4111` to get a public URL, then `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-Create `.env`:
+## Making it yours
 
-```bash
-OPENAI_API_KEY=sk-your-key
+This template is a starting point. Here are some ideas to make it your own:
 
-# Each Slack app needs its own credentials
-SLACK_REVERSE_BOT_TOKEN=xoxb-...
-SLACK_REVERSE_SIGNING_SECRET=...
+- **Swap in your own agents** — replace the demo agents with agents that do something useful for your team. Add a Slack app config in `src/mastra/slack/routes.ts` and the corresponding env vars.
+- **Add tools and workflows** — give agents access to APIs, databases, or multi-step workflows that execute when triggered from Slack.
+- **Customize streaming behavior** — adjust the spinner animations, status messages, and typing indicators in `src/mastra/slack/streaming.ts`.
+- **Deploy to production** — remove ngrok and deploy behind a public URL with proper TLS.
 
-SLACK_CAPS_BOT_TOKEN=xoxb-...
-SLACK_CAPS_SIGNING_SECRET=...
-```
+## About Mastra templates
 
-### 3. Create Slack Apps
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-For each agent you want to expose:
-
-1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
-2. **OAuth & Permissions** → Add Bot Token Scopes and Get Token:
-   - `app_mentions:read` — receive @mentions
-   - `channels:history` — read messages in public channels
-   - `chat:write` — send messages
-   - `im:history` — read direct messages
-   - Copy Bot User OAuth Token to .env
-3. **Event Subscriptions** → Enable and set Request URL:
-   - `https://your-server.com/slack/{agentName}/events`
-4. Subscribe to bot events: `app_mention`, `message.im`
-5. **Agents & AI Apps** → Toggle on to enable agent features
-6. **Basic Information** → copy Signing Secret to .env
-
-### 4. Run
-
-```bash
-# Dev with ngrok for webhooks
-ngrok http 4111
-pnpm dev
-```
-
-## Adding Your Own Agents
-
-### 1. Create the Agent
-
-```typescript
-// src/mastra/agents/my-agent.ts
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-
-export const myAgent = new Agent({
-  name: 'my-agent',
-  instructions: 'Your agent instructions...',
-  model: 'openai/gpt-4o-mini',
-  memory: new Memory({ options: { lastMessages: 20 } }),
-});
-```
-
-### 2. Register with Mastra
-
-```typescript
-// src/mastra/index.ts
-import { myAgent } from './agents/my-agent';
-
-export const mastra = new Mastra({
-  agents: { myAgent },
-  // ...
-});
-```
-
-### 3. Add Slack Route
-
-```typescript
-// src/mastra/slack/routes.ts
-const slackApps: SlackAppConfig[] = [
-  {
-    name: 'my-agent', // Route: /slack/my-agent/events
-    botToken: process.env.SLACK_MY_AGENT_BOT_TOKEN!,
-    signingSecret: process.env.SLACK_MY_AGENT_SIGNING_SECRET!,
-    agentName: 'myAgent', // Must match key in mastra.agents
-  },
-];
-```
-
-### 4. Create Slack App & Add Env Vars
-
-Follow the Slack app setup above, then add the credentials to `.env`.
-
-## Project Structure
-
-```
-src/mastra/
-├── agents/
-│   ├── caps-agent.ts       # Simple text transformation agent
-│   └── reverse-agent.ts    # Agent with tool + workflow capabilities
-├── slack/
-│   ├── chunks.ts           # Handle nested streaming chunk events
-│   ├── constants.ts        # Animation timing configuration
-│   ├── routes.ts           # Slack webhook handlers (creates one per app)
-│   ├── status.ts           # Format status text with spinners
-│   ├── streaming.ts        # Stream agent responses to Slack
-│   ├── types.ts            # TypeScript type definitions
-│   ├── utils.ts            # Helper functions
-│   └── verify.ts           # Slack request signature verification
-├── workflows/
-│   └── reverse-workflow.ts # Multi-step text transformation workflow
-└── index.ts                # Mastra instance with agents and routes
-```
-
-## Key Files
-
-- **`routes.ts`** — Defines webhook endpoints and maps Slack apps to agents
-- **`streaming.ts`** — Streams responses with animated spinners and tool/workflow indicators
-- **`status.ts`** — Formats status messages (thinking, tool calls, workflow steps)
-- **`verify.ts`** — Validates Slack request signatures for security
+Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
