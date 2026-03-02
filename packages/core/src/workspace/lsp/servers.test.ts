@@ -510,10 +510,13 @@ describe('buildServerDefs', () => {
 
   describe('searchPaths', () => {
     it('finds typescript/lib/tsserver.js from searchPaths for module resolution', () => {
-      // cwd has typescript installed (monorepo dep), so resolution falls through to cwd.
-      // Verify searchPaths doesn't break initialization when typescript is found via cwd.
-      const defs = buildServerDefs({ searchPaths: [tempDir] });
-      const init = defs.typescript!.initialization!(tempDir);
+      // Use a root dir that does NOT contain typescript so resolution can only succeed via searchPaths.
+      const emptyRoot = join(tempDir, 'empty-root');
+      mkdirSync(emptyRoot, { recursive: true });
+
+      // searchPaths points to cwd (monorepo root) which has typescript installed.
+      const defs = buildServerDefs({ searchPaths: [process.cwd()] });
+      const init = defs.typescript!.initialization!(emptyRoot);
       expect(init).toBeDefined();
       expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
     });
