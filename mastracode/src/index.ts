@@ -34,6 +34,14 @@ import {
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
+import {
+  arePermissionRulesEqual,
+  hasPermissionRules,
+  mergePermissionRules,
+  normalizePermissionRules,
+  toObjectRecord,
+  type MastraCodePermissionRules,
+} from './utils/permission-rules.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createStorage } from './utils/storage-factory.js';
@@ -43,6 +51,7 @@ const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
   openai: 'openai-codex',
 };
+export type { MastraCodePermissionRules } from './utils/permission-rules.js';
 
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
@@ -53,10 +62,14 @@ export interface MastraCodeConfig {
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set */
   extraTools?: Record<string, any>;
+  /** Tools removed from the dynamic tool set before exposure to the model */
+  disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
+  /** Permission rule overrides applied on startup and thread switches */
+  permissionRules?: MastraCodePermissionRules;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Disable MCP server discovery. Default: false */
@@ -116,7 +129,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager),
+    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
   // Build subagent definitions with project-scoped tools
@@ -273,6 +286,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       globalInitialState[`subagentModelId_${key}`] = modelId;
     }
   }
+  const initialStateOverrides = config?.initialState ?? {};
+  const initialStateRecord = toObjectRecord(initialStateOverrides) ?? {};
+  const configuredPermissionRules = normalizePermissionRules(config?.permissionRules);
+  const hasConfiguredPermissionRules = hasPermissionRules(configuredPermissionRules);
+  const mergedInitialPermissionRules = mergePermissionRules(
+    normalizePermissionRules(initialStateRecord.permissionRules),
+    configuredPermissionRules,
+  );
 
   const harness = new Harness({
     id: 'mastra-code',
@@ -289,7 +310,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       gitBranch: project.gitBranch,
       yolo: true,
       ...globalInitialState,
-      ...config?.initialState,
+      ...initialStateOverrides,
+      permissionRules: mergedInitialPermissionRules,
     },
     workspace: getDynamicWorkspace,
     modes,
@@ -329,16 +351,32 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
   });
 
-  // Sync hookManager session ID on thread changes
-  if (hookManager) {
+  const applyConfiguredPermissionRules = (): void => {
+    if (!hasConfiguredPermissionRules) return;
+    const stateRecord = toObjectRecord(harness.getState()) ?? {};
+    const currentRules = normalizePermissionRules(stateRecord.permissionRules);
+    const targetRules = mergePermissionRules(currentRules, configuredPermissionRules);
+    if (arePermissionRulesEqual(currentRules, targetRules)) {
+      return;
+    }
+    void harness.setState({
+      permissionRules: targetRules,
+    });
+  };
+
+  // Sync hookManager session ID and configured permission rules on thread changes
+  if (hookManager || hasConfiguredPermissionRules) {
     harness.subscribe(event => {
       if (event.type === 'thread_changed') {
-        hookManager.setSessionId(event.threadId);
+        hookManager?.setSessionId(event.threadId);
+        applyConfiguredPermissionRules();
       } else if (event.type === 'thread_created') {
-        hookManager.setSessionId(event.thread.id);
+        hookManager?.setSessionId(event.thread.id);
+        applyConfiguredPermissionRules();
       }
     });
   }
+  applyConfiguredPermissionRules();
 
   return { harness, mcpManager, hookManager, authStorage, storageWarning };
 }

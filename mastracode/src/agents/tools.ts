@@ -52,7 +52,12 @@ function wrapToolWithHooks(toolName: string, tool: any, hookManager?: HookManage
   };
 }
 
-export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>, hookManager?: HookManager) {
+export function createDynamicTools(
+  mcpManager?: McpManager,
+  extraTools?: Record<string, any>,
+  hookManager?: HookManager,
+  disabledTools?: string[],
+) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
@@ -110,6 +115,13 @@ export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<
         if (!(name in tools)) {
           tools[name] = tool;
         }
+      }
+    }
+
+    // Remove tools explicitly disabled via config so the model never sees them.
+    if (disabledTools?.length) {
+      for (const toolName of disabledTools) {
+        delete tools[toolName];
       }
     }
 
