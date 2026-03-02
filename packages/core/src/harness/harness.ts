@@ -67,6 +67,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
+  private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
@@ -100,6 +101,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
+    this.defaultResourceId = this.resourceId;
 
     // Initialize state from schema defaults + initial state
     this.state = {
@@ -571,6 +573,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
+  }
+
+  getDefaultResourceId(): string {
+    return this.defaultResourceId;
+  }
+
+  async getKnownResourceIds(): Promise<string[]> {
+    const threads = await this.listThreads({ allResources: true });
+    const ids = new Set(threads.map(t => t.resourceId));
+    return [...ids].sort();
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
