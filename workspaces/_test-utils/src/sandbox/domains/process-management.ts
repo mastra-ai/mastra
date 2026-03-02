@@ -122,6 +122,76 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         },
         getContext().testTimeout,
       );
+
+      it(
+        'streams stdout in real-time (chunks arrive before wait resolves)',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStreaming) return;
+
+          const chunks: string[] = [];
+          let chunksBeforeWait = 0;
+
+          const handle = await processes.spawn(
+            'for i in 1 2 3; do echo "line-$i"; sleep 0.2; done',
+            {
+              onStdout: data => chunks.push(data),
+            },
+          );
+
+          // Wait for at least one chunk to arrive while the process is still running
+          const deadline = Date.now() + 5000;
+          while (chunks.length === 0 && Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+
+          chunksBeforeWait = chunks.length;
+          await handle.wait();
+
+          // Real streaming: at least one chunk should have arrived before wait() resolved
+          expect(chunksBeforeWait).toBeGreaterThan(0);
+          // All three lines should be present
+          const combined = chunks.join('');
+          expect(combined).toContain('line-1');
+          expect(combined).toContain('line-3');
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'streams stderr in real-time (chunks arrive before wait resolves)',
+        async () => {
+          const { capabilities } = getContext();
+          if (!capabilities.supportsStreaming) return;
+
+          const chunks: string[] = [];
+          let chunksBeforeWait = 0;
+
+          const handle = await processes.spawn(
+            'for i in 1 2 3; do echo "err-$i" >&2; sleep 0.2; done',
+            {
+              onStderr: data => chunks.push(data),
+            },
+          );
+
+          // Wait for at least one chunk to arrive while the process is still running
+          const deadline = Date.now() + 5000;
+          while (chunks.length === 0 && Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+
+          chunksBeforeWait = chunks.length;
+          await handle.wait();
+
+          // Real streaming: at least one chunk should have arrived before wait() resolved
+          expect(chunksBeforeWait).toBeGreaterThan(0);
+          // All three lines should be present
+          const combined = chunks.join('');
+          expect(combined).toContain('err-1');
+          expect(combined).toContain('err-3');
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('handle properties', () => {
