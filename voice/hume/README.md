@@ -47,13 +47,9 @@ stream.pipe(destination);
 The `HumeVoice` constructor accepts the following options:
 
 ```typescript
-interface HumeVoiceConfig {
-  apiKey?: string; // Optional API key (can also use HUME_API_KEY env var)
-}
-
 new HumeVoice({
-  speechModel?: HumeVoiceConfig,
-  speaker?: string, // Optional default voice name or ID
+  speechModel: { apiKey: 'your-api-key' }, // optional; can also use HUME_API_KEY env var
+  speaker: 'voice-name', // optional default voice name or ID
 });
 ```
 

@@ -7,17 +7,18 @@ describe('HumeVoice', () => {
   describe('constructor', () => {
     it('should throw when no API key is provided', () => {
       const originalKey = process.env.HUME_API_KEY;
-      delete process.env.HUME_API_KEY;
-
-      expect(
-        () =>
-          new HumeVoice({
-            speechModel: {},
-          }),
-      ).toThrow('HUME_API_KEY is not set');
-
-      if (originalKey !== undefined) {
-        process.env.HUME_API_KEY = originalKey;
+      try {
+        delete process.env.HUME_API_KEY;
+        expect(
+          () =>
+            new HumeVoice({
+              speechModel: {},
+            }),
+        ).toThrow('HUME_API_KEY is not set');
+      } finally {
+        if (originalKey !== undefined) {
+          process.env.HUME_API_KEY = originalKey;
+        }
       }
     });
 

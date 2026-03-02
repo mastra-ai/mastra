@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- Add Hume as a new voice provider with TTS support ([#TBD](https://github.com/mastra-ai/mastra/pull/TBD))
+- Add Hume as a new voice provider with TTS support ([#TBD](https://github.com/mastra-ai/mastra/pull/13681))
 
   **Usage:**
 

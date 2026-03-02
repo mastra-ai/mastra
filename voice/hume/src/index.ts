@@ -67,24 +67,38 @@ export class HumeVoice extends MastraVoice {
    */
   async getSpeakers(): Promise<Array<{ voiceId: string; name?: string }>> {
     const voices: Array<{ voiceId: string; name?: string }> = [];
+    const PAGE_SIZE = 100;
 
-    try {
-      for (const provider of ['HUME_AI', 'CUSTOM_VOICE'] as const) {
-        const page = await this.client.tts.voices.list({ provider });
-        const items = page.data ?? [];
-        for (const voice of items) {
-          const id = voice.id ?? voice.name;
-          if (id) {
-            voices.push({
-              voiceId: id,
-              name: voice.name,
-            });
+    for (const provider of ['HUME_AI', 'CUSTOM_VOICE'] as const) {
+      try {
+        let pageNumber = 0;
+        let totalPages = 1;
+
+        do {
+          const page = await this.client.tts.voices.list({
+            provider,
+            pageNumber,
+            pageSize: PAGE_SIZE,
+          });
+          const response = page.response as { totalPages?: number; voicesPage?: Array<{ id?: string; name?: string }> };
+          totalPages = response.totalPages ?? 1;
+          const items = response.voicesPage ?? page.data ?? [];
+
+          for (const voice of items) {
+            const id = voice.id ?? voice.name;
+            if (id) {
+              voices.push({
+                voiceId: id,
+                name: voice.name,
+              });
+            }
           }
-        }
+          pageNumber++;
+        } while (pageNumber < totalPages);
+      } catch (err) {
+        this.logger.warn(`Hume voices list failed for provider ${provider}:`, err);
+        throw err;
       }
-    } catch {
-      // Return empty if API fails (e.g. no custom voices)
-      return [];
     }
 
     return voices;
