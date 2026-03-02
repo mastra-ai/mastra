@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /** Path to the generated permissions file in @mastra/core */
-export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/interfaces/permissions.generated.ts');
+export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfaces/permissions.generated.ts');
 
 /** Descriptions for actions (used for TSDoc comments in autocomplete) */
 const ACTION_DESCRIPTIONS: Record<string, string> = {

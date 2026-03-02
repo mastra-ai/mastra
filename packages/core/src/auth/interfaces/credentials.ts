@@ -1,14 +1,14 @@
 /**
- * Credentials provider interface for EE authentication.
+ * Credentials provider interface for authentication.
  * Enables email/password sign-in and sign-up in Studio.
  */
 
-import type { EEUser } from './user';
+import type { User } from './user';
 
 /**
  * Result of a successful credentials operation.
  */
-export interface CredentialsResult<TUser = EEUser> {
+export interface CredentialsResult<TUser = User> {
   /** The authenticated user */
   user: TUser;
   /** Optional session token */
@@ -41,7 +41,7 @@ export interface CredentialsResult<TUser = EEUser> {
  * }
  * ```
  */
-export interface ICredentialsProvider<TUser extends EEUser = EEUser> {
+export interface ICredentialsProvider<TUser extends User = User> {
   /**
    * Sign in with email and password.
    *

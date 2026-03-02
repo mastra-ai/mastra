@@ -1,6 +1,5 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
-import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -14,6 +13,22 @@ import {
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
+
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
 
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
@@ -511,14 +526,17 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // from route path/method unless explicitly set or route is public
       const authConfig = this.mastra.getServer()?.auth;
       if (authConfig) {
-        const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+        const hasPermission = await loadHasPermission();
+        if (hasPermission) {
+          const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-        if (permissionError) {
-          return reply.status(permissionError.status).send({
-            error: permissionError.error,
-            message: permissionError.message,
-          });
+          if (permissionError) {
+            return reply.status(permissionError.status).send({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
+          }
         }
       }
 
@@ -623,13 +641,24 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-          if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
+          try {
+            ({ hasPermission } = await import('@mastra/core/auth/ee'));
+          } catch {
+            console.error(
+              '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+            );
+          }
+
+          if (hasPermission) {
+            const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return reply.status(permissionError.status).send({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
           }
         }
 

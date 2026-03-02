@@ -195,6 +195,17 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * If not provided, all tools default to the "other" category.
    */
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+
+  /**
+   * Optional thread locking callbacks.
+   * Called during selectOrCreateThread, createThread, and switchThread
+   * to prevent concurrent access to the same thread from multiple processes.
+   * `acquire` should throw if the lock is held by another process.
+   */
+  threadLock?: {
+    acquire: (threadId: string) => void;
+    release: (threadId: string) => void;
+  };
 }
 
 /**
@@ -341,6 +352,9 @@ export type HarnessEvent =
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
+  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
+  | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
@@ -471,7 +485,15 @@ export type HarnessEvent =
       isError: boolean;
       durationMs: number;
     }
-  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string };
+  | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
+  | {
+      type: 'task_updated';
+      tasks: Array<{
+        content: string;
+        status: 'pending' | 'in_progress' | 'completed';
+        activeForm: string;
+      }>;
+    };
 
 /**
  * Listener function for harness events.
@@ -500,7 +522,28 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
-  | { type: 'image'; data: string; mimeType: string };
+  | { type: 'image'; data: string; mimeType: string }
+  | {
+      type: 'om_observation_start';
+      tokensToObserve: number;
+      operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_observation_end';
+      tokensObserved: number;
+      observationTokens: number;
+      durationMs: number;
+      operationType?: 'observation' | 'reflection';
+      observations?: string;
+      currentTask?: string;
+      suggestedResponse?: string;
+    }
+  | {
+      type: 'om_observation_failed';
+      error: string;
+      tokensAttempted?: number;
+      operationType?: 'observation' | 'reflection';
+    };
 
 // =============================================================================
 // Request Context

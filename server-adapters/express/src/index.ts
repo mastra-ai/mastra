@@ -1,6 +1,5 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
-import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -15,6 +14,22 @@ import {
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
 
 /**
  * Convert Express request to Web API Request for cookie-based auth providers.
@@ -479,14 +494,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         // from route path/method unless explicitly set or route is public
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-          if (permissionError) {
-            return res.status(permissionError.status).json({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
           }
         }
 
@@ -554,13 +572,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         const authConfig = this.mastra.getServer()?.auth;
         if (authConfig) {
-          const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-          if (permissionError) {
-            return res.status(permissionError.status).json({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
+            }
           }
         }
       }

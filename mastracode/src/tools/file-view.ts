@@ -11,7 +11,7 @@ import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 const execAsync = promisify(exec);
 
 // Maximum tokens for view tool output
-const MAX_VIEW_TOKENS = 3_000;
+const MAX_VIEW_TOKENS = 2_000;
 
 /**
  * Shorten an absolute path for display to save tokens
