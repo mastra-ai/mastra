@@ -35,7 +35,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
 
   // Try to resume the most recent thread for this resource
   const threads = await harness.listThreads();
-  const latest = threads.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+  const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
   state.chatContainer.clear();
   state.pendingTools.clear();
