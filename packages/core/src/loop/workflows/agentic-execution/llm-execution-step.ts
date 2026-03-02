@@ -49,6 +49,11 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
 };
 
+function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
+  const modelId = runState.state.responseMetadata?.modelId;
+  return modelId ? { metadata: { modelId } } : undefined;
+}
+
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
@@ -102,6 +107,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...(providerMetadata ? { providerMetadata } : {}),
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -255,6 +261,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -300,6 +307,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -335,6 +343,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   mimeType: chunk.payload.mimeType,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -362,6 +371,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   },
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -1007,22 +1017,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
               };
             }),
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
         messageList.add(message, 'response');
-      }
-
-      // Persist the model identifier from response metadata into assistant message content.
-      // Only update messages produced in this execution step (matched by messageId) so that
-      // earlier iterations in a multi-turn agentic loop retain their own modelId values.
-      const responseModelId = runState.state.responseMetadata?.modelId;
-      if (responseModelId) {
-        for (const msg of messageList.get.response.db()) {
-          if (msg.id === messageId && msg.role === 'assistant') {
-            msg.content.metadata = { ...msg.content.metadata, modelId: responseModelId };
-          }
-        }
       }
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
