@@ -1253,7 +1253,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         try {
           await messagesCollection.insertMany(messageDocs);
         } catch (msgError) {
-          // Compensating rollback: remove the already-inserted thread
+          // Compensating rollback: remove partially-inserted messages and the thread
+          try {
+            await messagesCollection.deleteMany({ thread_id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
           try {
             await threadsCollection.deleteOne({ id: newThreadId });
           } catch {
