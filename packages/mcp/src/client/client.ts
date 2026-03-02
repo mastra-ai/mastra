@@ -502,7 +502,9 @@ export class InternalMastraMCPClient extends MastraBase {
       errorMessage.includes('http 403') ||
       errorMessage.includes('econnrefused') ||
       errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused')
+      errorMessage.includes('connection refused') ||
+      errorMessage.includes('sse stream disconnected') ||
+      errorMessage.includes('typeerror: terminated')
     );
   }
 
