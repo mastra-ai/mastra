@@ -597,6 +597,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         });
       } catch (err) {
         // saveThread failed after lock was swapped; restore previous lock state
+        let reacquired = false;
         if (this.config.threadLock) {
           try {
             await this.config.threadLock.release(thread.id);
@@ -606,12 +607,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           if (oldThreadId) {
             try {
               await this.config.threadLock.acquire(oldThreadId);
+              reacquired = true;
             } catch {
-              // Best-effort re-acquire of old thread lock
+              // Re-acquire failed; no lock is held
             }
           }
         }
-        this.currentThreadId = oldThreadId;
+        this.currentThreadId = reacquired ? oldThreadId : null;
         throw err;
       }
     }
