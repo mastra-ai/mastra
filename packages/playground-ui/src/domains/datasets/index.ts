@@ -65,9 +65,9 @@ export { ScorerSelector } from './components/experiment-trigger/scorer-selector'
 
 // Experiment components
 export {
-  ExperimentResultsListAndDetails,
-  type ExperimentResultsListAndDetailsProps,
-} from '../experiments/components/experiment-results-list-and-details';
+  ExperimentPageContent,
+  type ExperimentPageContentProps,
+} from '../experiments/components/experiment-page-content';
 export { ExperimentPageHeader, type ExperimentPageHeaderProps } from '../experiments/components/experiment-page-header';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
