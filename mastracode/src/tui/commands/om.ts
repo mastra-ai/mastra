@@ -1,5 +1,13 @@
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { OMSettingsComponent } from '../components/om-settings.js';
 import type { SlashCommandContext } from './types.js';
+
+function persistOmModelOverride(modelId: string): void {
+  const settings = loadSettings();
+  settings.models.activeOmPackId = 'custom';
+  settings.models.omModelOverride = modelId;
+  saveSettings(settings);
+}
 
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.harness.listAvailableModels();
@@ -21,10 +29,12 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async modelId => {
           await ctx.state.harness.switchObserverModel({ modelId });
+          persistOmModelOverride(modelId);
           ctx.showInfo(`Observer model → ${modelId}`);
         },
         onReflectorModelChange: async modelId => {
           await ctx.state.harness.switchReflectorModel({ modelId });
+          persistOmModelOverride(modelId);
           ctx.showInfo(`Reflector model → ${modelId}`);
         },
         onObservationThresholdChange: value => {

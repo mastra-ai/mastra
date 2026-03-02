@@ -2945,4 +2945,152 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       }
     }
   });
+
+  describe('Sub-agent instructions merge', () => {
+    it('should preserve sub-agent own instructions when parent LLM provides instructions via tool call', async () => {
+      const capturedSystemMessages: string[] = [];
+
+      const subAgentModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          for (const msg of messages) {
+            if ((msg as any).role === 'system') {
+              const content = (msg as any).content;
+              if (typeof content === 'string') {
+                capturedSystemMessages.push(content);
+              } else if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'text') capturedSystemMessages.push(part.text);
+                }
+              }
+            }
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: 'Sub-agent response',
+            content: [{ type: 'text', text: 'Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'research-agent',
+        name: 'research-agent',
+        description: 'A research sub-agent',
+        instructions: 'You are a research assistant. Always cite your sources.',
+        model: subAgentModel,
+      });
+
+      let callCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-researchAgent',
+                  input: JSON.stringify({
+                    prompt: 'Find information about TypeScript',
+                    instructions: 'Be concise and use bullet points',
+                  }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text', text: 'Done' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { researchAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Research TypeScript', { maxSteps: 3 });
+
+      const allSystemText = capturedSystemMessages.join('\n');
+      expect(allSystemText).toContain('You are a research assistant. Always cite your sources.');
+      expect(allSystemText).toContain('Be concise and use bullet points');
+
+      const ownIdx = allSystemText.indexOf('You are a research assistant. Always cite your sources.');
+      const llmIdx = allSystemText.indexOf('Be concise and use bullet points');
+      expect(ownIdx).toBeLessThan(llmIdx);
+    });
+
+    it('should use only agent own instructions when parent LLM does not provide instructions', async () => {
+      const capturedSystemMessages: string[] = [];
+
+      const subAgentModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          for (const msg of messages) {
+            if ((msg as any).role === 'system') {
+              const content = (msg as any).content;
+              if (typeof content === 'string') {
+                capturedSystemMessages.push(content);
+              } else if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'text') capturedSystemMessages.push(part.text);
+                }
+              }
+            }
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: 'Sub-agent response',
+            content: [{ type: 'text', text: 'Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'helper-agent',
+        name: 'helper-agent',
+        description: 'A helper sub-agent',
+        instructions: 'You are a helpful assistant. Be thorough.',
+        model: subAgentModel,
+      });
+
+      const supervisorModel = makeSupervisorModel('helperAgent', 'Help me with something');
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { helperAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Help me', { maxSteps: 3 });
+
+      const allSystemText = capturedSystemMessages.join('\n');
+      expect(allSystemText).toContain('You are a helpful assistant. Be thorough.');
+    });
+  });
 });
