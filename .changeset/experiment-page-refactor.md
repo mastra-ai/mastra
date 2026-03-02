@@ -1,5 +1,6 @@
 ---
-'@mastra/playground-ui': minor
+'@mastra/playground-ui': patch
+'mastra': patch
 ---
 
 Redesigned experiment detail page with tabbed layout, score integration, and modular column panels.
