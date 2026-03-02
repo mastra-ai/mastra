@@ -125,12 +125,11 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
         : pathname === basePath
           ? '/'
           : pathname;
-
     // Let static assets be served by serve-handler
-    const isStaticAsset =
-      pathWithoutBase.includes('/assets/') ||
-      pathWithoutBase.includes('/dist/assets/') ||
-      pathWithoutBase.includes('/mastra.svg');
+    const isAssetsPath = /(^|\/)assets\//.test(pathWithoutBase);
+    const isDistAssetsPath = /(^|\/)dist\/assets\//.test(pathWithoutBase);
+    const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
+    const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {

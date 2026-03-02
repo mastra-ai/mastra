@@ -99,4 +99,23 @@ describe('studio base path support', () => {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }
   });
+
+  it('does not treat SPA routes with asset-like substrings as static assets', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const spaLikeRoute = await request(`http://127.0.0.1:${port}/agents/user/assets-settings`);
+
+      expect(spaLikeRoute.status).toBe(200);
+      expect(spaLikeRoute.body).toContain('<body>studio</body>');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
 });
