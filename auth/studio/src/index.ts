@@ -161,12 +161,15 @@ export class MastraAuthStudio
       throw new Error('Session validation failed after callback');
     }
 
+    // Don't forward the shared API's Set-Cookie headers — they're scoped to
+    // the shared API domain. Instead, omit `cookies` so the Mastra server
+    // fallback path calls createSession() + getSessionHeaders() to build a
+    // cookie scoped to the deployed instance's domain.
     return {
       user,
       tokens: {
         accessToken: sessionValue,
       },
-      cookies: setCookieHeaders,
     };
   }
 
