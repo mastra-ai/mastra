@@ -9,6 +9,7 @@
  * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
+import * as childProcess from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -25,6 +26,13 @@ import { LocalProcessManager } from './local-process-manager';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
+import { mountGCS } from './mounts/gcs';
+import type { LocalGCSMountConfig } from './mounts/gcs';
+import { isMountPoint, unmountFuse } from './mounts/platform';
+import { mountS3 } from './mounts/s3';
+import type { LocalS3MountConfig } from './mounts/s3';
+import { MountToolNotFoundError } from './mounts/types';
+import type { LocalMountContext } from './mounts/types';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo } from './types';
@@ -384,8 +392,12 @@ export class LocalSandbox extends MastraSandbox {
    * Mount a filesystem at a path on the local host.
    *
    * - **local** — Creates a symlink from `<workingDir>/<mount>` to the basePath.
+   * - **s3** — FUSE mount via s3fs. Linux: `apt install s3fs`. macOS: `brew install gromgit/fuse/s3fs-mac` + macFUSE.
+   * - **gcs** — FUSE mount via gcsfuse. Linux: `apt install gcsfuse`. macOS: not officially supported.
    *
    * Virtual mount paths (e.g. `/s3`) are resolved under the sandbox's workingDirectory.
+   * When the required FUSE tool is missing, the mount is marked `unavailable` (warning, not error)
+   * — the workspace still works via SDK filesystem methods, only sandbox process access is affected.
    * Other mount types can be handled via the `onMount` hook.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
@@ -430,7 +442,7 @@ export class LocalSandbox extends MastraSandbox {
     this.logger.debug(`[LocalSandbox] Config type: ${config.type}`);
 
     // Reject unsupported types early — before any filesystem work
-    if (config.type !== 'local') {
+    if (config.type !== 'local' && config.type !== 's3' && config.type !== 'gcs') {
       const error = `Unsupported mount type: ${(config as FilesystemMountConfig).type}`;
       this.mounts.set(mountPath, { filesystem, state: 'unsupported', config, error });
       return { success: false, mountPath, error };
@@ -438,7 +450,7 @@ export class LocalSandbox extends MastraSandbox {
 
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
-    // Check if host path exists and would conflict with the symlink
+    // Check if host path exists and would conflict
     try {
       const entries = await fs.readdir(hostPath);
       if (entries.length > 0) {
@@ -447,7 +459,7 @@ export class LocalSandbox extends MastraSandbox {
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
-      // Empty directory from a previous failed attempt — remove so symlink can be created
+      // Empty directory from a previous failed attempt — remove so symlink/mount can proceed
       await fs.rmdir(hostPath);
     } catch (err: unknown) {
       const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
@@ -457,21 +469,70 @@ export class LocalSandbox extends MastraSandbox {
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
-      // ENOENT: path doesn't exist yet — exactly what we want for symlink creation
+      // ENOENT: path doesn't exist yet — exactly what we want
     }
 
-    // Create symlink: ensure parent directory exists, then link
-    const localConfig = config as { type: 'local'; basePath: string };
     try {
-      await fs.mkdir(path.dirname(hostPath), { recursive: true });
-      await fs.symlink(localConfig.basePath, hostPath);
-      this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
+      switch (config.type) {
+        case 'local': {
+          // Local filesystem — create symlink directly (no intermediate directory)
+          const localConfig = config as { type: 'local'; basePath: string };
+          await fs.mkdir(path.dirname(hostPath), { recursive: true });
+          await fs.symlink(localConfig.basePath, hostPath);
+          this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
+          break;
+        }
+        case 's3': {
+          // S3 FUSE mount — needs a directory to mount into
+          this.logger.debug(`[LocalSandbox] Mounting S3 bucket at ${hostPath}...`);
+          await fs.mkdir(hostPath, { recursive: true });
+          const mountCtx = this.createMountContext();
+          await mountS3(hostPath, config as LocalS3MountConfig, mountCtx);
+          this.logger.debug(`[LocalSandbox] Mounted S3 bucket at ${hostPath}`);
+          break;
+        }
+        case 'gcs': {
+          // GCS FUSE mount — needs a directory to mount into
+          this.logger.debug(`[LocalSandbox] Mounting GCS bucket at ${hostPath}...`);
+          await fs.mkdir(hostPath, { recursive: true });
+          const mountCtx = this.createMountContext();
+          await mountGCS(hostPath, config as LocalGCSMountConfig, mountCtx);
+          this.logger.debug(`[LocalSandbox] Mounted GCS bucket at ${hostPath}`);
+          break;
+        }
+      }
     } catch (error) {
+      // Tool not installed — warn and mark as unavailable (workspace still works via SDK)
+      if (error instanceof MountToolNotFoundError) {
+        this.logger.warn(
+          `[LocalSandbox] FUSE mount unavailable at "${mountPath}": ${error.message}. Filesystem tools will still work, but sandbox processes won't have access to this mount path.`,
+        );
+        this.mounts.set(mountPath, { filesystem, state: 'unavailable', config, error: String(error) });
+
+        try {
+          await fs.rmdir(hostPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+
+        return { success: false, mountPath, error: String(error), unavailable: true };
+      }
+
+      // Actual mount failure — error
       this.logger.error(
         `[LocalSandbox] Error mounting "${filesystem.provider}" (${filesystem.id}) at "${hostPath}":`,
         error,
       );
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
+
+      // Clean up the directory we created for FUSE mounts
+      if (config.type !== 'local') {
+        try {
+          await fs.rmdir(hostPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
 
       return { success: false, mountPath, error: String(error) };
     }
@@ -501,13 +562,17 @@ export class LocalSandbox extends MastraSandbox {
 
     this.logger.debug(`[LocalSandbox] Unmounting ${mountPath} (${hostPath})...`);
 
-    // Check if it's a symlink — symlinks are just unlinked, not FUSE-unmounted
+    // Only call FUSE unmount for actual FUSE mounts (not symlinks)
     let isSymlink = false;
     try {
       const stats = await fs.lstat(hostPath);
       isSymlink = stats.isSymbolicLink();
-    } catch {
-      // Path doesn't exist — proceed with cleanup
+      if (!isSymlink) {
+        const mountCtx = this.createMountContext();
+        await unmountFuse(hostPath, mountCtx);
+      }
+    } catch (error) {
+      this.logger.debug(`[LocalSandbox] Unmount error:`, error);
     }
 
     this.mounts.delete(mountPath);
@@ -522,20 +587,88 @@ export class LocalSandbox extends MastraSandbox {
       // Ignore if doesn't exist
     }
 
-    // Remove symlink
-    if (isSymlink) {
-      try {
+    // Remove mount point (symlink or empty directory)
+    try {
+      if (isSymlink) {
         await fs.unlink(hostPath);
-        this.logger.debug(`[LocalSandbox] Unmounted and removed symlink ${hostPath}`);
-      } catch {
-        this.logger.debug(`[LocalSandbox] Could not remove symlink ${hostPath}`);
+      } else {
+        await fs.rmdir(hostPath);
       }
+      this.logger.debug(`[LocalSandbox] Unmounted and removed ${hostPath}`);
+    } catch {
+      this.logger.debug(`[LocalSandbox] Unmounted ${hostPath} (not removed: does not exist or not empty)`);
     }
   }
 
   // ---------------------------------------------------------------------------
   // Mount Helpers (private)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Run a command on the host, outside any isolation.
+   * Used for mount/unmount operations which need host-level access.
+   */
+  private runHostCommand(
+    command: string,
+    args: string[],
+    options?: { timeout?: number },
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const timeout = options?.timeout ?? 30_000;
+    return new Promise((resolve, reject) => {
+      const proc = childProcess.spawn(command, args, {
+        cwd: this.workingDirectory,
+        env: this.buildEnv(),
+        stdio: 'pipe',
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let killed = false;
+
+      const timeoutId = timeout
+        ? setTimeout(() => {
+            killed = true;
+            proc.kill('SIGTERM');
+          }, timeout)
+        : undefined;
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on('error', err => {
+        if (timeoutId) clearTimeout(timeoutId);
+        reject(err);
+      });
+
+      proc.on('close', (code, signal) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (killed) {
+          resolve({ stdout, stderr: stderr + `\nProcess timed out after ${timeout}ms`, exitCode: 124 });
+        } else if (signal) {
+          const signo = signal ? (os.constants.signals[signal as keyof typeof os.constants.signals] ?? 0) : 0;
+          resolve({ stdout, stderr: stderr + `\nProcess terminated by ${signal}`, exitCode: 128 + signo });
+        } else {
+          resolve({ stdout, stderr, exitCode: code ?? 0 });
+        }
+      });
+    });
+  }
+
+  /**
+   * Create a LocalMountContext for mount operations.
+   */
+  private createMountContext(): LocalMountContext {
+    return {
+      run: (command, args, options) => this.runHostCommand(command, args, options),
+      platform: os.platform(),
+      logger: this.logger,
+    };
+  }
 
   /**
    * Write a marker file for detecting config changes.
@@ -566,28 +699,33 @@ export class LocalSandbox extends MastraSandbox {
     hostPath: string,
     newConfig: FilesystemMountConfig,
   ): Promise<'not_mounted' | 'matching' | 'mismatched' | 'foreign'> {
-    // Check if it's a symlink (local mount)
-    try {
-      const stats = await fs.lstat(hostPath);
-      if (stats.isSymbolicLink() && newConfig.type === 'local') {
-        // Validate symlink target matches config before checking marker
-        const linkTarget = await fs.readlink(hostPath).catch(() => null);
-        const resolvedTarget = linkTarget ? path.resolve(path.dirname(hostPath), linkTarget) : null;
-        const expectedTarget = path.resolve((newConfig as { type: 'local'; basePath: string }).basePath);
-        if (!resolvedTarget || resolvedTarget !== expectedTarget) {
-          // Symlink exists but points somewhere else — check if we created it
-          return (await this.hasMarkerFile(hostPath)) ? 'mismatched' : 'foreign';
+    const mountCtx = this.createMountContext();
+    const mounted = await isMountPoint(hostPath, mountCtx);
+
+    if (!mounted) {
+      // Local mounts are symlinks, not FUSE mount points — check separately
+      try {
+        const stats = await fs.lstat(hostPath);
+        if (stats.isSymbolicLink() && newConfig.type === 'local') {
+          // Validate symlink target matches config before checking marker
+          const linkTarget = await fs.readlink(hostPath).catch(() => null);
+          const resolvedTarget = linkTarget ? path.resolve(path.dirname(hostPath), linkTarget) : null;
+          const expectedTarget = path.resolve((newConfig as { type: 'local'; basePath: string }).basePath);
+          if (!resolvedTarget || resolvedTarget !== expectedTarget) {
+            // Symlink exists but points somewhere else — check if we created it
+            return (await this.hasMarkerFile(hostPath)) ? 'mismatched' : 'foreign';
+          }
+          // Symlink target matches — validate via marker file
+          return this.checkMarkerFile(hostPath, newConfig);
         }
-        // Symlink target matches — validate via marker file
-        return this.checkMarkerFile(hostPath, newConfig);
-      } else if (stats.isSymbolicLink()) {
-        // Symlink exists for a non-local config — check if we created it
-        return (await this.hasMarkerFile(hostPath)) ? 'mismatched' : 'foreign';
+      } catch {
+        // Not a symlink or no marker — treat as not mounted
       }
-    } catch {
-      // Not a symlink or doesn't exist — treat as not mounted
+      return 'not_mounted';
     }
-    return 'not_mounted';
+
+    // Path is a FUSE mount point — check marker to see if we created it
+    return this.checkMarkerFile(hostPath, newConfig);
   }
 
   /**
