@@ -162,13 +162,26 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   postProcessJSONNode(schema: JSONSchema7): void {
-    if (schema.type === undefined && !schema.anyOf) {
-      schema.type = ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'];
-    }
-
     // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
+    }
+
+    if (schema.type === undefined && !schema.anyOf) {
+      let subSchema: typeof schema = {};
+      for (const key of Object.keys(schema)) {
+        // @ts-expect-error - key is a valid property for JSON Schema
+        subSchema[key] = schema[key];
+        // @ts-expect-error - key is a valid property for JSON Schema
+        delete schema[key];
+      }
+
+      schema.anyOf = [
+        subSchema,
+        {
+          type: 'null',
+        },
+      ];
     }
 
     // Fix v4-specific issues in post-processing

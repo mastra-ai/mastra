@@ -122,7 +122,7 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
     super.postProcessJSONNode(schema);
 
     // force additionalProperties to be false for object schemas
-    if (schema.type === 'object') {
+    if (schema.type === 'object' && schema.properties !== undefined) {
       schema.additionalProperties = false;
     }
   }

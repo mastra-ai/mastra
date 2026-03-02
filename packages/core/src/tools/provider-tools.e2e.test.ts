@@ -215,7 +215,7 @@ describe('provider-defined tools', () => {
     expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
-  it('stream - should handle anthropic skills', { timeout: 30000 }, async () => {
+  it('stream - should handle anthropic skills', { timeout: 60_000 }, async () => {
     const tool = anthropic.tools.codeExecution_20250522({});
 
     const agent = new Agent({

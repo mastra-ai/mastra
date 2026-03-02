@@ -458,15 +458,15 @@ export abstract class SchemaCompatLayer {
    * Processes union schemas and can convert anyOf patterns to type arrays for simple primitives.
    */
   protected defaultUnionHandler(schema: JSONSchema7): JSONSchema7 {
-    if (Array.isArray(schema.type)) {
-      schema.anyOf = schema.type.map(type => {
-        const result = { type };
+    // if (Array.isArray(schema.type)) {
+    //   schema.anyOf = schema.type.map(type => {
+    //     const result = { type };
 
-        return result;
-      });
+    //     return result;
+    //   });
 
-      delete schema.type;
-    }
+    //   delete schema.type;
+    // }
 
     if (Array.isArray(schema.anyOf)) {
       // const hasNull = schema.anyOf.some(subSchema => typeof subSchema === 'object' && subSchema.type === 'null');
@@ -489,6 +489,10 @@ export abstract class SchemaCompatLayer {
 
           this.preProcessJSONNode(subSchema);
           this.postProcessJSONNode(subSchema);
+
+          // if (hasNull && subSchema.type && subSchema.type !== 'null') {
+          //   subSchema.type = [].concat(subSchema.type, 'null');
+          // }
 
           return subSchema;
         })
