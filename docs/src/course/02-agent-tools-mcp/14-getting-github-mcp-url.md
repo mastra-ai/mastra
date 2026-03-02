@@ -1,6 +1,6 @@
 # Setting Up the GitHub MCP Server
 
-To connect your agent to GitHub, we'll use the [official GitHub MCP server](https://github.com/github/github-mcp-server) — a remote server hosted by GitHub that provides access to GitHub's API through MCP.
+To connect your agent to GitHub, we'll use the [official GitHub MCP server](https://github.com/github/github-mcp-server). GitHub hosts this server remotely at `https://api.githubcopilot.com/mcp/`, and authentication is done with a GitHub Personal Access Token passed in the request headers.
 
 ## Creating a GitHub Personal Access Token
 
@@ -24,3 +24,17 @@ GITHUB_PERSONAL_ACCESS_TOKEN=your_github_token
 ```
 
 Using an environment variable keeps your token secure and prevents it from being committed to your repository.
+
+:::note
+If you prefer to run the GitHub MCP server locally instead of using the hosted endpoint, you can use `npx` as a stdio transport:
+
+```typescript
+github: {
+  command: 'npx',
+  args: ['-y', '@github/mcp'],
+  env: { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN },
+}
+```
+
+This does not require access to `api.githubcopilot.com` and works the same way as the hosted option.
+:::
