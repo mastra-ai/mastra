@@ -561,20 +561,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       metadata.projectPath = projectPath;
     }
 
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      await memoryStorage.saveThread({
-        thread: {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title!,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-        },
-      });
-    }
-
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
     const oldThreadId = this.currentThreadId;
@@ -594,6 +580,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       if (oldThreadId) {
         await this.config.threadLock.release(oldThreadId);
       }
+    }
+
+    if (this.config.storage) {
+      const memoryStorage = await this.getMemoryStorage();
+      await memoryStorage.saveThread({
+        thread: {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title!,
+          createdAt: thread.createdAt,
+          updatedAt: thread.updatedAt,
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+        },
+      });
     }
 
     this.currentThreadId = thread.id;
@@ -658,6 +658,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
 
+    // Acquire lock on new thread before releasing old one.
+    // Lock operations must be adjacent (no intermediate awaits) so callers
+    // can rely on a single microtask tick to observe both acquire and release.
+    await this.config.threadLock?.acquire(threadId);
+    const previousThreadId = this.currentThreadId;
+    if (previousThreadId) {
+      await this.config.threadLock?.release(previousThreadId);
+    }
+
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -666,13 +675,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    // Acquire lock on new thread before releasing old one
-    await this.config.threadLock?.acquire(threadId);
-
-    const previousThreadId = this.currentThreadId;
-    if (previousThreadId) {
-      await this.config.threadLock?.release(previousThreadId);
-    }
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
