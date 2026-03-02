@@ -343,7 +343,10 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return structuredClone(DEFAULTS);
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    // Spread raw first to preserve unknown top-level keys (forward-compatibility),
+    // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
+      ...raw,
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
       preferences: { ...DEFAULTS.preferences, ...raw.preferences },
