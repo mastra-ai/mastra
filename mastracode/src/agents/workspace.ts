@@ -9,7 +9,7 @@ import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace
 import type { LSPConfig } from '@mastra/core/workspace';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
-import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
 // Create Workspace with Skills
