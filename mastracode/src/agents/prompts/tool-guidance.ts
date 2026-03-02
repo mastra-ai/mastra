@@ -4,6 +4,8 @@
  * and are scoped to what's available in the current mode.
  */
 
+import { MC_TOOLS } from '../../tool-names.js';
+
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
@@ -24,18 +26,18 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 
   const readTools: string[] = [];
 
-  if (!denied.has('view')) {
+  if (!denied.has(MC_TOOLS.VIEW)) {
     readTools.push(`
-**view** — Read file contents or list directories
+**${MC_TOOLS.VIEW}** — Read file contents or list directories
 - Use this to read files before editing them. NEVER propose changes to code you haven't read.
 - Use \`view_range\` for large files to read specific sections.
 - For directory listings, this shows 2 levels deep.
 - Example: To check lines 50-100 of a large file: \`view("src/big-file.ts", { view_range: [50, 100] })\``);
   }
 
-  if (!denied.has('search_content')) {
+  if (!denied.has(MC_TOOLS.SEARCH_CONTENT)) {
     readTools.push(`
-**search_content** — Search file contents using regex
+**${MC_TOOLS.SEARCH_CONTENT}** — Search file contents using regex
 - Use this for ALL content search (finding functions, variables, error messages, imports, etc.)
 - NEVER use \`execute_command\` with grep, rg, or ag. Always use the search_content tool.
 - Supports regex patterns, file type filtering, and context lines.
@@ -43,9 +45,9 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Example: Find all imports of a module: \`search_content("from ['\\"\\]express['\\"\\]", { glob: "**/*.ts" })\``);
   }
 
-  if (!denied.has('find_files')) {
+  if (!denied.has(MC_TOOLS.FIND_FILES)) {
     readTools.push(`
-**find_files** — Find files by name pattern
+**${MC_TOOLS.FIND_FILES}** — Find files by name pattern
 - Use this to find files matching a pattern (e.g., "**/*.ts", "src/**/test*").
 - NEVER use \`execute_command\` with find or ls for file search. Always use find_files.
 - Respects .gitignore automatically.
@@ -53,15 +55,15 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Example: Find config files: \`find_files("**/config.{js,ts,json}")\``);
   }
 
-  if (!denied.has('execute_command')) {
+  if (!denied.has(MC_TOOLS.EXECUTE_COMMAND)) {
     readTools.push(`
-**execute_command** — Run shell commands
+**${MC_TOOLS.EXECUTE_COMMAND}** — Run shell commands
 - Use for: git, npm/pnpm, docker, build tools, test runners, and other terminal operations.
-- Do NOT use for: file reading (use view), file search (use search_content/find_files), file editing (use string_replace_lsp/write_file).
+- Do NOT use for: file reading (use ${MC_TOOLS.VIEW}), file search (use ${MC_TOOLS.SEARCH_CONTENT}/${MC_TOOLS.FIND_FILES}), file editing (use ${MC_TOOLS.STRING_REPLACE_LSP}/${MC_TOOLS.WRITE_FILE}).
 - Commands have a 30-second default timeout. Use the \`timeout\` parameter for longer-running commands.
 - Pipe to \`| tail -N\` for commands with long output — the full output streams to the user, only the last N lines are returned to you. If you're building any kind of package you should be tailing.
 - Good: Run independent commands in parallel when possible.
-- Bad: Running \`cat file.txt\` — use the view tool instead.`);
+- Bad: Running \`cat file.txt\` — use the ${MC_TOOLS.VIEW} tool instead.`);
   }
 
   if (readTools.length > 0) {
@@ -73,22 +75,22 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (modeId !== 'plan') {
     const writeTools: string[] = [];
 
-    if (!denied.has('string_replace_lsp')) {
+    if (!denied.has(MC_TOOLS.STRING_REPLACE_LSP)) {
       writeTools.push(`
-**string_replace_lsp** — Edit files by replacing exact text
-- You MUST read a file with \`view\` before editing it.
+**${MC_TOOLS.STRING_REPLACE_LSP}** — Edit files by replacing exact text
+- You MUST read a file with \`${MC_TOOLS.VIEW}\` before editing it.
 - \`old_str\` must be an exact match of existing text in the file.
 - Provide enough surrounding context in \`old_str\` to make it unique.
-- For creating new files, use \`write_file\` instead.
+- For creating new files, use \`${MC_TOOLS.WRITE_FILE}\` instead.
 - Good: Include 2-3 lines of surrounding context to ensure uniqueness.
 - Bad: Using just \`return true;\` — too common, will match multiple places.`);
     }
 
-    if (!denied.has('write_file')) {
+    if (!denied.has(MC_TOOLS.WRITE_FILE)) {
       writeTools.push(`
-**write_file** — Create new files or overwrite existing ones
+**${MC_TOOLS.WRITE_FILE}** — Create new files or overwrite existing ones
 - Use this to create new files.
-- If overwriting an existing file, you MUST have read it first with \`view\`.
+- If overwriting an existing file, you MUST have read it first with \`${MC_TOOLS.VIEW}\`.
 - NEVER create files unless necessary. Prefer editing existing files.`);
     }
 

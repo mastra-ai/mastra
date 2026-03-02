@@ -48,11 +48,18 @@ import { writeFileTool } from './write-file';
 export function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
-): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean; maxOutputTokens?: number } {
+): {
+  enabled: boolean;
+  requireApproval: boolean;
+  requireReadBeforeWrite?: boolean;
+  maxOutputTokens?: number;
+  name?: string;
+} {
   let enabled = true;
   let requireApproval = false;
   let requireReadBeforeWrite: boolean | undefined;
   let maxOutputTokens: number | undefined;
+  let name: string | undefined;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
@@ -76,10 +83,13 @@ export function resolveToolConfig(
       if (perToolConfig.maxOutputTokens !== undefined) {
         maxOutputTokens = perToolConfig.maxOutputTokens;
       }
+      if (perToolConfig.name !== undefined) {
+        name = perToolConfig.name;
+      }
     }
   }
 
-  return { enabled, requireApproval, requireReadBeforeWrite, maxOutputTokens };
+  return { enabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name };
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +217,15 @@ export function createWorkspaceTools(workspace: Workspace) {
       wrapped = wrapWithWriteLock(wrapped, writeLock);
     }
 
-    tools[name] = wrapped;
+    // Use custom name if provided, otherwise use the default constant name
+    const exposedName = config.name ?? name;
+    if (tools[exposedName]) {
+      throw new Error(
+        `Duplicate workspace tool name "${exposedName}": tool "${name}" conflicts with an already-registered tool. ` +
+          `Check your tools config for duplicate "name" values.`,
+      );
+    }
+    tools[exposedName] = wrapped;
   };
 
   // Filesystem tools

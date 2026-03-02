@@ -25,6 +25,22 @@ export interface WorkspaceToolConfig {
   requireApproval?: boolean;
 
   /**
+   * Custom name to expose this tool as to the LLM.
+   * When set, the tool is registered under this name instead of the default
+   * `mastra_workspace_*` name. The config key must still be the original
+   * WorkspaceToolName constant — only the exposed name changes.
+   *
+   * @example
+   * ```typescript
+   * tools: {
+   *   mastra_workspace_read_file: { name: 'view' },
+   *   mastra_workspace_grep: { name: 'search_content' },
+   * }
+   * ```
+   */
+  name?: string;
+
+  /**
    * For write tools only: require reading a file before writing to it.
    * Prevents accidental overwrites when the agent hasn't seen the current content.
    */
