@@ -73,7 +73,6 @@
     "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
-    "@autoform/zod": "^4.0.0",
     "@base-ui/react": "^1.1.0",
     "@codemirror/autocomplete": "^6.20.0",
     "@codemirror/lang-javascript": "^6.2.4",
@@ -128,7 +127,6 @@
     "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
-    "zod": "^4.1.12",
     "zustand": "^5.0.9"
   },
   "peerDependencies": {
@@ -141,7 +139,8 @@
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "tailwindcss": "^3.0.0"
+    "tailwindcss": "^3.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@mastra/ai-sdk": "workspace:^",
@@ -174,7 +173,8 @@
     "vite": "^7.3.0",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {
