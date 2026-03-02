@@ -2,15 +2,12 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
 import { isStreamDestroyedError } from './error-classification.js';
 import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode } from './tui/theme.js';
-import { getAppDataDir } from './utils/project.js';
+import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
@@ -54,52 +51,7 @@ async function main() {
     }
   }
 
-  const debugEnabled = process.env.MASTRA_DEBUG === 'true';
-
-  if (debugEnabled) {
-    const logFile = path.join(getAppDataDir(), 'debug.log');
-
-    // Cap the log file: if it exceeds 5 MB, keep only the last ~4 MB
-    const MAX_LOG_SIZE = 5 * 1024 * 1024;
-    const KEEP_SIZE = 4 * 1024 * 1024;
-    try {
-      const stat = fs.statSync(logFile);
-      if (stat.size > MAX_LOG_SIZE) {
-        const buf = Buffer.alloc(KEEP_SIZE);
-        const fd = fs.openSync(logFile, 'r');
-        fs.readSync(fd, buf, 0, KEEP_SIZE, stat.size - KEEP_SIZE);
-        fs.closeSync(fd);
-        // Find the first newline so we don't start mid-line
-        const firstNewline = buf.indexOf(10);
-        const trimmed = firstNewline >= 0 ? buf.subarray(firstNewline + 1) : buf;
-        fs.writeFileSync(logFile, trimmed);
-      }
-    } catch {
-      // File may not exist yet — that's fine
-    }
-
-    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-    const fmt = (a: unknown): string => {
-      if (typeof a === 'string') return a;
-      if (a instanceof Error) return `${a.name}: ${a.message}`;
-      try {
-        return JSON.stringify(a);
-      } catch {
-        return String(a);
-      }
-    };
-    console.error = (...args: unknown[]) => {
-      logStream.write(`[ERROR] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
-    };
-    console.warn = (...args: unknown[]) => {
-      logStream.write(`[WARN] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
-    };
-  } else {
-    // Silence console.error/warn to avoid corrupting the TUI
-    const noop = () => {};
-    console.error = noop;
-    console.warn = noop;
-  }
+  setupDebugLogging();
 
   // Detect and apply terminal theme
   // MASTRA_THEME env var is the highest-priority override
