@@ -31,7 +31,7 @@ export interface HeartbeatHandler {
 
 // =============================================================================
 // Harness Configuration
-// =============================================================================
+// ===================
 
 /**
  * Configuration for a single agent mode within the harness.
@@ -171,6 +171,12 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   modelUseCountProvider?: ModelUseCountProvider;
 
   /**
+   * Callback invoked when a model is selected via switchModel().
+   * Lets the app layer track and persist model usage for ranking.
+   */
+  modelUseCountTracker?: ModelUseCountTracker;
+
+  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
@@ -203,8 +209,8 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * `acquire` should throw if the lock is held by another process.
    */
   threadLock?: {
-    acquire: (threadId: string) => void;
-    release: (threadId: string) => void;
+    acquire: (threadId: string) => void | Promise<void>;
+    release: (threadId: string) => void | Promise<void>;
   };
 }
 
@@ -294,6 +300,12 @@ export type ModelAuthChecker = (provider: string) => boolean | undefined;
  * Return a map of model ID → use count.
  */
 export type ModelUseCountProvider = () => Record<string, number>;
+
+/**
+ * Callback invoked when a model is selected via switchModel().
+ * Lets the app layer track and persist model usage for ranking.
+ */
+export type ModelUseCountTracker = (modelId: string) => void;
 
 // =============================================================================
 // Harness State
@@ -752,6 +764,7 @@ export type HarnessMessageContent =
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
   | { type: 'image'; data: string; mimeType: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
       type: 'om_observation_start';
       tokensToObserve: number;

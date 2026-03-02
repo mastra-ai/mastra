@@ -3163,7 +3163,12 @@ export class Agent<
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              const runIdToUse = suspendedToolRunId || runId;
+              // Use a unique runId for each workflow tool call to prevent parallel calls
+              // from sharing the same cached Run instance (see #13473).
+              // For resume cases, suspendedToolRunId is injected into inputData by
+              // tool-call-step (from metadata stored during suspension).
+              // For fresh calls: generate a new unique runId.
+              const runIdToUse = suspendedToolRunId || randomUUID();
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
@@ -3262,6 +3267,7 @@ export class Agent<
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
                   resumeSchema: resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined,
+                  runId: runIdToUse,
                 });
               } else {
                 // This is to satisfy the execute fn's return value for typescript

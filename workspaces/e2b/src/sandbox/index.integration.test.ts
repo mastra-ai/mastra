@@ -44,53 +44,6 @@ function getS3TestConfig() {
 }
 
 /**
- * Basic E2B integration tests.
- */
-describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
-  let sandbox: E2BSandbox;
-
-  beforeEach(() => {
-    sandbox = new E2BSandbox({
-      id: `test-${Date.now()}`,
-      timeout: 60000,
-    });
-  });
-
-  afterEach(async () => {
-    if (sandbox) {
-      try {
-        await sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  });
-
-  it('can start and execute commands', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('echo', ['Hello E2B']);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('Hello E2B');
-  }, 120000);
-
-  it('can reconnect to existing sandbox', async () => {
-    await sandbox._start();
-    const originalId = sandbox.id;
-
-    // Create new sandbox instance with same ID
-    const sandbox2 = new E2BSandbox({ id: originalId });
-    await sandbox2._start();
-
-    // Should reconnect to existing
-    expect(sandbox2.status).toBe('running');
-
-    await sandbox2._destroy();
-  }, 120000);
-});
-
-/**
  * S3 Mount integration tests.
  */
 describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mount Integration', () => {
@@ -373,63 +326,6 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
       }
     }
   });
-
-  it('mount errors if directory exists and is non-empty', async () => {
-    await sandbox._start();
-
-    // Use home directory instead of /data to avoid sudo complexity
-    const testDir = '/home/user/test-non-empty';
-
-    // Create non-empty directory
-    await sandbox.executeCommand('mkdir', ['-p', testDir]);
-    await sandbox.executeCommand('sh', ['-c', `echo "existing" > ${testDir}/file.txt`]);
-
-    // Verify setup succeeded
-    const lsResult = await sandbox.executeCommand('ls', ['-la', testDir]);
-    expect(lsResult.exitCode).toBe(0);
-    expect(lsResult.stdout).toContain('file.txt');
-
-    const mockFilesystem = {
-      id: 'test-fs',
-      name: 'MockFS',
-      provider: 'mock',
-      status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test' }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, testDir);
-    expect(result.success).toBe(false);
-    expect(result.error).toContain(`Cannot mount at ${testDir}: directory exists and is not empty`);
-    expect(result.error).toContain('Mounting would hide existing files');
-    expect(result.error).toContain('Use a different path or empty the directory first');
-  }, 120000);
-
-  it('mount succeeds if directory exists but is empty', async () => {
-    await sandbox._start();
-
-    // Use home directory to avoid sudo
-    const testDir = '/home/user/test-empty-dir';
-
-    // Create empty directory
-    await sandbox.executeCommand('mkdir', ['-p', testDir]);
-
-    const mockFilesystem = {
-      id: 'test-fs',
-      name: 'MockFS',
-      provider: 'mock',
-      status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test' }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, testDir);
-    // Empty directory should not block mounting
-    if (!result.success) {
-      // If mount failed, it should NOT be because of non-empty directory
-      expect(result.error).not.toContain('not empty');
-    } else {
-      expect(result.success).toBe(true);
-    }
-  }, 120000);
 
   it.skipIf(!hasS3Credentials)(
     'mount creates directory with sudo for paths outside home',
@@ -991,61 +887,6 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
 /**
  * Environment variable handling integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', () => {
-  let sandbox: E2BSandbox;
-
-  afterEach(async () => {
-    if (sandbox) {
-      try {
-        await sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  });
-
-  it('env changes reflected without sandbox restart', async () => {
-    // Create sandbox with initial env
-    sandbox = new E2BSandbox({
-      id: `test-env-${Date.now()}`,
-      timeout: 60000,
-      env: { MY_VAR: 'initial' },
-    });
-    await sandbox._start();
-
-    // Check initial value
-    const result1 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
-    expect(result1.stdout.trim()).toBe('initial');
-
-    // Execute with different env value (should override)
-    const result2 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR'], {
-      env: { MY_VAR: 'changed' },
-    });
-    expect(result2.stdout.trim()).toBe('changed');
-
-    // Original sandbox env should still work for new commands
-    const result3 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
-    expect(result3.stdout.trim()).toBe('initial');
-  }, 120000);
-
-  it('env vars merged and passed per-command', async () => {
-    sandbox = new E2BSandbox({
-      id: `test-env-merge-${Date.now()}`,
-      timeout: 60000,
-      env: { VAR_A: '1', VAR_B: '2' },
-    });
-    await sandbox._start();
-
-    // Command with additional env var - should merge
-    const result = await sandbox.executeCommand('sh', ['-c', 'echo $VAR_A $VAR_B $VAR_C'], {
-      env: { VAR_B: 'override', VAR_C: '3' },
-    });
-
-    // VAR_A from sandbox, VAR_B overridden, VAR_C from command
-    expect(result.stdout.trim()).toBe('1 override 3');
-  }, 120000);
-});
-
 /**
  * Shared Sandbox Conformance Tests
  *
@@ -1085,6 +926,16 @@ if (process.env.E2B_API_KEY) {
       defaultCommandTimeout: 30000,
     },
     testTimeout: 60000, // E2B commands can take time
+    createMountableFilesystem: hasS3Credentials
+      ? () =>
+          ({
+            id: 'test-s3-conformance',
+            name: 'S3Filesystem',
+            provider: 's3',
+            status: 'ready',
+            getMountConfig: () => getS3TestConfig(),
+          }) as any
+      : undefined,
   });
 }
 

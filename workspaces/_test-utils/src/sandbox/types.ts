@@ -78,6 +78,9 @@ export interface SandboxCapabilities {
 
   /** Supports streaming output (default: true) */
   supportsStreaming?: boolean;
+
+  /** Supports sending data to stdin (default: true) */
+  supportsStdin?: boolean;
 }
 
 /**

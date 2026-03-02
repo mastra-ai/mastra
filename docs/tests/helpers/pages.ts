@@ -27,7 +27,6 @@ export const pages: PageConfig[] = [
   { path: '/docs/streaming/overview', name: 'Docs – Streaming' },
   { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
   { path: '/docs/mastra-cloud/overview', name: 'Docs – Mastra Cloud' },
-  { path: '/docs/mastra-code/overview', name: 'Docs – Mastra Code' },
 
   // --- Models ---
   { path: '/models', name: 'Models – Index' },
