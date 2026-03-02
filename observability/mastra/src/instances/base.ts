@@ -330,17 +330,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // ============================================================================
 
   /**
-   * Extract entity context and root tags from a span by walking the parent chain.
+   * Extract entity context labels from a span's entity hierarchy by
+   * walking the parent chain.
    *
-   * Returns:
-   * - entityContext: entity_type/name, parent_type/name, root_type/name labels
-   * - rootTags: tags inherited from the root span (only set on root spans)
-   *
-   * Internal spans are skipped when resolving parent/root entities.
-   */
-  /**
-   * Extract entity context labels from a span's entity hierarchy.
-   * Walks the parent chain to find parent and root entities.
+   * Returns labels for: entity_type/name, parent_type/name, root_type/name.
+   * Internal spans are skipped when resolving parent and root entities.
    */
   private extractEntityLabels(span: AnySpan): Record<string, string> {
     const labels: Record<string, string> = {};

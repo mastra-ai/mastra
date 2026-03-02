@@ -207,6 +207,11 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
           `[ObservabilityBus] flush() exceeded ${MAX_FLUSH_ITERATIONS} drain iterations — ` +
             `${this.pendingHandlers.size} promises still pending. Handlers may be re-emitting during flush.`,
         );
+        // Final settlement pass: ensure every remaining promise has settled
+        // before moving to Phase 2, even if new promises keep appearing.
+        if (this.pendingHandlers.size > 0) {
+          await Promise.allSettled([...this.pendingHandlers]);
+        }
         break;
       }
     }

@@ -1090,7 +1090,7 @@ export class TestExporter extends BaseExporter {
         normalizedSpan.output = normalizeValue(span.output);
       }
       if (span.errorInfo) {
-        normalizedSpan.errorInfo = span.errorInfo;
+        normalizedSpan.errorInfo = normalizeValue(span.errorInfo) as typeof span.errorInfo;
       }
       if (span.tags && span.tags.length > 0) {
         normalizedSpan.tags = span.tags;
@@ -1260,12 +1260,22 @@ export class TestExporter extends BaseExporter {
     }
 
     let snapshotData: { __structure__?: string[]; spans?: unknown } | unknown[];
+    let snapshotContent: string;
     try {
       const { readFile } = await import('node:fs/promises');
-      const snapshotContent = await readFile(snapshotPath, 'utf-8');
+      snapshotContent = await readFile(snapshotPath, 'utf-8');
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(
+          `Snapshot file not found: ${snapshotPath}\n` + `Run with { updateSnapshot: true } to create it.`,
+        );
+      }
+      throw err;
+    }
+    try {
       snapshotData = JSON.parse(snapshotContent);
-    } catch {
-      throw new Error(`Snapshot file not found: ${snapshotPath}\n` + `Run with { updateSnapshot: true } to create it.`);
+    } catch (err: unknown) {
+      throw new Error(`Failed to parse snapshot ${snapshotPath}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Handle both old format (array) and new format (object with __structure__ and spans)
