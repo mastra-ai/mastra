@@ -39,8 +39,17 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const modelId = ctx.state?.currentModelId as string | undefined;
   const hasWebSearch = hasTavilyKey() || (!!modelId && modelId.startsWith('anthropic/'));
 
+  // Collect per-tool deny rules so guidance omits denied tools
+  const deniedTools = new Set<string>();
+  const permRules = ctx.state?.permissionRules as { tools?: Record<string, string> } | undefined;
+  if (permRules?.tools) {
+    for (const [name, policy] of Object.entries(permRules.tools)) {
+      if (policy === 'deny') deniedTools.add(name);
+    }
+  }
+
   // Build mode-aware tool guidance
-  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch });
+  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, deniedTools });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {

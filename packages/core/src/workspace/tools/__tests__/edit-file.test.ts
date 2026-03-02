@@ -24,11 +24,14 @@ describe('workspace_edit_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'World',
-      new_string: 'Universe',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: '/test.txt',
+        old_string: 'World',
+        new_string: 'Universe',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Replaced 1 occurrence');
@@ -43,11 +46,14 @@ describe('workspace_edit_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'foo',
-      new_string: 'bar',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: '/test.txt',
+        old_string: 'foo',
+        new_string: 'bar',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('not found');
@@ -58,11 +64,14 @@ describe('workspace_edit_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'hello',
-      new_string: 'hi',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: '/test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('3 times');
@@ -73,12 +82,15 @@ describe('workspace_edit_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'hello',
-      new_string: 'hi',
-      replace_all: true,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: '/test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+        replace_all: true,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Replaced 3 occurrence');
