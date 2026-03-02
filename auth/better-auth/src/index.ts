@@ -70,8 +70,7 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
     }
 
     this.auth = options.auth;
-    // Better Auth does not publicly export its options type, so we use a
-    // minimal inline interface instead of `as any` to document the assumed shape.
+    // options is not part of Better Auth's public API
     const authWithOptions = this.auth as unknown as { options?: { advanced?: { cookiePrefix?: string } } };
     const prefix = authWithOptions.options?.advanced?.cookiePrefix ?? 'better-auth';
     this.sessionCookieName = `${prefix}.session_token`;
@@ -99,9 +98,7 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
         headers.set('Cookie', cookieHeader);
       }
 
-      // Convert Bearer token to a session cookie so Better Auth can verify it.
-      // Use exact key matching (not substring) to avoid false positives when the
-      // cookie name appears inside another cookie's value.
+      // Convert Bearer token to a session cookie if not already present
       const hasSessionCookieInHeader = !!cookieHeader?.split(';').some(pair => {
         const [key] = pair.trim().split('=');
         return key?.trim() === this.sessionCookieName;
@@ -111,7 +108,6 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
         headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
       }
 
-      // Use Better Auth's API to get the session
       const result = await this.auth.api.getSession({
         headers,
       });
@@ -125,7 +121,6 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
         user: result.user,
       };
     } catch {
-      // Session verification failed
       return null;
     }
   }
