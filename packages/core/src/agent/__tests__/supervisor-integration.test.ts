@@ -1083,9 +1083,10 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
     // Delegation 1, call 2: respond with text
     // Delegation 2, call 1: respond with text
     let subCallCount = 0;
+    let secondDelegationSawPersistedMemory = false;
 
     const subAgentModel = new MockLanguageModelV2({
-      doGenerate: async () => {
+      doGenerate: async ({ prompt }) => {
         subCallCount++;
 
         if (subCallCount === 1) {
@@ -1107,6 +1108,11 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
             ],
             warnings: [],
           };
+        }
+
+        // Delegation 2 should include previously saved working-memory content in context
+        if (subCallCount >= 3) {
+          secondDelegationSawPersistedMemory = JSON.stringify(prompt).includes('401881');
         }
 
         // All subsequent calls: respond with text
@@ -1236,6 +1242,7 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
       resourceId: secondDelegationResourceId,
     });
     expect(retrievedWorkingMemory).toContain('401881');
+    expect(secondDelegationSawPersistedMemory).toBe(true);
   });
 });
 
