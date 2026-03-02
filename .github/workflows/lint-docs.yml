@@ -11,6 +11,8 @@ jobs:
   changes:
     name: Detect docs changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
     steps:

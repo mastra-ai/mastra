@@ -13,6 +13,8 @@ jobs:
   changes:
     name: Detect code changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
     steps:
