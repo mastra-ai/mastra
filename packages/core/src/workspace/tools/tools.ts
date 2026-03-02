@@ -27,6 +27,14 @@ import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
+export type {
+  WorkspaceToolConfig,
+  WorkspaceToolsConfig,
+  ExecuteCommandToolConfig,
+  BackgroundProcessConfig,
+  BackgroundProcessMeta,
+  BackgroundProcessExitMeta,
+} from './types';
 import { writeFileTool } from './write-file';
 
 /**

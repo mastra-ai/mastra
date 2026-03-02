@@ -261,6 +261,8 @@ export const agent = new Agent({
 
 ### Shared token budget
 
+When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
+
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
@@ -286,9 +288,9 @@ export const agent = new Agent({
 })
 ```
 
-When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
-
 ### Custom model
+
+By passing a `model` in the config, you can use any model from Mastra's model router.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -301,6 +303,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
+        // highlight-next-line
         model: 'openai/gpt-4o-mini',
       },
     },
@@ -321,12 +324,14 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
+        // highlight-start
         observation: {
           model: 'google/gemini-2.5-flash',
         },
         reflection: {
           model: 'openai/gpt-4o-mini',
         },
+        // highlight-end
       },
     },
   }),

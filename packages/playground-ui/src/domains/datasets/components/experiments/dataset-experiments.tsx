@@ -52,7 +52,7 @@ export function DatasetExperiments({
   const handleCompare = () => {
     if (selectedExperimentIds.length === 2) {
       const [experimentIdA, experimentIdB] = selectedExperimentIds;
-      navigate(`/datasets/${datasetId}/compare?experimentA=${experimentIdA}&experimentB=${experimentIdB}`);
+      navigate(`/datasets/${datasetId}/experiments?baseline=${experimentIdA}&contender=${experimentIdB}`);
     }
   };
 
