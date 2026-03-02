@@ -97,7 +97,7 @@ const getTextContent = (message: any): string => {
 
 export function getResuableTests(optionsFactory: () => { memory: Memory; workerTestConfig?: WorkerTestConfig }) {
   const cleanupAllThreads = async (memory: Memory) => {
-    let allThreads: any[] = [];
+    let allThreads: StorageThreadType[] = [];
     let page = 0;
     const perPage = 100;
     while (true) {
