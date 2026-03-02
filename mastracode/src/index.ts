@@ -53,6 +53,8 @@ export interface MastraCodeConfig {
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set */
   extraTools?: Record<string, any>;
+  /** Tools removed from the dynamic tool set before exposure to the model */
+  disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
@@ -116,7 +118,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager),
+    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
   // Build subagent definitions with project-scoped tools
@@ -273,7 +275,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       globalInitialState[`subagentModelId_${key}`] = modelId;
     }
   }
-
   const harness = new Harness({
     id: 'mastra-code',
     resourceId: project.resourceId,
