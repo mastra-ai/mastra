@@ -26,9 +26,9 @@ npm install @mastra/gcs
 Add a `GCSFilesystem` to a workspace and assign it to an agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { GCSFilesystem } from '@mastra/gcs';
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { GCSFilesystem } from '@mastra/gcs'
 
 const workspace = new Workspace({
   filesystem: new GCSFilesystem({
@@ -36,13 +36,13 @@ const workspace = new Workspace({
     projectId: 'my-project-id',
     credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
   }),
-});
+})
 
 const agent = new Agent({
   name: 'file-agent',
   model: 'anthropic/claude-opus-4-5',
   workspace,
-});
+})
 ```
 
 ### Using Application Default Credentials
@@ -50,119 +50,132 @@ const agent = new Agent({
 If running on Google Cloud or with `gcloud` CLI configured, you can omit credentials:
 
 ```typescript
-import { GCSFilesystem } from '@mastra/gcs';
+import { GCSFilesystem } from '@mastra/gcs'
 
 const filesystem = new GCSFilesystem({
   bucket: 'my-gcs-bucket',
   // Uses Application Default Credentials automatically
-});
+})
 ```
 
 [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) automatically discovers credentials in this order:
+
 1. `GOOGLE_APPLICATION_CREDENTIALS` environment variable (path to a service account key file)
-2. Default service account when running on GCP (Compute Engine, Cloud Run, GKE, etc.)
-3. User credentials from `gcloud auth application-default login` (for local development)
+1. Default service account when running on GCP (Compute Engine, Cloud Run, GKE, etc.)
+1. User credentials from `gcloud auth application-default login` (for local development)
 
 ### Using a Key File Path
 
 You can also pass a path to a service account key file:
 
 ```typescript
-import { GCSFilesystem } from '@mastra/gcs';
+import { GCSFilesystem } from '@mastra/gcs'
 
 const filesystem = new GCSFilesystem({
   bucket: 'my-gcs-bucket',
   projectId: 'my-project-id',
   credentials: '/path/to/service-account-key.json',
-});
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "bucket",
-      type: "string",
-      description: "GCS bucket name",
-    },
-    {
-      name: "projectId",
-      type: "string",
-      description: "GCS project ID. Required when using service account credentials.",
-      isOptional: true,
-    },
-    {
-      name: "credentials",
-      type: "object | string",
-      description: "Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.",
-      isOptional: true,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Optional prefix for all keys (acts like a subdirectory)",
-      isOptional: true,
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this filesystem instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "displayName",
-      type: "string",
-      description: "Human-friendly display name for the UI",
-      isOptional: true,
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, all write operations are blocked",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "Custom API endpoint URL. Used for local development with emulators.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "bucket",
+type: "string",
+description: "GCS bucket name",
+},
+{
+name: "projectId",
+type: "string",
+description: "GCS project ID. Required when using service account credentials.",
+isOptional: true,
+},
+{
+name: "credentials",
+type: "object | string",
+description: "Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.",
+isOptional: true,
+},
+{
+name: "prefix",
+type: "string",
+description: "Optional prefix for all keys (acts like a subdirectory)",
+isOptional: true,
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this filesystem instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "displayName",
+type: "string",
+description: "Human-friendly display name for the UI",
+isOptional: true,
+},
+{
+name: "icon",
+type: "FilesystemIcon",
+description: "Icon identifier for the UI",
+isOptional: true,
+},
+{
+name: "description",
+type: "string",
+description: "Short description of this filesystem for the UI",
+isOptional: true,
+},
+{
+name: "readOnly",
+type: "boolean",
+description: "When true, all write operations are blocked",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "endpoint",
+type: "string",
+description: "Custom API endpoint URL. Used for local development with emulators.",
+isOptional: true,
+},
+]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Filesystem instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('GCSFilesystem')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('gcs')",
-    },
-    {
-      name: "bucket",
-      type: "string",
-      description: "The GCS bucket name",
-    },
-    {
-      name: "readOnly",
-      type: "boolean | undefined",
-      description: "Whether the filesystem is in read-only mode",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Filesystem instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('GCSFilesystem')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('gcs')",
+},
+{
+name: "bucket",
+type: "string",
+description: "The GCS bucket name",
+},
+{
+name: "readOnly",
+type: "boolean | undefined",
+description: "Whether the filesystem is in read-only mode",
+},
+]}
 />
 
 ## Methods
@@ -186,7 +199,7 @@ GCSFilesystem implements the [WorkspaceFilesystem interface](/reference/workspac
 Initialize the filesystem. Verifies bucket access and credentials.
 
 ```typescript
-await filesystem.init();
+await filesystem.init()
 ```
 
 ### `getInfo()`
@@ -194,7 +207,7 @@ await filesystem.init();
 Returns metadata about this filesystem instance.
 
 ```typescript
-const info = filesystem.getInfo();
+const info = filesystem.getInfo()
 // { id: '...', name: 'GCSFilesystem', provider: 'gcs', status: 'ready' }
 ```
 
@@ -203,7 +216,7 @@ const info = filesystem.getInfo();
 Returns the mount configuration for sandboxes that support mounting this filesystem type.
 
 ```typescript
-const config = filesystem.getMountConfig();
+const config = filesystem.getMountConfig()
 // { type: 'gcs', bucket: 'my-bucket', ... }
 ```
 
@@ -212,9 +225,9 @@ const config = filesystem.getMountConfig();
 GCSFilesystem can be mounted into E2B sandboxes, making the bucket accessible as a local directory:
 
 ```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { GCSFilesystem } from '@mastra/gcs';
-import { E2BSandbox } from '@mastra/e2b';
+import { Workspace } from '@mastra/core/workspace'
+import { GCSFilesystem } from '@mastra/gcs'
+import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
   mounts: {
@@ -225,7 +238,7 @@ const workspace = new Workspace({
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
+})
 ```
 
 See [E2BSandbox reference](/reference/workspace/e2b-sandbox) for more details on mounting.

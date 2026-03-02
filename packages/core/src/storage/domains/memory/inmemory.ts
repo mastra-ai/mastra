@@ -966,24 +966,22 @@ export class InMemoryMemory extends MemoryStorage {
     // Safeguard: if the over boundary would eat into more than 95% of the
     // retention floor, fall back to the best under boundary instead.
     // This prevents edge cases where a large chunk overshoots dramatically.
-    // When forceMaxActivation is set (above blockAfter), skip the safeguard
-    // and always prefer the over boundary to aggressively reduce context.
-    // Additionally, never bias over if it would leave fewer than 1000 tokens
-    // remaining — at that level the agent may lose all meaningful context.
+    // When forceMaxActivation is set (above blockAfter), still prefer the over
+    // boundary, but never if it would leave fewer than the smaller of 1000
+    // tokens or the retention floor remaining.
     const maxOvershoot = retentionFloor * 0.95;
     const overshoot = bestOverTokens - targetMessageTokens;
     const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+    const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+    const minRemaining = Math.min(1000, retentionFloor);
 
     let chunksToActivate: number;
-    if (input.forceMaxActivation && bestOverBoundary > 0) {
+    if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
       chunksToActivate = bestOverBoundary;
-    } else if (
-      bestOverBoundary > 0 &&
-      overshoot <= maxOvershoot &&
-      (remainingAfterOver >= 1000 || retentionFloor === 0)
-    ) {
+    } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
       chunksToActivate = bestOverBoundary;
-    } else if (bestUnderBoundary > 0) {
+    } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
       chunksToActivate = bestUnderBoundary;
     } else if (bestOverBoundary > 0) {
       // All boundaries are over and exceed the safeguard — still activate
@@ -1034,6 +1032,9 @@ export class InMemoryMemory extends MemoryStorage {
     record.lastObservedAt = derivedLastObservedAt;
     record.updatedAt = new Date();
 
+    // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+    const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
     return {
       chunksActivated: activatedChunks.length,
       messageTokensActivated: activatedMessageTokens,
@@ -1049,6 +1050,8 @@ export class InMemoryMemory extends MemoryStorage {
         messageCount: c.messageIds.length,
         observations: c.observations,
       })),
+      suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+      currentTask: latestChunkHints?.currentTask ?? undefined,
     };
   }
 

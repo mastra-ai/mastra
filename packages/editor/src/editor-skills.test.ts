@@ -938,7 +938,7 @@ describe('editor.skill — end-to-end: publish → agent → skill discovery', (
     expect(fullSkill!.references).toContain('guide.md');
 
     // 9. Verify reference content can be read from the blob store
-    const guideContent = await workspace!.skills!.getReference('e2e-skill', 'guide.md');
+    const guideContent = await workspace!.skills!.getReference('e2e-skill', 'references/guide.md');
     expect(guideContent).toBeDefined();
     expect(guideContent).toContain('This is a reference guide.');
   });
@@ -1966,7 +1966,7 @@ describe('editor.skill — live strategy execution', () => {
     expect(workspace).toBeInstanceOf(Workspace);
 
     const skills = workspace!.skills!;
-    const refContent = await skills.getReference('api-docs', 'endpoints.md');
+    const refContent = await skills.getReference('api-docs', 'references/endpoints.md');
     expect(refContent).toContain('GET /users - List all users');
   });
 });

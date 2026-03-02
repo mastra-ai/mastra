@@ -30,7 +30,7 @@ new OtelBridge()
 
 ### executeInContext
 
-```typescript
+```typescript prettier:false
 executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
 ```
 
@@ -38,26 +38,26 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 <PropertiesTable
   props={[
-    {
-      name: "spanId",
-      type: "string",
-      description: "The ID of the Mastra span to use as context",
-      required: true,
-    },
-    {
-      name: "fn",
-      type: "() => Promise<T>",
-      description: "The async function to execute within the span context",
-      required: true,
-    },
-  ]}
+{
+name: "spanId",
+type: "string",
+description: "The ID of the Mastra span to use as context",
+required: true,
+},
+{
+name: "fn",
+type: "() => Promise<T>",
+description: "The async function to execute within the span context",
+required: true,
+},
+]}
 />
 
 **Returns:** `Promise<T>` - The result of the function execution.
 
 ### executeInContextSync
 
-```typescript
+```typescript prettier:false
 executeInContextSync<T>(spanId: string, fn: () => T): T
 ```
 
@@ -65,26 +65,26 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 
 <PropertiesTable
   props={[
-    {
-      name: "spanId",
-      type: "string",
-      description: "The ID of the Mastra span to use as context",
-      required: true,
-    },
-    {
-      name: "fn",
-      type: "() => T",
-      description: "The synchronous function to execute within the span context",
-      required: true,
-    },
-  ]}
+{
+name: "spanId",
+type: "string",
+description: "The ID of the Mastra span to use as context",
+required: true,
+},
+{
+name: "fn",
+type: "() => T",
+description: "The synchronous function to execute within the span context",
+required: true,
+},
+]}
 />
 
 **Returns:** `T` - The result of the function execution.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -95,21 +95,21 @@ Shuts down the bridge and cleans up resources. Ends any spans that were not prop
 ### Basic Usage
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelBridge } from "@mastra/otel-bridge";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelBridge } from '@mastra/otel-bridge'
 
 const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         bridge: new OtelBridge(),
       },
     },
   }),
   agents: { myAgent },
-});
+})
 ```
 
 ### Combined with Exporters
@@ -117,16 +117,16 @@ const mastra = new Mastra({
 The bridge can be used alongside exporters. The bridge handles OTEL context, while exporters send data to additional destinations:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { Observability, DefaultExporter } from "@mastra/observability";
-import { OtelBridge } from "@mastra/otel-bridge";
-import { LangfuseExporter } from "@mastra/langfuse";
+import { Mastra } from '@mastra/core'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { OtelBridge } from '@mastra/otel-bridge'
+import { LangfuseExporter } from '@mastra/langfuse'
 
 const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         bridge: new OtelBridge(), // Handles OTEL context
         exporters: [
           new DefaultExporter(), // Studio access
@@ -139,7 +139,7 @@ const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 ## OpenTelemetry Setup Requirements
@@ -155,11 +155,11 @@ The OtelBridge supports trace tagging for categorization and filtering. Tags are
 ### Usage
 
 ```typescript
-const result = await agent.generate("Hello", {
+const result = await agent.generate('Hello', {
   tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
+    tags: ['production', 'experiment-v2', 'user-request'],
   },
-});
+})
 ```
 
 ### How Tags Are Stored

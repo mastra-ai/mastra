@@ -6,6 +6,8 @@ This file provides guidance to coding agents when working on documentation in th
 
 **IMPORTANT**: Unless explicitly mentioned, always use `@styleguides/STYLEGUIDE.md` as the primary reference for documentation style and formatting. The `@styleguides/` folder contains specific styleguides for different types of documentation (general, guide, reference) which should be followed when applicable.
 
+If you're adding a new feature or changing an existing one, you should always check `src/content/en/docs/` and `src/content/en/reference/` for existing documentation related to that feature. If it exists, update it as needed to reflect the changes. If it doesn't exist, create new documentation in the appropriate section under `src/content/en/docs/` or `src/content/en/reference/`.
+
 ## Getting started
 
 Refer to the `@CONTRIBUTING.md` file for instructions on how to set up this project and run it locally.
@@ -35,3 +37,17 @@ Always follow the general styleguide at `@styleguides/STYLEGUIDE.md` when writin
 - `src/content/en/reference/` - `@styleguides/REFERENCE.md`
 
 Refer to the `@CONTRIBUTING.md` file for instructions on how to set frontmatter and use available MDX components.
+
+## E2E testing
+
+Playwright is used for end-to-end tests. The site must be built before running tests.
+
+```bash
+pnpm build                 # Build the Docusaurus site
+pnpm test:e2e              # Run all Playwright tests (desktop + tablet + mobile)
+pnpm test:smoke            # Smoke tests only (desktop)
+pnpm test:og               # OG image meta tag tests only (desktop)
+pnpm test:navigation       # Navigation tests (desktop + tablet + mobile)
+```
+
+Test files live in `tests/` and helpers in `tests/helpers/`. The Playwright config (`playwright.config.ts`) starts a local server automatically via `pnpm serve`.

@@ -18,7 +18,8 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
 
   // Validate instructions: check blocks if present, otherwise check plain instructions string
   const blocks = values.instructionBlocks;
-  const hasBlockContent = blocks && blocks.some(b => b.content.trim() !== '');
+  const hasBlockContent =
+    blocks && blocks.some(b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content.trim() !== ''));
   const hasPlainInstructions = values.instructions && values.instructions.trim() !== '';
 
   if (!hasBlockContent && !hasPlainInstructions) {

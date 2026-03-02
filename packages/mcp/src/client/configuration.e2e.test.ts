@@ -487,9 +487,8 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await config.listTools().catch(e => e);
-      expect(error).toBeDefined(); // Will throw since server exits before responding
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await config.listTools();
+      expect(tools).toEqual({});
 
       await config.disconnect();
     });
@@ -514,17 +513,15 @@ describe('MCPClient', () => {
         },
       });
 
-      // This should succeed since server timeout (3s) is longer than delay (2s)
-      const error = await config.listTools().catch(e => e);
-      expect(error).toBeDefined(); // Will throw since server exits before responding
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await config.listTools();
+      expect(tools).toEqual({});
 
       await config.disconnect();
     });
   });
 
   describe('MCPClient Connection Timeout', () => {
-    it('should throw timeout error for slow starting server', async () => {
+    it('should return empty tools for slow starting server that times out', async () => {
       const slowConfig = new MCPClient({
         id: 'test-slow-server',
         servers: {
@@ -536,11 +533,12 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(slowConfig.listTools()).rejects.toThrow(/Request timed out/);
+      const tools = await slowConfig.listTools();
+      expect(tools).toEqual({});
       await slowConfig.disconnect();
     });
 
-    it('timeout should be longer than configured timeout', async () => {
+    it('should return empty tools when server exits before responding', async () => {
       const slowConfig = new MCPClient({
         id: 'test-slow-server',
         timeout: 2000,
@@ -552,13 +550,12 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await slowConfig.listTools().catch(e => e);
-      expect(error).toBeDefined();
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await slowConfig.listTools();
+      expect(tools).toEqual({});
       await slowConfig.disconnect();
     });
 
-    it('should respect per-server timeout configuration', async () => {
+    it('should return empty tools when all servers time out', async () => {
       const mixedConfig = new MCPClient({
         id: 'test-mixed-timeout',
         timeout: 1000, // Short global timeout
@@ -575,12 +572,12 @@ describe('MCPClient', () => {
         },
       });
 
-      // Quick server should timeout
-      await expect(mixedConfig.listTools()).rejects.toThrow(/Request timed out/);
+      const tools = await mixedConfig.listTools();
+      expect(tools).toEqual({});
       await mixedConfig.disconnect();
     });
 
-    it('should handle connection errors gracefully', async () => {
+    it('should return empty tools for invalid server command', async () => {
       const badConfig = new MCPClient({
         servers: {
           badServer: {
@@ -590,7 +587,8 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(badConfig.listTools()).rejects.toThrow();
+      const tools = await badConfig.listTools();
+      expect(tools).toEqual({});
       await badConfig.disconnect();
     });
   });
@@ -857,5 +855,84 @@ describe('MCPClient', () => {
       });
       expect(contextXLeakInYLogs).toBe(false);
     }, 25000); // Increased timeout for multiple server ops
+  });
+
+  describe('Per-server fault isolation (issue #13521)', () => {
+    it('listTools should return tools from healthy servers when one server fails', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-tools',
+        servers: {
+          // Healthy server - the weather SSE server started in beforeAll
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          // Failing server - nonexistent command will fail to connect
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const tools = await mixedMcp.listTools();
+
+        // Should still get weather tools from the healthy server
+        expect(Object.keys(tools).length).toBeGreaterThan(0);
+        expect(tools).toHaveProperty('weather_getWeather');
+      } finally {
+        await mixedMcp.disconnect().catch(() => {});
+      }
+    });
+
+    it('listToolsets should return toolsets from healthy servers when one server fails', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-toolsets',
+        servers: {
+          // Healthy server
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          // Failing server
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const toolsets = await mixedMcp.listToolsets();
+
+        // Should still get weather toolset from the healthy server
+        expect(toolsets).toHaveProperty('weather');
+        expect(toolsets.weather).toHaveProperty('getWeather');
+        // Broken server should NOT be present (it failed)
+        expect(toolsets).not.toHaveProperty('brokenServer');
+      } finally {
+        await mixedMcp.disconnect().catch(() => {});
+      }
+    });
+
+    it('disconnect should not throw when one server fails to disconnect', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-disconnect',
+        servers: {
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      // Load tools to establish connections before testing disconnect
+      await mixedMcp.listTools();
+
+      // disconnect should not throw even if some servers had issues
+      await expect(mixedMcp.disconnect()).resolves.toBeUndefined();
+    });
   });
 });

@@ -7,6 +7,7 @@ export type {
   TypedChunkType,
   MastraFinishReason,
   ProviderMetadata,
+  StreamTransport,
   LanguageModelUsage,
 
   // Chunk Types

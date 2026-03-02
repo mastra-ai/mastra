@@ -22,14 +22,14 @@ npm install @mastra/deployer-vercel@latest
 Import `VercelDeployer` and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core'
 // highlight-next-line
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
   // highlight-next-line
   deployer: new VercelDeployer(),
-});
+})
 ```
 
 ## Constructor options
@@ -45,16 +45,16 @@ These options are merged into `.vercel/output/functions/index.func/.vc-config.js
 ### Example with overrides
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { Mastra } from '@mastra/core'
+import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
   deployer: new VercelDeployer({
     maxDuration: 600,
     memory: 1536,
-    regions: ["sfo1", "iad1"],
+    regions: ['sfo1', 'iad1'],
   }),
-});
+})
 ```
 
 ## Build output

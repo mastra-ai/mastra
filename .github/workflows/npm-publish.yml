@@ -343,4 +343,3 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
-          REQUIRE_PACKAGE_DOCS: 'true'

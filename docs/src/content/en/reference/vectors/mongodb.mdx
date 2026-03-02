@@ -21,13 +21,13 @@ npm install @mastra/mongodb@latest
 ## Usage Example
 
 ```typescript
-import { MongoDBVector } from "@mastra/mongodb";
+import { MongoDBVector } from '@mastra/mongodb'
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
-});
+})
 ```
 
 ### Custom Embedding Field Path
@@ -35,49 +35,49 @@ const store = new MongoDBVector({
 If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
 
 ```typescript
-import { MongoDBVector } from "@mastra/mongodb";
+import { MongoDBVector } from '@mastra/mongodb'
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
   embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
-});
+})
 ```
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this vector store instance",
-    },
-    {
-      name: "uri",
-      type: "string",
-      description: "MongoDB connection string",
-    },
-    {
-      name: "dbName",
-      type: "string",
-      description: "Name of the MongoDB database to use",
-    },
-    {
-      name: "options",
-      type: "MongoClientOptions",
-      isOptional: true,
-      description: "Optional MongoDB client options",
-    },
-    {
-      name: "embeddingFieldPath",
-      type: "string",
-      isOptional: true,
-      defaultValue: "embedding",
-      description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this vector store instance",
+},
+{
+name: "uri",
+type: "string",
+description: "MongoDB connection string",
+},
+{
+name: "dbName",
+type: "string",
+description: "Name of the MongoDB database to use",
+},
+{
+name: "options",
+type: "MongoClientOptions",
+isOptional: true,
+description: "Optional MongoDB client options",
+},
+{
+name: "embeddingFieldPath",
+type: "string",
+isOptional: true,
+defaultValue: "embedding",
+description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
+},
+]}
 />
 
 ## Methods
@@ -88,24 +88,24 @@ Creates a new vector index (collection) in MongoDB.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
@@ -114,29 +114,29 @@ Adds or updates vectors and their metadata in the collection.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to insert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
@@ -145,50 +145,50 @@ Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters (applies to the `metadata` field)",
-    },
-    {
-      name: "documentFilter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Filters on original document fields (not just metadata)",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to search in",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors for",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters (applies to the `metadata` field)",
+},
+{
+name: "documentFilter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Filters on original document fields (not just metadata)",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vector data in results",
+},
+{
+name: "minScore",
+type: "number",
+isOptional: true,
+defaultValue: "0",
+description: "Minimum similarity score threshold",
+},
+]}
 />
 
 ### describeIndex()
@@ -197,21 +197,21 @@ Returns information about the index (collection).
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -221,12 +221,12 @@ Deletes a collection and all its data.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to delete",
+},
+]}
 />
 
 ### listIndexes()
@@ -241,41 +241,41 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "ID of the vector entry to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data to update",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection containing the vector",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "ID of the vector entry to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "object",
+description: "Update data containing vector and/or metadata",
+},
+{
+name: "update.vector",
+type: "number[]",
+isOptional: true,
+description: "New vector data to update",
+},
+{
+name: "update.metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -284,17 +284,17 @@ Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector entry to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector entry to delete",
+},
+]}
 />
 
 ### deleteVectors()
@@ -303,24 +303,24 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ### disconnect()
@@ -333,10 +333,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -347,19 +347,19 @@ The store throws typed errors that can be caught:
 ```typescript
 try {
   await store.query({
-    indexName: "my_collection",
+    indexName: 'my_collection',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes("Invalid collection name")) {
+  if (error.message.includes('Invalid collection name')) {
     console.error(
-      "Collection name must start with a letter or underscore and contain only valid characters.",
-    );
-  } else if (error.message.includes("Collection not found")) {
-    console.error("The specified collection does not exist");
+      'Collection name must start with a letter or underscore and contain only valid characters.',
+    )
+  } else if (error.message.includes('Collection not found')) {
+    console.error('The specified collection does not exist')
   } else {
-    console.error("Vector store error:", error.message);
+    console.error('Vector store error:', error.message)
   }
 }
 ```
@@ -376,7 +376,11 @@ try {
 
 Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
 
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+:::note
+
+You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+:::
 
 This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:
@@ -388,17 +392,17 @@ npm install @mastra/fastembed@latest
 Add the following to your agent:
 
 ```typescript title="src/mastra/agents/example-mongodb-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
-import { fastembed } from "@mastra/fastembed";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { MongoDBStore, MongoDBVector } from '@mastra/mongodb'
+import { fastembed } from '@mastra/fastembed'
 
 export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
+  id: 'mongodb-agent',
+  name: 'mongodb-agent',
   instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new MongoDBStore({
       id: 'mongodb-storage',
@@ -420,7 +424,7 @@ export const mongodbAgent = new Agent({
       generateTitle: true, // generates descriptive thread titles automatically
     },
   }),
-});
+})
 ```
 
 ## Related
