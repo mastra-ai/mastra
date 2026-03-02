@@ -3617,9 +3617,6 @@ importers:
       '@autoform/react':
         specifier: ^4.0.0
         version: 4.0.0(@hookform/resolvers@3.10.0(react-hook-form@7.65.0(react@19.2.3)))(react-hook-form@7.65.0(react@19.2.3))(react@19.2.3)
-      '@autoform/zod':
-        specifier: ^4.0.0
-        version: 4.0.0(zod@4.3.6)
       '@base-ui/react':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -3791,9 +3788,6 @@ importers:
       use-debounce:
         specifier: ^10.0.6
         version: 10.0.6(react@19.2.3)
-      zod:
-        specifier: ^4.1.12
-        version: 4.3.6
       zustand:
         specifier: ^5.0.9
         version: 5.0.11(@types/react@19.2.2)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
@@ -3891,6 +3885,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   packages/rag:
     dependencies:
@@ -6948,11 +6945,6 @@ packages:
       '@hookform/resolvers': ^3.9.0
       react: ^16.8.0 || ^17 || ^18 || ^19
       react-hook-form: ^7
-
-  '@autoform/zod@4.0.0':
-    resolution: {integrity: sha512-Jy0OIKVRM2vLNuh02puHQug40QUCD3xiThkyar+E18WNFsqzTxC1Efl+dFFPYsa7FvFZFnUOkOwbTqHMCgqzYA==}
-    peerDependencies:
-      zod: ^3
 
   '@aws-crypto/crc32@5.2.0':
     resolution: {integrity: sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg==}
@@ -24623,10 +24615,6 @@ snapshots:
       '@hookform/resolvers': 3.10.0(react-hook-form@7.65.0(react@19.2.3))
       react: 19.2.3
       react-hook-form: 7.65.0(react@19.2.3)
-
-  '@autoform/zod@4.0.0(zod@4.3.6)':
-    dependencies:
-      zod: 4.3.6
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:
