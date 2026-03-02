@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { McpManager } from '../mcp';
@@ -17,7 +18,7 @@ import {
   requestSandboxAccessTool,
 } from '../tools';
 
-export function createDynamicTools(mcpManager?: McpManager) {
+export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
@@ -25,6 +26,7 @@ export function createDynamicTools(mcpManager?: McpManager) {
 
     const modelId = state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
+    const isOpenAIModel = modelId?.startsWith('openai/');
 
     const projectPath = state?.projectPath ?? '';
 
@@ -59,11 +61,32 @@ export function createDynamicTools(mcpManager?: McpManager) {
     } else if (isAnthropicModel) {
       const anthropic = createAnthropic({});
       tools.web_search = anthropic.tools.webSearch_20250305();
+    } else if (isOpenAIModel) {
+      const openai = createOpenAI({});
+      tools.web_search = openai.tools.webSearch();
     }
 
     if (mcpManager) {
       const mcpTools = mcpManager.getTools();
       Object.assign(tools, mcpTools);
+    }
+
+    if (extraTools) {
+      for (const [name, tool] of Object.entries(extraTools)) {
+        if (!(name in tools)) {
+          tools[name] = tool;
+        }
+      }
+    }
+
+    // Remove tools that have a per-tool 'deny' policy so the model never sees them.
+    const permissionRules = state?.permissionRules;
+    if (permissionRules?.tools) {
+      for (const [name, policy] of Object.entries(permissionRules.tools)) {
+        if (policy === 'deny') {
+          delete tools[name];
+        }
+      }
     }
 
     return tools;

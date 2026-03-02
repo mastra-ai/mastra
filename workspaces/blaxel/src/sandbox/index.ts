@@ -66,7 +66,7 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * Blaxel sandbox provider configuration.
  */
-export interface BlaxelSandboxOptions extends MastraSandboxOptions {
+export interface BlaxelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
@@ -903,6 +903,10 @@ export class BlaxelSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
+    // Accumulate output so partial stdout/stderr is available when abort/timeout wins the race
+    let capturedStdout = '';
+    let capturedStderr = '';
+
     try {
       // Merge sandbox default env with per-command env (per-command overrides)
       // Filter out undefined values to get Record<string, string>
@@ -923,39 +927,69 @@ export class BlaxelSandbox extends MastraSandbox {
         env: envRecord,
         waitForCompletion: true,
         ...(apiTimeout && { timeout: apiTimeout }),
-        ...(options.onStdout || options.onStderr
-          ? {
-              onStdout: options.onStdout,
-              onStderr: options.onStderr,
-            }
-          : {}),
+        onStdout: (data: string) => {
+          capturedStdout += data;
+          options.onStdout?.(data);
+        },
+        onStderr: (data: string) => {
+          capturedStderr += data;
+          options.onStderr?.(data);
+        },
       });
 
-      let result;
+      // Build race competitors: timeout and abort signal
+      const racePromises: Promise<never>[] = [];
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let abortHandler: (() => void) | undefined;
+
       if (options.timeout) {
-        let timer: ReturnType<typeof setTimeout>;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            // Best-effort cleanup: kill the process on the sandbox.
-            // The streaming exec path doesn't expose the process ID until it completes,
-            // so we attempt to kill by command string.
-            runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
-            reject(new Error(`Command timed out after ${options.timeout}ms`));
-          }, options.timeout!);
-        });
-        try {
-          result = await Promise.race([execPromise, timeoutPromise]);
-        } finally {
-          clearTimeout(timer!);
+        racePromises.push(
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              // Best-effort cleanup: kill the process on the sandbox.
+              // The streaming exec path doesn't expose the process ID until it completes,
+              // so we attempt to kill by command string.
+              runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+              reject(new Error(`Command timed out after ${options.timeout}ms`));
+            }, options.timeout!);
+          }),
+        );
+      }
+
+      if (options.abortSignal) {
+        if (options.abortSignal.aborted) {
+          runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+          throw new Error('Process aborted');
         }
-      } else {
-        result = await execPromise;
+        racePromises.push(
+          new Promise<never>((_, reject) => {
+            abortHandler = () => {
+              runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+              reject(new Error('Process aborted'));
+            };
+            options.abortSignal!.addEventListener('abort', abortHandler, { once: true });
+          }),
+        );
+      }
+
+      let result;
+      try {
+        if (racePromises.length > 0) {
+          result = await Promise.race([execPromise, ...racePromises]);
+        } else {
+          result = await execPromise;
+        }
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (abortHandler && options.abortSignal) {
+          options.abortSignal.removeEventListener('abort', abortHandler);
+        }
       }
 
       const executionTimeMs = Date.now() - startTime;
       const exitCode = result.exitCode ?? 0;
-      const stdout = result.stdout ?? '';
-      const stderr = result.stderr ?? '';
+      const stdout = capturedStdout || result.stdout || '';
+      const stderr = capturedStderr || result.stderr || '';
 
       this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms)`);
       if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
@@ -984,15 +1018,11 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      const stderr = errorToString(error);
-
-      this.logger.debug(`${LOG_PREFIX} Execution error (${executionTimeMs}ms): ${stderr}`);
-
       return {
         success: false,
         exitCode: 1,
-        stdout: '',
-        stderr,
+        stdout: capturedStdout,
+        stderr: capturedStderr || errorToString(error),
         executionTimeMs,
         command,
         args,

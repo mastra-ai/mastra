@@ -31,7 +31,7 @@ export interface HeartbeatHandler {
 
 // =============================================================================
 // Harness Configuration
-// =============================================================================
+// ===================
 
 /**
  * Configuration for a single agent mode within the harness.
@@ -209,8 +209,8 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * `acquire` should throw if the lock is held by another process.
    */
   threadLock?: {
-    acquire: (threadId: string) => void;
-    release: (threadId: string) => void;
+    acquire: (threadId: string) => void | Promise<void>;
+    release: (threadId: string) => void | Promise<void>;
   };
 }
 
@@ -764,6 +764,7 @@ export type HarnessMessageContent =
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
   | { type: 'image'; data: string; mimeType: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
       type: 'om_observation_start';
       tokensToObserve: number;

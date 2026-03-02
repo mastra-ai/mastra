@@ -80,8 +80,8 @@ export {
 } from '../experiments/components/experiment-result-span-pane';
 
 // Comparison components
-export { ComparisonView } from './components/comparison/comparison-view';
-export { ScoreDelta } from './components/comparison/score-delta';
+export { DatasetExperimentsComparison } from './components/experiments/dataset-experiments-comparison';
+export { ScoreDelta } from './components/experiments/score-delta';
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
