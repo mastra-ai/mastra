@@ -31,8 +31,6 @@ function DatasetExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
-  console.log({ experiment, resultsData });
-
   if (experimentLoading) {
     return (
       <MainContentLayout>

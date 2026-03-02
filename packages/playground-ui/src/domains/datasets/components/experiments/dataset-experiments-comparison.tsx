@@ -40,8 +40,6 @@ export function DatasetExperimentsComparison({
   const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
   const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
 
-  console.log({ comparison, expA, expB });
-
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
   // Collect all unique scorer IDs across all items

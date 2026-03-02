@@ -47,13 +47,6 @@ export function ExperimentPageContent({ experimentId, results, isLoading }: Expe
     return [...ids].sort();
   }, [scoresByExperimentId]);
 
-  console.log('[scores-debug]', {
-    allResultItemIds: results.map(r => r.itemId),
-    scoreKeys: scoresByExperimentId ? Object.keys(scoresByExperimentId) : null,
-    featuredItemId: featuredResult?.itemId,
-    matchedScores: featuredResult ? scoresByExperimentId?.[featuredResult.itemId] : null,
-  });
-
   // Trace data for span navigation (shared React Query cache with trace panel)
   const { data: traceData } = useExperimentTrace(featuredTraceId);
   const traceSpans = traceData?.spans ?? [];
