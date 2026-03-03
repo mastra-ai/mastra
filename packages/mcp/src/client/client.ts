@@ -700,10 +700,10 @@ export class InternalMastraMCPClient extends MastraBase {
    * unknown keys returned by an MCP server are preserved instead of being
    * silently stripped by Zod's default "strip" mode.
    */
-  private applyPassthrough(schema: z.ZodType): z.ZodType {
+  private applyPassthrough(schema: any): any {
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape;
-      const newShape: Record<string, z.ZodType> = {};
+      const newShape: Record<string, any> = {};
       for (const key of Object.keys(shape)) {
         newShape[key] = this.applyPassthrough(shape[key]);
       }
@@ -732,7 +732,7 @@ export class InternalMastraMCPClient extends MastraBase {
     try {
       await $RefParser.dereference(outputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
-      let zodSchema: z.ZodType;
+      let zodSchema: any;
       if ('toJSONSchema' in z) {
         //@ts-expect-error - zod type issue
         zodSchema = convertJsonSchemaToZod(jsonSchemaToConvert);
