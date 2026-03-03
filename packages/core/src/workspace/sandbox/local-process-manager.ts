@@ -149,6 +149,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       env,
       shell: this.sandbox.isolation === 'none',
       detached: true,
+      stdio: 'pipe',
     });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
     this._tracked.set(handle.pid, handle);

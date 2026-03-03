@@ -5579,6 +5579,8 @@ describe('Full Async Buffering Flow', () => {
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
+    /** Optional fixed observer responses in call order */
+    observerResponses?: string[];
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -5622,6 +5624,9 @@ describe('Full Async Buffering Flow', () => {
 
         // Observer call
         observerCalls.push({ input: promptText.slice(0, 200) });
+        const observerResponse =
+          opts.observerResponses?.[observerCalls.length - 1] ??
+          `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -5629,7 +5634,7 @@ describe('Full Async Buffering Flow', () => {
           content: [
             {
               type: 'text' as const,
-              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`,
+              text: observerResponse,
             },
           ],
           warnings: [],
@@ -6033,6 +6038,113 @@ describe('Full Async Buffering Flow', () => {
     const lastCall = observerCalls[observerCalls.length - 1];
     expect(lastCall).toBeDefined();
     expect(lastCall.input.length).toBeGreaterThan(0);
+  });
+
+  it('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      blockAfter: 0,
+      messageCount: 10,
+      observerResponses: [
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>Implement sync path</current-task>\n<suggested-response>Continue with step 2</suggested-response>',
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
+
+    await step(0);
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'sync-clear-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'New message to trigger observation' }],
+          },
+          type: 'text',
+          createdAt: new Date('2025-01-01T12:30:00Z'),
+        },
+      ],
+    });
+
+    await step(1);
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
+
+  it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
+    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🔴 Older chunk with hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-1'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'buf-cycle-1',
+        currentTask: 'Old buffered task',
+        suggestedContinuation: 'Old buffered suggestion',
+      },
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🟡 Latest chunk without hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-2'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:05:00Z'),
+        cycleId: 'buf-cycle-2',
+      },
+    });
+
+    const existingThread = await storage.getThreadById({ threadId });
+    await storage.updateThread({
+      id: threadId,
+      title: existingThread?.title ?? 'Test Thread',
+      metadata: {
+        ...(existingThread?.metadata ?? {}),
+        mastra: {
+          ...((existingThread?.metadata as any)?.mastra ?? {}),
+          om: {
+            ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
+            currentTask: 'Stale task before activation',
+            suggestedResponse: 'Stale suggestion before activation',
+          },
+        },
+      },
+    });
+
+    await step(0, { freshState: true });
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.currentTask).toBeUndefined();
+    expect(omAfterActivation.suggestedResponse).toBeUndefined();
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {

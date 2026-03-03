@@ -103,9 +103,17 @@ export const DEFAULT_BLOCKED_LABELS = [
 /** Cardinality protection configuration */
 export interface CardinalityConfig {
   /**
-   * Labels to block from metrics.
-   * Set to undefined to use DEFAULT_BLOCKED_LABELS.
-   * Set to empty array to allow all labels.
+   * Labels to block from metrics. **Replaces** the default list entirely —
+   * DEFAULT_BLOCKED_LABELS are NOT merged in when this is set.
+   *
+   * - `undefined` (default) → uses DEFAULT_BLOCKED_LABELS
+   * - `[]` → disables label blocking (allows all labels through)
+   * - `['x', 'y']` → blocks only x and y; defaults like trace_id are allowed
+   *
+   * To extend the defaults, spread them into your list:
+   * ```ts
+   * blockedLabels: [...DEFAULT_BLOCKED_LABELS, 'my_custom_label']
+   * ```
    */
   blockedLabels?: string[];
 

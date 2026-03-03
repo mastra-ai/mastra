@@ -1,180 +1,43 @@
-# Documentation Chatbot Template
+# Docs Chatbot Template
 
-A comprehensive monorepo template for building documentation chatbots using Mastra with separate MCP server and agent components.
+This template contains two main components:
 
-## Architecture Overview
+- A standalone MCP (Model Context Protocol) server that exposes documentation tools for consumption by any MCP client.
+- A Mastra agent that consumes tools from an MCP server to provide documentation assistance.
 
-This template demonstrates a modular architecture separating concerns between:
+The documentation agent uses the MCP client to connect to the MCP server and access the documentation tools. You can run both components together to have a complete documentation chatbot solution.
 
-- **MCP Server**: Standalone server that exposes documentation tools via HTTP/SSE
-- **Agent**: Mastra agent that consumes tools from the MCP server
-- **Web/Docs Apps**: Frontend applications for user interaction
+## Why we built this
 
-## What's inside?
+This template demonstrates how you can use Mastra to build an MCP server and connect it to a Mastra agent. This template is highly relevant for all documentation use cases.
 
-This template includes the following apps and packages:
+## Demo
 
-### Apps
+<video width="640" height="360" src="https://github.com/user-attachments/assets/5b98c4c1-92b2-44b4-95c8-3a69f233c47c"></video>
 
-- `apps/agent`: Mastra agent that connects to MCP servers for documentation assistance
-- `apps/mcp-server`: Standalone MCP server exposing documentation tools
-- `apps/docs`: Next.js documentation site
-- `apps/web`: Next.js web application
+This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
-### Packages
+## Prerequisites
 
-- `packages/ui`: Shared React component library
-- `packages/eslint-config`: ESLint configurations
-- `packages/typescript-config`: TypeScript configurations
+- [OpenAI API key](https://platform.openai.com/api-keys): Used by default, but you can swap in any model
 
-## Getting Started
+## Quickstart 🚀
 
-1. Install dependencies:
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template docs-chatbot` to scaffold the project locally.
+2. **Add your API keys**
+   - Copy `.env.example` to `.env` and fill in your keys.
+3. **Start the dev server**
+   - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-   ```bash
-   pnpm install
-   ```
+## Making it yours
 
-2. Set up environment files:
+Open the **Kepler Docs Agent** and ask it a question like: "Tell me about the getPlanetaryData function". The agent will use the tools from the MCP server to fetch documentation about the function and provide a helpful response.
 
-   ```bash
-   # Copy environment files for each app
-   cp apps/mcp-server/.env.example apps/mcp-server/.env
-   cp apps/agent/.env.example apps/agent/.env
-   ```
+Replace `src/mcp-server/data/functions.json` with your own documentation data to create a custom documentation assistant for your project. Or change `src/mcp-server/tools/docs-tool.ts` completely to fetch data from another source. You can also modify the agent instructions in `src/mastra/agents/docs-agent.ts` to change how the agent responds.
 
-3. Add your API key for your chosen provider to `apps/agent/.env`:
+## About Mastra templates
 
-   ```
-   OPENAI_API_KEY=your_openai_api_key_here
-   ```
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-4. Start the development servers:
-
-   ```bash
-   # Start all services
-   pnpm dev
-
-   # Or start individual services
-   pnpm dev:mcp      # MCP server (port 4111)
-   pnpm dev:agent    # Agent server (port 4112)
-   pnpm dev:web      # Web app (port 3000)
-   pnpm dev:docs     # Docs app (port 3001)
-   ```
-
-## Model Configuration
-
-This template supports any AI model provider through Mastra's model router. You can use models from:
-
-- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
-- **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
-- **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
-- **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`
-- **Cerebras**: `cerebras/llama-3.3-70b`
-- **Mistral**: `mistral/mistral-medium-2508`
-
-Set the `MODEL` environment variable in your `.env` file to your preferred model.
-
-## Usage
-
-### MCP Server (Port 4111)
-
-The MCP server exposes documentation tools via HTTP/SSE:
-
-```bash
-# Check server status
-curl http://localhost:4111/mcp
-
-# Connect with MCP client
-curl -X POST http://localhost:4111/mcp/message \
-  -H "Content-Type: application/json" \
-  -d '{"method": "tools/list"}'
-```
-
-### Agent Server (Port 4112)
-
-The agent consumes MCP tools and provides chat functionality:
-
-```bash
-# Chat with the docs agent
-curl -X POST http://localhost:4112/agents/docsAgent/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Tell me about getPlanetaryData"}]}'
-
-# Health check
-curl http://localhost:4112/health
-```
-
-## Development
-
-### Building
-
-Build all apps and packages:
-
-```bash
-pnpm build
-```
-
-Build specific apps:
-
-```bash
-pnpm build --filter=@templates/mcp-server
-pnpm build --filter=@templates/agent
-```
-
-### Development Scripts
-
-- `pnpm dev` - Start all development servers
-- `pnpm dev:mcp` - Start only MCP server
-- `pnpm dev:agent` - Start only agent server
-- `pnpm dev:web` - Start only web app
-- `pnpm dev:docs` - Start only docs app
-- `pnpm lint` - Run linting across all packages
-- `pnpm format` - Format code with Prettier
-- `pnpm check-types` - Run TypeScript type checking
-
-## Customization
-
-### MCP Server
-
-- Replace `apps/mcp-server/src/data/functions.json` with your documentation data
-- Modify tools in `apps/mcp-server/src/tools/`
-- Add new tools and register them in `apps/mcp-server/src/server.ts`
-
-### Agent
-
-- Update agent instructions in `apps/agent/src/mastra/agents/docs-agent.ts`
-- Configure MCP server connections in `apps/agent/src/mastra/mcp/mcp-client.ts`
-- Add new agents in `apps/agent/src/mastra/agents/`
-
-### Frontend Apps
-
-- Customize the web interface in `apps/web/`
-- Update documentation site in `apps/docs/`
-- Modify shared UI components in `packages/ui/`
-
-## Architecture Benefits
-
-This separation provides several advantages:
-
-1. **Modularity**: MCP server can be deployed independently and consumed by multiple clients
-2. **Scalability**: Each component can be scaled separately based on load
-3. **Flexibility**: Different frontends can consume the same MCP server
-4. **Development**: Teams can work on different components independently
-5. **Deployment**: Components can be deployed to different environments or platforms
-
-## Deployment
-
-Each app should be deployed independently:
-
-- **MCP Server**: Deploy as a standalone service (Docker, serverless, etc.)
-- **Agent**: Deploy with Mastra's built-in deployment options
-- **Web/Docs**: Deploy to Vercel, Netlify, or other hosting platforms
-
-The Agent app should be deployed first, then the deployment URL should be added to the MCP server's `MCP_SERVER_URL` environment variable.
-
-## Learn More
-
-- [Mastra Documentation](https://mastra.ai/docs)
-- [MCP Protocol](https://mastra.ai/docs/mcp/overview)
-- [Turborepo Documentation](https://turborepo.com/docs)
+Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).

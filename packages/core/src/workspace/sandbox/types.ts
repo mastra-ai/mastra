@@ -80,6 +80,8 @@ export interface CommandOptions {
   onStdout?: (data: string) => void;
   /** Callback for stderr chunks (enables streaming) */
   onStderr?: (data: string) => void;
+  /** Abort signal to cancel the command */
+  abortSignal?: AbortSignal;
 }
 
 /** Options for executeCommand. */

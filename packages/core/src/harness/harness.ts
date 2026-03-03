@@ -3,7 +3,9 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
@@ -66,6 +68,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
+  private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
@@ -99,6 +102,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
+    this.defaultResourceId = this.resourceId;
 
     // Initialize state from schema defaults + initial state
     this.state = {
@@ -207,7 +211,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
-    this.config.threadLock?.acquire(mostRecent.id);
+    await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
 
@@ -427,6 +431,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 
@@ -456,7 +474,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
+   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
+   * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     try {
@@ -470,7 +489,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       >;
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const models: AvailableModel[] = [];
+      const modelsById = new Map<string, AvailableModel>();
+
+      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+        if (!model.id || !model.provider || !model.modelName) return;
+        modelsById.set(model.id, {
+          ...model,
+          useCount: useCounts[model.id] ?? 0,
+        });
+      };
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
@@ -486,20 +513,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         if (providerConfig?.models && Array.isArray(providerConfig.models)) {
           for (const modelName of providerConfig.models) {
-            const id = `${provider}/${modelName}`;
-            models.push({
-              id,
+            upsertModel({
+              id: `${provider}/${modelName}`,
               provider,
               modelName,
               hasApiKey,
               apiKeyEnvVar: apiKeyEnvVar || undefined,
-              useCount: useCounts[id] ?? 0,
             });
           }
         }
       }
 
-      return models;
+      if (this.config.customModelCatalogProvider) {
+        try {
+          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+          for (const model of customModels) {
+            upsertModel({
+              id: model.id,
+              provider: model.provider,
+              modelName: model.modelName,
+              hasApiKey: model.hasApiKey,
+              apiKeyEnvVar: model.apiKeyEnvVar,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load custom available models:', error);
+        }
+      }
+
+      return [...modelsById.values()];
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
@@ -532,6 +574,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
+  }
+
+  getDefaultResourceId(): string {
+    return this.defaultResourceId;
+  }
+
+  async getKnownResourceIds(): Promise<string[]> {
+    const threads = await this.listThreads({ allResources: true });
+    const ids = new Set(threads.map(t => t.resourceId));
+    return [...ids].sort();
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
@@ -579,11 +631,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const oldThreadId = this.currentThreadId;
     if (this.config.threadLock) {
       try {
-        this.config.threadLock.acquire(thread.id);
+        await this.config.threadLock.acquire(thread.id);
       } catch (err) {
         if (oldThreadId) {
           try {
-            this.config.threadLock.acquire(oldThreadId);
+            await this.config.threadLock.acquire(oldThreadId);
           } catch {
             // Best-effort re-acquire; original error is more important
           }
@@ -591,7 +643,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         throw err;
       }
       if (oldThreadId) {
-        this.config.threadLock.release(oldThreadId);
+        await this.config.threadLock.release(oldThreadId);
       }
     }
 
@@ -619,6 +671,68 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
+  async cloneThread({
+    sourceThreadId,
+    title,
+    resourceId,
+  }: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  } = {}): Promise<HarnessThread> {
+    const sourceId = sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.resourceId,
+      title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(clonedThread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
+  }
+
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
 
@@ -631,11 +745,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     // Acquire lock on new thread before releasing old one
-    this.config.threadLock?.acquire(threadId);
+    await this.config.threadLock?.acquire(threadId);
 
     const previousThreadId = this.currentThreadId;
     if (previousThreadId) {
-      this.config.threadLock?.release(previousThreadId);
+      await this.config.threadLock?.release(previousThreadId);
     }
     this.currentThreadId = threadId;
 
@@ -755,6 +869,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
           });
         }
+      }
+
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -1058,10 +1180,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async sendMessage({
     content,
-    images,
+    files,
+    tracingContext,
+    tracingOptions,
   }: {
     content: string;
-    images?: Array<{ data: string; mimeType: string }>;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1086,22 +1212,40 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         maxSteps: 1000,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
       };
 
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (images?.length) {
+      if (files?.length) {
+        const fileParts = files.map(f => {
+          const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+          if (isText) {
+            let textContent = f.data;
+            // Decode data URI to plain text
+            const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+            if (base64Match) {
+              try {
+                textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+              } catch {
+                // Fall through with raw data
+              }
+            }
+            const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+            return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+          }
+          return {
+            type: 'file' as const,
+            data: f.data,
+            mimeType: f.mediaType,
+            filename: f.filename,
+          };
+        });
         messageInput = {
           role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...images.map((img: { data: string; mimeType: string }) => ({
-              type: 'file',
-              data: img.data,
-              mediaType: img.mimeType,
-            })),
-          ],
+          content: [{ type: 'text', text: content }, ...fileParts],
         };
       }
 
@@ -1141,7 +1285,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next });
+        await this.sendMessage({ content: next, tracingContext, tracingOptions });
       }
     }
   }
@@ -1287,6 +1431,32 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             error: (data.error as string) ?? 'Unknown error',
             tokensAttempted: (data.tokensAttempted as number) ?? 0,
             operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'file':
+          content.push({
+            type: 'file',
+            data: typeof part.data === 'string' ? part.data : '',
+            mediaType:
+              (part as { mediaType?: string }).mediaType ??
+              (part as { mimeType?: string }).mimeType ??
+              'application/octet-stream',
+            ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
+          });
+          break;
+        case 'image': {
+          const imgData =
+            typeof part.data === 'string'
+              ? part.data
+              : typeof (part as { image?: string }).image === 'string'
+                ? (part as { image?: string }).image!
+                : '';
+          content.push({
+            type: 'file',
+            data: imgData,
+            mediaType:
+              (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
           });
           break;
         }
@@ -1483,8 +1653,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const promptTokens = usage.promptTokens ?? 0;
-            const completionTokens = usage.completionTokens ?? 0;
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
 
             this.tokenUsage.promptTokens += promptTokens;
@@ -1682,6 +1852,22 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
             });
+          }
+          break;
+        }
+
+        // Sandbox streaming data chunks (from workspace execute_command tool)
+        case 'data-sandbox-stdout': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+          }
+          break;
+        }
+        case 'data-sandbox-stderr': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
           }
           break;
         }
@@ -2405,6 +2591,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================
