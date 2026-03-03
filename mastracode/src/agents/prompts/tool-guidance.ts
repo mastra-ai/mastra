@@ -28,31 +28,33 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 
   if (!denied.has(MC_TOOLS.VIEW)) {
     readTools.push(`
-**${MC_TOOLS.VIEW}** — Read file contents or list directories
+**${MC_TOOLS.VIEW}** — Read file contents
 - Use this to read files before editing them. NEVER propose changes to code you haven't read.
-- Use \`view_range\` for large files to read specific sections.
-- For directory listings, this shows 2 levels deep.
-- Example: To check lines 50-100 of a large file: \`view("src/big-file.ts", { view_range: [50, 100] })\``);
+- Use \`offset\` (1-indexed start line) and \`limit\` (number of lines) for large files.
+- Example: Read lines 50-100: \`{ path: "src/big-file.ts", offset: 50, limit: 51 }\`
+- To list directories, use \`${MC_TOOLS.FIND_FILES}\` instead.`);
   }
 
   if (!denied.has(MC_TOOLS.SEARCH_CONTENT)) {
     readTools.push(`
 **${MC_TOOLS.SEARCH_CONTENT}** — Search file contents using regex
 - Use this for ALL content search (finding functions, variables, error messages, imports, etc.)
-- NEVER use \`execute_command\` with grep, rg, or ag. Always use the search_content tool.
-- Supports regex patterns, file type filtering, and context lines.
-- Example: Find where a function is defined: \`search_content("function handleSubmit", { glob: "**/*.ts" })\`
-- Example: Find all imports of a module: \`search_content("from ['\\"\\]express['\\"\\]", { glob: "**/*.ts" })\``);
+- NEVER use \`execute_command\` with grep, rg, or ag. Always use this tool.
+- Use \`path\` to filter by directory or glob pattern. Supports \`contextLines\`, \`caseSensitive\`, and \`maxCount\`.
+- Example: Find a function: \`{ pattern: "function handleSubmit", path: "**/*.ts" }\`
+- Example: Find imports: \`{ pattern: "from ['\\"\\]express['\\"\\]", path: "**/*.ts" }\`
+- Respects .gitignore by default.`);
   }
 
   if (!denied.has(MC_TOOLS.FIND_FILES)) {
     readTools.push(`
-**${MC_TOOLS.FIND_FILES}** — Find files by name pattern
-- Use this to find files matching a pattern (e.g., "**/*.ts", "src/**/test*").
-- NEVER use \`execute_command\` with find or ls for file search. Always use find_files.
-- Respects .gitignore automatically.
-- Example: Find all test files: \`find_files("**/*.test.ts")\`
-- Example: Find config files: \`find_files("**/config.{js,ts,json}")\``);
+**${MC_TOOLS.FIND_FILES}** — List files and directories as a tree
+- Use this to explore project structure and find files by pattern.
+- NEVER use \`execute_command\` with find or ls. Always use this tool.
+- Returns tree-style output. Respects .gitignore by default.
+- Example: List project root: \`{ path: "./" }\`
+- Example: Find test files: \`{ path: "./src", pattern: "**/*.test.ts" }\`
+- Example: Find config files: \`{ pattern: "*.config.{js,ts,json}" }\``);
   }
 
   if (!denied.has(MC_TOOLS.EXECUTE_COMMAND)) {
@@ -60,8 +62,8 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 **${MC_TOOLS.EXECUTE_COMMAND}** — Run shell commands
 - Use for: git, npm/pnpm, docker, build tools, test runners, and other terminal operations.
 - Do NOT use for: file reading (use ${MC_TOOLS.VIEW}), file search (use ${MC_TOOLS.SEARCH_CONTENT}/${MC_TOOLS.FIND_FILES}), file editing (use ${MC_TOOLS.STRING_REPLACE_LSP}/${MC_TOOLS.WRITE_FILE}).
-- Commands have a 30-second default timeout. Use the \`timeout\` parameter for longer-running commands.
-- Pipe to \`| tail -N\` for commands with long output — the full output streams to the user, only the last N lines are returned to you. If you're building any kind of package you should be tailing.
+- Commands have a 30-second default timeout. Use \`timeout\` for longer commands, \`cwd\` for working directory.
+- Use the \`tail\` parameter to limit output to the last N lines — the full output streams to the user, only the tail is returned to you. If you're building any kind of package you should be tailing.
 - Good: Run independent commands in parallel when possible.
 - Bad: Running \`cat file.txt\` — use the ${MC_TOOLS.VIEW} tool instead.`);
   }
@@ -79,8 +81,9 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
       writeTools.push(`
 **${MC_TOOLS.STRING_REPLACE_LSP}** — Edit files by replacing exact text
 - You MUST read a file with \`${MC_TOOLS.VIEW}\` before editing it.
-- \`old_str\` must be an exact match of existing text in the file.
-- Provide enough surrounding context in \`old_str\` to make it unique.
+- \`old_string\` must be an exact match of existing text in the file.
+- Provide enough surrounding context in \`old_string\` to make it unique.
+- Use \`replace_all: true\` to replace all occurrences (default: false, requires unique match).
 - For creating new files, use \`${MC_TOOLS.WRITE_FILE}\` instead.
 - Good: Include 2-3 lines of surrounding context to ensure uniqueness.
 - Bad: Using just \`return true;\` — too common, will match multiple places.`);

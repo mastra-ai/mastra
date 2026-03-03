@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
+import { loadGitignore } from '../gitignore';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
 import { formatAsTree } from './tree-formatter';
@@ -25,8 +26,8 @@ Examples:
     maxDepth: z
       .number()
       .optional()
-      .default(3)
-      .describe('Maximum depth to descend (default: 3). Similar to tree -L flag.'),
+      .default(2)
+      .describe('Maximum depth to descend (default: 2). Similar to tree -L flag.'),
     showHidden: z
       .boolean()
       .optional()
@@ -45,10 +46,20 @@ Examples:
       .describe(
         'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
       ),
+    respectGitignore: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('Exclude files and directories listed in .gitignore (default: true).'),
   }),
-  execute: async ({ path = './', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
+  execute: async (
+    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore = true },
+    context,
+  ) => {
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+
+    const ignoreFilter = respectGitignore ? await loadGitignore(filesystem) : undefined;
 
     const result = await formatAsTree(filesystem, path, {
       maxDepth,
@@ -57,6 +68,7 @@ Examples:
       exclude: exclude || undefined,
       extension: extension || undefined,
       pattern: pattern || undefined,
+      ignoreFilter,
     });
 
     return await applyTokenLimit(

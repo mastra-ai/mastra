@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
+import { loadGitignore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -54,9 +55,22 @@ Usage:
       .optional()
       .default(false)
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
+    respectGitignore: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('Exclude files and directories listed in .gitignore from the search (default: true).'),
   }),
   execute: async (
-    { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
+    {
+      pattern,
+      path: inputPath = './',
+      contextLines = 0,
+      maxCount,
+      caseSensitive = true,
+      includeHidden = false,
+      respectGitignore = true,
+    },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);
@@ -88,6 +102,9 @@ Usage:
       searchPath = inputPath;
     }
 
+    // Load gitignore filter if requested
+    const ignoreFilter = respectGitignore ? await loadGitignore(filesystem) : undefined;
+
     // Collect files to search
     let filePaths: string[];
 
@@ -113,6 +130,14 @@ Usage:
             if (!includeHidden && entry.name.startsWith('.')) continue;
 
             const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
+
+            // Skip gitignored paths
+            if (ignoreFilter) {
+              const relativePath = fullPath.replace(/^\.\//, '');
+              const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
+              if (ignoreFilter(checkPath)) continue;
+            }
+
             if (entry.type === 'file') {
               // Skip non-text files
               if (!isTextFile(entry.name)) continue;

@@ -76,7 +76,7 @@ describe('workspace_list_files', () => {
     expect(result).toContain('truncated at depth 2');
   });
 
-  it('should default maxDepth to 3', async () => {
+  it('should default maxDepth to 2', async () => {
     await fs.mkdir(path.join(tempDir, 'level1'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
@@ -90,10 +90,10 @@ describe('workspace_list_files', () => {
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
     expect(result).toContain('level2');
-    expect(result).toContain('level3');
+    expect(result).not.toContain('level3');
     expect(result).not.toContain('level4');
     expect(result).not.toContain('deep.txt');
-    expect(result).toContain('truncated at depth 3');
+    expect(result).toContain('truncated at depth 2');
   });
 
   it('should filter by extension (tree -P flag)', async () => {
