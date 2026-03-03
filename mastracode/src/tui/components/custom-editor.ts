@@ -12,7 +12,8 @@ const PASTE_END = '\x1b[201~';
 export type AppAction =
   | 'clear' // Ctrl+C or Escape - interrupt
   | 'exit' // Ctrl+D - exit when empty
-  | 'undo' // Ctrl+Z - undo last clear
+  | 'suspend' // Ctrl+Z - suspend process (SIGTSTP)
+  | 'undo' // Alt+Z - undo last clear
   | 'toggleThinking' // Ctrl+T
   | 'expandTools' // Ctrl+E
   | 'followUp' // Alt+Enter - queue follow-up while streaming
@@ -123,8 +124,16 @@ export class CustomEditor extends Editor {
       }
       return; // Always consume
     }
-    // Ctrl+Z - undo last clear
+    // Ctrl+Z - suspend process
     if (matchesKey(data, 'ctrl+z')) {
+      const handler = this.actionHandlers.get('suspend');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+    // Alt+Z - undo last clear
+    if (matchesKey(data, 'alt+z')) {
       const handler = this.actionHandlers.get('undo');
       if (handler) {
         handler();
