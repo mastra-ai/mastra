@@ -2524,6 +2524,31 @@ describe('Scenario: Observation quality checks', () => {
     expect(observations).toBeGreaterThan(20);
     expect(observations).toBeLessThan(100);
   });
+
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+    const counter = new TokenCounter();
+    const message = createTestMessage('ignored-content', 'assistant');
+    message.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+    } as any;
+
+    const firstCount = counter.countMessage(message);
+    const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(firstCache).toBeTruthy();
+
+    const reloaded = {
+      ...JSON.parse(JSON.stringify(message)),
+      createdAt: new Date(message.createdAt),
+    } as MastraDBMessage;
+
+    const secondCount = counter.countMessage(reloaded);
+    const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(secondCount).toBe(firstCount);
+    expect(secondCache).toEqual(firstCache);
+  });
 });
 
 // =============================================================================
@@ -7585,6 +7610,46 @@ describe('Full Async Buffering Flow', () => {
     // The key assertion is that new buffering was triggered (observer called again).
     const callsAfterActivation = observerCalls.length;
     expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
+  });
+
+  it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 2000,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 10,
+    });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 30; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    const messageListAfterActivation = await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const remainingTokens = new TokenCounter().countMessages(messageListAfterActivation.get.all.db());
+    expect(remainingTokens).toBeGreaterThanOrEqual(2000);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {

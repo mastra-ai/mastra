@@ -3124,37 +3124,40 @@ ${suggestedResponse}
       // step sees a trimmed context with observations instead of raw messages.
       const observedSet = new Set(observedMessageIds);
       const messagesToSave: MastraDBMessage[] = [];
-      const idsToRemove: string[] = [];
-      const totalTokens = typeof minRemaining === 'number' ? this.tokenCounter.countMessages(allMsgs) : undefined;
-      let removedTokens = 0;
+      const idsToRemove = new Set<string>();
       let skipped = 0;
+      let backoffTriggered = false;
 
       for (const msg of allMsgs) {
-        if (msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id)) {
-          if (typeof minRemaining === 'number') {
-            const msgTokens = this.tokenCounter.countMessage(msg);
-            const remainingIfRemoved = (totalTokens ?? 0) - removedTokens - msgTokens;
-            if (remainingIfRemoved < minRemaining) {
-              skipped += 1;
-              continue;
-            }
-            removedTokens += msgTokens;
-          }
-          messagesToSave.push(msg);
-          idsToRemove.push(msg.id);
+        if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
+          continue;
         }
+
+        if (typeof minRemaining === 'number') {
+          const nextRemainingMessages = allMsgs.filter(m => m?.id && !idsToRemove.has(m.id) && m.id !== msg.id);
+          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          if (remainingIfRemoved < minRemaining) {
+            skipped += 1;
+            backoffTriggered = true;
+            break;
+          }
+        }
+
+        messagesToSave.push(msg);
+        idsToRemove.add(msg.id);
       }
 
       omDebug(
-        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, skipped=${skipped}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
+        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.size}, skipped=${skipped}, backoffTriggered=${backoffTriggered}, idsToRemove=${[...idsToRemove].map(id => id.slice(0, 8)).join(',')}`,
       );
 
       // Remove activated messages from context. No need to re-save — these were
       // already persisted by handlePerStepSave or runAsyncBufferedObservation.
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
+      const idsToRemoveList = [...idsToRemove];
+      if (idsToRemoveList.length > 0) {
+        messageList.removeByIds(idsToRemoveList);
         omDebug(
-          `[OM:cleanupActivation] removed ${idsToRemove.length} messages, remaining=${messageList.get.all.db().length}`,
+          `[OM:cleanupActivation] removed ${idsToRemoveList.length} messages, remaining=${messageList.get.all.db().length}`,
         );
       }
     } else {
@@ -3671,7 +3674,7 @@ ${suggestedResponse}
               : undefined;
           const minRemaining =
             typeof this.observationConfig.bufferActivation === 'number'
-              ? Math.min(1000, this.resolveRetentionFloor(this.observationConfig.bufferActivation, threshold))
+              ? this.resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
