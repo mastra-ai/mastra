@@ -1121,7 +1121,7 @@ describe('CoreToolBuilder inputExamples', () => {
 
     const builtTool = builder.build();
 
-    expect((builtTool as any).inputExamples).toEqual([{ input: { city: 'New York' } }, { input: { city: 'London' } }]);
+    expect(builtTool.inputExamples).toEqual([{ input: { city: 'New York' } }, { input: { city: 'London' } }]);
   });
 
   it('should pass through inputExamples via buildV5()', () => {
@@ -1170,7 +1170,7 @@ describe('CoreToolBuilder inputExamples', () => {
 
     const builtTool = builder.build();
 
-    expect((builtTool as any).inputExamples).toBeUndefined();
+    expect(builtTool.inputExamples).toBeUndefined();
   });
 
   it('should pass through inputExamples for provider-defined tools', () => {
@@ -1197,7 +1197,7 @@ describe('CoreToolBuilder inputExamples', () => {
     const builtTool = builder.build();
 
     expect(builtTool.type).toBe('provider-defined');
-    expect((builtTool as any).inputExamples).toEqual([{ input: { query: 'test query' } }]);
+    expect(builtTool.inputExamples).toEqual([{ input: { query: 'test query' } }]);
   });
 
   it('should handle Vercel tools with inputExamples', () => {
@@ -1221,7 +1221,7 @@ describe('CoreToolBuilder inputExamples', () => {
 
     const builtTool = builder.build();
 
-    expect((builtTool as any).inputExamples).toEqual([{ input: { input: 'hello world' } }]);
+    expect(builtTool.inputExamples).toEqual([{ input: { input: 'hello world' } }]);
   });
 });
 
