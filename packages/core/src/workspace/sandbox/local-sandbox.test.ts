@@ -250,6 +250,32 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Spawn Failure Handling
+  // ===========================================================================
+  describe('spawn failure handling', () => {
+    beforeEach(async () => {
+      await sandbox._start();
+    });
+
+    it('should throw a descriptive error when cwd does not exist', async () => {
+      if (os.platform() === 'win32') return;
+      await expect(sandbox.executeCommand('pwd', [], { cwd: '/nonexistent/path/that/does/not/exist' })).rejects.toThrow(
+        /ENOENT|no such file or directory|cwd/i,
+      );
+    });
+
+    it('should return exit code 127 for nonexistent command', async () => {
+      if (os.platform() === 'win32') return;
+      // With shell: true (isolation: none), the shell spawns fine but reports
+      // "command not found" via stderr and exits with code 127.
+      const result = await sandbox.executeCommand('nonexistent-command-xyz-12345', []);
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toMatch(/not found/i);
+    });
+  });
+
+  // ===========================================================================
   // Timeout Handling
   // ===========================================================================
   describe('timeout handling', () => {
