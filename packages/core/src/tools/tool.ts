@@ -1,7 +1,7 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
 import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
@@ -419,20 +419,53 @@ export class Tool<
  * });
  * ```
  */
-export function createTool<
-  TId extends string = string,
-  TSchemaIn = unknown,
-  TSchemaOut = unknown,
-  TSuspend = unknown,
-  TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
-    TSuspend,
-    TResume,
+type SchemaLike = PublicSchema<any> | undefined;
+type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+
+type CreateToolOpts<
+  TId extends string,
+  TInputSchema extends SchemaLike,
+  TOutputSchema extends SchemaLike,
+  TSuspendSchema extends SchemaLike,
+  TResumeSchema extends SchemaLike,
+  TRequestContext,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
+> = Omit<
+  ToolAction<
+    InferSchema<TInputSchema>,
+    InferSchema<TOutputSchema>,
+    InferSchema<TSuspendSchema>,
+    InferSchema<TResumeSchema>,
+    TContext,
+    TId,
     TRequestContext
   >,
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+> & {
+  inputSchema?: TInputSchema;
+  outputSchema?: TOutputSchema;
+  suspendSchema?: TSuspendSchema;
+  resumeSchema?: TResumeSchema;
+};
+export function createTool<
+  TId extends string = string,
+  TInputSchema extends SchemaLike = undefined,
+  TOutputSchema extends SchemaLike = undefined,
+  TSuspendSchema extends SchemaLike = undefined,
+  TResumeSchema extends SchemaLike = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext> =
+    ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> {
+  opts: CreateToolOpts<TId, TInputSchema, TOutputSchema, TSuspendSchema, TResumeSchema, TRequestContext, TContext>,
+): Tool<
+  InferSchema<TInputSchema>,
+  InferSchema<TOutputSchema>,
+  InferSchema<TSuspendSchema>,
+  InferSchema<TResumeSchema>,
+  TContext,
+  TId,
+  TRequestContext
+> {
   return new Tool(opts);
 }
