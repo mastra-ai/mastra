@@ -18,11 +18,13 @@ export function getWorkflowRunsNextPageParam(lastPage: WorkflowRuns, _allPages: 
 /** Deduplicates workflow runs by runId across all loaded pages, keeping the first occurrence. */
 export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
   const seen = new Set<string>();
-  return data.pages.flatMap(page => page.runs).filter(run => {
-    if (seen.has(run.runId)) return false;
-    seen.add(run.runId);
-    return true;
-  });
+  return data.pages
+    .flatMap(page => page.runs)
+    .filter(run => {
+      if (seen.has(run.runId)) return false;
+      seen.add(run.runId);
+      return true;
+    });
 }
 
 export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enabled?: boolean } = {}) => {
