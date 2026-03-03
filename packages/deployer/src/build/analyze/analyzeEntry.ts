@@ -1,10 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { readJSON } from 'fs-extra/esm';
 import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
@@ -125,7 +125,7 @@ async function captureDependenciesToOptimize(
       // Read version from package.json when we have a valid rootPath
       if (rootPath) {
         try {
-          const pkgJson = await readJSON(`${rootPath}/package.json`);
+          const pkgJson = JSON.parse(await readFile(`${rootPath}/package.json`, 'utf-8'));
           version = pkgJson.version;
         } catch {
           // Failed to read package.json, version will remain undefined
@@ -234,7 +234,7 @@ async function captureDependenciesToOptimize(
           rootPath = await getPackageRootPath(dynamicImport, entryRootPath);
           if (rootPath) {
             try {
-              const pkgJson = await readJSON(`${rootPath}/package.json`);
+              const pkgJson = JSON.parse(await readFile(`${rootPath}/package.json`, 'utf-8'));
               version = pkgJson.version;
             } catch {
               // Failed to read package.json

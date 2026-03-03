@@ -1,15 +1,14 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import stripJsonComments from 'strip-json-comments';
+import ts from 'typescript';
 import { logger } from '../../../utils/logger.js';
 import type { LintContext, LintRule } from './types.js';
 
 function readTsConfig(dir: string) {
   const tsConfigPath = join(dir, 'tsconfig.json');
   try {
-    const tsConfigContent = readFileSync(tsConfigPath, 'utf-8');
-    const cleanTsConfigContent = stripJsonComments(tsConfigContent);
-    return JSON.parse(cleanTsConfigContent);
+    const { config, error } = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
+    if (error) return null;
+    return config;
   } catch {
     return null;
   }

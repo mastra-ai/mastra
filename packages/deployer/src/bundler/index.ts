@@ -1,14 +1,13 @@
 import { existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { access, cp, glob, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, posix, resolve } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
-import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
-import { glob } from 'tinyglobby';
+
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
@@ -36,10 +35,11 @@ export abstract class Bundler extends MastraBundler {
 
   async prepare(outputDirectory: string): Promise<void> {
     // Clean up the output directory first
-    await emptyDir(outputDirectory);
+    await rm(outputDirectory, { recursive: true, force: true });
+    await mkdir(outputDirectory, { recursive: true });
 
-    await ensureDir(join(outputDirectory, this.analyzeOutputDir));
-    await ensureDir(join(outputDirectory, this.outputDir));
+    await mkdir(join(outputDirectory, this.analyzeOutputDir), { recursive: true });
+    await mkdir(join(outputDirectory, this.outputDir), { recursive: true });
   }
 
   async writePackageJson(
@@ -49,7 +49,7 @@ export abstract class Bundler extends MastraBundler {
   ) {
     this.logger.debug(`Writing project's package.json`);
 
-    await ensureDir(outputDirectory);
+    await mkdir(outputDirectory, { recursive: true });
     const pkgPath = join(outputDirectory, 'package.json');
 
     const dependenciesMap = new Map();
@@ -146,7 +146,7 @@ export abstract class Bundler extends MastraBundler {
       return;
     }
 
-    await copy(publicDir, join(outputDirectory, this.outputDir));
+    await cp(publicDir, join(outputDirectory, this.outputDir), { recursive: true });
   }
 
   protected async copyDOTNPMRC({
@@ -161,7 +161,7 @@ export abstract class Bundler extends MastraBundler {
 
     try {
       await stat(sourceDotNpmRcPath);
-      await copy(sourceDotNpmRcPath, targetDotNpmRcPath);
+      await cp(sourceDotNpmRcPath, targetDotNpmRcPath, { recursive: true });
     } catch {
       return;
     }
@@ -233,13 +233,15 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      const expandedPaths = await glob(toolPath, {
-        absolute: true,
-        expandDirectories: false,
-      });
+      const expandedPaths = (await Array.fromAsync(glob(toolPath))).map(p => resolve(p));
 
       for (const path of expandedPaths) {
-        if (await fsExtra.pathExists(path)) {
+        if (
+          await access(path).then(
+            () => true,
+            () => false,
+          )
+        ) {
           const fileService = new FileService();
           const entryFile = fileService.getFirstExistingFile([
             join(path, 'index.ts'),
@@ -343,7 +345,7 @@ export abstract class Bundler extends MastraBundler {
         }
 
         if (rootPath) {
-          const pkg = await readJSON(`${rootPath}/package.json`);
+          const pkg = JSON.parse(await readFile(`${rootPath}/package.json`, 'utf-8'));
           actualPackageName = pkg.name;
           // Use pre-resolved version if available, otherwise use from package.json
           if (!version) {

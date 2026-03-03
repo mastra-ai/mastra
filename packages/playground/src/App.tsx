@@ -1,5 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import { v4 as uuid } from '@lukeed/uuid';
+
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
 import { Layout } from '@/components/layout';
@@ -95,7 +95,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
-  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
+  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${crypto.randomUUID()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',

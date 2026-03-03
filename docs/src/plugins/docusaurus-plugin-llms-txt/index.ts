@@ -6,8 +6,7 @@
 
 import type { LoadContext, Plugin } from '@docusaurus/types'
 import path from 'path'
-import fs from 'fs-extra'
-import { glob } from 'tinyglobby'
+import { glob, readFile } from 'node:fs/promises'
 
 import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './options'
 import { CacheManager, computeHash } from './cache-manager'
@@ -39,10 +38,9 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
       await cache.load()
 
       // Find all index.html files
-      const htmlFiles = await glob('**/index.html', {
-        cwd: outDir,
-        ignore: ['assets/**', '.llms-txt-cache/**'],
-      })
+      const htmlFiles = (await Array.fromAsync(glob('**/index.html', { cwd: outDir }))).filter(
+        f => !f.startsWith('assets/') && !f.startsWith('.llms-txt-cache/'),
+      )
 
       console.log(`[${PLUGIN_NAME}] Found ${htmlFiles.length} HTML files to process`)
 
@@ -67,7 +65,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
 
         try {
           // Read HTML content
-          const html = await fs.readFile(htmlPath, 'utf-8')
+          const html = await readFile(htmlPath, 'utf-8')
           const contentHash = computeHash(html)
 
           const llmsTxtPath = path.join(path.dirname(htmlPath), 'llms.txt')
@@ -161,12 +159,12 @@ async function mapConcurrent<T, R>(items: T[], concurrency: number, fn: (item: T
  * Compute a hash of all plugin source files to invalidate cache when plugin code changes
  */
 async function computePluginHash(): Promise<string> {
-  const pluginFiles = await glob('*.ts', { cwd: PLUGIN_DIR })
+  const pluginFiles = await Array.fromAsync(glob('*.ts', { cwd: PLUGIN_DIR }))
   const contents: string[] = []
 
   for (const file of pluginFiles.sort()) {
     const filePath = path.join(PLUGIN_DIR, file)
-    const content = await fs.readFile(filePath, 'utf-8')
+    const content = await readFile(filePath, 'utf-8')
     contents.push(content)
   }
 

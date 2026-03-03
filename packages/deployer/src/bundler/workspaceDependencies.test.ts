@@ -19,8 +19,8 @@ vi.mock('empathic/package', () => ({
   up: vi.fn().mockReturnValue('/workspace/packages/pkg-a/package.json'),
 }));
 
-vi.mock('fs-extra', () => ({
-  ensureDir: vi.fn().mockResolvedValue(undefined),
+vi.mock('node:fs/promises', () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Create shared mock methods that can be accessed in tests

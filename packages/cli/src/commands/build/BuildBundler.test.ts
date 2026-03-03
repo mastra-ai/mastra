@@ -1,18 +1,16 @@
-import { copy } from 'fs-extra';
+import { cp } from 'node:fs/promises';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock fs-extra/esm - parent Bundler uses this import path
-vi.mock('fs-extra/esm', () => ({
-  copy: vi.fn(),
-  emptyDir: vi.fn().mockResolvedValue(undefined),
-  ensureDir: vi.fn().mockResolvedValue(undefined),
-  default: {},
-}));
-
-// Mock fs-extra - BuildBundler uses this import path
-vi.mock('fs-extra', () => ({
-  copy: vi.fn(),
-}));
+// Mock node:fs/promises - BuildBundler uses cp from this module
+vi.mock('node:fs/promises', async importOriginal => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    cp: vi.fn(),
+    mkdir: vi.fn(),
+    rm: vi.fn(),
+  };
+});
 
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
@@ -104,9 +102,9 @@ describe('BuildBundler', () => {
 
       await bundler.prepare('/output/dir');
 
-      expect(copy).toHaveBeenCalledTimes(1);
-      expect(copy).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
-        overwrite: true,
+      expect(cp).toHaveBeenCalledTimes(1);
+      expect(cp).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
+        recursive: true,
       });
     });
 
@@ -116,7 +114,7 @@ describe('BuildBundler', () => {
 
       await bundler.prepare('/output/dir');
 
-      expect(copy).not.toHaveBeenCalled();
+      expect(cp).not.toHaveBeenCalled();
     });
 
     it('should not copy studio assets when studio is not provided', async () => {
@@ -125,7 +123,7 @@ describe('BuildBundler', () => {
 
       await bundler.prepare('/output/dir');
 
-      expect(copy).not.toHaveBeenCalled();
+      expect(cp).not.toHaveBeenCalled();
     });
   });
 });

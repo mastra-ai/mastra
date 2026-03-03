@@ -236,7 +236,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.4.0
-        version: 13.5.0(encoding@0.1.13)
+        version: 13.5.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -396,9 +396,6 @@ importers:
 
   client-sdks/client-js:
     dependencies:
-      '@lukeed/uuid':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -454,9 +451,6 @@ importers:
 
   client-sdks/react:
     dependencies:
-      '@lukeed/uuid':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../client-js
@@ -554,9 +548,6 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -579,9 +570,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -673,9 +661,6 @@ importers:
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -689,9 +674,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -719,9 +701,6 @@ importers:
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -735,9 +714,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -831,9 +807,6 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       hast-util-select:
         specifier: ^6.0.4
         version: 6.0.4
@@ -870,9 +843,6 @@ importers:
       remark-stringify:
         specifier: ^11.0.0
         version: 11.0.0
-      tinyglobby:
-        specifier: ^0.2.15
-        version: 0.2.15
       unified:
         specifier: ^11.0.5
         version: 11.0.5
@@ -898,9 +868,6 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/hast':
         specifier: ^3.0.4
         version: 3.0.4
@@ -2455,9 +2422,6 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       get-port:
         specifier: ^7.1.0
         version: 7.1.0
@@ -2485,9 +2449,6 @@ importers:
       shell-quote:
         specifier: ^1.8.3
         version: 1.8.3
-      strip-json-comments:
-        specifier: ^5.0.3
-        version: 5.0.3
       yocto-spinner:
         specifier: ^1.0.0
         version: 1.0.0
@@ -2510,9 +2471,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -2625,9 +2583,6 @@ importers:
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
-      '@lukeed/uuid':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -2821,9 +2776,6 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -2849,9 +2801,6 @@ importers:
       '@rollup/plugin-node-resolve':
         specifier: 16.0.3
         version: 16.0.3(rollup@4.55.3)
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -2921,9 +2870,6 @@ importers:
       find-workspaces:
         specifier: ^0.3.1
         version: 0.3.1
-      fs-extra:
-        specifier: ^11.3.3
-        version: 11.3.3
       hono:
         specifier: ^4.11.9
         version: 4.11.9
@@ -2942,12 +2888,6 @@ importers:
       rollup-plugin-esbuild:
         specifier: ^6.2.1
         version: 6.2.1(esbuild@0.25.11)(rollup@4.55.3)
-      strip-json-comments:
-        specifier: ^5.0.3
-        version: 5.0.3
-      tinyglobby:
-        specifier: ^0.2.15
-        version: 0.2.15
       typescript-paths:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.9.3)
@@ -2979,9 +2919,6 @@ importers:
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -3512,9 +3449,6 @@ importers:
 
   packages/playground:
     dependencies:
-      '@lukeed/uuid':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
@@ -3660,9 +3594,6 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
-      '@lukeed/uuid':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.14
         version: 1.1.15(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -14103,9 +14034,6 @@ packages:
   '@types/express@5.0.5':
     resolution: {integrity: sha512-LuIQOcb6UmnF7C1PCFmEU1u2hmiHL43fgFQX67sN3H4Z+0Yk0Neo++mFsBjhOAuLzvlQeqAAkeDOZrJs9rzumQ==}
 
-  '@types/fs-extra@11.0.4':
-    resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
-
   '@types/gtag.js@0.0.12':
     resolution: {integrity: sha512-YQV9bUsemkzG81Ea295/nF/5GijnD2Af7QhEofh7xu+kvCN6RdodgNwwGWXB5GMI3NoyvQo0odNctoH/qLMIpg==}
 
@@ -14156,9 +14084,6 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
-
-  '@types/jsonfile@6.1.4':
-    resolution: {integrity: sha512-D5qGUYwjvnNNextdU59/+fI+spnwtTFmyQP0h+PfIOSkNfpU6AOICUOkm4i0OnSk+NyjdPJrxCDro0sJsWlRpQ==}
 
   '@types/jsonwebtoken@9.0.10':
     resolution: {integrity: sha512-asx5hIG9Qmf/1oStypjanR7iKTv0gXQ1Ov/jfrX6kS/EO0OFni8orbmGCn0672NHR3kXHwpAwR+B368ZGN/2rA==}
@@ -29146,7 +29071,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.0
       fast-deep-equal: 3.1.3
@@ -34564,11 +34489,6 @@ snapshots:
       '@types/express-serve-static-core': 5.1.0
       '@types/serve-static': 1.15.9
 
-  '@types/fs-extra@11.0.4':
-    dependencies:
-      '@types/jsonfile': 6.1.4
-      '@types/node': 22.19.7
-
   '@types/gtag.js@0.0.12': {}
 
   '@types/hast@2.3.10':
@@ -34619,10 +34539,6 @@ snapshots:
       parse5: 7.3.0
 
   '@types/json-schema@7.0.15': {}
-
-  '@types/jsonfile@6.1.4':
-    dependencies:
-      '@types/node': 22.19.7
 
   '@types/jsonwebtoken@9.0.10':
     dependencies:
@@ -38654,7 +38570,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.1
 
-  firebase-admin@13.5.0(encoding@0.1.13):
+  firebase-admin@13.5.0:
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -38668,7 +38584,7 @@ snapshots:
       node-forge: 1.3.3
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
+      '@google-cloud/firestore': 7.11.6
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding

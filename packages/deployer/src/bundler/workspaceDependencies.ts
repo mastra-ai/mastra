@@ -1,9 +1,9 @@
+import { mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
 import slugify from '@sindresorhus/slugify';
 import * as pkg from 'empathic/package';
 import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
-import { ensureDir } from 'fs-extra';
 import { slash } from '../build/utils';
 import { DepsService } from '../services';
 
@@ -151,7 +151,7 @@ export const packWorkspaceDependencies = async ({
   // package all workspace dependencies
   if (usedWorkspacePackages.size > 0) {
     const workspaceDirPath = join(bundleOutputDir, 'workspace-module');
-    await ensureDir(workspaceDirPath);
+    await mkdir(workspaceDirPath, { recursive: true });
 
     logger.info(`Packaging ${usedWorkspacePackages.size} workspace dependencies...`);
 

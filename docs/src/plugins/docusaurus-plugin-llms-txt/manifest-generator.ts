@@ -2,8 +2,8 @@
  * Generate llms-manifest.json mapping packages to their documentation
  */
 
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'path'
-import fs from 'fs-extra'
 import { extractFrontMatter, getPackageNames } from '../../utils/frontmatter'
 import { resolveSourceFile, getCategoryFromRoute, getFolderPathFromRoute, isDocumentedRoute } from './source-resolver'
 
@@ -64,7 +64,7 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
 
     // Read and parse frontmatter
     try {
-      const content = await fs.readFile(sourceFile, 'utf-8')
+      const content = await readFile(sourceFile, 'utf-8')
       const frontmatter = extractFrontMatter(content)
       let packages = getPackageNames(frontmatter)
 
@@ -118,7 +118,7 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
  */
 export async function writeManifest(manifest: LlmsManifest, outDir: string): Promise<void> {
   const manifestPath = path.join(outDir, 'llms-manifest.json')
-  await fs.writeJson(manifestPath, manifest, { spaces: 2 })
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
 
   const packageCount = Object.keys(manifest.packages).length
   const entryCount = Object.values(manifest.packages).reduce((sum, entries) => sum + entries.length, 0)

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
 import type { Plugin } from 'rollup';
-import stripJsonComments from 'strip-json-comments';
+import ts from 'typescript';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
 
@@ -18,8 +18,8 @@ export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?:
  */
 export function hasPaths(tsConfigPath: string): boolean {
   try {
-    const content = fs.readFileSync(tsConfigPath, 'utf8');
-    const config = JSON.parse(stripJsonComments(content));
+    const { config } = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
+    if (!config) return false;
     return !!(
       (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
       (typeof config.extends === 'string' && config.extends.length > 0) ||

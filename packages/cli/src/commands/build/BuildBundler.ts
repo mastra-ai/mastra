@@ -1,9 +1,9 @@
+import { cp } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
-import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class BuildBundler extends Bundler {
@@ -60,8 +60,8 @@ export class BuildBundler extends Bundler {
       const __dirname = dirname(__filename);
 
       const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-        overwrite: true,
+      await cp(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+        recursive: true,
       });
     }
   }

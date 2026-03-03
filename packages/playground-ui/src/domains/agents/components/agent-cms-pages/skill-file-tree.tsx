@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
+
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 
 import { Tree } from '@/ds/components/Tree/tree';
@@ -333,7 +333,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
       reader.onload = () => {
         const base64 = reader.result as string;
         const newNode: InMemoryFileNode = {
-          id: uuid(),
+          id: crypto.randomUUID(),
           name: file.name,
           type: 'file',
           content: base64,
@@ -352,7 +352,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
   const handleInputSubmit = useCallback(
     (name: string) => {
       if (!pendingInput) return;
-      const newId = uuid();
+      const newId = crypto.randomUUID();
       const newNode: InMemoryFileNode =
         pendingInput.type === 'folder'
           ? { id: newId, name, type: 'folder', children: [] }

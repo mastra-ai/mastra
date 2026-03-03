@@ -1,7 +1,6 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type * as AIV4Type from '@internal/ai-sdk-v4';
-import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IdGeneratorContext } from '../../types';
@@ -883,7 +882,7 @@ export class MessageList {
           // Only create a new message if there are actually new parts
           if (newParts.length > 0) {
             // Generate a new ID for the incoming message
-            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? crypto.randomUUID();
             // Replace the parts with only the new ones
             messageV2.content.parts = newParts;
             // Ensure the new message has a timestamp after the sealed message
@@ -980,7 +979,7 @@ export class MessageList {
         role,
       });
     }
-    return randomUUID();
+    return crypto.randomUUID();
   }
 
   private createAdapterContext() {

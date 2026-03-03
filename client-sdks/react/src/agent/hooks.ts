@@ -11,7 +11,7 @@ import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
-import { v4 as uuid } from '@lukeed/uuid';
+
 import { type TracingOptions } from '@mastra/core/observability';
 
 export interface MastraChatProps {
@@ -115,7 +115,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = uuid();
+    const runId = crypto.randomUUID();
     _currentRunId.current = runId;
 
     const response = await agent.generate(coreUserMessages, {
@@ -216,7 +216,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = uuid();
+    const runId = crypto.randomUUID();
 
     const response = await agent.stream(coreUserMessages, {
       runId,
@@ -277,7 +277,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = uuid();
+    const runId = crypto.randomUUID();
 
     const response = await agent.network(coreUserMessages, {
       maxSteps,

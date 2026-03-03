@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { v4 as uuid } from '@lukeed/uuid';
+
 import type { JsonSchema } from '@/lib/json-schema';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
 
@@ -84,14 +84,14 @@ const refInstructionBlockSchema = z.object({
 const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);
 
 export const createInstructionBlock = (content = '', rules?: RuleGroup): InlineInstructionBlock => ({
-  id: uuid(),
+  id: crypto.randomUUID(),
   type: 'prompt_block',
   content,
   rules,
 });
 
 export const createRefInstructionBlock = (promptBlockId: string): RefInstructionBlock => ({
-  id: uuid(),
+  id: crypto.randomUUID(),
   type: 'prompt_block_ref',
   promptBlockId,
 });

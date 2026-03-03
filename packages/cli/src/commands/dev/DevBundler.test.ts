@@ -1,4 +1,4 @@
-import { remove } from 'fs-extra/esm';
+import { rm } from 'node:fs/promises';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DevBundler } from './DevBundler';
 
@@ -56,10 +56,12 @@ vi.mock('@mastra/deployer/build', () => {
   };
 });
 
-vi.mock('fs-extra', () => {
+vi.mock('node:fs/promises', async importOriginal => {
+  const original = await importOriginal();
   return {
-    pathExists: vi.fn().mockResolvedValue(false),
-    copy: vi.fn().mockResolvedValue(undefined),
+    ...original,
+    cp: vi.fn().mockResolvedValue(undefined),
+    rm: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -102,7 +104,7 @@ describe('DevBundler', () => {
           expect.objectContaining({ sourcemap: false }),
         );
       } finally {
-        await remove(tmpDir);
+        await rm(tmpDir, { recursive: true, force: true });
       }
     });
 
@@ -126,7 +128,7 @@ describe('DevBundler', () => {
           expect.objectContaining({ sourcemap: false }),
         );
       } finally {
-        await remove(tmpDir);
+        await rm(tmpDir, { recursive: true, force: true });
       }
     });
   });

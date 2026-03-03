@@ -4,8 +4,8 @@
  * Maps build routes to their source MDX files to extract frontmatter.
  */
 
+import { access } from 'node:fs/promises'
 import path from 'path'
-import fs from 'fs-extra'
 
 interface RouteMapping {
   routePrefix: string
@@ -42,7 +42,12 @@ export async function resolveSourceFile(route: string, siteDir: string): Promise
       ]
 
       for (const sourcePath of possiblePaths) {
-        if (await fs.pathExists(sourcePath)) {
+        if (
+          await access(sourcePath).then(
+            () => true,
+            () => false,
+          )
+        ) {
           return sourcePath
         }
       }

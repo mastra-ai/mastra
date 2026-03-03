@@ -1,8 +1,7 @@
 import fs from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import fsExtra from 'fs-extra/esm';
 
 import { FileEnvService } from './service.fileEnv';
 
@@ -25,7 +24,8 @@ export class FileService {
       return false;
     }
 
-    await fsExtra.outputFile(outputFilePath, fileString);
+    await mkdir(path.dirname(outputFilePath), { recursive: true });
+    await writeFile(outputFilePath, fileString);
 
     return true;
   }
@@ -33,7 +33,8 @@ export class FileService {
   public async setupEnvFile({ dbUrl }: { dbUrl: string }) {
     const envPath = path.join(process.cwd(), '.env.development');
 
-    await fsExtra.ensureFile(envPath);
+    await mkdir(path.dirname(envPath), { recursive: true });
+    await writeFile(envPath, '', { flag: 'a' });
 
     const fileEnvService = new FileEnvService(envPath);
     await fileEnvService.setEnvValue('DB_URL', dbUrl);

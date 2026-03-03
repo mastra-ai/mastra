@@ -42,7 +42,6 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "json-schema": "^0.4.0"

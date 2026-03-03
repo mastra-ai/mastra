@@ -1,8 +1,8 @@
+import { cp, readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -46,15 +46,13 @@ export class CloudDeployer extends Deployer {
       const __dirname = dirname(__filename);
 
       const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-        overwrite: true,
-      });
+      await cp(join(dirname(__dirname), join('dist', 'studio')), studioServePath, { recursive: true });
     }
   }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
-    const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
-      | Record<string, string>
-      | undefined;
+    const versions = JSON.parse(
+      await readFile(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'), 'utf-8'),
+    ) as Record<string, string> | undefined;
     for (const [pkgName, version] of Object.entries(versions || {})) {
       dependencies.set(pkgName, version);
     }

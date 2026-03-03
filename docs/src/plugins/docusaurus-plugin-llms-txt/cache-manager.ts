@@ -3,7 +3,7 @@
  */
 
 import crypto from 'crypto'
-import fs from 'fs-extra'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'path'
 
 interface CacheEntry {
@@ -41,10 +41,13 @@ export class CacheManager {
     if (!this.enabled) return
 
     try {
-      const exists = await fs.pathExists(this.cachePath)
+      const exists = await access(this.cachePath).then(
+        () => true,
+        () => false,
+      )
       if (!exists) return
 
-      const raw = await fs.readFile(this.cachePath, 'utf-8')
+      const raw = await readFile(this.cachePath, 'utf-8')
       const parsed = JSON.parse(raw) as CacheData
 
       // Version check - invalidate if version or plugin hash mismatch
@@ -86,8 +89,8 @@ export class CacheManager {
   async save(): Promise<void> {
     if (!this.enabled) return
 
-    await fs.ensureDir(this.cacheDir)
-    await fs.writeFile(this.cachePath, JSON.stringify(this.data, null, 2), 'utf-8')
+    await mkdir(this.cacheDir, { recursive: true })
+    await writeFile(this.cachePath, JSON.stringify(this.data, null, 2), 'utf-8')
   }
 
   getEntryCount(): number {

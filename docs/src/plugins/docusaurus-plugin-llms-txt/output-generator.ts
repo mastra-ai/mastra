@@ -2,7 +2,7 @@
  * Output generation for root and individual llms.txt files
  */
 
-import fs from 'fs-extra'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'path'
 import type { ResolvedOptions } from './options'
 import { generateMarkdownList, getBaseUrl, getSidebarLocations, parseSidebarFile } from './sidebars-handler'
@@ -33,15 +33,15 @@ export async function generateRootLlmsTxt(outDir: string, siteDir: string): Prom
     }
   }
 
-  await fs.writeFile(path.join(outDir, 'llms.txt'), output, 'utf-8')
+  await writeFile(path.join(outDir, 'llms.txt'), output, 'utf-8')
 }
 
 /**
  * Write an individual llms.txt file
  */
 export async function writeLlmsTxt(outputPath: string, content: string): Promise<void> {
-  await fs.ensureDir(path.dirname(outputPath))
-  await fs.writeFile(outputPath, content, 'utf-8')
+  await mkdir(path.dirname(outputPath), { recursive: true })
+  await writeFile(outputPath, content, 'utf-8')
 }
 
 const ROOT_LLMS_PREFIX_BLOCK = `# Mastra

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
 
 const createArgs = (versionTag?: string) => {
   const packageName = versionTag ? `@mastra/mcp-docs-server@${versionTag}` : '@mastra/mcp-docs-server';
@@ -63,11 +63,9 @@ function makeConfig(
 
 async function writeMergedConfig(configPath: string, editor: Editor, versionTag?: string) {
   const configExists = existsSync(configPath);
-  const config = makeConfig(configExists ? await readJSON(configPath) : {}, editor, versionTag);
-  await ensureFile(configPath);
-  await writeJSON(configPath, config, {
-    spaces: 2,
-  });
+  const config = makeConfig(configExists ? JSON.parse(await readFile(configPath, 'utf-8')) : {}, editor, versionTag);
+  await mkdir(path.dirname(configPath), { recursive: true });
+  await writeFile(configPath, JSON.stringify(config, null, 2));
 }
 
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
@@ -161,7 +159,7 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor, versionTag?: s
   }
 
   try {
-    const configContents = await readJSON(configPath);
+    const configContents = JSON.parse(await readFile(configPath, 'utf-8'));
 
     if (!configContents) return false;
 

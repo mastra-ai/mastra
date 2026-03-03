@@ -1,7 +1,7 @@
+import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPackages } from '@manypkg/get-packages';
-import { writeJson } from 'fs-extra/esm';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,4 +18,4 @@ packages.forEach(pkg => {
 
 console.log(`Writing versions to versions.json:\n${JSON.stringify(versionsToWrite, null, 2)}`);
 
-await writeJson(join(__dirname, '../versions.json'), versionsToWrite);
+await writeFile(join(__dirname, '../versions.json'), JSON.stringify(versionsToWrite, null, 2) + '\n', 'utf-8');

@@ -1,21 +1,21 @@
+import { readFile } from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
-import fsExtra from 'fs-extra';
 
 export async function getPackageVersion() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const pkgJsonPath = path.join(__dirname, '..', 'package.json');
 
-  const content = await fsExtra.readJSON(pkgJsonPath);
+  const content = JSON.parse(await readFile(pkgJsonPath, 'utf-8'));
   return content.version;
 }
 
 export async function getCreateVersionTag(): Promise<string | undefined> {
   try {
     const pkgPath = fileURLToPath(import.meta.resolve('create-mastra/package.json'));
-    const json = await fsExtra.readJSON(pkgPath);
+    const json = JSON.parse(await readFile(pkgPath, 'utf-8'));
 
     const { stdout } = await execa('npm', ['dist-tag', 'create-mastra']);
     const tagLine = stdout.split('\n').find(distLine => distLine.endsWith(`: ${json.version}`));

@@ -4,7 +4,6 @@ import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm/model';
-import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
 import shellQuote from 'shell-quote';
@@ -452,7 +451,7 @@ export async function writeCodeSampleForComponents(
 export const createComponentsDir = async (dirPath: string, component: string) => {
   const componentPath = dirPath + `/${component}`;
 
-  await fsExtra.ensureDir(componentPath);
+  await fs.mkdir(componentPath, { recursive: true });
 };
 
 export const writeIndexFile = async ({
@@ -632,7 +631,7 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
     await fs.access(dirPath);
     return { ok: false };
   } catch {
-    await fsExtra.ensureDir(dirPath);
+    await fs.mkdir(dirPath, { recursive: true });
     return { ok: true, dirPath };
   }
 };

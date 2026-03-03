@@ -1,6 +1,5 @@
 import { Octokit } from '@octokit/rest';
 import fs from 'fs';
-import * as fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { execSync } from 'child_process';
 import dotenv from 'dotenv';
@@ -129,7 +128,7 @@ async function pushToRepo(repoName) {
   try {
     // Create temp directory
     console.log(`Creating temp directory: ${tempRoot}`);
-    fsExtra.ensureDirSync(tempRoot);
+    fs.mkdirSync(tempRoot, { recursive: true });
 
     console.log(`Cloning repo into temp directory: ${tempRoot}`);
     execSync(
@@ -178,7 +177,7 @@ async function pushToRepo(repoName) {
     for (const fileOrDir of filesAndDirs) {
       if (fileOrDir !== '.git') {
         console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
-        fsExtra.removeSync(path.join(tempDir, fileOrDir));
+        fs.rmSync(path.join(tempDir, fileOrDir), { recursive: true, force: true });
       }
     }
 
@@ -187,7 +186,7 @@ async function pushToRepo(repoName) {
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
-    fsExtra.copySync(templatePath, tempDir);
+    fs.cpSync(templatePath, tempDir, { recursive: true });
 
     // Initialize git and push to repo
     console.log(`Pushing to main branch`);
@@ -211,7 +210,7 @@ async function pushToRepo(repoName) {
   } finally {
     // Clean up temp directory
     console.log(`Cleaning up temp directory: ${tempDir}`);
-    fsExtra.removeSync(path.join(process.cwd(), '.temp'));
+    fs.rmSync(path.join(process.cwd(), '.temp'), { recursive: true, force: true });
   }
 }
 

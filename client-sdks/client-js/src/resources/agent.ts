@@ -8,7 +8,7 @@ import type {
   UIMessage,
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { v4 as uuid } from '@lukeed/uuid';
+
 import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
@@ -396,7 +396,7 @@ export class Agent extends BaseResource {
     const message: UIMessage = replaceLastMessage
       ? structuredClone(lastMessage)
       : {
-          id: uuid(),
+          id: crypto.randomUUID(),
           createdAt: getCurrentDate(),
           role: 'assistant',
           content: '',
@@ -456,7 +456,7 @@ export class Agent extends BaseResource {
         // changes. This is why we need to add a revision id to ensure that the message
         // is updated with SWR (without it, the changes get stuck in SWR and are not
         // forwarded to rendering):
-        revisionId: uuid(),
+        revisionId: crypto.randomUUID(),
       } as UIMessage;
 
       update({
@@ -787,7 +787,7 @@ export class Agent extends BaseResource {
     const message: UIMessage = replaceLastMessage
       ? structuredClone(lastMessage)
       : {
-          id: uuid(),
+          id: crypto.randomUUID(),
           createdAt: getCurrentDate(),
           role: 'assistant',
           content: '',
@@ -847,7 +847,7 @@ export class Agent extends BaseResource {
         // changes. This is why we need to add a revision id to ensure that the message
         // is updated with SWR (without it, the changes get stuck in SWR and are not
         // forwarded to rendering):
-        revisionId: uuid(),
+        revisionId: crypto.randomUUID(),
       } as UIMessage;
 
       update({

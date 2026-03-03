@@ -1,14 +1,17 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 
 vi.mock('execa', () => ({
   execa: vi.fn(),
 }));
 
-vi.mock('fs-extra', () => ({
-  default: {
-    readJSON: vi.fn(),
-  },
-}));
+vi.mock('node:fs/promises', async importOriginal => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    readFile: vi.fn(),
+  };
+});
 
 vi.mock('node:url', () => ({
   fileURLToPath: vi.fn(() => '/mock/path/to/package.json'),
@@ -21,9 +24,8 @@ describe('getVersionTag', () => {
 
   test('returns "beta" when CLI version matches beta dist-tag', async () => {
     const { execa } = await import('execa');
-    const fsExtra = (await import('fs-extra')).default;
 
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '1.0.0-beta.5' });
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: '1.0.0-beta.5' }) as any);
     vi.mocked(execa).mockResolvedValue({
       stdout: 'beta: 1.0.0-beta.5\nlatest: 0.18.6',
       stderr: '',
@@ -43,9 +45,8 @@ describe('getVersionTag', () => {
 
   test('returns "latest" when CLI version matches latest dist-tag', async () => {
     const { execa } = await import('execa');
-    const fsExtra = (await import('fs-extra')).default;
 
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '0.18.6' });
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: '0.18.6' }) as any);
     vi.mocked(execa).mockResolvedValue({
       stdout: 'beta: 1.0.0-beta.5\nlatest: 0.18.6',
       stderr: '',
@@ -65,9 +66,8 @@ describe('getVersionTag', () => {
 
   test('returns undefined when version does not match any dist-tag', async () => {
     const { execa } = await import('execa');
-    const fsExtra = (await import('fs-extra')).default;
 
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '0.0.0-local' });
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: '0.0.0-local' }) as any);
     vi.mocked(execa).mockResolvedValue({
       stdout: 'beta: 1.0.0-beta.5\nlatest: 0.18.6',
       stderr: '',
@@ -87,9 +87,8 @@ describe('getVersionTag', () => {
 
   test('returns undefined when npm command fails', async () => {
     const { execa } = await import('execa');
-    const fsExtra = (await import('fs-extra')).default;
 
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '1.0.0-beta.5' });
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: '1.0.0-beta.5' }) as any);
     vi.mocked(execa).mockRejectedValue(new Error('npm command failed'));
 
     const { getVersionTag } = await import('./utils');
@@ -99,9 +98,7 @@ describe('getVersionTag', () => {
   });
 
   test('returns undefined when package.json cannot be read', async () => {
-    const fsExtra = (await import('fs-extra')).default;
-
-    vi.mocked(fsExtra.readJSON).mockRejectedValue(new Error('File not found'));
+    vi.mocked(readFile).mockRejectedValue(new Error('File not found'));
 
     const { getVersionTag } = await import('./utils');
     const tag = await getVersionTag();

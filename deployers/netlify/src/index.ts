@@ -1,8 +1,8 @@
+import { rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
-import { move, writeJson } from 'fs-extra/esm';
 
 export class NetlifyDeployer extends Deployer {
   constructor() {
@@ -47,25 +47,30 @@ export class NetlifyDeployer extends Deployer {
 
     // Use Netlify Frameworks API config.json
     // https://docs.netlify.com/build/frameworks/frameworks-api/
-    await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
-      functions: {
-        directory: '.netlify/v1/functions',
-        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
-        included_files: ['.netlify/v1/functions/**'],
-      },
-      redirects: [
+    await writeFile(
+      join(outputDirectory, '.netlify', 'v1', 'config.json'),
+      JSON.stringify(
         {
-          force: true,
-          from: '/*',
-          to: '/.netlify/functions/api/:splat',
-          status: 200,
+          functions: {
+            directory: '.netlify/v1/functions',
+            node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
+            included_files: ['.netlify/v1/functions/**'],
+          },
+          redirects: [
+            {
+              force: true,
+              from: '/*',
+              to: '/.netlify/functions/api/:splat',
+              status: 200,
+            },
+          ],
         },
-      ],
-    });
+        null,
+        2,
+      ),
+    );
 
-    await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
-      overwrite: true,
-    });
+    await rename(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'));
 
     return result;
   }

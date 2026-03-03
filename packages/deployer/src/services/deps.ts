@@ -3,7 +3,6 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
-import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
@@ -92,7 +91,7 @@ export class Deps extends MastraBase {
 
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
     const packageJsonPath = path.join(dir, 'package.json');
-    const packageJson = await readJSON(packageJsonPath);
+    const packageJson = JSON.parse(await fsPromises.readFile(packageJsonPath, 'utf-8'));
 
     packageJson.pnpm = {
       ...packageJson.pnpm,
@@ -103,7 +102,7 @@ export class Deps extends MastraBase {
       },
     };
 
-    await writeJSON(packageJsonPath, packageJson, { spaces: 2 });
+    await fsPromises.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
@@ -169,7 +168,8 @@ export class Deps extends MastraBase {
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
-        await ensureFile(path.join(dir, 'yarn.lock'));
+        await fsPromises.mkdir(dirname(path.join(dir, 'yarn.lock')), { recursive: true });
+        await fsPromises.writeFile(path.join(dir, 'yarn.lock'), '', { flag: 'a' });
         if (architecture) {
           await this.writeYarnConfig(dir, architecture);
         }
@@ -229,7 +229,7 @@ export class Deps extends MastraBase {
         return 'No package.json file found in the current directory';
       }
 
-      const packageJson = await readJSON(packageJsonPath);
+      const packageJson = JSON.parse(await fsPromises.readFile(packageJsonPath, 'utf-8'));
       for (const dependency of dependencies) {
         if (!packageJson.dependencies || !packageJson.dependencies[dependency]) {
           return `Please install ${dependency} before running this command (${this.packageManager} install ${dependency})`;
@@ -246,7 +246,7 @@ export class Deps extends MastraBase {
   public async getProjectName() {
     try {
       const packageJsonPath = path.join(this.rootDir, 'package.json');
-      const pkg = await readJSON(packageJsonPath);
+      const pkg = JSON.parse(await fsPromises.readFile(packageJsonPath, 'utf-8'));
       return pkg.name;
     } catch (err) {
       throw err;
@@ -258,17 +258,17 @@ export class Deps extends MastraBase {
     const __dirname = dirname(__filename);
     const pkgJsonPath = path.join(__dirname, '..', '..', 'package.json');
 
-    const content = (await readJSON(pkgJsonPath)) as PackageJson;
+    const content = JSON.parse(await fsPromises.readFile(pkgJsonPath, 'utf-8')) as PackageJson;
     return content.version;
   }
 
   public async addScriptsToPackageJson(scripts: Record<string, string>) {
-    const packageJson = await readJSON('package.json');
+    const packageJson = JSON.parse(await fsPromises.readFile('package.json', 'utf-8'));
     packageJson.scripts = {
       ...packageJson.scripts,
       ...scripts,
     };
-    await writeJSON('package.json', packageJson, { spaces: 2 });
+    await fsPromises.writeFile('package.json', JSON.stringify(packageJson, null, 2));
   }
 }
 

@@ -1,10 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdir, writeFile, readFile, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
-import { ensureDir, writeFile, readFile } from 'fs-extra';
-import { copy } from 'fs-extra/esm';
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
 
 import { CloudDeployer } from './index.js';
@@ -21,12 +20,12 @@ vi.mock('./utils/logger.js', () => ({
   },
 }));
 
-// Mock fs-extra/esm copy for studio tests
-vi.mock('fs-extra/esm', async () => {
-  const actual = await vi.importActual('fs-extra/esm');
+// Mock node:fs/promises cp for studio tests
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual('node:fs/promises');
   return {
     ...actual,
-    copy: vi.fn().mockResolvedValue(undefined),
+    cp: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -46,8 +45,8 @@ describe('CloudDeployer Integration Tests', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'cloud-deployer-test-'));
     outputDir = join(tempDir, 'output');
 
-    await ensureDir(tempDir);
-    await ensureDir(outputDir);
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
   });
 
   afterEach(() => {
@@ -198,8 +197,8 @@ describe('CloudDeployer Integration Tests', () => {
   describe('Bundling Integration', () => {
     it('should handle bundle method with mocked parent implementation', async () => {
       const mastraDir = join(tempDir, 'mastra-project');
-      await ensureDir(mastraDir);
-      await ensureDir(join(mastraDir, 'src/mastra'));
+      await mkdir(mastraDir, { recursive: true });
+      await mkdir(join(mastraDir, 'src/mastra'), { recursive: true });
       await writeFile(join(mastraDir, 'src/mastra/index.ts'), 'export const mastra = {};');
 
       // Mock the parent _bundle method to avoid actual bundling
@@ -227,7 +226,7 @@ describe('CloudDeployer Integration Tests', () => {
 
   describe('Studio Bundling', () => {
     beforeEach(() => {
-      vi.mocked(copy).mockClear();
+      vi.mocked(cp).mockClear();
     });
 
     it('should copy studio assets when studio is true', async () => {
@@ -235,9 +234,9 @@ describe('CloudDeployer Integration Tests', () => {
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).toHaveBeenCalledTimes(1);
-      expect(copy).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
-        overwrite: true,
+      expect(cp).toHaveBeenCalledTimes(1);
+      expect(cp).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
+        recursive: true,
       });
     });
 
@@ -246,7 +245,7 @@ describe('CloudDeployer Integration Tests', () => {
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).not.toHaveBeenCalled();
+      expect(cp).not.toHaveBeenCalled();
     });
 
     it('should not copy studio assets when studio is not provided', async () => {
@@ -254,7 +253,7 @@ describe('CloudDeployer Integration Tests', () => {
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).not.toHaveBeenCalled();
+      expect(cp).not.toHaveBeenCalled();
     });
 
     it('should copy studio to correct output path', async () => {
@@ -262,8 +261,8 @@ describe('CloudDeployer Integration Tests', () => {
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'studio'), {
-        overwrite: true,
+      expect(cp).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'studio'), {
+        recursive: true,
       });
     });
   });

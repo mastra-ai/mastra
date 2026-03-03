@@ -1,7 +1,7 @@
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { InvalidArgumentError } from 'commander';
 import { execa } from 'execa';
-import fsExtra from 'fs-extra';
 import type { PackageManager } from '../utils/package-manager';
 import { EDITOR, isValidEditor } from './init/mcp-docs-server-install';
 import { areValidComponents, COMPONENTS, isValidLLMProvider, LLMProvider } from './init/utils';
@@ -84,7 +84,7 @@ export function shouldSkipDotenvLoading(): boolean {
 export async function getVersionTag(): Promise<string | undefined> {
   try {
     const pkgPath = fileURLToPath(import.meta.resolve('mastra/package.json'));
-    const json = await fsExtra.readJSON(pkgPath);
+    const json = JSON.parse(await readFile(pkgPath, 'utf-8'));
     const currentVersion = json.version;
 
     const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra'], {

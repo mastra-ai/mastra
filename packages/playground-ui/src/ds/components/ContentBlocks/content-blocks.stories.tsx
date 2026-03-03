@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { v4 as uuid } from '@lukeed/uuid';
 
 import { ContentBlocks } from './content-blocks';
 import { ContentBlock } from './content-block';
@@ -39,7 +38,7 @@ const Components = () => {
   const [items, setItems] = useState<Array<Item>>([]);
 
   const addButton = () => {
-    setItems(state => [...state, { id: uuid(), content: `item content number ${state.length + 1}` }]);
+    setItems(state => [...state, { id: crypto.randomUUID(), content: `item content number ${state.length + 1}` }]);
   };
 
   const handleItemChange = (index: number, newValue: Item) => {

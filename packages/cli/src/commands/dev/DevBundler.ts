@@ -1,10 +1,9 @@
-import { writeFile } from 'node:fs/promises';
+import { cp, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
@@ -50,8 +49,8 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-      overwrite: true,
+    await cp(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+      recursive: true,
     });
   }
 

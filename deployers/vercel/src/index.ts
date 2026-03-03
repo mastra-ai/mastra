@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { cp, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { Deployer } from '@mastra/deployer';
 import { injectStudioHtmlConfig } from '@mastra/deployer/build';
-import { copy, move } from 'fs-extra/esm';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
@@ -33,7 +33,7 @@ export class VercelDeployer extends Deployer {
       const staticDir = join(outputDirectory, '.vercel', 'output', 'static');
 
       try {
-        await copy(studioSource, staticDir, { overwrite: true });
+        await cp(studioSource, staticDir, { recursive: true });
       } catch (err) {
         throw new Error(
           `Failed to copy studio assets from "${studioSource}" to "${staticDir}": ${err instanceof Error ? err.message : err}`,
@@ -135,9 +135,7 @@ export const HEAD = handle(app);
 
     writeFileSync(join(outputDirectory, this.outputDir, '.vc-config.json'), JSON.stringify(vcConfig, null, 2));
 
-    await move(join(outputDirectory, '.vercel', 'output'), join(process.cwd(), '.vercel', 'output'), {
-      overwrite: true,
-    });
+    await rename(join(outputDirectory, '.vercel', 'output'), join(process.cwd(), '.vercel', 'output'));
 
     return result;
   }

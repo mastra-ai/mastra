@@ -1,6 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
-import { readFile } from 'fs-extra';
 import { resolveModule } from 'local-pkg';
 import type * as LocalPkgModule from 'local-pkg';
 import { rollup } from 'rollup';

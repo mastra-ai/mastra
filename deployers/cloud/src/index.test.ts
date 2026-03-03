@@ -8,7 +8,6 @@ import { getMastraEntryFile } from './utils/file.js';
 import { CloudDeployer } from './index.js';
 
 // Mock the dependencies
-vi.mock('fs-extra');
 vi.mock('./utils/file.js');
 vi.mock('./utils/deps.js');
 vi.mock('./utils/auth.js');

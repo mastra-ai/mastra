@@ -1,6 +1,6 @@
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
@@ -371,17 +371,22 @@ describe('bundleExternals', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), 'bundleExternals-test-' + Date.now());
-    await ensureDir(testDir);
+    await mkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
-    if (await pathExists(testDir)) {
-      await remove(testDir);
+    if (
+      await access(testDir).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      await rm(testDir, { recursive: true, force: true });
     }
   });
 
   async function createWorkspacePackageJson(packagePath: string, packageName: string) {
-    await ensureDir(packagePath);
+    await mkdir(packagePath, { recursive: true });
     await writeFile(
       join(packagePath, 'package.json'),
       JSON.stringify({
