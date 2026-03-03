@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react';
-import { Outlet, useLocation, useParams, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useMemo } from 'react';
+import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import {
   useLinkComponent,
@@ -111,6 +111,8 @@ function EditFormContent({
 function EditLayoutWrapper() {
   const { agentId } = useParams<{ agentId: string }>();
   const { navigate, paths } = useLinkComponent();
+  const routerNavigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
@@ -124,6 +126,15 @@ function EditLayoutWrapper() {
   const isCodeAgentOverride = codeAgent?.source === 'code';
   const agent = storedAgent ?? null;
   const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+
+  // Redirect code agent overrides from the Identity page to Instructions
+  const basePath = `/cms/agents/${agentId}/edit`;
+  const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
+  useEffect(() => {
+    if (isCodeAgentOverride && isOnIdentityPage) {
+      routerNavigate(`${basePath}/instruction-blocks`, { replace: true });
+    }
+  }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath]);
 
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
@@ -256,7 +267,7 @@ function EditLayoutWrapper() {
           onVersionSelect={handleVersionSelect}
           activeVersionId={activeVersionId}
           latestVersionId={latestVersion?.id}
-          hideVersionPanel={isCodeAgentOverride}
+          hideVersionPanel={isCodeAgentOverride && !storedAgent}
           isCodeAgentOverride={isCodeAgentOverride}
         />
       )}

@@ -675,7 +675,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       ...(skillsFormat && { skillsFormat }),
     } as any);
 
-    this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    // Only register in Mastra if no code-defined agent with this ID already exists.
+    // When a stored config is an override for a code agent, adding it would create a
+    // duplicate entry under a different key (agent.id vs config key), causing the list
+    // endpoint to show the agent as "stored" instead of "code".
+    const existingCodeAgent = (() => {
+      try {
+        return this.mastra?.getAgentById(storedAgent.id);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!existingCodeAgent || existingCodeAgent.source !== 'code') {
+      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
     return agent;

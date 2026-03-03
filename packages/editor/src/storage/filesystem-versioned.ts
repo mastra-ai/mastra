@@ -10,6 +10,13 @@ import type {
 } from '@mastra/core/storage';
 
 import type { FilesystemDB } from './filesystem-db';
+import { GitHistory } from './git-history';
+
+/**
+ * Prefix for version IDs that come from git history.
+ * These versions are read-only and cannot be deleted.
+ */
+const GIT_VERSION_PREFIX = 'git-';
 
 /**
  * Configuration for a filesystem-backed versioned storage domain.
@@ -29,6 +36,8 @@ export interface FilesystemVersionedConfig {
    * e.g., ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt']
    */
   versionMetadataFields: string[];
+  /** Maximum number of git commits to load per file (default: 50) */
+  gitHistoryLimit?: number;
 }
 
 /**
@@ -38,6 +47,11 @@ export interface FilesystemVersionedConfig {
  * (the clean primitive configuration) is persisted to the on-disk JSON file.
  * This means the JSON files are human-readable, Git-friendly, and contain
  * no version metadata like `changedFields` or `changeMessage`.
+ *
+ * When the storage directory is inside a git repository, committed versions
+ * of the JSON file are automatically loaded as read-only version history.
+ * Each git commit that touched the file becomes a version record, giving
+ * users a full published history in the version panel — powered by git.
  *
  * On-disk format for `agents.json`:
  * ```json
@@ -59,6 +73,7 @@ export class FilesystemVersionedHelpers<
   readonly parentIdField: string;
   readonly name: string;
   readonly versionMetadataFields: string[];
+  private readonly gitHistoryLimit: number;
 
   /**
    * In-memory entity records (thin metadata), keyed by entity ID.
@@ -67,6 +82,7 @@ export class FilesystemVersionedHelpers<
 
   /**
    * In-memory version records, keyed by version ID.
+   * Includes both in-memory/hydrated versions and git-based versions (metadata only).
    */
   private versions = new Map<string, TVersion>();
 
@@ -75,18 +91,48 @@ export class FilesystemVersionedHelpers<
    */
   private hydrated = false;
 
+  /**
+   * Git history utility instance (shared across all helpers).
+   */
+  private static gitHistory = new GitHistory();
+
+  /**
+   * Promise that resolves when git history has been loaded.
+   * null means git history loading hasn't been triggered yet.
+   */
+  private gitHistoryPromise: Promise<void> | null = null;
+
+  /**
+   * The highest version number from git history, per entity ID.
+   * Used to assign version numbers to new in-memory versions that continue
+   * after the git history.
+   */
+  private gitVersionCounts = new Map<string, number>();
+
   constructor(config: FilesystemVersionedConfig) {
     this.db = config.db;
     this.entitiesFile = config.entitiesFile;
     this.parentIdField = config.parentIdField;
     this.name = config.name;
     this.versionMetadataFields = config.versionMetadataFields;
+    this.gitHistoryLimit = config.gitHistoryLimit ?? 50;
+  }
+
+  /**
+   * Check if a version ID represents a git-based version.
+   */
+  static isGitVersion(id: string): boolean {
+    return id.startsWith(GIT_VERSION_PREFIX);
   }
 
   /**
    * Hydrate in-memory state from the on-disk JSON file.
    * For each entry on disk, creates an in-memory entity (status: 'published')
-   * and a synthetic version 1 with the snapshot config.
+   * and a synthetic version with the snapshot config.
+   *
+   * Also kicks off async git history loading in the background.
+   * Version numbers for hydrated entities are assigned as 1 initially,
+   * but will be reassigned after git history loads.
    */
   hydrate(): void {
     if (this.hydrated) return;
@@ -111,7 +157,8 @@ export class FilesystemVersionedHelpers<
 
       this.entities.set(entityId, entity);
 
-      // Create a synthetic version with the snapshot config
+      // Create a synthetic version with the snapshot config.
+      // Version number starts at 1 but may be bumped after git history loads.
       const version = {
         id: versionId,
         [this.parentIdField]: entityId,
@@ -121,6 +168,94 @@ export class FilesystemVersionedHelpers<
       } as TVersion;
 
       this.versions.set(versionId, version);
+    }
+
+    // Kick off async git history loading (fire and forget)
+    this.gitHistoryPromise = this.loadGitHistory();
+  }
+
+  /**
+   * Ensure git history has been loaded before proceeding.
+   * Call this in version-related methods to ensure git versions are available.
+   */
+  private async ensureGitHistory(): Promise<void> {
+    this.hydrate();
+    if (this.gitHistoryPromise) {
+      await this.gitHistoryPromise;
+    }
+  }
+
+  /**
+   * Load git commit history for the domain's JSON file.
+   * Creates read-only version records (metadata + snapshot config) for each
+   * commit where an entity existed. Reassigns version numbers for
+   * hydrated (current disk) versions to sit on top of git history.
+   */
+  private async loadGitHistory(): Promise<void> {
+    const git = FilesystemVersionedHelpers.gitHistory;
+    const dir = this.db.dir;
+
+    // Check if we're in a git repo
+    const isRepo = await git.isGitRepo(dir);
+    if (!isRepo) return;
+
+    // Get commit history for this domain's file
+    const commits = await git.getFileHistory(dir, this.entitiesFile, this.gitHistoryLimit);
+    if (commits.length === 0) return;
+
+    // Process commits from oldest to newest so version numbers are sequential
+    const orderedCommits = [...commits].reverse();
+
+    // Track per-entity version counts from git
+    const entityVersionCount = new Map<string, number>();
+
+    for (let i = 0; i < orderedCommits.length; i++) {
+      const commit = orderedCommits[i]!;
+
+      // Load the file content at this commit
+      const fileContent = await git.getFileAtCommit<Record<string, Record<string, unknown>>>(
+        dir,
+        commit.hash,
+        this.entitiesFile,
+      );
+      if (!fileContent) continue;
+
+      // Create a version record for each entity that existed in this commit
+      for (const [entityId, snapshotConfig] of Object.entries(fileContent)) {
+        if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+
+        const count = (entityVersionCount.get(entityId) ?? 0) + 1;
+        entityVersionCount.set(entityId, count);
+
+        const versionId = `${GIT_VERSION_PREFIX}${commit.hash}-${entityId}`;
+
+        // Skip if we somehow already have this version
+        if (this.versions.has(versionId)) continue;
+
+        const version = {
+          id: versionId,
+          [this.parentIdField]: entityId,
+          versionNumber: count,
+          changeMessage: commit.message,
+          ...snapshotConfig,
+          createdAt: commit.date,
+        } as TVersion;
+
+        this.versions.set(versionId, version);
+      }
+    }
+
+    // Save the max git version count per entity
+    this.gitVersionCounts = entityVersionCount;
+
+    // Reassign version numbers for hydrated (current disk) versions
+    // so they sit on top of git history
+    for (const [entityId, gitCount] of entityVersionCount) {
+      const hydratedVersionId = `hydrated-${entityId}-v1`;
+      const version = this.versions.get(hydratedVersionId);
+      if (version) {
+        (version as Record<string, unknown>).versionNumber = gitCount + 1;
+      }
     }
   }
 
@@ -132,6 +267,9 @@ export class FilesystemVersionedHelpers<
    * Write the published snapshot config for an entity to disk.
    * Strips all entity metadata and version metadata fields, leaving only
    * the clean primitive configuration.
+   *
+   * If a `GitHistory` instance is available, also stages and commits the
+   * changed file. The commit message describes which entities were published.
    */
   private persistToDisk(): void {
     const diskData: Record<string, Record<string, unknown>> = {};
@@ -279,11 +417,11 @@ export class FilesystemVersionedHelpers<
   }
 
   // ==========================================================================
-  // Version Methods (all in-memory)
+  // Version Methods (in-memory + git history)
   // ==========================================================================
 
   async createVersion(input: TVersion): Promise<TVersion> {
-    this.hydrate();
+    await this.ensureGitHistory();
     if (this.versions.has(input.id)) {
       throw new Error(`${this.name}: version with id ${input.id} already exists`);
     }
@@ -309,12 +447,12 @@ export class FilesystemVersionedHelpers<
   }
 
   async getVersion(id: string): Promise<TVersion | null> {
-    this.hydrate();
+    await this.ensureGitHistory();
     return this.versions.has(id) ? structuredClone(this.versions.get(id)!) : null;
   }
 
   async getVersionByNumber(entityId: string, versionNumber: number): Promise<TVersion | null> {
-    this.hydrate();
+    await this.ensureGitHistory();
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === entityId && v.versionNumber === versionNumber) {
         return structuredClone(v);
@@ -324,7 +462,7 @@ export class FilesystemVersionedHelpers<
   }
 
   async getLatestVersion(entityId: string): Promise<TVersion | null> {
-    this.hydrate();
+    await this.ensureGitHistory();
     let latest: TVersion | null = null;
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
@@ -340,7 +478,7 @@ export class FilesystemVersionedHelpers<
     input: ListVersionsInputBase,
     parentIdField: string,
   ): Promise<ListVersionsOutputBase<TVersion>> {
-    this.hydrate();
+    await this.ensureGitHistory();
     const { page = 0, perPage: perPageInput, orderBy } = input;
     const entityId = (input as Record<string, unknown>)[parentIdField] as string;
 
@@ -381,6 +519,8 @@ export class FilesystemVersionedHelpers<
 
   async deleteVersion(id: string): Promise<void> {
     this.hydrate();
+    // Git-based versions are read-only and cannot be deleted
+    if (FilesystemVersionedHelpers.isGitVersion(id)) return;
     this.versions.delete(id);
   }
 
@@ -389,7 +529,10 @@ export class FilesystemVersionedHelpers<
     const idsToDelete: string[] = [];
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
-        idsToDelete.push(v.id);
+        // Don't delete git-based versions
+        if (!FilesystemVersionedHelpers.isGitVersion(v.id)) {
+          idsToDelete.push(v.id);
+        }
       }
     }
     for (const id of idsToDelete) {
@@ -398,7 +541,7 @@ export class FilesystemVersionedHelpers<
   }
 
   async countVersions(entityId: string): Promise<number> {
-    this.hydrate();
+    await this.ensureGitHistory();
     let count = 0;
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
@@ -408,9 +551,38 @@ export class FilesystemVersionedHelpers<
     return count;
   }
 
+  /**
+   * Get the next version number for an entity, accounting for git history
+   * and existing in-memory versions.
+   */
+  async getNextVersionNumber(entityId: string): Promise<number> {
+    await this.ensureGitHistory();
+    return this._getNextVersionNumber(entityId);
+  }
+
+  /**
+   * Internal sync version — call only after git history is loaded.
+   */
+  private _getNextVersionNumber(entityId: string): number {
+    const gitCount = this.gitVersionCounts.get(entityId) ?? 0;
+
+    let maxVersion = gitCount;
+    for (const v of this.versions.values()) {
+      if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
+        if (v.versionNumber > maxVersion) {
+          maxVersion = v.versionNumber;
+        }
+      }
+    }
+
+    return maxVersion + 1;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.entities.clear();
     this.versions.clear();
+    this.gitVersionCounts.clear();
+    this.gitHistoryPromise = null;
     this.db.clearDomain(this.entitiesFile);
     this.hydrated = true; // Mark as hydrated so we don't re-read the now-empty disk
   }

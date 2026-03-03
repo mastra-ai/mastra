@@ -44,12 +44,14 @@ export interface FilesystemStoreConfig {
  */
 export class FilesystemStore extends MastraCompositeStore {
   #db: FilesystemDB;
+  #dir: string;
 
   constructor(config: FilesystemStoreConfig = {}) {
     const dir = resolve(config.dir ?? '.mastra-storage');
 
     super({ id: 'filesystem', name: 'FilesystemStore' });
 
+    this.#dir = dir;
     this.#db = new FilesystemDB(dir);
 
     // Only editor domains are provided; other domains (workflows, scores, memory, etc.)
@@ -64,7 +66,15 @@ export class FilesystemStore extends MastraCompositeStore {
       skills: new FilesystemSkillsStorage({ db: this.#db }),
     } as unknown as StorageDomains;
   }
+
+  /**
+   * The absolute path to the storage directory.
+   */
+  get dir(): string {
+    return this.#dir;
+  }
 }
 
 export { FilesystemDB } from './filesystem-db';
 export { FilesystemVersionedHelpers } from './filesystem-versioned';
+export { GitHistory } from './git-history';

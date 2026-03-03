@@ -8,7 +8,11 @@
       },
       {
         "type": "prompt_block",
-        "content": "test test test"
+        "content": "test test test 123"
+      },
+      {
+        "type": "prompt_block_ref",
+        "id": "test"
       }
     ],
     "model": {

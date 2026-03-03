@@ -11,6 +11,31 @@ import type { AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsO
 import type { FilesystemDB } from '../filesystem-db';
 import { FilesystemVersionedHelpers } from '../filesystem-versioned';
 
+/**
+ * Fields persisted for filesystem-stored agents.
+ * Only fields that `applyStoredOverrides` actually uses plus the
+ * minimum required by the storage schema (`name`, `model`).
+ */
+const PERSISTED_SNAPSHOT_FIELDS = new Set([
+  'name',
+  'instructions',
+  'model',
+  'tools',
+  'integrationTools',
+  'mcpClients',
+  'requestContextSchema',
+]);
+
+function stripUnusedFields<T extends Record<string, unknown>>(obj: T): T {
+  const result = {} as Record<string, unknown>;
+  for (const [key, value] of Object.entries(obj)) {
+    if (PERSISTED_SNAPSHOT_FIELDS.has(key)) {
+      result[key] = value;
+    }
+  }
+  return result as T;
+}
+
 export class FilesystemAgentsStorage extends AgentsStorage {
   private helpers: FilesystemVersionedHelpers<StorageAgentType, AgentVersion>;
 
@@ -53,13 +78,14 @@ export class FilesystemAgentsStorage extends AgentsStorage {
     await this.helpers.createEntity(agent.id, entity);
 
     const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const filtered = stripUnusedFields(snapshotConfig);
     const versionId = crypto.randomUUID();
     await this.createVersion({
       id: versionId,
       agentId: agent.id,
       versionNumber: 1,
-      ...snapshotConfig,
-      changedFields: Object.keys(snapshotConfig),
+      ...filtered,
+      changedFields: Object.keys(filtered),
       changeMessage: 'Initial version',
     } as CreateVersionInput);
 
@@ -88,7 +114,16 @@ export class FilesystemAgentsStorage extends AgentsStorage {
   }
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
-    return this.helpers.createVersion(input as AgentVersion);
+    const { id, agentId, versionNumber, changedFields, changeMessage, ...snapshotFields } = input;
+    const filtered = stripUnusedFields(snapshotFields as Record<string, unknown>);
+    return this.helpers.createVersion({
+      id,
+      agentId,
+      versionNumber,
+      changedFields,
+      changeMessage,
+      ...filtered,
+    } as AgentVersion);
   }
 
   async getVersion(id: string): Promise<AgentVersion | null> {

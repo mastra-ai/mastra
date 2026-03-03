@@ -428,6 +428,49 @@ describe('FilesystemStore', () => {
       expect(agentOnDisk.instructions).toBe('hi');
     });
 
+    it('only persists used agent fields, strips unused fields like workflows', async () => {
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'a1',
+          name: 'Filtered Agent',
+          instructions: 'hello',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: { myTool: { id: 'myTool' } },
+          workflows: { wf1: { id: 'wf1' } },
+          agents: { sub1: { id: 'sub1' } },
+          memory: { default: { lastMessages: 10 } },
+          scorers: { s1: { id: 's1' } },
+          skills: { sk1: { id: 'sk1' } },
+          workspace: { default: { id: 'ws1' } },
+          mcpClients: { mc1: { selectedTools: ['t1'] } },
+          requestContextSchema: { type: 'object' },
+        } as any,
+      });
+
+      const v1 = await agents!.getLatestVersion('a1');
+      await agents!.update({ id: 'a1', activeVersionId: v1!.id, status: 'published' });
+
+      const raw = JSON.parse(readFileSync(join(dir, 'agents.json'), 'utf-8'));
+      const agentOnDisk = raw['a1'];
+
+      // Should have persisted fields
+      expect(agentOnDisk.name).toBe('Filtered Agent');
+      expect(agentOnDisk.instructions).toBe('hello');
+      expect(agentOnDisk.model).toEqual({ provider: 'openai', name: 'gpt-4' });
+      expect(agentOnDisk.tools).toEqual({ myTool: { id: 'myTool' } });
+      expect(agentOnDisk.mcpClients).toEqual({ mc1: { selectedTools: ['t1'] } });
+      expect(agentOnDisk.requestContextSchema).toEqual({ type: 'object' });
+
+      // Should NOT have unused fields
+      expect(agentOnDisk.workflows).toBeUndefined();
+      expect(agentOnDisk.agents).toBeUndefined();
+      expect(agentOnDisk.memory).toBeUndefined();
+      expect(agentOnDisk.scorers).toBeUndefined();
+      expect(agentOnDisk.skills).toBeUndefined();
+      expect(agentOnDisk.workspace).toBeUndefined();
+    });
+
     it('no separate versions file on disk', async () => {
       const agents = await store.getStore('agents');
       await agents!.create({
