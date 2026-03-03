@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -95,6 +96,12 @@ export interface HarnessSubagent {
 
   /** Default model ID for this subagent type (e.g., "anthropic/claude-sonnet-4-20250514") */
   defaultModelId?: string;
+
+  /** Optional maximum number of steps for this subagent's execution loop */
+  maxSteps?: number;
+
+  /** Optional stop condition for this subagent's execution loop */
+  stopWhen?: LoopOptions['stopWhen'];
 }
 
 /**
@@ -125,7 +132,7 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   initialState?: Partial<z.infer<TState>>;
 
   /** Memory configuration (shared across all modes) */
-  memory?: MastraMemory;
+  memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
   modes: HarnessMode<TState>[];

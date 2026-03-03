@@ -12,6 +12,7 @@ export { handleMcpCommand } from './mcp.js';
 export { handleModeCommand } from './mode.js';
 export { handleSkillsCommand } from './skills.js';
 export { handleNewCommand } from './new.js';
+export { handleCloneCommand } from './clone.js';
 export { handleResourceCommand } from './resource.js';
 export { handleDiffCommand } from './diff.js';
 export { handleThreadsCommand } from './threads.js';
