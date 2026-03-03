@@ -13,7 +13,7 @@ This version has been adapted to meet the stable v1.5 contract for Mastra storag
 To verify compatibility:
 ```bash
 pnpm typecheck
-pnpm test test/storage/index.unit.test.ts
+pnpm test src/storage/index.unit.test.ts
 ```
 
 ## Running the test suite
@@ -24,10 +24,10 @@ Run unit tests that don't require a database connection:
 
 ```bash
 # Run all unit tests
-pnpm test test/storage/domains/utils.test.ts test/storage/index.unit.test.ts
+pnpm test src/storage/domains/utils.test.ts src/storage/index.unit.test.ts
 
 # Or run just the unit test file
-pnpm test test/storage/index.unit.test.ts
+pnpm test src/storage/index.unit.test.ts
 ```
 
 ### Integration tests (requires Docker)
@@ -66,7 +66,7 @@ If issues arise with this version, follow these steps to rollback:
 3. Verify the previous state:
    ```bash
    pnpm typecheck
-   pnpm test test/storage/index.unit.test.ts
+   pnpm test src/storage/index.unit.test.ts
    ```
 
 ## Notes

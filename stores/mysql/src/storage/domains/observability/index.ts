@@ -342,8 +342,13 @@ export class ObservabilityMySQL extends ObservabilityStorage {
                 details: { key },
               });
             }
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = ?`);
-            queryArgs.push(typeof value === 'string' ? value : JSON.stringify(value));
+            if (typeof value === 'string') {
+              conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+              queryArgs.push(value);
+            } else {
+              conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+              queryArgs.push(JSON.stringify(value));
+            }
           }
         }
 
