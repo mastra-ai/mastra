@@ -73,6 +73,20 @@ isOptional: true,
 description: "Maximum number of steps to run during execution.",
 },
 {
+name: "abortSignal",
+type: "AbortSignal",
+isOptional: true,
+description:
+"Signal to abort the network execution. When aborted, the network stops routing, cancels any in-progress sub-agent, tool, or workflow execution, and skips saving partial results to memory.",
+},
+{
+name: "onAbort",
+type: "(event: { primitiveType: string; primitiveId: string; iteration: number }) => void | Promise<void>",
+isOptional: true,
+description:
+"Callback fired when the network is aborted. Receives an event with the type and ID of the primitive that was executing when the abort occurred.",
+},
+{
 name: "memory",
 type: "object",
 isOptional: true,
@@ -412,3 +426,32 @@ When using structured output, additional chunk types are emitted:
 
 - `network-object`: Emitted with partial objects during streaming
 - `network-object-result`: Emitted with the final structured object
+
+## Aborting a Network
+
+Use `abortSignal` to cancel a running network. When aborted, the network stops routing, cancels any in-progress sub-agent, tool, or workflow execution, and does not save partial results to memory.
+
+```typescript
+const controller = new AbortController()
+
+// Abort after 30 seconds
+setTimeout(() => controller.abort(), 30_000)
+
+const stream = await agent.network('Research this topic thoroughly', {
+  abortSignal: controller.signal,
+  onAbort: ({ primitiveType, primitiveId, iteration }) => {
+    console.log(`Aborted ${primitiveType} "${primitiveId}" at iteration ${iteration}`)
+  },
+})
+
+for await (const chunk of stream) {
+  if (
+    chunk.type === 'routing-agent-abort' ||
+    chunk.type === 'agent-execution-abort' ||
+    chunk.type === 'tool-execution-abort' ||
+    chunk.type === 'workflow-execution-abort'
+  ) {
+    console.log('Network was aborted')
+  }
+}
+```
