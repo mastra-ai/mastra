@@ -609,6 +609,13 @@ describe('output-helpers', () => {
       expect(await applyTokenLimit('', 100)).toBe('');
     });
 
+    it('handles output with punctuation and symbols', async () => {
+      const output = 'alpha | beta ~ gamma\nline 1\nline 2\nline 3';
+      const result = await applyTokenLimit(output, 5);
+      expect(result).toBeDefined();
+      expect(result).toContain('[output truncated');
+    });
+
     it('truncates from the start by default (keeps the end)', async () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
