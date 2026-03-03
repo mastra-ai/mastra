@@ -1367,7 +1367,7 @@ a.learn-sidebar-item:hover {
   color: #027930 !important;
 }
 [data-theme='dark'] a.learn-sidebar-item:hover {
-  color: #1AFB6F !important;
+  color: #1afb6f !important;
 }
 
 /* Active sidebar item */
@@ -1376,7 +1376,7 @@ a.learn-sidebar-item.is-active {
   font-weight: 500;
 }
 [data-theme='dark'] a.learn-sidebar-item.is-active {
-  color: #1AFB6F !important;
+  color: #1afb6f !important;
 }
 
 .learn-sidebar ul,
