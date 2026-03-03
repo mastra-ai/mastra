@@ -75,6 +75,28 @@ export const mastra = new Mastra({
   </StepItem>
 </Steps>
 
+## Studio
+
+You can deploy [Studio](/docs/getting-started/studio) alongside your API by enabling the `studio` option. Studio is deployed as static assets served from Vercel's Edge CDN, so it doesn't consume function invocations.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { VercelDeployer } from '@mastra/deployer-vercel'
+
+export const mastra = new Mastra({
+  deployer: new VercelDeployer({
+    // highlight-next-line
+    studio: true,
+  }),
+})
+```
+
+After deploying, Studio is available at the root URL (`https://<your-project>.vercel.app/`) and the API remains at `/api/*`. Studio automatically connects to the API on the same origin — no additional environment variables are needed.
+
+:::warning
+Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
+:::
+
 ## Optional overrides
 
 The Vercel deployer supports configuration options that are written to the Vercel Output API function config. See the [`VercelDeployer` reference](/reference/deployer/vercel#constructor-options) for available options like `maxDuration`, `memory`, and `regions`.
