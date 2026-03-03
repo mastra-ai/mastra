@@ -1,0 +1,30 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:js": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "!dist/react.css"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.spec.ts",
+        "!**/*.stories.tsx"
+      ]
+    },
+    "build:css": {
+      "dependsOn": ["build:js"],
+      "outputs": ["dist/react.css"],
+      "inputs": ["src/ui/**/*.css", "package.json"]
+    },
+    "build": {
+      "dependsOn": ["build:js", "build:css"],
+      "inputs": ["package.json"]
+    }
+  }
+}

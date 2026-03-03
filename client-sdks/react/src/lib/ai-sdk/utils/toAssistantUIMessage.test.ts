@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import type { MastraUIMessage } from '../types';
 import { toAssistantUIMessage } from './toAssistantUIMessage';
-import { MastraUIMessage } from '../types';
-import { ThreadMessageLike } from '@assistant-ui/react';
 
 describe('toAssistantUIMessage', () => {
   describe('Basic message conversion', () => {

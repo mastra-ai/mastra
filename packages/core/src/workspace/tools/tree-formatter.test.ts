@@ -897,4 +897,56 @@ describe('tree-formatter', () => {
       expect(ourResult.tree).toBe(nativeResult);
     });
   });
+
+  // ===========================================================================
+  // ignoreFilter Option
+  // ===========================================================================
+  describe('ignoreFilter', () => {
+    it('should filter out files matched by ignoreFilter', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'generated.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/', {
+        ignoreFilter: (p: string) => p.includes('generated'),
+      });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('generated.ts');
+    });
+
+    it('should filter out directories matched by ignoreFilter', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'dist'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+
+      const result = await formatAsTree(filesystem, '/', {
+        ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
+      });
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('bundle.js');
+    });
+
+    it('should combine with other filters', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'dist'));
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.js'), '');
+
+      const result = await formatAsTree(filesystem, '/', {
+        exclude: 'node_modules',
+        ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
+      });
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('node_modules');
+    });
+  });
 });
