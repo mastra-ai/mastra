@@ -1,16 +1,3 @@
-import { useParams, useNavigate, Link } from 'react-router';
-import { useState, useMemo } from 'react';
-import { format } from 'date-fns';
-import {
-  AlertTriangleIcon,
-  ArrowRightToLineIcon,
-  Calendar1Icon,
-  DatabaseIcon,
-  Edit2Icon,
-  FileCodeIcon,
-  HistoryIcon,
-  Trash2Icon,
-} from 'lucide-react';
 import {
   MainContentLayout,
   MainContentContent,
@@ -23,7 +10,6 @@ import {
   AlertDialog,
   Button,
   Icon,
-  type DatasetItemVersion,
   Header,
   Breadcrumb,
   Crumb,
@@ -37,6 +23,20 @@ import {
   Column,
   Notice,
 } from '@mastra/playground-ui';
+import type { DatasetItemVersion } from '@mastra/playground-ui';
+import { format } from 'date-fns';
+import {
+  AlertTriangleIcon,
+  ArrowRightToLineIcon,
+  Calendar1Icon,
+  DatabaseIcon,
+  Edit2Icon,
+  FileCodeIcon,
+  HistoryIcon,
+  Trash2Icon,
+} from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -180,7 +180,7 @@ function DatasetItemPage() {
       await deleteItem.mutateAsync({ datasetId, itemId });
       toast.success('Item deleted successfully');
       setDeleteDialogOpen(false);
-      navigate(`/datasets/${datasetId}`);
+      void navigate(`/datasets/${datasetId}`);
     } catch (error) {
       toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -335,7 +335,7 @@ function DatasetItemPage() {
                     onClose={() => {}}
                     onVersionSelect={handleVersionSelect}
                     onCompareVersionsClick={(versionIds: string[]) => {
-                      navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
+                      void navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
                     }}
                     activeVersion={selectedVersion?.datasetVersion ?? null}
                   />
