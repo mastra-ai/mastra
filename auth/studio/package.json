@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/auth-better-auth",
-  "version": "1.0.1",
-  "description": "Mastra Better Auth integration - self-hosted authentication",
+  "name": "@mastra/auth-studio",
+  "version": "1.0.0",
+  "description": "Mastra Studio Auth integration — proxies authentication through Mastra shared API",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,24 +25,21 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "better-auth": "^1.4.18"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.7",
-    "hono": "^4.11.9",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",
@@ -52,7 +49,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "auth/better-auth"
+    "directory": "auth/studio"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
