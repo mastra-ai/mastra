@@ -1,6 +1,5 @@
 ---
 '@mastra/react': patch
-'@internal/playground': patch
 ---
 
 fix(@mastra/react): externalize @mastra/core instead of inlining it into dist
