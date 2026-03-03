@@ -34,6 +34,9 @@ export default defineConfig({
         return `${entryName}.js`;
       },
     },
+    rollupOptions: {
+      external: [/^@mastra\/core/],
+    },
     sourcemap: true,
     // Reduce bloat from legacy polyfills.
     target: 'esnext',
