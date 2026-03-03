@@ -2,8 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { CustomAvailableModel, HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
 import type { ProviderConfig } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
