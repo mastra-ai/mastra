@@ -189,6 +189,52 @@ export function normalizeStudioBase(studioBase: string): string {
 }
 
 /**
+ * Configuration values for Studio's index.html placeholder injection.
+ *
+ * Each value is the **exact JavaScript expression** that replaces the
+ * corresponding `'%%PLACEHOLDER%%'` token (including surrounding quotes).
+ *
+ * For literal strings pass `"'value'"` (quoted).
+ * For runtime expressions pass the raw JS, e.g. `"window.location.hostname"`.
+ */
+export interface StudioInjectionConfig {
+  host: string;
+  port: string;
+  protocol: string;
+  apiPrefix: string;
+  basePath: string;
+  hideCloudCta: string;
+  cloudApiEndpoint: string;
+  experimentalFeatures: string;
+  telemetryDisabled: string;
+  requestContextPresets: string;
+}
+
+/**
+ * Replace all `%%MASTRA_*%%` placeholders in the Studio `index.html` with the
+ * supplied configuration values.
+ *
+ * The `<base href>` tag and the `window.MASTRA_STUDIO_BASE_PATH` assignment
+ * use `basePath` as a plain string (no surrounding quotes), while all other
+ * placeholders replace `'%%TOKEN%%'` (with surrounding single-quotes in the
+ * source HTML) with the provided expression verbatim.
+ */
+export function injectStudioHtmlConfig(html: string, config: StudioInjectionConfig): string {
+  html = html.replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
+  html = html.replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
+  html = html.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
+  html = html.replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
+  html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
+  html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
+  html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
+  html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
+
+  return html;
+}
+
+/**
  * Check if a module is a Node.js builtin module
  * @param specifier - Module specifier
  * @returns True if it's a builtin module
