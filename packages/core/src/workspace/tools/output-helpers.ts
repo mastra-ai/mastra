@@ -4,7 +4,7 @@ import { getTiktoken } from '../../utils/tiktoken';
 export const DEFAULT_TAIL_LINES = 200;
 
 /** Default estimated token limit for tool output. Safety net on top of line-based tail. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 3_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
 
 // ---------------------------------------------------------------------------
 // ANSI stripping
