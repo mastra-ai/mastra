@@ -1,8 +1,8 @@
 import pMap from 'p-map';
 import z from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { InternalSpans } from '../../observability';
-import type { TracingContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -22,7 +22,8 @@ const getTraceStep = createStep({
     scorerId: z.string(),
   }),
   outputSchema: z.any(),
-  execute: async ({ inputData, tracingContext, mastra }) => {
+  execute: async ({ inputData, mastra, ...rest }) => {
+    const observabilityContext = resolveObservabilityContext(rest);
     const logger = mastra.getLogger();
     if (!logger) {
       console.warn(
@@ -71,7 +72,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target, tracingContext });
+          await runScorerOnTarget({ storage, scorer, target, ...observabilityContext });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -99,13 +100,12 @@ export async function runScorerOnTarget({
   storage,
   scorer,
   target,
-  tracingContext,
+  ...observabilityContext
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
-  tracingContext: TracingContext;
-}) {
+} & Partial<ObservabilityContext>) {
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -136,7 +136,7 @@ export async function runScorerOnTarget({
 
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
-    tracingContext,
+    ...observabilityContext,
     trace,
     targetSpan: span,
   });
@@ -148,6 +148,7 @@ export async function runScorerOnTarget({
       id: scorer.id,
       name: scorer.name || scorer.id,
       description: scorer.description,
+      hasJudge: !!scorer.judge,
     },
     traceId: target.traceId,
     spanId: target.spanId,
@@ -179,28 +180,19 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
 
 function buildScorerRun({
   scorerType,
-  tracingContext,
   trace,
   targetSpan,
+  ...observabilityContext
 }: {
   scorerType?: string;
-  tracingContext: TracingContext;
   trace: TraceRecord;
   targetSpan: SpanRecord;
-}) {
-  let runPayload: ScorerRun;
+} & Partial<ObservabilityContext>): ScorerRun {
   if (scorerType === 'agent') {
     const { input, output } = transformTraceToScorerInputAndOutput(trace);
-    runPayload = {
-      input,
-      output,
-    };
-  } else {
-    runPayload = { input: targetSpan.input, output: targetSpan.output };
+    return { input, output, ...observabilityContext };
   }
-
-  runPayload.tracingContext = tracingContext;
-  return runPayload;
+  return { input: targetSpan.input, output: targetSpan.output, ...observabilityContext };
 }
 
 async function attachScoreToSpan({

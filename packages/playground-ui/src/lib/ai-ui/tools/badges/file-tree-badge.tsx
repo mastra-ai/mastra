@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useAuiState } from '@assistant-ui/react';
 import { cn } from '@/lib/utils';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { IconButton } from '@/ds/components/IconButton';
@@ -10,20 +11,24 @@ import { MastraUIMessage } from '@mastra/react';
 import { useLinkComponent } from '@/lib/framework';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
-interface FilesystemInfo {
+// Matches the shape returned by workspace.getInfo()
+interface WorkspaceMetadata {
+  toolName?: string;
   id?: string;
   name?: string;
-  provider?: string;
-}
-
-interface WorkspaceInfo {
-  id?: string;
-  name?: string;
-}
-
-interface FilesystemMetadata {
-  workspace?: WorkspaceInfo;
-  filesystem?: FilesystemInfo;
+  status?: string;
+  filesystem?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
+  sandbox?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
 }
 
 interface ParsedArgs {
@@ -90,26 +95,32 @@ export const FileTreeBadge = ({
     argsDisplay.push(`ext: ${extension}`);
   }
 
-  // Get tree output from result
-  const treeOutput = result?.tree || '';
-  const summary = result?.summary || '';
-  // Check for error - could be result.error (tool error) or result itself being an Error-like object
-  const rawError =
-    result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null);
-  const errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
-  const hasError = !!errorMessage;
-  const hasResult = !!treeOutput || hasError;
+  // Get tree output + summary from result string: "tree\n\nsummary"
+  let treeOutput = '';
+  let summary = '';
+  if (typeof result === 'string' && result) {
+    const lastDoubleNewline = result.lastIndexOf('\n\n');
+    if (lastDoubleNewline !== -1) {
+      treeOutput = result.slice(0, lastDoubleNewline);
+      summary = result.slice(lastDoubleNewline + 2);
+    } else {
+      treeOutput = result;
+    }
+  }
+
+  const hasResult = !!treeOutput;
   const toolCalled = toolCalledProp ?? hasResult;
 
-  // Expand when there's an error so user can see it
-  useEffect(() => {
-    if (hasError) {
-      setIsCollapsed(false);
-    }
-  }, [hasError]);
+  // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
+  const message = useAuiState(s => s.message);
+  const workspaceMetadata = useMemo(() => {
+    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
+    return content.find(
+      part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
+    );
+  }, [message.content, toolCallId]);
 
-  // Extract filesystem metadata from result (if provided by the tool)
-  const fsMeta: FilesystemMetadata | undefined = result?.metadata;
+  const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
   const onCopy = () => {
     if (!treeOutput || isCopied) return;
@@ -133,17 +144,13 @@ export const FileTreeBadge = ({
         </button>
 
         {/* Filesystem badge - outside button to prevent overlap */}
-        {fsMeta?.filesystem?.name && (
+        {wsMeta?.filesystem && (
           <Link
-            href={
-              fsMeta.workspace?.id
-                ? `/workspaces/${fsMeta.workspace.id}?path=${encodeURIComponent(path)}`
-                : '/workspaces'
-            }
+            href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
             className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
-            <span>{fsMeta.filesystem.name}</span>
+            <span>{wsMeta.name || wsMeta.filesystem.name}</span>
           </Link>
         )}
 
@@ -171,15 +178,8 @@ export const FileTreeBadge = ({
             </div>
           )}
 
-          {/* Error state */}
-          {toolCalled && hasError && (
-            <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
-              <span className="text-xs text-red-400">{errorMessage}</span>
-            </div>
-          )}
-
           {/* Tree output panel - custom UI after tool has been called */}
-          {toolCalled && !hasError && treeOutput && (
+          {toolCalled && treeOutput && (
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
@@ -210,7 +210,7 @@ export const FileTreeBadge = ({
           )}
 
           {/* Loading state */}
-          {toolCalled && !hasResult && !hasError && (
+          {toolCalled && !hasResult && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
               <span className="text-xs text-neutral6">Loading...</span>
             </div>

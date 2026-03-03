@@ -91,6 +91,11 @@ export class MockMemory extends MastraMemory {
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
+    usage?: { tokens: number };
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
   }> {
     const memoryStorage = await this.getMemoryStore();
     // Extract only the StorageListMessagesInput properties, excluding threadConfig and vectorSearchString

@@ -1,0 +1,65 @@
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { McpManager } from '../mcp';
+import type { stateSchema } from '../schema';
+import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
+
+export function createDynamicTools(
+  mcpManager?: McpManager,
+  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>),
+) {
+  return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
+    const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
+    const state = ctx?.getState?.();
+
+    const modelId = state?.currentModelId;
+    const isAnthropicModel = modelId?.startsWith('anthropic/');
+    const isOpenAIModel = modelId?.startsWith('openai/');
+
+    // Filesystem, grep, glob, edit, write, execute_command, and process
+    // management tools are now provided by the workspace (see workspace.ts).
+    // Only tools without a workspace equivalent remain here.
+    const tools: Record<string, any> = {
+      request_sandbox_access: requestSandboxAccessTool,
+    };
+
+    if (hasTavilyKey()) {
+      tools.web_search = createWebSearchTool();
+      tools.web_extract = createWebExtractTool();
+    } else if (isAnthropicModel) {
+      const anthropic = createAnthropic({});
+      tools.web_search = anthropic.tools.webSearch_20250305();
+    } else if (isOpenAIModel) {
+      const openai = createOpenAI({});
+      tools.web_search = openai.tools.webSearch();
+    }
+
+    if (mcpManager) {
+      const mcpTools = mcpManager.getTools();
+      Object.assign(tools, mcpTools);
+    }
+
+    if (extraTools) {
+      const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
+      for (const [name, tool] of Object.entries(resolved)) {
+        if (!(name in tools)) {
+          tools[name] = tool;
+        }
+      }
+    }
+
+    // Remove tools that have a per-tool 'deny' policy so the model never sees them.
+    const permissionRules = state?.permissionRules;
+    if (permissionRules?.tools) {
+      for (const [name, policy] of Object.entries(permissionRules.tools)) {
+        if (policy === 'deny') {
+          delete tools[name];
+        }
+      }
+    }
+
+    return tools;
+  };
+}

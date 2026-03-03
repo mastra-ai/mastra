@@ -4,53 +4,104 @@ A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi
 
 ## Features
 
-- 🤖 **Multi-model support** - Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
-- 🔐 **OAuth login** - Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
-- 💾 **Persistent conversations** - Threads are saved per-project and resume automatically
-- 🛠️ **Coding tools** - View files, edit code, run shell commands
-- 📊 **Token tracking** - Monitor usage with persistent token counts per thread
-- 🎨 **Beautiful TUI** - Polished terminal interface with streaming responses
+- 🤖 **Multi-model support**: Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
+- 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
+- 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
+- 🛠️ **Coding tools**: View files, edit code, run shell commands
+- 📋 **Plan persistence**: Approved plans are saved as markdown files for future reference
+- 📊 **Token tracking**: Monitor usage with persistent token counts per thread
+- 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
 
 ## Installation
 
-Clone the repository and install its dependencies.
+Install `mastracode` globally with your package manager of choice.
 
 ```bash
-# Clone the repository
-git clone https://github.com/mastra-ai/mastra.git
-cd mastracode
-
-# Install dependencies
-pnpm install
+npm install -g mastracode
 ```
 
-To use Mastra Code, we recommend creating an alias in your shell configuration to launch it from any directory. You have to specify the absolute path to `main.ts` and then run it with `tsx`.
+If you prefer not to install packages globally, you can use `npx`:
 
 ```bash
-# Add this to your .bashrc, .zshrc, etc.
-alias mastracode="pnpm dlx tsx /absolute/path/mastracode/src/main.ts"
+npx mastracode
 ```
 
-Lastly, start the TUI and execute the `/login` command to authenticate with your AI providers.
+On first launch, an interactive onboarding wizard guides you through:
+
+1. **Authentication** — log in with your AI provider (Anthropic, OpenAI, etc.)
+2. **Model packs** — choose default models for each mode (build / plan / fast)
+3. **Observational Memory** — pick a model for OM (learns about you over time)
+4. **YOLO mode** — auto-approve tool calls, or require manual confirmation
+
+You can re-run setup anytime with `/setup`.
+
+## Prerequisites
+
+### Optional: `fd` for file autocomplete
+
+The `@` file autocomplete feature uses [`fd`](https://github.com/sharkdp/fd), a fast file finder that respects `.gitignore`. Without it, `@` autocomplete silently does nothing.
+
+Install with your package manager:
+
+```bash
+# macOS
+brew install fd
+
+# Ubuntu/Debian
+sudo apt install fd-find
+
+# Arch
+sudo pacman -S fd
+```
+
+On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` and `fdfind` automatically.
 
 ## Usage
 
 ### Starting a conversation
 
-Simply type your message and press Enter. The agent will respond with streaming text.
+Type your message and press Enter. The agent responds with streaming text.
+
+### `@` file references
+
+Type `@` followed by a partial filename to fuzzy-search project files and reference them in your message. This requires `fd` to be installed (see [Prerequisites](#prerequisites)).
+
+- `@setup` — fuzzy-matches files like `setup.ts`, `setup.py`, etc.
+- `@src/tui` — scoped search within a directory
+- `@"path with spaces"` — quoted form for paths containing spaces
+
+Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command    | Description                               |
-| ---------- | ----------------------------------------- |
-| `/new`     | Start a new conversation thread           |
-| `/threads` | List all threads for this project         |
-| `/models`  | Select a different AI model               |
-| `/cost`    | Show token usage for current conversation |
-| `/login`   | Authenticate with OAuth providers         |
-| `/logout`  | Log out from a provider                   |
-| `/help`    | Show available commands                   |
-| `/exit`    | Exit the TUI                              |
+| Command             | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `/new`              | Start a new conversation thread                  |
+| `/threads`          | List and switch between threads                  |
+| `/models`           | Switch/manage model packs (built-in/custom)      |
+| `/custom-providers` | Manage custom OpenAI-compatible providers/models |
+| `/mode`             | Switch agent mode                                |
+| `/subagents`        | Configure subagent model defaults                |
+| `/om`               | Configure Observational Memory models            |
+| `/think`            | Set thinking level (Anthropic)                   |
+| `/skills`           | List available skills                            |
+| `/diff`             | Show modified files or git diff                  |
+| `/name`             | Rename current thread                            |
+| `/cost`             | Show token usage and estimated costs             |
+| `/review`           | Review a GitHub pull request                     |
+| `/hooks`            | Show/reload configured hooks                     |
+| `/mcp`              | Show/reload MCP server connections               |
+| `/sandbox`          | Manage allowed paths (add/remove dirs)           |
+| `/permissions`      | View/manage tool approval permissions            |
+| `/settings`         | General settings (notifications, YOLO, etc.)     |
+| `/yolo`             | Toggle YOLO mode (auto-approve all tools)        |
+| `/resource`         | Show/switch resource ID (tag for sharing)        |
+| `/thread:tag-dir`   | Tag current thread with this directory           |
+| `/login`            | Authenticate with OAuth providers                |
+| `/logout`           | Log out from a provider                          |
+| `/setup`            | Re-run the interactive setup wizard              |
+| `/help`             | Show available commands                          |
+| `/exit`             | Exit the TUI                                     |
 
 ### Keyboard shortcuts
 
@@ -82,7 +133,45 @@ The SQLite database is stored in your system's application data directory:
 
 ### Authentication
 
-OAuth credentials are stored alongside the database in `auth.json`.
+For **Anthropic** models, mastracode supports two authentication methods:
+
+1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
+2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+
+When both are available, Claude Max OAuth takes priority.
+
+For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
+
+Credentials are stored alongside the database in `auth.json`.
+
+### Custom providers and models
+
+Use `/custom-providers` to manage OpenAI-compatible providers with:
+
+- provider `name`
+- provider `url`
+- optional provider `apiKey`
+- one or more custom model IDs per provider
+
+Once saved, provider models appear in existing selectors like `/models` and `/subagents` and can be selected like built-in models.
+
+Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
+
+### Plan persistence
+
+When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
+
+- **macOS**: `~/Library/Application Support/mastracode/plans/<resourceId>/`
+- **Linux**: `~/.local/share/mastracode/plans/<resourceId>/`
+- **Windows**: `%APPDATA%/mastracode/plans/<resourceId>/`
+
+Files are named `<timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
+
+To save plans to a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+
+```bash
+export MASTRA_PLANS_DIR=.mastracode/plans
+```
 
 ## Architecture
 
@@ -130,13 +219,6 @@ pnpm typecheck
 # Build
 pnpm build
 ```
-
-## Roadmap
-
-- [ ] Tool approval UI for dangerous operations
-- [ ] Streaming tool output
-- [ ] More tools (search, grep, etc.)
-- [ ] Multi-agent collaboration (network mode)
 
 ## Credits
 

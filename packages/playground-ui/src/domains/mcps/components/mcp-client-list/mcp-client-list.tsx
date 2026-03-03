@@ -7,7 +7,7 @@ import type { StoredMCPServerConfig } from '@mastra/client-js';
 import { Icon, McpServerIcon } from '@/ds/icons';
 import { Button } from '@/ds/components/Button';
 import { Section } from '@/ds/components/Section';
-import { Entity, EntityContent, EntityDescription, EntityName, EntityIcon } from '@/ds/components/Entity';
+import { Entity, EntityContent, EntityDescription, EntityName } from '@/ds/components/Entity';
 import { SideDialog } from '@/ds/components/SideDialog';
 
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
@@ -57,9 +57,20 @@ export function MCPClientList() {
     name: string;
     description?: string;
     servers: Record<string, StoredMCPServerConfig>;
+    selectedTools: Record<string, { description?: string }>;
   }) => {
     const current = form.getValues('mcpClients') ?? [];
     form.setValue('mcpClients', [...current, config]);
+
+    if (Object.keys(config.selectedTools).length > 0) {
+      const currentTools = form.getValues('tools') ?? {};
+      const next = { ...currentTools };
+      for (const [name, toolConfig] of Object.entries(config.selectedTools)) {
+        next[name] = { description: toolConfig.description };
+      }
+      form.setValue('tools', next);
+    }
+
     setIsCreateOpen(false);
   };
 
@@ -67,9 +78,25 @@ export function MCPClientList() {
     name: string;
     description?: string;
     servers: Record<string, StoredMCPServerConfig>;
+    selectedTools: Record<string, { description?: string }>;
   }) => {
     if (viewIndex === null) return;
     const current = form.getValues('mcpClients') ?? [];
+    const oldClient = current[viewIndex];
+
+    const currentTools = form.getValues('tools') ?? {};
+    const next = { ...currentTools };
+
+    // Remove old MCP tools
+    for (const name of Object.keys(oldClient?.selectedTools ?? {})) {
+      delete next[name];
+    }
+    // Add new MCP tools
+    for (const [name, toolConfig] of Object.entries(config.selectedTools)) {
+      next[name] = { description: toolConfig.description };
+    }
+    form.setValue('tools', next);
+
     const updated = [...current];
     updated[viewIndex] = { ...updated[viewIndex], ...config };
     form.setValue('mcpClients', updated);
@@ -79,6 +106,15 @@ export function MCPClientList() {
   const handleRemove = (index: number) => {
     const current = form.getValues('mcpClients') ?? [];
     const removed = current[index];
+
+    if (removed?.selectedTools) {
+      const currentTools = form.getValues('tools') ?? {};
+      const next = { ...currentTools };
+      for (const name of Object.keys(removed.selectedTools)) {
+        delete next[name];
+      }
+      form.setValue('tools', next);
+    }
 
     // Track persisted clients for deletion on save
     if (removed?.id) {
@@ -207,8 +243,9 @@ export function MCPClientList() {
           <MCPClientCreateContent
             readOnly={isViewingPersisted}
             initialValues={viewFormValues}
-            onAdd={isViewingPersisted ? undefined : handleUpdate}
-            submitLabel={isViewingPersisted ? undefined : 'Update MCP Client'}
+            initialSelectedTools={viewingClient?.selectedTools}
+            onAdd={readOnly ? undefined : handleUpdate}
+            submitLabel={isViewingPersisted ? 'Update tool selection' : 'Update MCP Client'}
           />
         )}
       </SideDialog>

@@ -1,167 +1,170 @@
 /**
- * MCPManager — high-level orchestration for MCP server connections.
+ * MCP manager — orchestrates MCP server connections using MCPClient directly.
  * Created once at startup, provides tools from connected MCP servers.
- *
- * Uses Mastra's MCPClient which handles per-server connections and
- * namespaces tools as serverName_toolName automatically.
  */
 
-import { MCPClient } from "@mastra/mcp"
-import type { McpConfig, McpServerStatus } from "./types.js"
-import {
-	loadMcpConfig,
-	getProjectMcpPath,
-	getGlobalMcpPath,
-	getClaudeSettingsPath,
-} from "./config.js"
+import { MCPClient } from '@mastra/mcp';
+import type { MastraMCPServerDefinition } from '@mastra/mcp';
+import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
+import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
-export class MCPManager {
-	private config: McpConfig
-	private projectDir: string
-	private client: MCPClient | null = null
-	private tools: Record<string, any> = {}
-	private serverStatuses: Map<string, McpServerStatus> = new Map()
-	private initialized = false
+/** Public interface for the MCP manager returned by createMcpManager(). */
+export interface McpManager {
+  /** Connect to all configured MCP servers and collect their tools. */
+  init(): Promise<void>;
+  /** Disconnect all servers, reload config from disk, reconnect. */
+  reload(): Promise<void>;
+  /** Disconnect from all MCP servers and clean up. */
+  disconnect(): Promise<void>;
+  /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
+  getTools(): Record<string, any>;
+  /** Check if any MCP servers are configured (or skipped). */
+  hasServers(): boolean;
+  /** Get status of all servers. */
+  getServerStatuses(): McpServerStatus[];
+  /** Get servers that were skipped during config loading. */
+  getSkippedServers(): McpSkippedServer[];
+  /** Get config file paths for display. */
+  getConfigPaths(): { project: string; global: string; claude: string };
+  /** Get the merged config. */
+  getConfig(): McpConfig;
+}
 
-	constructor(projectDir: string) {
-		this.projectDir = projectDir
-		this.config = loadMcpConfig(projectDir)
-	}
+function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
+  return 'url' in cfg ? 'http' : 'stdio';
+}
 
-	/**
-	 * Connect to all configured MCP servers and collect their tools.
-	 * Errors on individual servers are caught and logged, not thrown.
-	 */
-	async init(): Promise<void> {
-		if (this.initialized) return
+/**
+ * Create an MCP manager that wraps MCPClient with config-file discovery
+ * and per-server status tracking.
+ */
+export function createMcpManager(projectDir: string): McpManager {
+  let config = loadMcpConfig(projectDir);
+  let client: MCPClient | null = null;
+  let tools: Record<string, any> = {};
+  let serverStatuses = new Map<string, McpServerStatus>();
+  let initialized = false;
 
-		const servers = this.config.mcpServers
-		if (!servers || Object.keys(servers).length === 0) {
-			this.initialized = true
-			return
-		}
+  function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
+    const defs: Record<string, MastraMCPServerDefinition> = {};
+    for (const [name, cfg] of Object.entries(servers)) {
+      if ('url' in cfg) {
+        const httpCfg = cfg as McpHttpServerConfig;
+        defs[name] = {
+          url: new URL(httpCfg.url),
+          requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
+        };
+      } else {
+        defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env };
+      }
+    }
+    return defs;
+  }
 
-		// Build server definitions for MCPClient
-		const serverDefs: Record<
-			string,
-			{ command: string; args?: string[]; env?: Record<string, string> }
-		> = {}
-		for (const [name, cfg] of Object.entries(servers)) {
-			serverDefs[name] = {
-				command: cfg.command,
-				args: cfg.args,
-				env: cfg.env,
-			}
-		}
+  async function connectAndCollectTools(): Promise<void> {
+    const servers = config.mcpServers;
+    if (!servers || Object.keys(servers).length === 0) {
+      return;
+    }
 
-		try {
-			this.client = new MCPClient({
-				id: "mastra-code-mcp",
-				servers: serverDefs,
-			})
+    client = new MCPClient({
+      id: 'mastra-code-mcp',
+      servers: buildServerDefs(servers),
+    });
 
-			// listTools() connects to servers and returns namespaced tools
-			// Tool names are serverName_toolName (handled by MCPClient)
-			this.tools = await this.client.listTools()
+    // MCPClient.listTools() uses Promise.all internally — a single server
+    // failure throws for all. We call it once wrapped in try/catch and
+    // derive per-server status from tool name prefixes (serverName_toolName).
+    const serverNames = Object.keys(servers);
 
-			// Derive per-server status from tool names
-			for (const name of Object.keys(servers)) {
-				const prefix = `${name}_`
-				const serverToolNames = Object.keys(this.tools).filter((t) =>
-					t.startsWith(prefix),
-				)
-				this.serverStatuses.set(name, {
-					name,
-					connected: true,
-					toolCount: serverToolNames.length,
-					toolNames: serverToolNames,
-				})
-			}
-		} catch (error) {
-			const errMsg = error instanceof Error ? error.message : String(error)
+    try {
+      tools = await client.listTools();
 
-			// If MCPClient throws at top level, mark all servers as failed
-			for (const name of Object.keys(servers)) {
-				this.serverStatuses.set(name, {
-					name,
-					connected: false,
-					toolCount: 0,
-					toolNames: [],
-					error: errMsg,
-				})
-			}
-		}
+      for (const name of serverNames) {
+        const prefix = `${name}_`;
+        const serverToolNames = Object.keys(tools).filter(t => t.startsWith(prefix));
+        serverStatuses.set(name, {
+          name,
+          connected: true,
+          toolCount: serverToolNames.length,
+          toolNames: serverToolNames,
+          transport: getTransport(servers[name]!),
+        });
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
 
-		this.initialized = true
-	}
+      for (const name of serverNames) {
+        serverStatuses.set(name, {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: getTransport(servers[name]!),
+          error: errMsg,
+        });
+      }
+    }
+  }
 
-	/**
-	 * Disconnect all servers, reload config from disk, reconnect.
-	 */
-	async reload(): Promise<void> {
-		await this.disconnect()
-		this.config = loadMcpConfig(this.projectDir)
-		this.tools = {}
-		this.serverStatuses.clear()
-		this.initialized = false
-		await this.init()
-	}
+  async function disconnect(): Promise<void> {
+    if (client) {
+      try {
+        await client.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+      client = null;
+    }
+  }
 
-	/**
-	 * Disconnect from all MCP servers and clean up.
-	 */
-	async disconnect(): Promise<void> {
-		if (this.client) {
-			try {
-				await this.client.disconnect()
-			} catch {
-				// Ignore disconnect errors
-			}
-			this.client = null
-		}
-	}
+  return {
+    async init() {
+      if (initialized) return;
+      await connectAndCollectTools();
+      initialized = true;
+    },
 
-	/**
-	 * Get all tools from connected MCP servers.
-	 * Returns a Record<string, ToolAction> compatible with Mastra's agent tools.
-	 * Tool names are serverName_toolName (namespaced by MCPClient).
-	 */
-	getTools(): Record<string, any> {
-		return { ...this.tools }
-	}
+    async reload() {
+      await disconnect();
+      config = loadMcpConfig(projectDir);
+      tools = {};
+      serverStatuses = new Map();
+      initialized = false;
+      await connectAndCollectTools();
+      initialized = true;
+    },
 
-	/**
-	 * Check if any MCP servers are configured.
-	 */
-	hasServers(): boolean {
-		return (
-			this.config.mcpServers !== undefined &&
-			Object.keys(this.config.mcpServers).length > 0
-		)
-	}
+    disconnect,
 
-	/**
-	 * Get status of all servers.
-	 */
-	getServerStatuses(): McpServerStatus[] {
-		return Array.from(this.serverStatuses.values())
-	}
+    getTools() {
+      return { ...tools };
+    },
 
-	/**
-	 * Get config file paths for display.
-	 */
-	getConfigPaths(): { project: string; global: string; claude: string } {
-		return {
-			project: getProjectMcpPath(this.projectDir),
-			global: getGlobalMcpPath(),
-			claude: getClaudeSettingsPath(this.projectDir),
-		}
-	}
+    hasServers() {
+      const hasConfigured = config.mcpServers !== undefined && Object.keys(config.mcpServers).length > 0;
+      const hasSkipped = config.skippedServers !== undefined && config.skippedServers.length > 0;
+      return hasConfigured || hasSkipped;
+    },
 
-	/**
-	 * Get the merged config.
-	 */
-	getConfig(): McpConfig {
-		return this.config
-	}
+    getServerStatuses() {
+      return Array.from(serverStatuses.values());
+    },
+
+    getSkippedServers() {
+      return [...(config.skippedServers ?? [])];
+    },
+
+    getConfigPaths() {
+      return {
+        project: getProjectMcpPath(projectDir),
+        global: getGlobalMcpPath(),
+        claude: getClaudeSettingsPath(projectDir),
+      };
+    },
+
+    getConfig() {
+      return config;
+    },
+  };
 }

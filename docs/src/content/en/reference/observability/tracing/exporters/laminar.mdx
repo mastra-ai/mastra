@@ -13,7 +13,7 @@ Sends Tracing data to Laminar via OTLP/HTTP (protobuf).
 
 ## Constructor
 
-```typescript
+```typescript prettier:false
 new LaminarExporter(config?: LaminarExporterConfig)
 ```
 
@@ -21,79 +21,80 @@ new LaminarExporter(config?: LaminarExporterConfig)
 
 ```typescript
 interface LaminarExporterConfig extends BaseExporterConfig {
-  apiKey?: string;
-  baseUrl?: string;
-  endpoint?: string;
-  headers?: Record<string, string>;
-  realtime?: boolean;
-  disableBatch?: boolean;
-  batchSize?: number;
-  timeoutMillis?: number;
+  apiKey?: string
+  baseUrl?: string
+  endpoint?: string
+  headers?: Record<string, string>
+  realtime?: boolean
+  disableBatch?: boolean
+  batchSize?: number
+  timeoutMillis?: number
 }
 ```
 
 Extends `BaseExporterConfig`, which includes:
+
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "baseUrl",
-      type: "string",
-      description: "Laminar base URL (used for trace exports + scoring). Falls back to LMNR_BASE_URL env var (default: https://api.lmnr.ai).",
-      required: false,
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "OTLP/HTTP traces endpoint (ends with /v1/traces). Falls back to LAMINAR_ENDPOINT env var (default: `${baseUrl}/v1/traces`).",
-      required: false,
-    },
-    {
-      name: "headers",
-      type: "Record<string, string>",
-      description: "Additional headers to include in OTLP requests (merged with Authorization).",
-      required: false,
-    },
-    {
-      name: "realtime",
-      type: "boolean",
-      description: "Flush after each span for immediate visibility (default: false).",
-      required: false,
-    },
-    {
-      name: "disableBatch",
-      type: "boolean",
-      description: "Disable batching (SimpleSpanProcessor). Default: false.",
-      required: false,
-    },
-    {
-      name: "batchSize",
-      type: "number",
-      description: "Max spans per batch (BatchSpanProcessor). Default: 512.",
-      required: false,
-    },
-    {
-      name: "timeoutMillis",
-      type: "number",
-      description: "OTLP export timeout in milliseconds. Default: 30000.",
-      required: false,
-    },
-  ]}
+{
+name: "apiKey",
+type: "string",
+description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
+required: false,
+},
+{
+name: "baseUrl",
+type: "string",
+description: "Laminar base URL (used for trace exports + scoring). Falls back to LMNR_BASE_URL env var (default: https://api.lmnr.ai).",
+required: false,
+},
+{
+name: "endpoint",
+type: "string",
+description: "OTLP/HTTP traces endpoint (ends with /v1/traces). Falls back to LAMINAR_ENDPOINT env var (default: `${baseUrl}/v1/traces`).",
+required: false,
+},
+{
+name: "headers",
+type: "Record<string, string>",
+description: "Additional headers to include in OTLP requests (merged with Authorization).",
+required: false,
+},
+{
+name: "realtime",
+type: "boolean",
+description: "Flush after each span for immediate visibility (default: false).",
+required: false,
+},
+{
+name: "disableBatch",
+type: "boolean",
+description: "Disable batching (SimpleSpanProcessor). Default: false.",
+required: false,
+},
+{
+name: "batchSize",
+type: "number",
+description: "Max spans per batch (BatchSpanProcessor). Default: 512.",
+required: false,
+},
+{
+name: "timeoutMillis",
+type: "number",
+description: "OTLP export timeout in milliseconds. Default: 30000.",
+required: false,
+},
+]}
 />
 
 ## Methods
 
 ### exportTracingEvent
 
-```typescript
+```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -101,7 +102,7 @@ Exports a tracing event to Laminar.
 
 ### flush
 
-```typescript
+```typescript prettier:false
 async flush(): Promise<void>
 ```
 
@@ -109,7 +110,7 @@ Force flushes any buffered spans to Laminar without shutting down the exporter. 
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -120,20 +121,20 @@ Flushes pending data and shuts down the exporter.
 ### Zero-Config (using environment variables)
 
 ```typescript
-import { LaminarExporter } from "@mastra/laminar";
+import { LaminarExporter } from '@mastra/laminar'
 
 // Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT
-const exporter = new LaminarExporter();
+const exporter = new LaminarExporter()
 ```
 
 ### Explicit Configuration
 
 ```typescript
-import { LaminarExporter } from "@mastra/laminar";
+import { LaminarExporter } from '@mastra/laminar'
 
 const exporter = new LaminarExporter({
   apiKey: process.env.LMNR_PROJECT_API_KEY,
-  baseUrl: "https://api.lmnr.ai",
+  baseUrl: 'https://api.lmnr.ai',
   realtime: true,
-});
+})
 ```

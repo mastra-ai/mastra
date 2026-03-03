@@ -2,27 +2,13 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import { createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
-
-/**
- * Check if a ReadableStreamDefaultController is open and can accept data.
- *
- * Note: While the ReadableStream spec indicates desiredSize can be:
- * - positive (ready), 0 (full but open), or null (closed/errored),
- * our empirical testing shows that after controller.close(), desiredSize becomes 0.
- * Therefore, we treat both 0 and null as closed states to prevent
- * "Invalid state: Controller is already closed" errors.
- *
- * @param controller - The ReadableStreamDefaultController to check
- * @returns true if the controller is open and can accept data
- */
-export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
-  return controller.desiredSize !== 0 && controller.desiredSize !== null;
-}
 
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
@@ -64,7 +50,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
           messageList.add(message, 'response');
         }
-        void controller.enqueue(chunk);
+        safeEnqueue(controller, chunk);
       };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
@@ -111,7 +97,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       };
 
       if (!resumeContext) {
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'start',
           runId,
           from: ChunkFrom.AGENT,
@@ -135,13 +121,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
           });
 
@@ -151,7 +137,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
-          controller.enqueue({
+          safeEnqueue(controller, {
             type: 'error',
             runId,
             from: ChunkFrom.AGENT,
@@ -167,7 +153,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           await agenticLoopWorkflow.deleteWorkflowRunById(runId);
         }
 
-        controller.close();
+        safeClose(controller);
         return;
       }
 
@@ -176,7 +162,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved
       // The tripwire/abort status is communicated through the stepResult.reason
-      controller.enqueue({
+      safeEnqueue(controller, {
         type: 'finish',
         runId,
         from: ChunkFrom.AGENT,
@@ -190,7 +176,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         },
       });
 
-      controller.close();
+      safeClose(controller);
     },
   });
 }

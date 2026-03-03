@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router';
-import { Database, PlayCircle } from 'lucide-react';
+import { Database } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -10,7 +10,7 @@ import {
   useDataset,
   useDatasetExperiment,
   useDatasetExperimentResults,
-  ExperimentResultsListAndDetails,
+  ExperimentPageContent,
   ExperimentPageHeader,
 } from '@mastra/playground-ui';
 
@@ -18,16 +18,23 @@ function DatasetExperimentPage() {
   const { datasetId, experimentId } = useParams<{ datasetId: string; experimentId: string }>();
 
   const { data: dataset } = useDataset(datasetId ?? '');
+
   const {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
   } = useDatasetExperiment(datasetId!, experimentId!);
+
   const { data: resultsData, isLoading: resultsLoading } = useDatasetExperimentResults({
     datasetId: datasetId!,
     experimentId: experimentId!,
     experimentStatus: experiment?.status,
   });
+
+  if (!datasetId || !experimentId) {
+    return null;
+  }
+
   if (experimentLoading) {
     return (
       <MainContentLayout>
@@ -48,7 +55,6 @@ function DatasetExperimentPage() {
     );
   }
 
-  // Transform results for the table
   const results = resultsData?.results ?? [];
 
   return (
@@ -62,21 +68,18 @@ function DatasetExperimentPage() {
             Datasets
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name || datasetId}
+            {dataset?.name}
           </Crumb>
-          <Crumb isCurrent>
-            <Icon>
-              <PlayCircle />
-            </Icon>
+          <Crumb isCurrent as="span">
             Experiment
           </Crumb>
         </Breadcrumb>
       </Header>
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
+        <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentResultsListAndDetails results={results} isLoading={resultsLoading} />
+          <ExperimentPageContent experimentId={experimentId!} results={results} isLoading={resultsLoading} />
         </div>
       </div>
     </MainContentLayout>

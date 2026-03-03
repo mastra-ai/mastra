@@ -30,14 +30,15 @@ import type {
   StorageDefaultOptions,
   StorageModelConfig,
   AgentInstructionBlock,
+  StoredProcessorGraph,
   StorageWorkspaceRef,
 } from '@mastra/core/storage';
 
 import { RequestContext } from '@mastra/core/request-context';
-import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
+import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
@@ -348,29 +349,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
 
-    // Input processors (array): accumulate by concatenating all matching variants
+    // Input processors (graph): first-match from conditional variants, then hydrate
+    const processorProviders = this.editor.getProcessorProviders();
+    const hydrationCtx = { providers: processorProviders, mastra: this.mastra, logger: this.logger };
+
     const inputProcessors = hasConditionalInputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.inputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.inputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredInputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'input', hydrationCtx);
         }
-      : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.inputProcessors as StoredProcessorGraph | undefined, 'input', hydrationCtx);
 
-    // Output processors (array): accumulate by concatenating all matching variants
+    // Output processors (graph): first-match from conditional variants, then hydrate
     const outputProcessors = hasConditionalOutputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.outputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.outputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredOutputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'output', hydrationCtx);
         }
-      : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.outputProcessors as StoredProcessorGraph | undefined, 'output', hydrationCtx);
 
     // Model (object): accumulate by merging config from all matching variants
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
@@ -916,50 +920,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
   }
 
-  private findProcessor(processorKey: string): Processor<any> | undefined {
-    if (!this.mastra) return undefined;
-
-    try {
-      return this.mastra.getProcessor(processorKey);
-    } catch {
-      try {
-        return this.mastra.getProcessorById(processorKey);
-      } catch {
-        this.logger?.warn(`Processor "${processorKey}" referenced in stored agent but not registered in Mastra`);
-        return undefined;
-      }
-    }
-  }
-
-  private resolveStoredInputProcessors(storedProcessors?: string[]): InputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: InputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (processor && (processor.processInput || processor.processInputStep)) {
-        resolved.push(processor as InputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
-  private resolveStoredOutputProcessors(storedProcessors?: string[]): OutputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: OutputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (
-        processor &&
-        (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)
-      ) {
-        resolved.push(processor as OutputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
   // ============================================================================
   // Clone
   // ============================================================================
@@ -1035,10 +995,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const memory = await agent.getMemory({ requestContext });
     const memoryConfig = memory?.getConfig();
 
-    // 7. Extract input/output processor IDs
-    const { inputProcessorIds, outputProcessorIds } = await agent.getConfiguredProcessorIds(requestContext);
-    const inputProcessorKeys = inputProcessorIds.length > 0 ? inputProcessorIds : undefined;
-    const outputProcessorKeys = outputProcessorIds.length > 0 ? outputProcessorIds : undefined;
+    // 7. Processors from code-defined agents cannot be automatically serialized
+    // to a StoredProcessorGraph (requires provider ID + config). Processors must
+    // be configured via the editor UI after cloning.
 
     // 8. Extract scorer keys with sampling config
     let storedScorers: Record<string, StorageScorerConfig> | undefined;
@@ -1081,8 +1040,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       workflows: workflowKeys.length > 0 ? Object.fromEntries(workflowKeys.map(key => [key, {}])) : undefined,
       agents: agentKeys.length > 0 ? Object.fromEntries(agentKeys.map(key => [key, {}])) : undefined,
       memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,

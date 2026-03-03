@@ -46,27 +46,39 @@ export function WorkflowsPage() {
     if (isSet) {
       const next = { ...selectedWorkflows };
       delete next[workflowId];
-      form.setValue('workflows', next);
+      form.setValue('workflows', next, { shouldDirty: true });
     } else {
-      form.setValue('workflows', {
-        ...selectedWorkflows,
-        [workflowId]: { ...selectedWorkflows?.[workflowId], description: getOriginalDescription(workflowId) },
-      });
+      form.setValue(
+        'workflows',
+        {
+          ...selectedWorkflows,
+          [workflowId]: { ...selectedWorkflows?.[workflowId], description: getOriginalDescription(workflowId) },
+        },
+        { shouldDirty: true },
+      );
     }
   };
 
   const handleDescriptionChange = (workflowId: string, description: string) => {
-    form.setValue('workflows', {
-      ...selectedWorkflows,
-      [workflowId]: { ...selectedWorkflows?.[workflowId], description },
-    });
+    form.setValue(
+      'workflows',
+      {
+        ...selectedWorkflows,
+        [workflowId]: { ...selectedWorkflows?.[workflowId], description },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleRulesChange = (workflowId: string, rules: RuleGroup | undefined) => {
-    form.setValue('workflows', {
-      ...selectedWorkflows,
-      [workflowId]: { ...selectedWorkflows?.[workflowId], rules },
-    });
+    form.setValue(
+      'workflows',
+      {
+        ...selectedWorkflows,
+        [workflowId]: { ...selectedWorkflows?.[workflowId], rules },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const filteredOptions = useMemo(() => {

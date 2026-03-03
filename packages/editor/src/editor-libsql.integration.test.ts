@@ -16,6 +16,8 @@ import {
   ProcessorMessageResult,
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
+import { ProcessorProvider } from '@mastra/core/processor-provider';
+import { StoredProcessorGraph } from '@mastra/core/storage';
 import { MastraMessageContentV2 } from '@mastra/core/agent/message-list';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
@@ -390,6 +392,13 @@ class ProcessorTest implements Processor {
   }
 }
 
+const processorTestProvider: ProcessorProvider = {
+  info: { id: 'processor-test', name: 'Processor Test' },
+  configSchema: z.object({}),
+  availablePhases: ['processInput', 'processOutputResult'],
+  createProcessor: () => new ProcessorTest(),
+};
+
 const weatherAgent = new Agent({
   id: 'weather-assistant',
   name: 'Weather Assistant',
@@ -492,7 +501,11 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     // Create fresh storage for each test
     storage = createTestStorage();
-    editor = new MastraEditor();
+    editor = new MastraEditor({
+      processorProviders: {
+        'processor-test': processorTestProvider,
+      },
+    });
 
     mastra = new Mastra({
       storage,
@@ -678,8 +691,32 @@ describe('MastraEditor with LibSQL Integration', () => {
           name: 'Processor Agent',
           instructions: 'You are an assistant with processors',
           model: { provider: 'mock', name: 'structured-mock' },
-          inputProcessors: ['processor-test'],
-          outputProcessors: ['processor-test'],
+          inputProcessors: {
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-input',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processInput'],
+                },
+              },
+            ],
+          } satisfies StoredProcessorGraph,
+          outputProcessors: {
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-output',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processOutputResult'],
+                },
+              },
+            ],
+          } satisfies StoredProcessorGraph,
         },
       });
 
@@ -698,12 +735,11 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Test that processors modify the input/output
       const result = await retrievedAgent?.generate('Hello world');
 
-      console.log('result', JSON.stringify(result, null, 2));
-
       const userMessage = result?.messages[0]?.content.parts[0]!;
 
-      // The output processor should have modified the response
+      // The input processor should have modified the user message
       expect('text' in userMessage && userMessage.text).toContain('[INPUT PROCESSED]');
+      // The output processor should have modified the response
       expect(result?.text).toContain('[OUTPUT PROCESSED]');
     });
   });
@@ -725,8 +761,32 @@ describe('MastraEditor with LibSQL Integration', () => {
           scorers: {
             'accuracy-scorer': {},
           },
-          inputProcessors: ['processor-test'],
-          outputProcessors: ['processor-test'],
+          inputProcessors: {
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-input',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processInput'],
+                },
+              },
+            ],
+          } satisfies StoredProcessorGraph,
+          outputProcessors: {
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-output',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processOutputResult'],
+                },
+              },
+            ],
+          } satisfies StoredProcessorGraph,
 
           defaultOptions: {
             maxSteps: 10,

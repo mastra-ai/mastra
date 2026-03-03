@@ -26,8 +26,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
 
       - name: Setup custom action
+        continue-on-error: true
         uses: ./.github/workflows/shared-actions/set-pr-status
         with:
           status: 'pending'

@@ -73,7 +73,10 @@ export interface ObservationConfig {
 
   /**
    * Model settings for the Observer agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0.3 }
+   *
+   * Note: `maxOutputTokens: 100_000` is only applied by default when using
+   * the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
@@ -111,12 +114,21 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
-   * Ratio (0-1) of buffered observations to activate when threshold is reached.
-   * Setting this below 1 keeps some observations in reserve for continuity.
+   * Controls how many raw message tokens to retain after activation.
+   *
+   * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
+   *   The retention floor is `messageTokens * (1 - ratio)`.
+   *   e.g. `0.8` with `messageTokens: 30000` → retain ~6000 tokens.
+   *
+   * - **Absolute (value >= 1000):** exact number of message tokens to retain.
+   *   e.g. `3000` → always aim to keep ~3000 tokens of raw message history.
+   *   Must be less than `messageTokens`.
+   *
+   * Values between 1 and 1000 are invalid.
    *
    * Requires `bufferTokens` to also be set.
    *
-   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
+   * @default 0.8 (retain ~20% of messageTokens as raw messages)
    */
   bufferActivation?: number;
 
@@ -134,6 +146,12 @@ export interface ObservationConfig {
    * If not set, synchronous observation is never used when async buffering is enabled.
    */
   blockAfter?: number;
+
+  /**
+   * Custom instructions to append to the Observer's system prompt.
+   * Use this to customize observation behavior for specific use cases.
+   */
+  instruction?: string;
 }
 
 /**
@@ -162,7 +180,10 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0, maxOutputTokens: 100_000 }
+   * @default { temperature: 0 }
+   *
+   * Note: `maxOutputTokens: 100_000` is only applied by default when using
+   * the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
@@ -197,6 +218,12 @@ export interface ReflectionConfig {
    * Requires `observation.bufferTokens` to also be set.
    */
   bufferActivation?: number;
+
+  /**
+   * Custom instructions to append to the Reflector's system prompt.
+   * Use this to customize reflection behavior for specific use cases.
+   */
+  instruction?: string;
 }
 
 /**
@@ -219,6 +246,9 @@ export interface ReflectorResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
