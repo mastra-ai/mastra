@@ -4,7 +4,7 @@ import { getTiktoken } from '../../utils/tiktoken';
 export const DEFAULT_TAIL_LINES = 200;
 
 /** Default estimated token limit for tool output. Safety net on top of line-based tail. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 3_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
 
 // ---------------------------------------------------------------------------
 // ANSI stripping
@@ -67,6 +67,14 @@ export function applyTail(output: string, tail: number | null | undefined): stri
 // ---------------------------------------------------------------------------
 
 /**
+ * Count tokens while allowing tokenizer special tokens.
+ */
+async function countTokens(output: string): Promise<number> {
+  const tiktoken = await getTiktoken();
+  return tiktoken.encode(output, 'all').length;
+}
+
+/**
  * Token-based output limit. Truncates output to fit within a token budget.
  * Uses tiktoken for accurate token counting.
  *
@@ -83,8 +91,7 @@ export async function applyTokenLimit(
 ): Promise<string> {
   if (!output) return output;
 
-  const tiktoken = await getTiktoken();
-  const tokens = tiktoken.encode(output).length;
+  const tokens = await countTokens(output);
   if (tokens <= limit) return output;
 
   const trailingNewline = output.endsWith('\n');
@@ -96,7 +103,7 @@ export async function applyTokenLimit(
   if (from === 'start') {
     // Keep the end — iterate backwards
     for (let i = lines.length - 1; i >= 0; i--) {
-      const lineTokens = tiktoken.encode(lines[i]!).length;
+      const lineTokens = await countTokens(lines[i]!);
       if (keptTokens + lineTokens > limit && kept.length > 0) break;
       kept.unshift(lines[i]!);
       keptTokens += lineTokens;
@@ -104,7 +111,7 @@ export async function applyTokenLimit(
   } else {
     // Keep the start — iterate forwards
     for (let i = 0; i < lines.length; i++) {
-      const lineTokens = tiktoken.encode(lines[i]!).length;
+      const lineTokens = await countTokens(lines[i]!);
       if (keptTokens + lineTokens > limit && kept.length > 0) break;
       kept.push(lines[i]!);
       keptTokens += lineTokens;
@@ -135,8 +142,7 @@ export async function applyTokenLimitSandwich(
 ): Promise<string> {
   if (!output) return output;
 
-  const tiktoken = await getTiktoken();
-  const tokens = tiktoken.encode(output).length;
+  const tokens = await countTokens(output);
   if (tokens <= limit) return output;
 
   const trailingNewline = output.endsWith('\n');
@@ -149,7 +155,7 @@ export async function applyTokenLimitSandwich(
   const headLines: string[] = [];
   let headTokens = 0;
   for (let i = 0; i < lines.length; i++) {
-    const lineTokens = tiktoken.encode(lines[i]!).length;
+    const lineTokens = await countTokens(lines[i]!);
     if (headTokens + lineTokens > headBudget && headLines.length > 0) break;
     headLines.push(lines[i]!);
     headTokens += lineTokens;
@@ -159,7 +165,7 @@ export async function applyTokenLimitSandwich(
   const tailLines: string[] = [];
   let tailTokens = 0;
   for (let i = lines.length - 1; i >= headLines.length; i--) {
-    const lineTokens = tiktoken.encode(lines[i]!).length;
+    const lineTokens = await countTokens(lines[i]!);
     if (tailTokens + lineTokens > tailBudget && tailLines.length > 0) break;
     tailLines.unshift(lines[i]!);
     tailTokens += lineTokens;

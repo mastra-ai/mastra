@@ -5,6 +5,7 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
+import { MC_TOOLS } from '../../tool-names.js';
 import type { SubagentDefinition } from './types.js';
 
 export const executeSubagent: SubagentDefinition = {
@@ -45,14 +46,14 @@ End with a structured summary:
 . **Notes**: Follow-up needed (if any)`,
   allowedTools: [
     // Read tools
-    'view',
-    'search_content',
-    'find_files',
+    MC_TOOLS.VIEW,
+    MC_TOOLS.SEARCH_CONTENT,
+    MC_TOOLS.FIND_FILES,
     // Write tools
-    'string_replace_lsp',
-    'write_file',
+    MC_TOOLS.STRING_REPLACE_LSP,
+    MC_TOOLS.WRITE_FILE,
     // Execution tool
-    'execute_command',
+    MC_TOOLS.EXECUTE_COMMAND,
     // Task tracking (built-in harness tools)
     'task_write',
     'task_check',

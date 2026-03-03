@@ -1,15 +1,15 @@
 import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 
-import { weatherInfo } from '../tools';
 import * as aiTest from 'ai/test';
+import { z } from 'zod';
 import { fixtures } from '../../../fixtures';
-import { Fixtures } from '../../../types';
-import { lessComplexWorkflow } from '../workflows/complex-workflow';
-import { simpleMcpTool } from '../tools';
-import { storage } from '../storage';
+import type { Fixtures } from '../../../types';
 import { createMockOmModel } from '../mock-om-model';
-import { createTool } from '@mastra/core/tools';
+import { storage } from '../storage';
+import { weatherInfo, simpleMcpTool } from '../tools';
+import { lessComplexWorkflow } from '../workflows/complex-workflow';
 
 const memory = new Memory({
   // ...
@@ -111,8 +111,6 @@ const omAdaptiveMemory = new Memory({
   },
 });
 
-import { z } from 'zod';
-
 /**
  * Tool that the mock OM model calls to trigger multi-step execution.
  * The OM processor only triggers observations when stepNumber > 0,
@@ -132,7 +130,7 @@ const omTriggerTool = createTool({
 let count = 0;
 
 // Helper function to create a delayed readable stream
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function createDelayedStream(chunks: Array<any>, delayMs: number = 10) {
   return new ReadableStream({
     async start(controller) {
@@ -175,8 +173,21 @@ export const weatherAgent = new Agent({
     console.log({ fixture });
     const fixtureData = fixtures[fixture];
 
+    // Default response for API tests that don't set a fixture
+    const defaultResponse = {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text' as const, text: 'Mock response' }],
+      warnings: [],
+    };
+
     return new aiTest.MockLanguageModelV2({
       doGenerate: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return defaultResponse;
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
@@ -186,7 +197,7 @@ export const weatherAgent = new Agent({
         }
 
         // Extract text from fixture chunks
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
         const text = textChunks.join('');
 
@@ -204,6 +215,14 @@ export const weatherAgent = new Agent({
         };
       },
       doStream: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return {
+            stream: createDelayedStream([{ type: 'text-delta', delta: 'Mock response' }, { type: 'finish' }], 0),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 

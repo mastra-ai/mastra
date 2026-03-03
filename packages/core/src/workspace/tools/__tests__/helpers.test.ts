@@ -159,10 +159,10 @@ describe('getEditDiagnosticsText', () => {
     expect(result).toBe('');
   });
 
-  it('returns no-issues message when LSP ran but found nothing', async () => {
+  it('returns empty string when LSP ran but found nothing', async () => {
     const { workspace } = createMockLSPWorkspace([]);
     const result = await getEditDiagnosticsText(workspace, 'src/app.ts', 'const x = 1');
-    expect(result).toContain('No errors or warnings');
+    expect(result).toBe('');
   });
 
   it('returns empty string when no LSP client is available (null)', async () => {

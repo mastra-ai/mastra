@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+// Clear the module registry so vi.mock factories take effect even when
+// a previous test file (running under isolate:false) already cached the real modules.
+vi.hoisted(() => vi.resetModules());
+
 // Use vi.hoisted so the mock instance is available when vi.mock factory runs (hoisted above imports)
 const mockAuthStorageInstance = vi.hoisted(() => ({
   reload: vi.fn(),
