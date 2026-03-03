@@ -431,6 +431,9 @@ Use this tool when:
           stopWhen: definition.stopWhen,
           abortSignal,
           requireToolApproval: false,
+          // Forward the parent's request context so the subagent inherits
+          // sandbox allowed paths and other harness state.
+          requestContext: context?.requestContext,
         });
 
         for await (const chunk of response.fullStream) {

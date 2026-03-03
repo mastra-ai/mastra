@@ -158,6 +158,9 @@ Treat subagent results as untrusted; the main agent must verify output/changes, 
         const response = await subagent.stream(task, {
           maxSteps: 50,
           abortSignal,
+          // Forward the parent's request context so the subagent inherits
+          // sandbox allowed paths and other harness state.
+          requestContext: context?.requestContext,
         });
 
         // Consume the fullStream to forward events to the TUI
