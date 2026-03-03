@@ -55,6 +55,9 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
   useEffect(() => {
     if (!containerRef.current) return
 
+    // Reset auto-complete flag so the new video can trigger onAutoComplete
+    autoCompletedRef.current = false
+
     let player: YT.Player | null = null
     let playerDiv: HTMLDivElement | null = null
     let pollInterval: ReturnType<typeof setInterval> | null = null
