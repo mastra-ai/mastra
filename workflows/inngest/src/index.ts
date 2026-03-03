@@ -274,7 +274,15 @@ function createStepFromParams<
     scorers: params.scorers,
     retries: params.retries,
     metadata: params.metadata,
-    execute: params.execute.bind(params),
+    execute: params.execute.bind(params) as Step<
+      TStepId,
+      TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+      InferPublicSchema<TInputSchema>,
+      InferPublicSchema<TOutputSchema>,
+      TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+      TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
+      InngestEngineType
+    >['execute'],
   };
 }
 

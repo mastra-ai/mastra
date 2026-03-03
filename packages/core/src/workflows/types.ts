@@ -543,10 +543,14 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
+type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = TSchema extends { _output: infer Output }
+  ? Output
+  : InferPublicSchema<TSchema>;
+
 /**
  * StepParams with schema-based inference for better type errors.
  * Generic parameters are the SCHEMAS, and we infer value types from them.
- * Uses z.infer for proper TypeScript contextual typing of the execute function.
+ * Uses parsed schema output typing for contextual typing of the execute function.
  */
 export type StepParams<
   TStepId extends string,
@@ -574,7 +578,7 @@ export type StepParams<
   metadata?: StepMetadata;
   execute: ExecuteFunction<
     TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
-    InferPublicSchema<TInputSchema>,
+    InferParsedPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
     TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
