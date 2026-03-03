@@ -80,18 +80,26 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
   describe('multiple concurrent ask_user calls', () => {
     it('should not overwrite activeInlineQuestion when a second ask_question arrives while first is pending', async () => {
       // Start first question - this sets state.activeInlineQuestion
-      handleAskQuestion(ctx, 'q1', 'First question?');
+      const p1 = handleAskQuestion(ctx, 'q1', 'First question?');
 
       const firstComponent = state.activeInlineQuestion;
       expect(firstComponent).toBeDefined();
 
       // Start second question while first is still pending
       // In the buggy code, this overwrites activeInlineQuestion
-      handleAskQuestion(ctx, 'q2', 'Second question?');
+      const p2 = handleAskQuestion(ctx, 'q2', 'Second question?');
 
       // CRITICAL: The first component should still be the active one
       // (second should be queued), OR both should be tracked
       expect(state.activeInlineQuestion).toBe(firstComponent);
+
+      // Cleanup: resolve both pending prompts
+      state.activeInlineQuestion!.handleInput('y');
+      state.activeInlineQuestion!.handleInput('\r');
+      await p1;
+      state.activeInlineQuestion!.handleInput('y');
+      state.activeInlineQuestion!.handleInput('\r');
+      await p2;
     });
 
     it('should allow answering all parallel questions sequentially', async () => {
