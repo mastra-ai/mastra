@@ -1,9 +1,5 @@
 ---
-'@mastra/deployer': patch
 '@mastra/deployer-cloud': patch
-'@mastra/deployer-vercel': patch
-'@mastra/deployer-netlify': patch
-'@mastra/deployer-cloudflare': patch
 ---
 
-Add dynamic CORS origin when auth is configured.
+Added dynamic CORS origin support and `@mastra/auth-cloud` integration when auth is configured on deployed instances. Service token auth now includes role information for RBAC compatibility.
