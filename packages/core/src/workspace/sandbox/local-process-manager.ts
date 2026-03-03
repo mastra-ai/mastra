@@ -149,6 +149,10 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       env,
       shell: this.sandbox.isolation === 'none',
       detached: true,
+      // Explicit 'pipe' prevents detached processes from inheriting parent
+      // stdio, which can cause the parent process to exit when the child
+      // closes its streams (observed on some Node.js versions).
+      stdio: 'pipe',
     });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
     this._tracked.set(handle.pid, handle);
