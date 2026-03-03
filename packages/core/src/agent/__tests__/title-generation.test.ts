@@ -2402,6 +2402,46 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(thread?.title).toBe('Generated Title');
     });
   });
+
+  describe(`${version} - title generation with file parts`, () => {
+    it('should not throw TypeError when message contains file parts', async () => {
+      const agent = new Agent({
+        id: 'file-title-test-agent',
+        name: 'File Title Test Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+      });
+
+      // File part input with text - this previously caused a TypeError
+      // because generateTitleFromUserMessage accessed part.data on UI-format parts
+      // which use part.url instead
+      const result = await agent.generateTitleFromUserMessage({
+        message: [
+          { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+          { type: 'text' as const, text: 'Describe this image' },
+        ],
+      });
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should generate title when message contains only a file part', async () => {
+      const agent = new Agent({
+        id: 'file-only-title-test-agent',
+        name: 'File Only Title Test Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+      });
+
+      const result = await agent.generateTitleFromUserMessage({
+        message: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' }],
+      });
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
 }
 
 titleGenerationTests('v1');

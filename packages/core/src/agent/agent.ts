@@ -1708,14 +1708,14 @@ export class Agent<
           text: `User added URL: ${part.source.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
-        const fileUrl = typeof (part as { url?: unknown }).url === 'string' ? (part as { url: string }).url : undefined;
-        const fileType =
-          ('mediaType' in part && typeof part.mediaType === 'string' ? part.mediaType : undefined) ??
-          ('mimeType' in part && typeof part.mimeType === 'string' ? part.mimeType : undefined) ??
-          'unknown';
+        // The .ui() conversion may produce parts with `url`/`mediaType` (AIV5 format)
+        // instead of `data`/`mimeType` (AIV4 FileUIPart type), so handle both.
+        const filePart = part as unknown as Record<string, unknown>;
+        const fileData = typeof filePart.url === 'string' ? filePart.url : typeof filePart.data === 'string' ? filePart.data : undefined;
+        const fileType = typeof filePart.mediaType === 'string' ? filePart.mediaType : typeof filePart.mimeType === 'string' ? filePart.mimeType : 'unknown';
         partsToGen.push({
           type: 'text',
-          text: `User added ${fileType} file: ${fileUrl ? fileUrl.slice(0, 100) : '(binary)'}`,
+          text: `User added ${fileType} file: ${fileData ? fileData.slice(0, 100) : '(binary)'}`,
         });
       }
     }
