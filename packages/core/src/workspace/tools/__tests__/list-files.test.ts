@@ -19,7 +19,7 @@ describe('workspace_list_files', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('should list directory contents as compact paths (default depth 1)', async () => {
+  it('should list directory contents as compact paths (default depth 2)', async () => {
     await fs.mkdir(path.join(tempDir, 'dir'));
     await fs.writeFile(path.join(tempDir, 'dir', 'file1.txt'), 'content1');
     await fs.writeFile(path.join(tempDir, 'dir', 'file2.txt'), 'content2');
