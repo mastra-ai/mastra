@@ -307,8 +307,8 @@ describe('Template Workflow Integration Tests', () => {
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
-    // The copy step always creates this commit
-    expect(gitLog).toContain('feat(template): copy 7 files from csv-to-questions@');
+    // The copy step always creates this commit (file count varies based on conflicts)
+    expect(gitLog).toMatch(/feat\(template\): copy \d+ files from csv-to-questions@/);
     // These commits are created by AI agents and may not always appear (non-deterministic)
     // - feat(template): resolve conflicts for csv-to-questions@
     // - fix(template): resolve validation errors for csv-to-questions@
