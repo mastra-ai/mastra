@@ -8,21 +8,20 @@ This template shows how Mastra's workspace primitives enable you to build a powe
 
 ## Demo
 
-https://github.com/user-attachments/assets/6bef659b-e0a1-46e8-a8e5-affd96304184
+<video width="640" height="360" src="https://github.com/user-attachments/assets/6bef659b-e0a1-46e8-a8e5-affd96304184"></video>
 
 This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
 ## Prerequisites
 
 - Node.js >= 22.13.0
-- pnpm
 - A [GitHub Personal Access Token](https://github.com/settings/tokens) (read-only scope)
 - An [Anthropic API Key](https://console.anthropic.com/)
 
 ## Getting started
 
 ```shell
-pnpm install
+npm install
 cp .env.example .env
 ```
 
@@ -38,7 +37,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 Start the dev server:
 
 ```shell
-pnpm run dev
+npm run dev
 ```
 
 Open [http://localhost:4111](http://localhost:4111) to access Mastra Studio.
