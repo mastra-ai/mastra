@@ -1,12 +1,13 @@
 /**
  * Local Process Manager
  *
- * Local implementation of SandboxProcessManager using child_process.spawn.
+ * Local implementation of SandboxProcessManager using execa.
  * Tracks processes in-memory since there's no server to query.
  */
 
-import * as childProcess from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+
+import { execa } from 'execa';
 
 import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
@@ -132,7 +133,7 @@ class LocalProcessHandle extends ProcessHandle {
 
 /**
  * Local implementation of SandboxProcessManager.
- * Spawns processes via child_process.spawn and tracks them in-memory.
+ * Spawns processes via execa and tracks them in-memory.
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
@@ -140,18 +141,36 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
-    // detached: true creates a new process group so we can kill the entire tree.
     // Non-isolated: use shell mode so the host shell interprets the command string.
     // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
     // sandbox, so we spawn the wrapper binary directly.
-    const proc = childProcess.spawn(wrapped.command, wrapped.args, {
-      cwd,
-      env,
-      shell: this.sandbox.isolation === 'none',
-      detached: true,
-      stdio: 'pipe',
-    });
-    const handle = new LocalProcessHandle(proc, Date.now(), options);
+    const useShell = this.sandbox.isolation === 'none';
+
+    const subprocess = useShell
+      ? execa({
+          shell: true,
+          cwd,
+          env,
+          extendEnv: false,
+          detached: true,
+          stdio: 'pipe',
+          cleanup: false,
+        })`${wrapped.command}`
+      : execa(wrapped.command, wrapped.args, {
+          cwd,
+          env,
+          extendEnv: false,
+          detached: true,
+          stdio: 'pipe',
+          cleanup: false,
+        });
+
+    // execa's subprocess is also a promise that rejects on non-zero exit or kill.
+    // We handle exit/error via ChildProcess events in LocalProcessHandle, so
+    // swallow the execa promise to prevent unhandled rejections.
+    subprocess.catch(() => {});
+
+    const handle = new LocalProcessHandle(subprocess as unknown as ChildProcess, Date.now(), options);
     this._tracked.set(handle.pid, handle);
     return handle;
   }
