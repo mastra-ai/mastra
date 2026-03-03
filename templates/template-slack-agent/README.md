@@ -6,10 +6,6 @@ A Mastra template for building Slack bots powered by AI agents with streaming re
 
 Connecting AI agents to Slack is one of the most common integration patterns — whether for internal tools, customer support, or team automation. This template shows how to wire up Mastra agents to Slack with proper streaming, thread memory, and multi-agent support. It includes two demo agents (reverse, caps) to demonstrate the pattern, so you can swap in your own agents and be up and running quickly.
 
-## Demo
-
-This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
-
 ## Prerequisites
 
 - [OpenAI API key](https://platform.openai.com/api-keys): Used by default, but you can swap in any model

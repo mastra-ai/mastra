@@ -10,6 +10,8 @@ This template shows how to combine agents into a workflow that can process large
 
 ## Demo
 
+<video width="640" height="360" src="https://github.com/user-attachments/assets/a1176628-b870-41d5-987e-162e5e0022f9"></video>
+
 This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
 ## Features

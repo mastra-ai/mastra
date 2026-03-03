@@ -13,6 +13,8 @@ This template demonstrates how you can use Mastra to build an MCP server and con
 
 ## Demo
 
+<video width="640" height="360" src="https://github.com/user-attachments/assets/5b98c4c1-92b2-44b4-95c8-3a69f233c47c"></video>
+
 This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
 ## Prerequisites
