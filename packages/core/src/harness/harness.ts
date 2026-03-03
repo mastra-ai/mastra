@@ -1185,7 +1185,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     files,
     tracingContext,
     tracingOptions,
-    requestContext: runtimeContext,
+    requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -1204,7 +1204,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.emit({ type: 'agent_start' });
 
     try {
-      const requestContext = await this.buildRequestContext(runtimeContext);
+      const requestContext = await this.buildRequestContext(requestContextInput);
 
       const isYolo = (this.state as Record<string, unknown>).yolo === true;
 
@@ -1273,7 +1273,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         });
         this.followUpQueue.push({
           content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-          requestContext: runtimeContext,
+          requestContext: requestContextInput,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
       } else {
@@ -1649,14 +1649,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           if (approval.decision === 'approve') {
             const result = await this.handleToolApprove({
               toolCallId,
-              runtimeContext: approval.requestContext ?? requestContext,
+              requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
             return { message: currentMessage };
           } else {
             const result = await this.handleToolDecline({
               toolCallId,
-              runtimeContext: approval.requestContext ?? requestContext,
+              requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
             return { message: currentMessage };
