@@ -5,6 +5,7 @@
  * implementation plan. It can read the codebase to understand existing
  * patterns and architecture, but cannot modify anything.
  */
+import { MC_TOOLS } from '../../tool-names.js';
 import type { SubagentDefinition } from './types.js';
 
 export const planSubagent: SubagentDefinition = {
@@ -38,5 +39,5 @@ Structure your plan as:
 . **Risks**: Potential issues or edge cases (if any)
 
 Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
-  allowedTools: ['view', 'search_content', 'find_files'],
+  allowedTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };

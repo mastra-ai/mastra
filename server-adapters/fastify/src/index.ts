@@ -624,4 +624,52 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     this.app.addHook('preHandler', authenticationMiddleware);
     this.app.addHook('preHandler', authorizationMiddleware);
   }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
+      return;
+    }
+
+    this.app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+      const urlPath = request.url.split('?')[0]!;
+      if (!this.shouldLogRequest(urlPath)) {
+        return;
+      }
+
+      const start = Date.now();
+      const method = request.method;
+      const path = urlPath;
+
+      reply.raw.once('finish', () => {
+        const duration = Date.now() - start;
+        const status = reply.statusCode;
+        const level = this.httpLoggingConfig?.level || 'info';
+
+        const logData: Record<string, any> = {
+          method,
+          path,
+          status,
+          duration: `${duration}ms`,
+        };
+
+        if (this.httpLoggingConfig?.includeQueryParams) {
+          logData.query = request.query;
+        }
+
+        if (this.httpLoggingConfig?.includeHeaders) {
+          const headers = { ...request.headers };
+          const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+          redactHeaders.forEach((h: string) => {
+            const key = h.toLowerCase();
+            if (headers[key] !== undefined) {
+              headers[key] = '[REDACTED]';
+            }
+          });
+          logData.headers = headers;
+        }
+
+        this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+      });
+    });
+  }
 }

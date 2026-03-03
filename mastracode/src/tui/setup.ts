@@ -233,6 +233,7 @@ function detectFdPath(): string | null {
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
+    { name: 'clone', description: 'Clone the current thread' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
@@ -413,26 +414,46 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const mostRecent = sortedThreads[0]!;
-  // Auto-resume the most recent thread for this directory
-  try {
-    await state.harness.switchThread({ threadId: mostRecent.id });
-    // Retroactively tag untagged legacy threads
-    if (!mostRecent.metadata?.projectPath) {
-      await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
-    }
-  } catch (error) {
-    if (error instanceof ThreadLockError) {
-      // Defer the lock conflict prompt until after the TUI is started
-      state.pendingNewThread = true;
-      state.pendingLockConflict = {
-        threadTitle: mostRecent.title || mostRecent.id,
-        ownerPid: error.ownerPid,
-      };
+
+  // If there's only one thread, auto-resume it directly
+  if (sortedThreads.length === 1) {
+    const thread = sortedThreads[0]!;
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
       return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        // Thread is locked by another process — silently start a new thread.
+        // The lock prompt only appears when the user intentionally picks a
+        // locked thread from the /threads selector.
+        state.pendingNewThread = true;
+        return;
+      }
+      throw error;
     }
-    throw error;
   }
+
+  // Multiple threads — try each in order until one is unlocked
+  for (const thread of sortedThreads) {
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
+      return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        continue; // Try the next one
+      }
+      throw error;
+    }
+  }
+
+  // All directory threads are locked — silently start a new thread
+  state.pendingNewThread = true;
 }
 
 // =============================================================================
