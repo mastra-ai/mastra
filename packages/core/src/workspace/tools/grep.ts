@@ -89,9 +89,13 @@ Usage:
       searchPath = inputPath;
     }
 
-    // Load gitignore filter — only when searching from the default root.
-    // When the user explicitly targets a path, search there regardless of gitignore.
-    const ignoreFilter = inputPath === './' ? await loadGitignore(filesystem) : undefined;
+    // Load gitignore filter.
+    // If the user explicitly targets a gitignored path (e.g. "./dist"), skip
+    // filtering so they can still search there. Otherwise apply as normal.
+    const rawIgnoreFilter = await loadGitignore(filesystem);
+    const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
+    const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
+    const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
 
     // Collect files to search
     let filePaths: string[];
