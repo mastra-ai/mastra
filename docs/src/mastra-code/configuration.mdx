@@ -66,6 +66,12 @@ Project config overrides global config by server name. Claude Code settings are 
 
 ### MCP config format
 
+Mastra Code supports two transport types for MCP servers: **stdio** (local process) and **HTTP** (remote server via Streamable HTTP or SSE).
+
+#### Stdio servers
+
+Launch a local process that communicates via stdin/stdout. Requires a `command` field. The `args` and `env` fields are optional.
+
 ```json title=".mastracode/mcp.json"
 {
   "mcpServers": {
@@ -80,7 +86,26 @@ Project config overrides global config by server name. Claude Code settings are 
 }
 ```
 
-Each server entry requires a `command` field. The `args` and `env` fields are optional.
+#### HTTP servers
+
+Connect to a remote MCP server via URL. Requires a `url` field. The optional `headers` field lets you pass static headers such as authentication tokens.
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/sse",
+      "headers": {
+        "Authorization": "Bearer your-token"
+      }
+    }
+  }
+}
+```
+
+Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+
+#### Startup behavior
 
 On startup, Mastra Code connects to all configured servers and reports the status:
 
@@ -88,7 +113,13 @@ On startup, Mastra Code connects to all configured servers and reports the statu
 MCP: 2 server(s) connected, 15 tool(s)
 ```
 
-Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools.
+Invalid or ambiguous entries (for example, specifying both `command` and `url`, or providing an invalid URL) are skipped with a reason:
+
+```
+MCP: Skipped "bad-server": Missing required field: "command" (stdio) or "url" (http)
+```
+
+Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools. Use `/mcp` to see the status of all servers, including their transport type and any skipped entries.
 
 ## Hooks
 
