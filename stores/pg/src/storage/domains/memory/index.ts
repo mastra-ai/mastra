@@ -155,6 +155,7 @@ export class MemoryPG extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'metadata',
         ],
       });
     }
@@ -1573,10 +1574,12 @@ export class MemoryPG extends MemoryStorage {
 
         // Clone messages with new IDs
         const clonedMessages: MastraDBMessage[] = [];
+        const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
+          messageIdMap[sourceMsg.id] = newMessageId;
           const normalizedMsg = this.normalizeMessageRow(sourceMsg);
           let parsedContent = normalizedMsg.content;
           try {
@@ -1614,6 +1617,7 @@ export class MemoryPG extends MemoryStorage {
         return {
           thread: newThread,
           clonedMessages,
+          messageIdMap,
         };
       });
     } catch (error) {
@@ -1840,6 +1844,79 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const tableName = getTableName({
+        indexName: OM_TABLE,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const lastObservedAtStr = record.lastObservedAt ? record.lastObservedAt.toISOString() : null;
+      const lastBufferedAtTimeStr = record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null;
+      await this.#db.client.none(
+        `INSERT INTO ${tableName} (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "observedMessageIds", "bufferedObservationChunks",
+          "bufferedReflection", "bufferedReflectionTokens", "bufferedReflectionInputTokens",
+          "reflectedObservationLineCount",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+          "lastBufferedAtTokens", "lastBufferedAtTime",
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
+        [
+          record.id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          record.activeObservations || '',
+          null,
+          record.originType || 'initial',
+          record.config ? JSON.stringify(record.config) : null,
+          record.generationCount || 0,
+          lastObservedAtStr,
+          lastObservedAtStr,
+          null, // lastReflectionAt
+          null, // lastReflectionAtZ
+          record.pendingMessageTokens || 0,
+          record.totalTokensObserved || 0,
+          record.observationTokenCount || 0,
+          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.bufferedReflection || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
+          record.isObserving || false,
+          record.isReflecting || false,
+          record.isBufferingObservation || false,
+          record.isBufferingReflection || false,
+          record.lastBufferedAtTokens || 0,
+          lastBufferedAtTimeStr,
+          record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.createdAt.toISOString(),
+          record.createdAt.toISOString(),
+          record.updatedAt.toISOString(),
+          record.updatedAt.toISOString(),
+        ],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
@@ -1945,8 +2022,8 @@ export class MemoryPG extends MemoryStorage {
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
         [
           id,
           lookupKey,
@@ -1972,6 +2049,7 @@ export class MemoryPG extends MemoryStorage {
           0, // lastBufferedAtTokens
           null, // lastBufferedAtTime
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt

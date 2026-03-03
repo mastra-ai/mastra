@@ -403,6 +403,7 @@ export const createTimeTravelExecutionParams = (params: {
     nestedStepResults: nestedStepsContext as any,
     state: initialState ?? snapshot.value ?? {},
     resumeData,
+    stepExecutionPath: snapshot?.stepExecutionPath,
   };
 
   return timeTravelData;

@@ -38,14 +38,21 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         `        "command": "npx",\n` +
         `        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"],\n` +
         `        "env": {}\n` +
+        `      },\n` +
+        `      "remote-api": {\n` +
+        `        "url": "https://mcp.example.com/sse",\n` +
+        `        "headers": { "Authorization": "Bearer <token>" }\n` +
         `      }\n` +
         `    }\n` +
-        `  }`,
+        `  }\n\n` +
+        `Note: For dynamic auth (token refresh), use a stdio wrapper.\n` +
+        `"headers" only supports static values.`,
     );
     return;
   }
 
   const statuses = mm.getServerStatuses();
+  const skipped = mm.getSkippedServers();
   const lines: string[] = [`MCP Servers:`];
   lines.push(`  Project: ${paths.project}`);
   lines.push(`  Global:  ${paths.global}`);
@@ -55,11 +62,19 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
   for (const status of statuses) {
     const icon = status.connected ? '\u2713' : '\u2717';
     const state = status.connected ? 'connected' : `error: ${status.error}`;
-    lines.push(`  ${icon} ${status.name} (${state})`);
+    lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {
         lines.push(`      - ${toolName}`);
       }
+    }
+  }
+
+  if (skipped.length > 0) {
+    lines.push('');
+    lines.push('  Skipped:');
+    for (const s of skipped) {
+      lines.push(`    \u2717 ${s.name}: ${s.reason}`);
     }
   }
 

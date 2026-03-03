@@ -431,6 +431,15 @@ export class InngestWorkflow<
           return result;
         });
 
+        // Flush observability OUTSIDE step.run() so it executes on every invocation
+        // (not memoized) and ensures all span export promises resolve before the
+        // Inngest function completes. This fixes #13388 where fire-and-forget export
+        // promises were abandoned when step.run() completed.
+        const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+        if (observability) {
+          await observability.flush();
+        }
+
         return { result, runId };
       },
     );
