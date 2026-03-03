@@ -1,5 +1,3 @@
-import { useParams, useSearchParams, Link } from 'react-router';
-import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -12,6 +10,8 @@ import {
   DatasetExperimentsComparison,
   useDataset,
 } from '@mastra/playground-ui';
+import { Database, GitCompare, ArrowLeft } from 'lucide-react';
+import { useParams, useSearchParams, Link } from 'react-router';
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();

@@ -1,4 +1,4 @@
-import { ExtendedMastraUIMessage, MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import type { ExtendedMastraUIMessage, MastraUIMessage, MastraUIMessageMetadata } from '../types';
 
 // Type definitions for parsing network execution data
 
@@ -165,7 +165,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
 
             return nextMessage;
           }
-        } catch (error) {
+        } catch {
           // If parsing fails, return the original message
           return message;
         }
@@ -205,7 +205,9 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
     ?.filter(message => {
       const completionModes = ['generate', 'stream', 'network'];
       if (message.role === 'assistant' && completionModes.includes(message?.metadata?.mode as string)) {
-        const meta = message.metadata as MastraUIMessageMetadata;
+        const meta = message.metadata as MastraUIMessageMetadata & {
+          isTaskCompleteResult?: { suppressFeedback?: boolean };
+        };
         if (meta?.isTaskCompleteResult?.suppressFeedback || meta?.completionResult?.suppressFeedback) {
           return false;
         }

@@ -1,9 +1,9 @@
-import { type NetworkChunkType } from '@mastra/core/stream';
-import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
-import { type Transformer, type TransformerArgs } from './types';
-import { type MastraUIMessage, type MastraUIMessageMetadata } from '../types';
-import { type WorkflowStreamResult } from '@mastra/core/workflows';
 import { formatCompletionFeedback } from '@mastra/core/loop';
+import type { NetworkChunkType } from '@mastra/core/stream';
+import type { WorkflowStreamResult } from '@mastra/core/workflows';
+import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
+import type { Transformer, TransformerArgs } from './types';
 
 export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
   transform({ chunk, conversation, metadata }: TransformerArgs<NetworkChunkType>): MastraUIMessage[] {
@@ -402,7 +402,7 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
 
       try {
         agentInput = JSON.parse(chunk?.payload?.args?.prompt);
-      } catch (e) {
+      } catch {
         agentInput = chunk?.payload?.args?.prompt;
       }
 
