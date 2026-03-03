@@ -339,6 +339,26 @@ describe('S3BlobStore', () => {
     });
   });
 
+  describe('sessionToken', () => {
+    it('should store sessionToken from options', () => {
+      const store = new S3BlobStore({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      expect((store as any).sessionToken).toBe('FwoGZXIvYXdzEBYaDH7EXAMPLE');
+    });
+
+    it('should leave sessionToken undefined when not provided', () => {
+      const store = createStore();
+
+      expect((store as any).sessionToken).toBeUndefined();
+    });
+  });
+
   describe('prefix handling', () => {
     it('should default prefix to mastra_skill_blobs/', async () => {
       const store = createStore();
