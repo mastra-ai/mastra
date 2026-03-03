@@ -7613,42 +7613,59 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
-    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-      messageTokens: 3000,
-      bufferTokens: 500,
-      bufferActivation: 2000,
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
       reflectionObservationTokens: 50000,
       reflectionAsyncActivation: 0.5,
       messageCount: 10,
     });
 
-    await step(0);
+    const messageListAfterStep0 = await step(0);
     await waitForAsyncOps();
 
-    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-    for (let i = 10; i < 30; i++) {
-      await storage.saveMessages({
-        messages: [
-          {
-            id: `msg-${i}`,
-            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-            content: {
-              format: 2 as const,
-              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
-            },
-            type: 'text',
-            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
-            threadId,
-            resourceId,
-          },
-        ],
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const chunkMsgIds = contextMsgs.slice(0, 4).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(4);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+    for (let i = 0; i < 2; i++) {
+      const ids = chunkMsgIds.slice(i * 2, (i + 1) * 2);
+      await storage.updateBufferedObservations({
+        id: recordId,
+        chunk: {
+          observations: `Manual chunk ${i} observations`,
+          tokenCount: 50,
+          messageIds: ids,
+          messageTokens: 400,
+          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          cycleId: `manual-cycle-floor-${i}`,
+        },
       });
     }
 
-    const messageListAfterActivation = await step(0, { freshState: true });
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    let capturedMinRemaining: number | undefined;
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
     await waitForAsyncOps();
 
-    const remainingTokens = new TokenCounter().countMessages(messageListAfterActivation.get.all.db());
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk');
+    expect(capturedMinRemaining).toBe(2000);
+
+    const remainingTokens = new TokenCounter().countMessages(messageListAfterStep1.get.all.db());
     expect(remainingTokens).toBeGreaterThanOrEqual(2000);
   });
 
