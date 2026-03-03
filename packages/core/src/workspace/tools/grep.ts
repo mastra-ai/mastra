@@ -55,22 +55,9 @@ Usage:
       .optional()
       .default(false)
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
-    respectGitignore: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe('Exclude files and directories listed in .gitignore from the search (default: true).'),
   }),
   execute: async (
-    {
-      pattern,
-      path: inputPath = './',
-      contextLines = 0,
-      maxCount,
-      caseSensitive = true,
-      includeHidden = false,
-      respectGitignore = true,
-    },
+    { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);
@@ -102,8 +89,8 @@ Usage:
       searchPath = inputPath;
     }
 
-    // Load gitignore filter if requested
-    const ignoreFilter = respectGitignore ? await loadGitignore(filesystem) : undefined;
+    // Load gitignore filter
+    const ignoreFilter = await loadGitignore(filesystem);
 
     // Collect files to search
     let filePaths: string[];

@@ -46,20 +46,12 @@ Examples:
       .describe(
         'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
       ),
-    respectGitignore: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe('Exclude files and directories listed in .gitignore (default: true).'),
   }),
-  execute: async (
-    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore = true },
-    context,
-  ) => {
+  execute: async ({ path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
-    const ignoreFilter = respectGitignore ? await loadGitignore(filesystem) : undefined;
+    const ignoreFilter = await loadGitignore(filesystem);
 
     const result = await formatAsTree(filesystem, path, {
       maxDepth,
