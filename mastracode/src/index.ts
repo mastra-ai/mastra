@@ -59,7 +59,7 @@ export interface MastraCodeConfig {
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set */
-  extraTools?: Record<string, any>;
+  extraTools?: Record<string, { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }>;
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
@@ -136,11 +136,21 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const writeFileTool = createWriteFileTool(project.rootPath);
   const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
 
-  const readOnlyTools = {
+  // Filter disabled tools from a tool map so subagents respect disabledTools config.
+  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
+    if (!config?.disabledTools?.length) return tools;
+    const filtered = { ...tools };
+    for (const name of config.disabledTools) {
+      delete (filtered as Record<string, unknown>)[name];
+    }
+    return filtered;
+  };
+
+  const readOnlyTools = filterDisabled({
     view: viewTool,
     search_content: grepTool,
     find_files: globTool,
-  };
+  });
 
   const defaultSubagents: HarnessSubagent[] = [
     {
@@ -165,14 +175,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
       instructions: executeSubagent.instructions,
-      tools: {
+      tools: filterDisabled({
         ...readOnlyTools,
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
         task_write: taskWriteTool,
         task_check: taskCheckTool,
-      },
+      }),
     },
   ];
 

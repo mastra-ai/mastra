@@ -1436,6 +1436,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         }
         case 'file':
           if (typeof part.data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
             break;
           }
           content.push({

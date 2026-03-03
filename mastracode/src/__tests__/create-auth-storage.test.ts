@@ -5,8 +5,8 @@ import { getAuthStorage as getOpenAIAuthStorage, setAuthStorage as setOpenAIAuth
 
 describe('createAuthStorage', () => {
   afterEach(() => {
-    setClaudeAuthStorage(undefined as any);
-    setOpenAIAuthStorage(undefined as any);
+    setClaudeAuthStorage(undefined);
+    setOpenAIAuthStorage(undefined);
   });
 
   it('wires a shared auth storage instance to provider modules', () => {

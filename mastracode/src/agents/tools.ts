@@ -7,7 +7,13 @@ import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
-function wrapToolWithHooks(toolName: string, tool: any, hookManager?: HookManager): any {
+/** Minimal shape for tools passed to createDynamicTools. */
+interface ToolLike {
+  execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
+  [key: string]: unknown;
+}
+
+function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
   if (!hookManager || typeof tool?.execute !== 'function') {
     return tool;
   }
@@ -42,7 +48,7 @@ function wrapToolWithHooks(toolName: string, tool: any, hookManager?: HookManage
 
 export function createDynamicTools(
   mcpManager?: McpManager,
-  extraTools?: Record<string, any>,
+  extraTools?: Record<string, ToolLike>,
   hookManager?: HookManager,
   disabledTools?: string[],
 ) {
@@ -57,7 +63,7 @@ export function createDynamicTools(
     // Filesystem, grep, glob, edit, write, execute_command, and process
     // management tools are now provided by the workspace (see workspace.ts).
     // Only tools without a workspace equivalent remain here.
-    const tools: Record<string, any> = {
+    const tools: Record<string, ToolLike> = {
       request_sandbox_access: requestSandboxAccessTool,
     };
 
