@@ -225,6 +225,12 @@ export function createWorkspaceTools(workspace: Workspace) {
           `Check your tools config for duplicate "name" values.`,
       );
     }
+    // When the tool is renamed, update its id to match so fallback-by-id
+    // resolution (in tool-call-step, llm-execution-step, etc.) won't allow
+    // the model to call the tool using the old default name.
+    if (exposedName !== name && 'id' in wrapped) {
+      wrapped = { ...wrapped, id: exposedName };
+    }
     tools[exposedName] = wrapped;
   };
 
