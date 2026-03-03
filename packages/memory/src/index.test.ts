@@ -1216,4 +1216,67 @@ describe('Memory', () => {
       });
     });
   });
+
+  describe('recall pagination metadata', () => {
+    let memory: Memory;
+    const resourceId = 'resource-pagination';
+    const threadId = 'thread-pagination';
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Pagination Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save 5 messages
+      const messages: MastraDBMessage[] = [];
+      for (let i = 1; i <= 5; i++) {
+        messages.push({
+          id: `msg-page-${i}`,
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+          createdAt: new Date(`2024-01-01T10:0${i}:00Z`),
+        });
+      }
+      await memory.saveMessages({ messages });
+    });
+
+    it('should return pagination metadata from recall()', async () => {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: 2,
+      });
+
+      expect(result.messages).toHaveLength(2);
+      // Verifies the fix for #13277 — recall() now surfaces pagination metadata
+      expect(result).toHaveProperty('total', 5);
+      expect(result).toHaveProperty('page', 0);
+      expect(result).toHaveProperty('perPage', 2);
+      expect(result).toHaveProperty('hasMore', true);
+    });
+
+    it('should return correct hasMore=false on last page', async () => {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(result.messages).toHaveLength(5);
+      expect(result).toHaveProperty('total', 5);
+      expect(result).toHaveProperty('hasMore', false);
+    });
+  });
 });

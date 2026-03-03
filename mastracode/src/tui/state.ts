@@ -115,7 +115,6 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
-  pendingLockConflict: { threadTitle: string; ownerPid: number } | null;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
@@ -212,7 +211,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
-    pendingLockConflict: null,
 
     // Inline interaction
     lastClearedText: '',
