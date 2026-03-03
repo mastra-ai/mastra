@@ -46,7 +46,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: [{ name: 'email', value: email }],
-          context: { pageName: 'Mastra Learn - Course Signup' },
+          context: { pageName: 'Mastra Learn - Course Signup', pageUri: window.location.href },
         }),
       })
       if (!res.ok) throw new Error('Submission failed')
