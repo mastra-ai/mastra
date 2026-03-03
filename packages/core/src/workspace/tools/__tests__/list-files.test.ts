@@ -76,7 +76,7 @@ describe('workspace_list_files', () => {
     expect(result).toContain('truncated at depth 2');
   });
 
-  it('should default maxDepth to 3', async () => {
+  it('should default maxDepth to 2', async () => {
     await fs.mkdir(path.join(tempDir, 'level1'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
@@ -90,10 +90,10 @@ describe('workspace_list_files', () => {
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
     expect(result).toContain('level2');
-    expect(result).toContain('level3');
+    expect(result).not.toContain('level3');
     expect(result).not.toContain('level4');
     expect(result).not.toContain('deep.txt');
-    expect(result).toContain('truncated at depth 3');
+    expect(result).toContain('truncated at depth 2');
   });
 
   it('should filter by extension (tree -P flag)', async () => {
@@ -254,5 +254,40 @@ describe('workspace_list_files', () => {
     )) as string;
 
     expect(result).toContain('[output truncated');
+  });
+
+  it('should respect .gitignore by default', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'));
+    await fs.mkdir(path.join(tempDir, 'dist'));
+    await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+    await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '/', maxDepth: 3, showHidden: true },
+      { workspace },
+    );
+
+    expect(result).toContain('src');
+    expect(result).toContain('index.ts');
+    expect(result).not.toContain('dist');
+    expect(result).not.toContain('bundle.js');
+  });
+
+  it('should still list an ignored directory when explicitly targeted', async () => {
+    await fs.mkdir(path.join(tempDir, 'dist'));
+    await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '/dist', maxDepth: 3 },
+      { workspace },
+    );
+
+    expect(result).toContain('bundle.js');
   });
 });
