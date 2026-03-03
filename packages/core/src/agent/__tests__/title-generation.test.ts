@@ -2441,6 +2441,28 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(0);
     });
+
+    it('should handle UI-format file parts with url/mediaType (regression)', async () => {
+      const agent = new Agent({
+        id: 'ui-format-file-title-test-agent',
+        name: 'UI Format File Title Test Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+      });
+
+      // UI-format file parts use url/mediaType instead of data/mimeType.
+      // The .ui() conversion produces this format, and the original bug was
+      // that the code referenced part.data (undefined in UI format).
+      const result = await agent.generateTitleFromUserMessage({
+        message: [
+          { type: 'file' as const, url: 'data:image/png;base64,iVBOR', mediaType: 'image/png' } as any,
+          { type: 'text' as const, text: 'Describe this image' },
+        ],
+      });
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
   });
 }
 
