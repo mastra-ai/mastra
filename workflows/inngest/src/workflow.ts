@@ -322,7 +322,9 @@ export class InngestWorkflow<
 
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
-        await step.run(`workflow.${this.id}.finalize`, async () => {
+        let finalizeError: unknown;
+        try {
+          await step.run(`workflow.${this.id}.finalize`, async () => {
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
             await engine.invokeLifecycleCallbacksInternal({
@@ -429,15 +431,23 @@ export class InngestWorkflow<
           }
 
           return result;
-        });
+          });
+        } catch (error) {
+          finalizeError = error;
+        } finally {
+          // Flush observability OUTSIDE step.run() so it executes on every invocation
+          // (not memoized) and ensures all span export promises resolve before the
+          // Inngest function completes. Using finally guarantees flush runs on both
+          // success and failure paths. This fixes #13388 where fire-and-forget export
+          // promises were abandoned when step.run() completed.
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+          if (observability) {
+            await observability.flush();
+          }
+        }
 
-        // Flush observability OUTSIDE step.run() so it executes on every invocation
-        // (not memoized) and ensures all span export promises resolve before the
-        // Inngest function completes. This fixes #13388 where fire-and-forget export
-        // promises were abandoned when step.run() completed.
-        const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-        if (observability) {
-          await observability.flush();
+        if (finalizeError) {
+          throw finalizeError;
         }
 
         return { result, runId };
