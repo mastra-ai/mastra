@@ -7,8 +7,11 @@ import {
   useScorers,
   useLinkComponent,
   useIsCmsAvailable,
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  ScorersTable,
 } from '@mastra/playground-ui';
-import { Header, HeaderTitle, MainContentLayout, ScorersTable } from '@mastra/playground-ui';
 import { GaugeIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 

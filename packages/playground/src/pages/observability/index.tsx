@@ -1,4 +1,5 @@
-import { cn } from '@/lib/utils';
+import { EntityType } from '@mastra/core/observability';
+import type { EntityOptions } from '@mastra/playground-ui';
 import {
   HeaderTitle,
   Header,
@@ -6,7 +7,6 @@ import {
   TracesList,
   tracesListColumns,
   PageHeader,
-  EntityOptions,
   TracesTools,
   TraceDialog,
   parseError,
@@ -23,13 +23,14 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { EntityType } from '@mastra/core/observability';
-import { useState } from 'react';
-import { EyeIcon } from 'lucide-react';
-import { useTraces } from '@/domains/observability/hooks/use-traces';
-import { useTrace } from '@/domains/observability/hooks/use-trace';
 
+import { EyeIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useTrace } from '@/domains/observability/hooks/use-trace';
+import { useTraces } from '@/domains/observability/hooks/use-traces';
+
+import { cn } from '@/lib/utils';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -87,23 +88,30 @@ export default function Observability() {
     setDialogIsOpen(true);
   }
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
-    value: value.id,
-    label: value.name,
-    type: EntityType.AGENT,
-  }));
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(agents) || []).map(([_, value]) => ({
+        value: value.id,
+        label: value.name,
+        type: EntityType.AGENT,
+      })),
+    [agents],
+  );
 
-  const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
-    value: value.name,
-    label: value.name,
-    type: EntityType.WORKFLOW_RUN,
-  }));
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(workflows || {}) || []).map(([, value]) => ({
+        value: value.name,
+        label: value.name,
+        type: EntityType.WORKFLOW_RUN,
+      })),
+    [workflows],
+  );
 
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'all' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
 
   // Sync URL entity to state
   const entityName = searchParams.get('entity');
@@ -250,7 +258,7 @@ export default function Observability() {
         traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
-          navigate(`/observability`);
+          void navigate(`/observability`);
           setDialogIsOpen(false);
         }}
         onNext={toNextTrace}

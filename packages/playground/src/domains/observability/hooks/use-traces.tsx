@@ -1,6 +1,6 @@
-import { useMastraClient } from '@mastra/react';
-import { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery, is403ForbiddenError } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
 import { useEffect } from 'react';
 
 const fetchTracesFn = async ({
@@ -77,7 +77,7 @@ export const useTraces = ({ filters }: TracesFilters) => {
 
   useEffect(() => {
     if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 

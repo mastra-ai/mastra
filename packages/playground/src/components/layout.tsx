@@ -1,6 +1,6 @@
+import { AuthRequired, MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider } from '@mastra/playground-ui';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
-import { MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider, AuthRequired } from '@mastra/playground-ui';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (

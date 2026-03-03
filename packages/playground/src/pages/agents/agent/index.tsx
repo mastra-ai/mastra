@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentLayout,
@@ -15,10 +16,9 @@ import {
   SchemaRequestContextProvider,
   PermissionDenied,
   is403ForbiddenError,
-  type AgentSettingsType,
 } from '@mastra/playground-ui';
+import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -52,7 +52,7 @@ function Agent() {
     if (threadId) return;
 
     // After redirects on /agents/:agentId
-    navigate(`/agents/${agentId}/chat/new`);
+    void navigate(`/agents/${agentId}/chat/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -112,7 +112,7 @@ function Agent() {
     await refreshThreads();
 
     if (isNewThread) {
-      navigate(`/agents/${agentId}/chat/${newThreadId}`);
+      void navigate(`/agents/${agentId}/chat/${newThreadId}`);
     }
   };
 

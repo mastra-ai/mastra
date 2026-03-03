@@ -1,5 +1,3 @@
-import { Link, useParams, Navigate } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -16,6 +14,7 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {
   const { processorId } = useParams();

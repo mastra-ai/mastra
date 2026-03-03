@@ -1,4 +1,3 @@
-import { useState, useCallback } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -33,11 +32,12 @@ import {
   useUpdateSkills,
   useRemoveSkill,
   toast,
-  type WorkspaceItem,
 } from '@mastra/playground-ui';
+import type { WorkspaceItem } from '@mastra/playground-ui';
+import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
+import { useState, useCallback } from 'react';
 
 import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
-import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
@@ -106,7 +106,7 @@ export default function Workspace() {
   const setSelectedWorkspaceId = (id: string) => {
     setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
     setShowSearch(false);
-    navigate(`/workspaces/${id}`);
+    void navigate(`/workspaces/${id}`);
   };
 
   const setCurrentPath = (path: string) => {
@@ -234,7 +234,7 @@ export default function Workspace() {
               const updated = result.updated[0];
               if (updated.success) {
                 toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
-                refetchSkills();
+                void refetchSkills();
               } else {
                 toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
               }
@@ -264,7 +264,7 @@ export default function Workspace() {
             setRemovingSkillName(null);
             if (result.success) {
               toast.success(`Skill "${result.skillName}" removed successfully`);
-              refetchSkills();
+              void refetchSkills();
             } else {
               toast.error(`Failed to remove skill "${result.skillName}"`);
             }
@@ -586,7 +586,7 @@ export default function Workspace() {
               }}
               onViewSkillResult={skillName => {
                 if (effectiveWorkspaceId) {
-                  navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
+                  void navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
                 }
               }}
             />

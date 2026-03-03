@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -16,9 +15,10 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Bot, Folder, Wand2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Bot, Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();

@@ -1,6 +1,6 @@
+import type { ListTracesResponse } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 import { getTracesNextPageParam, selectUniqueTraces } from '../use-traces';
-import type { ListTracesResponse } from '@mastra/core/storage';
 
 function makePage(spans: Array<{ traceId: string; name: string }>, hasMore: boolean): ListTracesResponse {
   return { pagination: { total: 100, page: 0, perPage: 25, hasMore }, spans } as unknown as ListTracesResponse;

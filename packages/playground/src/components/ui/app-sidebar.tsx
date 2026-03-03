@@ -1,3 +1,21 @@
+import type { NavLink, NavSection } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  AuthStatus,
+  GithubIcon,
+  McpServerIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  MainSidebar,
+  useMainSidebar,
+  LogoWithoutText,
+  SettingsIcon,
+  MastraVersionFooter,
+  useMastraPlatform,
+  useIsCmsAvailable,
+  useAuthCapabilities,
+  isAuthenticated,
+} from '@mastra/playground-ui';
 import {
   GaugeIcon,
   EyeIcon,
@@ -13,27 +31,6 @@ import {
   DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
-
-import {
-  AgentIcon,
-  AuthStatus,
-  GithubIcon,
-  McpServerIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  MainSidebar,
-  useMainSidebar,
-  type NavSection,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  NavLink,
-  useAuthCapabilities,
-  isAuthenticated,
-  useExperimentalFeatures,
-} from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
   {
@@ -186,7 +183,6 @@ export function AppSidebar() {
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
 
   // Check if user is authenticated (small avatar) vs not (wide login button)

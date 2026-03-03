@@ -1,3 +1,5 @@
+import type { ClientScoreRowData } from '@mastra/client-js';
+import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
   Crumb,
@@ -7,7 +9,6 @@ import {
   PageHeader,
   ScoresTools,
   ScoreDialog,
-  type ScoreEntityOption as EntityOptions,
   KeyValueList,
   useScorer,
   useScoresByScorerId,
@@ -25,12 +26,11 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { useParams, Link, useSearchParams } from 'react-router';
+import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router';
 import { cn } from '@/lib/utils';
-import { ClientScoreRowData } from '@mastra/client-js';
-import { ScoreRowData } from '@mastra/core/evals';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -59,23 +59,28 @@ export default function Scorer() {
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
 
-  const agentOptions: EntityOptions[] =
-    scorer?.agentIds
-      ?.filter(agentId => agents[agentId])
-      .map(agentId => {
-        return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
-      }) || [];
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      scorer?.agentIds
+        ?.filter(agentId => agents[agentId])
+        .map(agentId => {
+          return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
+        }) || [],
+    [scorer?.agentIds, agents],
+  );
 
-  const workflowOptions: EntityOptions[] =
-    scorer?.workflowIds?.map(workflowId => {
-      return { value: workflowId, label: workflowId, type: 'WORKFLOW' as const };
-    }) || [];
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      scorer?.workflowIds?.map(workflowId => {
+        return { value: workflowId, label: workflowId, type: 'WORKFLOW' as const };
+      }) || [],
+    [scorer?.workflowIds],
+  );
 
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'ALL' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'ALL' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
 
   // Sync URL entity to state
   const entityName = searchParams.get('entity');
