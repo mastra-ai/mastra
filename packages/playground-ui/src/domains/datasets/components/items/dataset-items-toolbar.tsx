@@ -160,7 +160,7 @@ export function DatasetItemsToolbar({
                 >
                   {selectedCount}
                 </Chip>
-                <span>selected items</span>
+                <span>{selectionMode === 'compare-items' ? 'of 2 items selected' : 'items selected'}</span>
                 <MoveRightIcon />
               </div>
             </TooltipTrigger>

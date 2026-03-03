@@ -36,6 +36,7 @@ overrides:
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.2.2
+  fast-xml-parser@<=5.3.8: 5.3.8
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -728,6 +729,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/playground':
+        specifier: workspace:*
+        version: link:../../packages/playground
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -2677,6 +2681,9 @@ importers:
       radash:
         specifier: ^12.1.1
         version: 12.1.1
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -2774,6 +2781,9 @@ importers:
       '@types/picomatch':
         specifier: 4.0.2
         version: 4.0.2
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18)
@@ -3619,9 +3629,6 @@ importers:
       '@autoform/react':
         specifier: ^4.0.0
         version: 4.0.0(@hookform/resolvers@3.10.0(react-hook-form@7.65.0(react@19.2.3)))(react-hook-form@7.65.0(react@19.2.3))(react@19.2.3)
-      '@autoform/zod':
-        specifier: ^4.0.0
-        version: 4.0.0(zod@4.3.6)
       '@base-ui/react':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -3793,9 +3800,6 @@ importers:
       use-debounce:
         specifier: ^10.0.6
         version: 10.0.6(react@19.2.3)
-      zod:
-        specifier: ^4.1.12
-        version: 4.3.6
       zustand:
         specifier: ^5.0.9
         version: 5.0.11(@types/react@19.2.2)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
@@ -3893,6 +3897,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
 
   packages/rag:
     dependencies:
@@ -6175,6 +6182,12 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/gcs':
+        specifier: workspace:*
+        version: link:../gcs
+      '@mastra/s3':
+        specifier: workspace:*
+        version: link:../s3
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -6957,11 +6970,6 @@ packages:
       '@hookform/resolvers': ^3.9.0
       react: ^16.8.0 || ^17 || ^18 || ^19
       react-hook-form: ^7
-
-  '@autoform/zod@4.0.0':
-    resolution: {integrity: sha512-Jy0OIKVRM2vLNuh02puHQug40QUCD3xiThkyar+E18WNFsqzTxC1Efl+dFFPYsa7FvFZFnUOkOwbTqHMCgqzYA==}
-    peerDependencies:
-      zod: ^3
 
   '@aws-crypto/crc32@5.2.0':
     resolution: {integrity: sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg==}
@@ -17220,12 +17228,8 @@ packages:
   fast-uri@3.1.0:
     resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
 
-  fast-xml-parser@5.2.5:
-    resolution: {integrity: sha512-pfX9uG9Ki0yekDHx2SiuRIyFdyAr1kMIMitPvb0YBo8SUfKvia7w7FIyd/l6av85pFYRhZscS75MwMnbvY+hcQ==}
-    hasBin: true
-
-  fast-xml-parser@5.3.4:
-    resolution: {integrity: sha512-EFd6afGmXlCx8H8WTZHhAoDaWaGyuIBoZJ2mknrNxug+aZKjkp0a0dlars9Izl+jF+7Gu1/5f/2h68cQpe0IiA==}
+  fast-xml-parser@5.3.8:
+    resolution: {integrity: sha512-53jIF4N6u/pxvaL1eb/hEZts/cFLWZ92eCfLrNyCI0k38lettCG/Bs40W9pPwoPXyHQlKu2OUbQtiEIZK/J6Vw==}
     hasBin: true
 
   fastembed@1.14.4:
@@ -22449,8 +22453,8 @@ packages:
   strip-literal@3.1.0:
     resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
 
-  strnum@2.1.1:
-    resolution: {integrity: sha512-7ZvoFTiCnGxBtDqJ//Cu6fWtZtc7Y3x+QOirG15wztbdngGSkht27o2pyGWrVy0b4WAy3jbKmnoK6g5VlVNUUw==}
+  strnum@2.2.0:
+    resolution: {integrity: sha512-Y7Bj8XyJxnPAORMZj/xltsfo55uOiyHcU2tnAVzHUnSJR/KsEX+9RoDeXEnsXtl/CX4fAcrt64gZ13aGaWPeBg==}
 
   stubborn-fs@1.2.5:
     resolution: {integrity: sha512-H2N9c26eXjzL/S/K+i/RHHcFanE74dptvvjM8iwzwbVcWY/zjBbgRqF3K0DY4+OD+uTTASTBvDoxPDaPN02D7g==}
@@ -24759,10 +24763,6 @@ snapshots:
       react: 19.2.3
       react-hook-form: 7.65.0(react@19.2.3)
 
-  '@autoform/zod@4.0.0(zod@4.3.6)':
-    dependencies:
-      zod: 4.3.6
-
   '@aws-crypto/crc32@5.2.0':
     dependencies:
       '@aws-crypto/util': 5.2.0
@@ -25646,13 +25646,13 @@ snapshots:
   '@aws-sdk/xml-builder@3.911.0':
     dependencies:
       '@smithy/types': 4.12.0
-      fast-xml-parser: 5.2.5
+      fast-xml-parser: 5.3.8
       tslib: 2.8.1
 
   '@aws-sdk/xml-builder@3.972.4':
     dependencies:
       '@smithy/types': 4.12.0
-      fast-xml-parser: 5.3.4
+      fast-xml-parser: 5.3.8
       tslib: 2.8.1
 
   '@aws/lambda-invoke-store@0.0.1': {}
@@ -29227,7 +29227,7 @@ snapshots:
       abort-controller: 3.0.0
       async-retry: 1.3.3
       duplexify: 4.1.3
-      fast-xml-parser: 5.3.4
+      fast-xml-parser: 5.3.8
       gaxios: 6.7.1(encoding@0.1.13)
       google-auth-library: 9.15.1(encoding@0.1.13)
       html-entities: 2.6.0
@@ -38534,13 +38534,9 @@ snapshots:
 
   fast-uri@3.1.0: {}
 
-  fast-xml-parser@5.2.5:
+  fast-xml-parser@5.3.8:
     dependencies:
-      strnum: 2.1.1
-
-  fast-xml-parser@5.3.4:
-    dependencies:
-      strnum: 2.1.1
+      strnum: 2.2.0
 
   fastembed@1.14.4:
     dependencies:
@@ -45144,7 +45140,7 @@ snapshots:
     dependencies:
       js-tokens: 9.0.1
 
-  strnum@2.1.1: {}
+  strnum@2.2.0: {}
 
   stubborn-fs@1.2.5: {}
 

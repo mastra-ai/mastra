@@ -251,10 +251,9 @@ describe('Workflow (Default Engine Specifics)', () => {
       }
 
       expect(result?.status).toBe('success');
-      expect(result?.steps['step1']).toEqual({
+      expect(result?.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });

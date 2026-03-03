@@ -503,7 +503,9 @@ export class InternalMastraMCPClient extends MastraBase {
       errorMessage.includes('http 403') ||
       errorMessage.includes('econnrefused') ||
       errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused')
+      errorMessage.includes('connection refused') ||
+      errorMessage.includes('sse stream disconnected') ||
+      errorMessage.includes('typeerror: terminated')
     );
   }
 
@@ -693,6 +695,32 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
+  /**
+   * Recursively applies `.passthrough()` to all ZodObject schemas so that
+   * unknown keys returned by an MCP server are preserved instead of being
+   * silently stripped by Zod's default "strip" mode.
+   */
+  private applyPassthrough(schema: z.ZodType): z.ZodType {
+    if (schema instanceof z.ZodObject) {
+      const shape = schema.shape;
+      const newShape: Record<string, z.ZodType> = {};
+      for (const key of Object.keys(shape)) {
+        newShape[key] = this.applyPassthrough(shape[key]);
+      }
+      return z.object(newShape).passthrough();
+    }
+    if (schema instanceof z.ZodArray) {
+      return z.array(this.applyPassthrough(schema.element));
+    }
+    if (schema instanceof z.ZodOptional) {
+      return this.applyPassthrough(schema.unwrap()).optional();
+    }
+    if (schema instanceof z.ZodNullable) {
+      return this.applyPassthrough(schema.unwrap()).nullable();
+    }
+    return schema;
+  }
+
   private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
   ): Promise<z.ZodType<any, any> | undefined> {
@@ -704,12 +732,16 @@ export class InternalMastraMCPClient extends MastraBase {
     try {
       await $RefParser.dereference(outputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
+      let zodSchema: z.ZodType;
       if ('toJSONSchema' in z) {
         //@ts-expect-error - zod type issue
-        return convertJsonSchemaToZod(jsonSchemaToConvert);
+        zodSchema = convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert) as unknown as z.ZodType<any, any>;
+        zodSchema = convertJsonSchemaToZodV3(jsonSchemaToConvert);
       }
+      // Apply passthrough to all ZodObject schemas so that extra fields
+      // returned by the MCP server are not silently stripped by Zod.
+      return this.applyPassthrough(zodSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {

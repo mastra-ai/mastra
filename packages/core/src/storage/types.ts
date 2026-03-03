@@ -236,6 +236,8 @@ export type StorageCloneThreadOutput = {
   thread: StorageThreadType;
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
+  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {

@@ -3665,6 +3665,7 @@ export class Run<
           resumePayload: resumeDataToUse,
           // @ts-expect-error - context type mismatch
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          stepExecutionPath: snapshot?.stepExecutionPath,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
           label: params.label,
         },
@@ -3757,6 +3758,7 @@ export class Run<
       activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
       stepResults: snapshot.context,
       state: snapshot.value,
+      stepExecutionPath: snapshot?.stepExecutionPath,
     };
     const requestContextToUse = requestContext ?? new RequestContext();
     for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {

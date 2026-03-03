@@ -408,6 +408,12 @@ export type NetworkOptions<OUTPUT = undefined> = {
    */
   structuredOutput?: PublicStructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
 
+  /** Callback fired after each LLM step within a sub-agent execution */
+  onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
+
+  /** Callback fired when an error occurs during sub-agent execution */
+  onError?: LoopConfig<OUTPUT>['onError'];
+
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig<OUTPUT>['onAbort'];
 

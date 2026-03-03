@@ -114,7 +114,8 @@
       "better-auth": "^1.4.18",
       "js-yaml": "^3.14.2",
       "glob@<=10.5.0": "10.5.0",
-      "body-parser@<=2.2.1": "2.2.2"
+      "body-parser@<=2.2.1": "2.2.2",
+      "fast-xml-parser@<=5.3.8": "5.3.8"
     }
   },
   "license": "Apache-2.0",

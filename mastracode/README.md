@@ -74,33 +74,34 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command           | Description                                  |
-| ----------------- | -------------------------------------------- |
-| `/new`            | Start a new conversation thread              |
-| `/threads`        | List and switch between threads              |
-| `/models`         | Switch/manage model packs (built-in/custom)  |
-| `/mode`           | Switch agent mode                            |
-| `/subagents`      | Configure subagent model defaults            |
-| `/om`             | Configure Observational Memory models        |
-| `/think`          | Set thinking level (Anthropic)               |
-| `/skills`         | List available skills                        |
-| `/diff`           | Show modified files or git diff              |
-| `/name`           | Rename current thread                        |
-| `/cost`           | Show token usage and estimated costs         |
-| `/review`         | Review a GitHub pull request                 |
-| `/hooks`          | Show/reload configured hooks                 |
-| `/mcp`            | Show/reload MCP server connections           |
-| `/sandbox`        | Manage allowed paths (add/remove dirs)       |
-| `/permissions`    | View/manage tool approval permissions        |
-| `/settings`       | General settings (notifications, YOLO, etc.) |
-| `/yolo`           | Toggle YOLO mode (auto-approve all tools)    |
-| `/resource`       | Show/switch resource ID (tag for sharing)    |
-| `/thread:tag-dir` | Tag current thread with this directory       |
-| `/login`          | Authenticate with OAuth providers            |
-| `/logout`         | Log out from a provider                      |
-| `/setup`          | Re-run the interactive setup wizard          |
-| `/help`           | Show available commands                      |
-| `/exit`           | Exit the TUI                                 |
+| Command             | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `/new`              | Start a new conversation thread                  |
+| `/threads`          | List and switch between threads                  |
+| `/models`           | Switch/manage model packs (built-in/custom)      |
+| `/custom-providers` | Manage custom OpenAI-compatible providers/models |
+| `/mode`             | Switch agent mode                                |
+| `/subagents`        | Configure subagent model defaults                |
+| `/om`               | Configure Observational Memory models            |
+| `/think`            | Set thinking level (Anthropic)                   |
+| `/skills`           | List available skills                            |
+| `/diff`             | Show modified files or git diff                  |
+| `/name`             | Rename current thread                            |
+| `/cost`             | Show token usage and estimated costs             |
+| `/review`           | Review a GitHub pull request                     |
+| `/hooks`            | Show/reload configured hooks                     |
+| `/mcp`              | Show/reload MCP server connections               |
+| `/sandbox`          | Manage allowed paths (add/remove dirs)           |
+| `/permissions`      | View/manage tool approval permissions            |
+| `/settings`         | General settings (notifications, YOLO, etc.)     |
+| `/yolo`             | Toggle YOLO mode (auto-approve all tools)        |
+| `/resource`         | Show/switch resource ID (tag for sharing)        |
+| `/thread:tag-dir`   | Tag current thread with this directory           |
+| `/login`            | Authenticate with OAuth providers                |
+| `/logout`           | Log out from a provider                          |
+| `/setup`            | Re-run the interactive setup wizard              |
+| `/help`             | Show available commands                          |
+| `/exit`             | Exit the TUI                                     |
 
 ### Keyboard shortcuts
 
@@ -132,7 +133,29 @@ The SQLite database is stored in your system's application data directory:
 
 ### Authentication
 
-OAuth credentials are stored alongside the database in `auth.json`.
+For **Anthropic** models, mastracode supports two authentication methods:
+
+1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
+2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+
+When both are available, Claude Max OAuth takes priority.
+
+For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
+
+Credentials are stored alongside the database in `auth.json`.
+
+### Custom providers and models
+
+Use `/custom-providers` to manage OpenAI-compatible providers with:
+
+- provider `name`
+- provider `url`
+- optional provider `apiKey`
+- one or more custom model IDs per provider
+
+Once saved, provider models appear in existing selectors like `/models` and `/subagents` and can be selected like built-in models.
+
+Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
 
 ### Plan persistence
 
