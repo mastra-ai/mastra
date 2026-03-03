@@ -438,7 +438,11 @@ export class InngestWorkflow<
           // Keep this outside step.run memoization, but guaranteed on all paths.
           const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           if (observability) {
-            await observability.flush();
+            try {
+              await observability.flush();
+            } catch (flushError) {
+              this.logger.debug?.('Failed to flush observability:', flushError);
+            }
           }
         }
 
