@@ -139,9 +139,16 @@ export function matchesPermission(userPermission: string, requiredPermission: st
   const [grantedResource, grantedAction, grantedId] = grantedParts;
   const [requiredResource, requiredAction, requiredId] = requiredParts;
 
-  // Resource wildcard with specific action: "*:read" matches any resource with that action
+  // Resource wildcard: "*:*" matches everything, "*:read" matches any resource with that action
   if (grantedResource === '*') {
-    // Action must match for resource wildcards
+    // "*:*" is a full wildcard - matches everything
+    if (grantedAction === '*') {
+      if (grantedId === undefined) {
+        return true;
+      }
+      return grantedId === requiredId;
+    }
+    // Action must match for resource wildcards with specific action
     if (grantedAction !== requiredAction) {
       return false;
     }

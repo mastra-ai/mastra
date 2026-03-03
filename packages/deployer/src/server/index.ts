@@ -166,9 +166,21 @@ export async function createHonoServer(
     // Check if auth is configured - if so, we need credentials for cookie-based sessions
     const hasAuth = !!server?.auth;
 
+    // When auth + credentials are enabled, origin cannot be '*'.
+    // Use user-configured cors.origin if provided; otherwise fall back to
+    // reflecting the request origin (required for dev/Studio but users should
+    // set an explicit origin in production).
+    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
+    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
+      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
+    } else if (hasAuth) {
+      corsOrigin = (origin: string) => origin || undefined;
+    } else {
+      corsOrigin = '*';
+    }
+
     const corsConfig = {
-      // When credentials are enabled, origin cannot be '*' - use dynamic origin
-      origin: hasAuth ? (origin: string) => origin || '*' : (server?.cors?.origin ?? '*'),
+      origin: corsOrigin,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
       credentials: hasAuth ? true : false,

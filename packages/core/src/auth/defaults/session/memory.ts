@@ -6,6 +6,10 @@
 
 import type { Session, ISessionProvider } from '../../interfaces';
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Options for MemorySessionProvider.
  */
@@ -108,7 +112,8 @@ export class MemorySessionProvider implements ISessionProvider {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) return null;
 
-    const match = cookieHeader.match(new RegExp(`${this.cookieName}=([^;]+)`));
+    const escapedName = escapeRegExp(this.cookieName);
+    const match = cookieHeader.match(new RegExp(`${escapedName}=([^;]+)`));
     return match?.[1] ?? null;
   }
 

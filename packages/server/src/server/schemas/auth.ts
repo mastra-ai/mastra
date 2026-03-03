@@ -15,6 +15,7 @@ export const loginConfigSchema = z
   .object({
     type: z.enum(['sso', 'credentials', 'both']),
     sso: ssoConfigSchema.optional(),
+    signUpEnabled: z.boolean().optional(),
   })
   .nullable();
 
@@ -51,7 +52,9 @@ export const authenticatedCapabilitiesSchema = publicCapabilitiesSchema.extend({
   access: userAccessSchema,
 });
 
-export const capabilitiesResponseSchema = z.union([publicCapabilitiesSchema, authenticatedCapabilitiesSchema]);
+// Note: authenticatedCapabilitiesSchema is listed first because z.union checks left-to-right
+// and the authenticated schema is a superset of the public schema (extends it with user, capabilities, access).
+export const capabilitiesResponseSchema = z.union([authenticatedCapabilitiesSchema, publicCapabilitiesSchema]);
 
 // ============================================================================
 // SSO Schemas

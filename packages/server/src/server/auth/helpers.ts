@@ -282,14 +282,20 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
 
       if (rbacProvider) {
-        const permissions = await rbacProvider.getPermissions(user as EEUser);
-        requestContext.set('userPermissions', permissions);
+        if (!user || typeof user !== 'object' || !('id' in user)) {
+          mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
+        } else {
+          const permissions = await rbacProvider.getPermissions(user as EEUser);
+          requestContext.set('userPermissions', permissions);
 
-        const roles = await rbacProvider.getRoles(user as EEUser);
-        requestContext.set('userRoles', roles);
+          const roles = await rbacProvider.getRoles(user as EEUser);
+          requestContext.set('userRoles', roles);
+        }
       }
-    } catch {
-      // RBAC not available or failed, continue without permissions
+    } catch (rbacError) {
+      mastra.getLogger()?.error('RBAC: failed to load user permissions/roles', {
+        error: rbacError instanceof Error ? { message: rbacError.message, stack: rbacError.stack } : rbacError,
+      });
     }
   } catch (err) {
     mastra.getLogger()?.error('Authentication error', {

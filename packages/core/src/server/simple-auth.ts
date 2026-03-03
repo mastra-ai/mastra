@@ -49,22 +49,7 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
       }
     }
 
-    // Check cookie (set during sign-in)
-    const cookieHeader = this.getRequestHeader(request, 'Cookie');
-    if (cookieHeader) {
-      const cookies = cookieHeader.split(';').map(c => c.trim());
-      for (const cookie of cookies) {
-        if (cookie.startsWith('mastra-token=')) {
-          const cookieToken = cookie.slice('mastra-token='.length);
-          const user = this.tokens[cookieToken];
-          if (user) {
-            return user;
-          }
-        }
-      }
-    }
-
-    return null;
+    return this.getUserFromCookie(this.getRequestHeader(request, 'Cookie'));
   }
 
   async authorizeUser(user: TUser, _request: HonoRequest): Promise<boolean> {
@@ -85,21 +70,22 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
       }
     }
 
-    // Check cookie (set during sign-in)
-    const cookieHeader = request.headers.get('Cookie');
-    if (cookieHeader) {
-      const cookies = cookieHeader.split(';').map(c => c.trim());
-      for (const cookie of cookies) {
-        if (cookie.startsWith('mastra-token=')) {
-          const token = cookie.slice('mastra-token='.length);
-          const user = this.tokens[token];
-          if (user) {
-            return user;
-          }
+    return this.getUserFromCookie(request.headers.get('Cookie'));
+  }
+
+  private getUserFromCookie(cookieHeader: string | null | undefined): TUser | null {
+    if (!cookieHeader) return null;
+
+    const cookies = cookieHeader.split(';').map(c => c.trim());
+    for (const cookie of cookies) {
+      if (cookie.startsWith('mastra-token=')) {
+        const token = cookie.slice('mastra-token='.length);
+        const user = this.tokens[token];
+        if (user) {
+          return user;
         }
       }
     }
-
     return null;
   }
 

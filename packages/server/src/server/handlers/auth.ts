@@ -261,8 +261,20 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
       }
     }
 
-    // Build absolute redirect URL
-    const absoluteRedirect = redirectTo.startsWith('http') ? redirectTo : `${baseUrl}${redirectTo}`;
+    // Build absolute redirect URL, preventing open redirects to external origins
+    let absoluteRedirect: string;
+    if (redirectTo.startsWith('http')) {
+      try {
+        const redirectUrl = new URL(redirectTo);
+        const baseUrlObj = new URL(baseUrl);
+        // Only allow same-origin redirects
+        absoluteRedirect = redirectUrl.origin === baseUrlObj.origin ? redirectTo : `${baseUrl}/`;
+      } catch {
+        absoluteRedirect = `${baseUrl}/`;
+      }
+    } else {
+      absoluteRedirect = `${baseUrl}${redirectTo}`;
+    }
 
     try {
       const auth = getAuthProvider(mastra);
@@ -483,9 +495,11 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
       return new Response(responseBody, { status: 200, headers });
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      // Extract message from error (handles Better Auth APIError format)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create account';
-      throw new HTTPException(400, { message: errorMessage });
+      const mastra = (ctx as any).mastra;
+      mastra?.getLogger?.()?.error('Sign-up error', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+      throw new HTTPException(400, { message: 'Failed to create account' });
     }
   },
 });

@@ -34,7 +34,7 @@ export interface CredentialsResult<TUser = User> {
  *     return { user };
  *   }
  *
- *   async signUp(email: string, password: string, name?: string) {
+ *   async signUp(email: string, password: string, name: string | undefined, request: Request) {
  *     const user = await this.createUser({ email, password, name });
  *     return { user };
  *   }

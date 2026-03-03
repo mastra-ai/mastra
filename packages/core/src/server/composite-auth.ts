@@ -219,12 +219,15 @@ export class CompositeAuth
   }
 
   getSessionHeaders(session: Session): Record<string, string> {
+    // Intentionally uses only the first session provider: a session is created by one
+    // provider, so we only set its cookie. clearSession clears ALL providers to ensure
+    // no stale cookies remain.
     const sessionProvider = this.findProvider(isSessionProvider);
     return sessionProvider?.getSessionHeaders(session) ?? {};
   }
 
   getClearSessionHeaders(): Record<string, string> {
-    // Merge clear headers from ALL providers
+    // Merge clear headers from ALL providers to ensure no stale session cookies remain
     const headers: Record<string, string> = {};
     for (const provider of this.providers) {
       if (isSessionProvider(provider)) {

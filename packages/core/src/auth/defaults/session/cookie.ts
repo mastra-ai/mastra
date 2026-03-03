@@ -8,6 +8,10 @@ import { createHmac } from 'node:crypto';
 
 import type { Session, ISessionProvider } from '../../interfaces';
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Options for CookieSessionProvider.
  */
@@ -114,7 +118,8 @@ export class CookieSessionProvider implements ISessionProvider {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) return null;
 
-    const match = cookieHeader.match(new RegExp(`${this.cookieName}=([^;]+)`));
+    const escapedName = escapeRegExp(this.cookieName);
+    const match = cookieHeader.match(new RegExp(`${escapedName}=([^;]+)`));
     if (!match?.[1]) return null;
 
     try {
@@ -215,23 +220,36 @@ export class CookieSessionProvider implements ISessionProvider {
   }
 
   /**
-   * Base64 encode.
+   * Base64 encode (consistent across Node.js and browser runtimes).
    */
   private base64Encode(str: string): string {
-    if (typeof btoa !== 'undefined') {
-      return btoa(encodeURIComponent(str));
+    // Use TextEncoder for consistent UTF-8 handling across runtimes
+    const bytes = new TextEncoder().encode(str);
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(bytes).toString('base64');
     }
-    return Buffer.from(str).toString('base64');
+    // Browser fallback: btoa only handles Latin1, so convert bytes to a binary string
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
   }
 
   /**
-   * Base64 decode.
+   * Base64 decode (consistent across Node.js and browser runtimes).
    */
   private base64Decode(str: string): string {
-    if (typeof atob !== 'undefined') {
-      return decodeURIComponent(atob(str));
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(str, 'base64').toString('utf-8');
     }
-    return Buffer.from(str, 'base64').toString();
+    // Browser fallback: atob returns a binary string, convert back to UTF-8
+    const binary = atob(str);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
   }
 
   /**
