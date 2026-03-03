@@ -61,7 +61,7 @@
     "get-port": "7.1.0",
     "hono": "^4.11.9",
     "inngest-cli": "^1.12.1",
-    "koa": "^3.1.0",
+    "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
