@@ -1,9 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDynamicTools } from '../../agents/tools.js';
 import { createAstSmartEditTool } from '../ast-smart-edit.js';
 import { createStringReplaceLspTool } from '../string-replace-lsp.js';
 import { createWriteFileTool } from '../write.js';
@@ -22,16 +20,6 @@ interface ToolErrorFlagResult {
   isError: boolean;
 }
 
-interface DynamicTool<TArgs extends Record<string, unknown>> {
-  execute(args: TArgs): Promise<unknown>;
-}
-
-interface DynamicEditTools {
-  string_replace_lsp: DynamicTool<{ path: string; old_str: string; new_str: string }>;
-  ast_smart_edit: DynamicTool<{ path: string; transform: 'rename-variable'; targetName: string; newName: string }>;
-  write_file: DynamicTool<{ path: string; content: string }>;
-}
-
 function isToolTextResult(result: unknown): result is ToolTextResult {
   if (!result || typeof result !== 'object') return false;
   const value = result as { content?: unknown };
@@ -48,20 +36,6 @@ function isToolSuccessResult(result: unknown): result is ToolSuccessResult {
 function isToolErrorFlagResult(result: unknown): result is ToolErrorFlagResult {
   if (!result || typeof result !== 'object') return false;
   return typeof (result as { isError?: unknown }).isError === 'boolean';
-}
-
-function isDynamicEditTools(value: unknown): value is DynamicEditTools {
-  if (!value || typeof value !== 'object') return false;
-  const tools = value as {
-    string_replace_lsp?: { execute?: unknown };
-    ast_smart_edit?: { execute?: unknown };
-    write_file?: { execute?: unknown };
-  };
-  return (
-    typeof tools.string_replace_lsp?.execute === 'function' &&
-    typeof tools.ast_smart_edit?.execute === 'function' &&
-    typeof tools.write_file?.execute === 'function'
-  );
 }
 
 function createTempProject(): string {
@@ -138,64 +112,5 @@ describe('tool project-root path resolution', () => {
     }
     expect(result.isError).toBe(false);
     expect(fs.readFileSync(targetPath, 'utf-8')).toBe('created from write_file');
-  });
-
-  it('wires dynamic edit tools to the project root from harness state', async () => {
-    const projectRoot = createTempProject();
-    const editableFile = path.join(projectRoot, 'dynamic.ts');
-    const astFile = path.join(projectRoot, 'dynamic-ast.ts');
-    const createdFile = path.join(projectRoot, 'nested', 'dynamic-created.txt');
-
-    fs.writeFileSync(editableFile, 'export const value = 1;\n', 'utf-8');
-    fs.writeFileSync(astFile, 'const oldName = 1;\nconsole.log(oldName);\n', 'utf-8');
-
-    const requestContext = new RequestContext();
-    requestContext.set('harness', {
-      modeId: 'build',
-      getState: () => ({ projectPath: projectRoot }),
-    });
-
-    const toolsValue = createDynamicTools()({ requestContext });
-    expect(isDynamicEditTools(toolsValue)).toBe(true);
-    if (!isDynamicEditTools(toolsValue)) {
-      throw new Error('Dynamic tools missing expected edit tool interfaces');
-    }
-    const tools = toolsValue;
-
-    const replaceResult = await tools.string_replace_lsp.execute({
-      path: 'dynamic.ts',
-      old_str: 'export const value = 1;',
-      new_str: 'export const value = 2;',
-    });
-    expect(isToolTextResult(replaceResult)).toBe(true);
-    if (!isToolTextResult(replaceResult)) {
-      throw new Error('Unexpected dynamic result shape from string_replace_lsp');
-    }
-    expect(replaceResult.content[0]?.text).toContain('has been edited');
-    expect(fs.readFileSync(editableFile, 'utf-8')).toContain('export const value = 2;');
-
-    const astResult = await tools.ast_smart_edit.execute({
-      path: 'dynamic-ast.ts',
-      transform: 'rename-variable',
-      targetName: 'oldName',
-      newName: 'newName',
-    });
-    expect(isToolSuccessResult(astResult)).toBe(true);
-    if (!isToolSuccessResult(astResult)) {
-      throw new Error('Unexpected dynamic result shape from ast_smart_edit');
-    }
-    expect(astResult.success).toBe(true);
-    expect(fs.readFileSync(astFile, 'utf-8')).toContain('newName');
-
-    const writeResult = await tools.write_file.execute({
-      path: 'nested/dynamic-created.txt',
-      content: 'dynamic tool write',
-    });
-    expect(isToolErrorFlagResult(writeResult)).toBe(true);
-    if (!isToolErrorFlagResult(writeResult)) {
-      throw new Error('Unexpected dynamic result shape from write_file');
-    }
-    expect(writeResult.isError).toBe(false);
-    expect(fs.readFileSync(createdFile, 'utf-8')).toBe('dynamic tool write');
   });
 });

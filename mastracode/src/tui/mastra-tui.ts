@@ -20,8 +20,8 @@ import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../o
 import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+
 import type { SlashCommandContext } from './commands/types.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
@@ -292,12 +292,7 @@ export class MastraTUI {
     // One-time Claude Max OAuth warning at startup
     await this.checkClaudeMaxOAuthWarning();
 
-    // Show deferred thread lock prompt (must happen after TUI is started)
-    if (this.state.pendingLockConflict) {
-      this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
-      this.state.pendingLockConflict = null;
-      // Skip onboarding when there's a lock conflict — it'll run on next clean startup
-    } else if (this.shouldShowOnboarding()) {
+    if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
   }
@@ -466,46 +461,6 @@ export class MastraTUI {
         resolve(text);
       };
     });
-  }
-
-  /**
-   * Show an inline prompt when a thread is locked by another process.
-   * User can create a new thread (y) or exit (n).
-   */
-  private showThreadLockPrompt(threadTitle: string, ownerPid: number): void {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. Create a new thread?`,
-        options: [
-          { label: 'Yes', description: 'Start a new thread' },
-          { label: 'No', description: 'Exit' },
-        ],
-        formatResult: answer => (answer === 'Yes' ? 'Thread created' : 'Exiting.'),
-        onSubmit: async answer => {
-          this.state.activeInlineQuestion = undefined;
-          if (answer.toLowerCase().startsWith('y')) {
-            // pendingNewThread is already true — thread will be
-            // created lazily on first message
-            if (this.shouldShowOnboarding()) {
-              await this.showOnboarding();
-            }
-          } else {
-            process.exit(0);
-          }
-        },
-        onCancel: () => {
-          this.state.activeInlineQuestion = undefined;
-          process.exit(0);
-        },
-      },
-      this.state.ui,
-    );
-
-    this.state.activeInlineQuestion = questionComponent;
-    this.state.chatContainer.addChild(questionComponent);
-    this.state.chatContainer.addChild(new Spacer(1));
-    this.state.ui.requestRender();
-    this.state.chatContainer.invalidate();
   }
 
   /**

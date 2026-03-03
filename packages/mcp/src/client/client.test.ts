@@ -1501,6 +1501,46 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     await serverTransport.close().catch(() => {});
     httpServer.close();
   });
+
+  it('should reconnect and retry when streamable SSE stream is terminated', async () => {
+    const testServer = await setupTestServer(true);
+    const client = new InternalMastraMCPClient({
+      name: 'sse-terminated-retry-test',
+      server: { url: testServer.baseUrl },
+    });
+
+    await client.connect();
+
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+    expect(greetTool).toBeDefined();
+
+    const sdkClient = (client as any).client as Client;
+    const originalCallTool = sdkClient.callTool.bind(sdkClient);
+
+    const callToolSpy = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockImplementationOnce(async () => {
+        throw new Error('SSE stream disconnected: TypeError: terminated');
+      })
+      .mockImplementation(originalCallTool);
+
+    const forceReconnectSpy = vi.spyOn(client as any, 'forceReconnect').mockResolvedValue(undefined);
+
+    try {
+      const result = await greetTool.execute?.({ name: 'Recovered' });
+      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Recovered!' }] });
+      expect(forceReconnectSpy).toHaveBeenCalledTimes(1);
+      expect(callToolSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      forceReconnectSpy.mockRestore();
+      callToolSpy.mockRestore();
+      await client.disconnect().catch(() => {});
+      await testServer.mcpServer.close().catch(() => {});
+      await testServer.serverTransport.close().catch(() => {});
+      testServer.httpServer.close();
+    }
+  });
 });
 
 describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {

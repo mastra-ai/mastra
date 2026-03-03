@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
-import type { CustomAvailableModel, HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
+import type { CustomAvailableModel, HeartbeatHandler, HarnessConfig, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 
@@ -66,6 +66,8 @@ export interface MastraCodeConfig {
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
+  /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
+  workspace?: HarnessConfig['workspace'];
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
@@ -280,7 +282,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...globalInitialState,
       ...config?.initialState,
     },
-    workspace: getDynamicWorkspace,
+    workspace: config?.workspace ?? getDynamicWorkspace,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
