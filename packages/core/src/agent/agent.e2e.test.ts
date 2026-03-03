@@ -461,11 +461,12 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         },
       });
 
+      const retryModel = version === 'v1' ? openai('gpt-4.1') : openai_v5('gpt-4.1');
       const agent = new Agent({
         id: 'retry-agent',
         name: 'retry-agent',
         instructions: 'Call the flakey tool with input "test data".',
-        model: openaiModel,
+        model: retryModel,
         tools: { flakeyTool },
       });
       agent.__setLogger(noopLogger);
