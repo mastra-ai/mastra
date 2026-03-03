@@ -13,6 +13,7 @@ export type AppAction =
   | 'clear' // Ctrl+C or Escape - interrupt
   | 'exit' // Ctrl+D - exit when empty
   | 'suspend' // Ctrl+Z - suspend process (SIGTSTP)
+  | 'undo' // Alt+Z - undo last clear
   | 'toggleThinking' // Ctrl+T
   | 'expandTools' // Ctrl+E
   | 'followUp' // Alt+Enter - queue follow-up while streaming
@@ -126,6 +127,14 @@ export class CustomEditor extends Editor {
     // Ctrl+Z - suspend process
     if (matchesKey(data, 'ctrl+z')) {
       const handler = this.actionHandlers.get('suspend');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+    // Alt+Z - undo last clear
+    if (matchesKey(data, 'alt+z')) {
+      const handler = this.actionHandlers.get('undo');
       if (handler) {
         handler();
         return;

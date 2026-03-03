@@ -56,6 +56,10 @@ export function setupKeyboardShortcuts(
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
+      const current = state.editor.getText();
+      if (current.length > 0) {
+        state.lastClearedText = current;
+      }
       state.editor.setText('');
       state.ui.requestRender();
     }
@@ -81,6 +85,15 @@ export function setupKeyboardShortcuts(
       state.ui.start();
       state.ui.requestRender();
       showError(state, 'Unable to suspend in the current terminal');
+    }
+  });
+
+  // Alt+Z - undo last clear (restore editor text)
+  state.editor.onAction('undo', () => {
+    if (state.lastClearedText && state.editor.getText().length === 0) {
+      state.editor.setText(state.lastClearedText);
+      state.lastClearedText = '';
+      state.ui.requestRender();
     }
   });
 
