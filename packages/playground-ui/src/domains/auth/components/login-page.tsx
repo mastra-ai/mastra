@@ -124,9 +124,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </h1>
         </div>
 
-        {errorMessage && (
-          <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
-        )}
+        {errorMessage && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>}
 
         {hasCredentials && (
           <form onSubmit={handleCredentialsSubmit} className="space-y-4">

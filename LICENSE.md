@@ -4,7 +4,7 @@ Portions of this software are licensed as follows:
   repository, including but not limited to:
   - `packages/core/src/auth/ee/`
   - `packages/server/src/server/auth/ee/`
-  is licensed under the license defined in `ee/LICENSE`.
+    is licensed under the license defined in `ee/LICENSE`.
 
 - All third-party components incorporated into the Mastra Software are
   licensed under the original license provided by the owner of the

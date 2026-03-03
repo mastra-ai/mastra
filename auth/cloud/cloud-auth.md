@@ -1,11 +1,9 @@
 ---
-
 TL;DR
 
 - OAuth 2.0 + PKCE flow against Mastra Cloud
 - Cookie-based sessions with Bearer token fallback
 - RBAC via role→permission mapping
-
 ---
 
 HIGH-LEVEL FLOW
