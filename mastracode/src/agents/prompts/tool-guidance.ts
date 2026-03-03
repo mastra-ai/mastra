@@ -63,7 +63,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Use for: git, npm/pnpm, docker, build tools, test runners, and other terminal operations.
 - Do NOT use for: file reading (use ${MC_TOOLS.VIEW}), file search (use ${MC_TOOLS.SEARCH_CONTENT}/${MC_TOOLS.FIND_FILES}), file editing (use ${MC_TOOLS.STRING_REPLACE_LSP}/${MC_TOOLS.WRITE_FILE}).
 - Commands have a 30-second default timeout. Use \`timeout\` for longer commands, \`cwd\` for working directory.
-- Use the \`tail\` parameter to limit output to the last N lines — the full output streams to the user, only the tail is returned to you. If you're building any kind of package you should be tailing.
+- Use the \`tail\` parameter or pipe to \`| tail -N\` to limit output — the full output streams to the user, only the tail is returned to you. If you're building any kind of package you should be tailing.
 - Good: Run independent commands in parallel when possible.
 - Bad: Running \`cat file.txt\` — use the ${MC_TOOLS.VIEW} tool instead.`);
   }
