@@ -139,12 +139,32 @@ describe('Template Workflow Integration Tests', () => {
     // Note: AI discovery is non-deterministic and may return either export names (e.g., csvToQuestionsWorkflow)
     // or filename-based IDs (e.g., csv-to-questions-workflow), so we check for either naming convention
     const expectedPatterns = [
-      { dir: 'src/mastra/agents', patterns: ['csvQuestionAgent.ts', 'csv-question-agent.ts'] },
+      {
+        dir: 'src/mastra/agents',
+        // Template has csv-summarization-agent.ts and text-question-agent.ts;
+        // AI discovery may return export names or filename-based IDs,
+        // and convertNaming adapts to the target project's convention
+        patterns: [
+          'csvSummarizationAgent.ts',
+          'csv-summarization-agent.ts',
+          'textQuestionAgent.ts',
+          'text-question-agent.ts',
+          'csvQuestionAgent.ts',
+          'csv-question-agent.ts',
+        ],
+      },
       {
         dir: 'src/mastra/tools',
         // AI discovery may return export name (csvFetcherTool) or filename-based ID (download-csv-tool),
         // and convertNaming then adapts to the target project's convention
-        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts', 'downloadCsvTool.ts'],
+        patterns: [
+          'csvFetcherTool.ts',
+          'csv-fetcher-tool.ts',
+          'download-csv-tool.ts',
+          'downloadCsvTool.ts',
+          'generateQuestionsFromTextTool.ts',
+          'generate-questions-from-text-tool.ts',
+        ],
       },
       {
         dir: 'src/mastra/workflows',
