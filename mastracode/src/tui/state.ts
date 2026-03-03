@@ -115,7 +115,6 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
-  pendingLockConflict: { threadTitle: string; ownerPid: number } | null;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
@@ -123,6 +122,8 @@ export interface TUIState {
   /** Saved editor text for Ctrl+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
+  /** Queue of pending inline questions waiting to be shown (when one is already active) */
+  pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
@@ -212,10 +213,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
-    pendingLockConflict: null,
 
     // Inline interaction
     lastClearedText: '',
+    pendingInlineQuestions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
