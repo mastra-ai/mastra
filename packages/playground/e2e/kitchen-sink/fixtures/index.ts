@@ -18,3 +18,6 @@ export const fixtures: Record<Fixtures, Array<unknown>> = {
   'om-reflection': omReflectionFixture,
   'om-shared-budget': omSharedBudgetFixture,
 };
+
+// Auth role fixtures for E2E testing
+export * from './auth-roles.fixture';

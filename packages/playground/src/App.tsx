@@ -12,6 +12,8 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
 }
@@ -54,6 +56,7 @@ import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import { Login } from './pages/login';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
@@ -63,6 +66,7 @@ import RequestContext from './pages/request-context';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
+import { SignUp } from './pages/signup';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
@@ -150,6 +154,9 @@ const agentCmsChildRoutes = [
 ];
 
 const routes = [
+  // Auth pages - no layout
+  { path: '/login', element: <Login /> },
+  { path: '/signup', element: <SignUp /> },
   {
     element: <RootLayout />,
     children: [
@@ -282,7 +289,8 @@ export default function AppWrapper() {
   const port = window.MASTRA_SERVER_PORT || 4111;
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
-  const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
+  const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
+  const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>

@@ -23,6 +23,8 @@ import {
   ScorerCombobox,
   toast,
   Spinner,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
@@ -80,15 +82,12 @@ export default function Scorer() {
     [agentOptions, workflowOptions],
   );
 
-  useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
-    }
-  }, [searchParams, selectedEntityOption, entityOptions]);
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
 
   useEffect(() => {
     if (scorerError) {
@@ -111,13 +110,38 @@ export default function Scorer() {
     }
   }, [workflowsError]);
 
+  // 403 check - permission denied for scorers
+  if (scorerError && is403ForbiddenError(scorerError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="scorers" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
     scorer?.agentIds?.map(agentId => {
       return {
         name: agentId,
-        id: Object.entries(agents).find(([_, value]) => value.name === agentId)?.[0],
+        id: Object.entries(agents).find(([, value]) => value.name === agentId)?.[0],
       };
     }) || [];
 
@@ -125,7 +149,7 @@ export default function Scorer() {
     scorer?.workflowIds?.map(workflowId => {
       return {
         name: workflowId,
-        id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
+        id: Object.entries(workflows || {}).find(([, value]) => value.name === workflowId)?.[0],
       };
     }) || [];
 
@@ -147,7 +171,7 @@ export default function Scorer() {
   ];
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) setSearchParams({ entity: option.value });
   };
 
   const scores = scoresData?.scores || [];
