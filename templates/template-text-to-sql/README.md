@@ -8,7 +8,7 @@ Text-to-SQL is a classic problem that showcases the power of AI agents to unders
 
 ## Demo
 
-<video width="640" height="360" src="https://github.com/user-attachments/assets/8547cfb0-243f-44b3-829c-e2b734ad5178"></video>
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1772538183/template-text-to-sql_pgibmm.mp4"></video>
 
 This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
@@ -47,4 +47,4 @@ This template is a starting point. Here are some ideas to make it your own:
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-text-to-sql/CONTRIBUTING.md).

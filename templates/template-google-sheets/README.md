@@ -8,7 +8,7 @@ This template demonstrates how to integrate third-party services like Composio t
 
 ## Demo
 
-<video width="640" height="360" src="https://github.com/user-attachments/assets/9ec426fe-42cd-4c5b-8343-89fdab9a2c42"></video>
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1772538183/template-google-sheets_gbgosm.mp4"></video>
 
 This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
@@ -48,4 +48,4 @@ Start conversing with the agent by saying "Hello". It'll tell you to create a ne
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-google-sheets/CONTRIBUTING.md).
