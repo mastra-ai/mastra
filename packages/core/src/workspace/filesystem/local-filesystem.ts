@@ -33,7 +33,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
+import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
@@ -195,16 +195,16 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
     const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
-    this._allowedPaths = newPaths.map(p => nodePath.resolve(p));
+    this._allowedPaths = newPaths.map(p => nodePath.resolve(expandTilde(p)));
   }
 
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
-    this._basePath = nodePath.resolve(options.basePath);
+    this._basePath = nodePath.resolve(expandTilde(options.basePath));
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
-    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(expandTilde(p)));
     this._instructionsOverride = options.instructions;
   }
 
@@ -239,6 +239,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
+    inputPath = expandTilde(inputPath);
 
     if (!this._contained && nodePath.isAbsolute(inputPath)) {
       // Containment disabled — absolute paths are real filesystem paths

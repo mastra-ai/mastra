@@ -119,7 +119,7 @@ export interface TUIState {
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
   lastAskUserComponent?: IToolExecutionComponent;
-  /** Saved editor text for Ctrl+Z undo */
+  /** Saved editor text for Alt+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
   /** Queue of pending inline questions waiting to be shown (when one is already active) */
