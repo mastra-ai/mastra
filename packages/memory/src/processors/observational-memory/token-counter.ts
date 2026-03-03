@@ -19,6 +19,78 @@ function getDefaultEncoder(): Tiktoken {
   return sharedDefaultEncoder;
 }
 
+type TokenEstimateCacheEntry = {
+  v: number;
+  source: string;
+  key: string;
+  tokens: number;
+};
+
+const TOKEN_ESTIMATE_CACHE_VERSION = 1;
+const TOKEN_ESTIMATE_CACHE_SOURCE = 'o200k_base';
+
+type CacheablePart = any;
+
+function buildEstimateKey(kind: string, text: string): string {
+  const head = text.slice(0, 24);
+  const tail = text.slice(-24);
+  return `${kind}:${text.length}:${head}:${tail}`;
+}
+
+function getPartCacheEntry(part: CacheablePart): TokenEstimateCacheEntry | undefined {
+  const cache = (part as any)?.providerMetadata?.mastra?.tokenEstimate;
+  if (!cache || typeof cache !== 'object') return undefined;
+  return cache as TokenEstimateCacheEntry;
+}
+
+function setPartCacheEntry(part: CacheablePart, entry: TokenEstimateCacheEntry): void {
+  const mutablePart = part as any;
+  mutablePart.providerMetadata ??= {};
+  mutablePart.providerMetadata.mastra ??= {};
+  mutablePart.providerMetadata.mastra.tokenEstimate = entry;
+}
+
+function getMessageCacheEntry(message: MastraDBMessage): TokenEstimateCacheEntry | undefined {
+  const content = message.content as any;
+  if (content && typeof content === 'object') {
+    const contentLevelCache = content.metadata?.mastra?.tokenEstimate;
+    if (contentLevelCache && typeof contentLevelCache === 'object') {
+      return contentLevelCache as TokenEstimateCacheEntry;
+    }
+  }
+
+  const messageLevelCache = (message as any)?.metadata?.mastra?.tokenEstimate;
+  if (!messageLevelCache || typeof messageLevelCache !== 'object') return undefined;
+  return messageLevelCache as TokenEstimateCacheEntry;
+}
+
+function setMessageCacheEntry(message: MastraDBMessage, entry: TokenEstimateCacheEntry): void {
+  const content = message.content as any;
+  if (content && typeof content === 'object') {
+    content.metadata ??= {};
+    (content.metadata as any).mastra ??= {};
+    (content.metadata as any).mastra.tokenEstimate = entry;
+    return;
+  }
+
+  (message as any).metadata ??= {};
+  (message as any).metadata.mastra ??= {};
+  (message as any).metadata.mastra.tokenEstimate = entry;
+}
+
+function isValidCacheEntry(
+  entry: TokenEstimateCacheEntry | undefined,
+  expectedKey: string,
+): entry is TokenEstimateCacheEntry {
+  return Boolean(
+    entry &&
+    entry.v === TOKEN_ESTIMATE_CACHE_VERSION &&
+    entry.source === TOKEN_ESTIMATE_CACHE_SOURCE &&
+    entry.key === expectedKey &&
+    Number.isFinite(entry.tokens),
+  );
+}
+
 /**
  * Token counting utility using tiktoken.
  * For POC we use o200k_base (GPT-4o encoding) as a reasonable default.
@@ -47,34 +119,79 @@ export class TokenCounter {
     return this.encoder.encode(text, 'all').length;
   }
 
+  private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {
+    const key = buildEstimateKey(kind, payload);
+    const cached = getPartCacheEntry(part);
+    if (isValidCacheEntry(cached, key)) {
+      return cached.tokens;
+    }
+
+    const tokens = this.countString(payload);
+    setPartCacheEntry(part, {
+      v: TOKEN_ESTIMATE_CACHE_VERSION,
+      source: TOKEN_ESTIMATE_CACHE_SOURCE,
+      key,
+      tokens,
+    });
+
+    return tokens;
+  }
+
+  private readOrPersistMessageEstimate(message: MastraDBMessage, kind: string, payload: string): number {
+    const key = buildEstimateKey(kind, payload);
+    const cached = getMessageCacheEntry(message);
+    if (isValidCacheEntry(cached, key)) {
+      return cached.tokens;
+    }
+
+    const tokens = this.countString(payload);
+    setMessageCacheEntry(message, {
+      v: TOKEN_ESTIMATE_CACHE_VERSION,
+      source: TOKEN_ESTIMATE_CACHE_SOURCE,
+      key,
+      tokens,
+    });
+
+    return tokens;
+  }
+
   /**
    * Count tokens in a single message
    */
   countMessage(message: MastraDBMessage): number {
-    let tokenString = message.role;
+    let payloadTokens = this.countString(message.role);
     let overhead = TokenCounter.TOKENS_PER_MESSAGE;
     let toolResultCount = 0;
 
     if (typeof message.content === 'string') {
-      tokenString += message.content;
+      payloadTokens += this.readOrPersistMessageEstimate(message, 'message-content', message.content);
     } else if (message.content && typeof message.content === 'object') {
       if (message.content.content && !Array.isArray(message.content.parts)) {
-        tokenString += message.content.content;
+        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', message.content.content);
       } else if (Array.isArray(message.content.parts)) {
         for (const part of message.content.parts) {
           if (part.type === 'text') {
-            tokenString += part.text;
+            payloadTokens += this.readOrPersistPartEstimate(part, 'text', part.text);
           } else if (part.type === 'tool-invocation') {
             const invocation = part.toolInvocation;
             if (invocation.state === 'call' || invocation.state === 'partial-call') {
               if (invocation.toolName) {
-                tokenString += invocation.toolName;
+                payloadTokens += this.readOrPersistPartEstimate(
+                  part,
+                  `tool-${invocation.state}-name`,
+                  invocation.toolName,
+                );
               }
               if (invocation.args) {
                 if (typeof invocation.args === 'string') {
-                  tokenString += invocation.args;
+                  payloadTokens += this.readOrPersistPartEstimate(
+                    part,
+                    `tool-${invocation.state}-args`,
+                    invocation.args,
+                  );
                 } else {
-                  tokenString += JSON.stringify(invocation.args);
+                  const argsJson = JSON.stringify(invocation.args);
+                  payloadTokens += this.readOrPersistPartEstimate(part, `tool-${invocation.state}-args-json`, argsJson);
                   // JSON.stringify adds ~12 tokens of structural overhead (braces, quotes, colons)
                   // that the model's native tool encoding doesn't use, so subtract to compensate.
                   overhead -= 12;
@@ -84,9 +201,10 @@ export class TokenCounter {
               toolResultCount++;
               if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
-                  tokenString += invocation.result;
+                  payloadTokens += this.readOrPersistPartEstimate(part, 'tool-result', invocation.result);
                 } else {
-                  tokenString += JSON.stringify(invocation.result);
+                  const resultJson = JSON.stringify(invocation.result);
+                  payloadTokens += this.readOrPersistPartEstimate(part, 'tool-result-json', resultJson);
                   overhead -= 12;
                 }
               }
@@ -101,7 +219,8 @@ export class TokenCounter {
           } else if (part.type === 'reasoning') {
             // Skip reasoning parts (not sent to the model context).
           } else {
-            tokenString += JSON.stringify(part);
+            const serialized = JSON.stringify(part);
+            payloadTokens += this.readOrPersistPartEstimate(part, `part-${part.type}`, serialized);
           }
         }
       }
@@ -112,8 +231,7 @@ export class TokenCounter {
       overhead += toolResultCount * TokenCounter.TOKENS_PER_MESSAGE;
     }
 
-    // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return Math.round(this.encoder.encode(tokenString, 'all').length + overhead);
+    return Math.round(payloadTokens + overhead);
   }
 
   /**
