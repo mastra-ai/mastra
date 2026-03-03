@@ -8,7 +8,7 @@ This template shows how an AI agent can do that analysis conversationally: ask i
 
 ## Demo
 
-<video controls width="640" height="360" src="https://github.com/user-attachments/assets/214aad12-f8bc-4eae-bcf0-2df5d809e3f5"></video>
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1772538405/template-customer-feedback-summarization_yeobip.mp4"></video>
 
 This demo runs in Mastra Studio, but you can connect this agent to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
