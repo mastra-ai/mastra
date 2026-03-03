@@ -163,6 +163,43 @@ export class Tool<
    */
   mcp?: MCPToolProperties;
 
+  onInputStart?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputStart'];
+  onInputDelta?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputDelta'];
+  onInputAvailable?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputAvailable'];
+  onOutput?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onOutput'];
+
   /**
    * Creates a new Tool instance with input validation wrapper.
    *
@@ -191,6 +228,10 @@ export class Tool<
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
+    this.onInputStart = opts.onInputStart;
+    this.onInputDelta = opts.onInputDelta;
+    this.onInputAvailable = opts.onInputAvailable;
+    this.onOutput = opts.onOutput;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
