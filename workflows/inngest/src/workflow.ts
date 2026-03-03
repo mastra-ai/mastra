@@ -9,6 +9,7 @@ import type {
   WorkflowConfig,
   StepFlowEntry,
   WorkflowResult,
+  WorkflowRunStatus,
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
@@ -323,6 +324,7 @@ export class InngestWorkflow<
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
         let finalizeError: unknown;
+        let finalizeErrored = false;
         try {
           await step.run(`workflow.${this.id}.finalize`, async () => {
             if (result.status !== 'paused') {
@@ -367,7 +369,7 @@ export class InngestWorkflow<
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
             const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
-              workflowStatus: result.status as any,
+              workflowStatus: result.status as WorkflowRunStatus,
               stepResults: result.steps,
             });
             if (shouldPersistFinalSnapshot) {
@@ -394,6 +396,7 @@ export class InngestWorkflow<
                     runId,
                     status: result.status,
                     value: result.state ?? initialState ?? {},
+                    // StepResult is a structural subset of SerializedStepResult; cast needed due to generics
                     context: result.steps as any,
                     activePaths: [],
                     activeStepsPath: {},
@@ -401,7 +404,7 @@ export class InngestWorkflow<
                     suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
                     waitingPaths: {},
                     resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? (result.result as any) : undefined,
+                    result: result.status === 'success' ? (result.result as Record<string, any>) : undefined,
                     error: result.status === 'failed' ? result.error : undefined,
                     timestamp: Date.now(),
                   },
@@ -409,19 +412,23 @@ export class InngestWorkflow<
               }
             }
 
-            // Publish workflow-finish event for realtime subscribers
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: {
-                type: 'workflow-finish',
-                payload: {
-                  status: result.status,
-                  result: result.status === 'success' ? result.result : undefined,
-                  error: result.status === 'failed' ? result.error : undefined,
+            // Publish workflow-finish event for realtime subscribers (best-effort)
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: {
+                  type: 'workflow-finish',
+                  payload: {
+                    status: result.status,
+                    result: result.status === 'success' ? result.result : undefined,
+                    error: result.status === 'failed' ? result.error : undefined,
+                  },
                 },
-              },
-            });
+              });
+            } catch (publishError) {
+              this.logger.debug?.('Failed to publish workflow-finish event:', publishError);
+            }
 
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
@@ -433,6 +440,7 @@ export class InngestWorkflow<
             return result;
           });
         } catch (error) {
+          finalizeErrored = true;
           finalizeError = error;
         } finally {
           // Keep this outside step.run memoization, but guaranteed on all paths.
@@ -446,7 +454,7 @@ export class InngestWorkflow<
           }
         }
 
-        if (finalizeError) {
+        if (finalizeErrored) {
           throw finalizeError;
         }
 
