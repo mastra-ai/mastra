@@ -42,6 +42,8 @@ export interface TreeOptions {
   extension?: string | string[];
   /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
   pattern?: string | string[];
+  /** Filter function that returns true if a relative path should be ignored (e.g., from .gitignore). */
+  ignoreFilter?: (relativePath: string) => boolean;
 }
 
 export interface TreeResult {
@@ -85,6 +87,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const exclude = options?.exclude;
   const extension = options?.extension;
   const pattern = options?.pattern;
+  const ignoreFilter = options?.ignoreFilter;
 
   // Compile glob matcher once before the walk (if pattern provided)
   let globMatcher: GlobMatcher | undefined;
@@ -132,6 +135,20 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       const patterns = Array.isArray(exclude) ? exclude : [exclude];
       filtered = filtered.filter(e => {
         return !patterns.some(pattern => e.name.includes(pattern));
+      });
+    }
+
+    // Filter by gitignore rules
+    if (ignoreFilter) {
+      filtered = filtered.filter(e => {
+        // Build relative path from the tree root
+        const relativePath =
+          currentPath === path || currentPath === '.' || currentPath === './'
+            ? e.name
+            : `${currentPath.replace(/^\.\//, '')}/${e.name}`;
+        // Append trailing slash for directories so gitignore dir patterns match
+        const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
+        return !ignoreFilter(checkPath);
       });
     }
 
