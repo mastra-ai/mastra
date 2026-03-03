@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatTableName,
+  prepareDeleteStatement,
   prepareStatement,
   prepareWhereClause,
   quoteIdentifier,
@@ -60,5 +61,11 @@ describe('MySQL utils', () => {
 
     expect(sql.trim()).toMatch(/^WHERE/);
     expect(args).toEqual(['thread-1', '2023-01-01 00:00:00.000', '2023-01-02 00:00:00.000']);
+  });
+
+  it('throws when delete statement keys are empty', () => {
+    expect(() => prepareDeleteStatement({ tableName: TABLE_MESSAGES, keys: {} })).toThrow(
+      'Keys object cannot be empty for DELETE statement',
+    );
   });
 });

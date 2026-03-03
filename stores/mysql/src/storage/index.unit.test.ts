@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 const poolInstances: Array<{
+  connection: {
+    release: Mock;
+    query: Mock;
+    execute: Mock;
+  };
   pool: {
     getConnection: Mock;
     execute: Mock;
@@ -19,6 +24,7 @@ vi.mock('mysql2/promise', async () => {
       const connection = {
         release,
         query: vi.fn().mockResolvedValue([[{ count: 0 }]]),
+        execute: vi.fn().mockResolvedValue([[]]),
       };
       const pool = {
         getConnection: vi.fn().mockResolvedValue(connection),
@@ -26,7 +32,7 @@ vi.mock('mysql2/promise', async () => {
         query: vi.fn().mockResolvedValue([[]]),
         end: vi.fn().mockResolvedValue(undefined),
       };
-      poolInstances.push({ pool, release });
+      poolInstances.push({ pool, connection, release });
       return pool as unknown as typeof actual.createPool extends (...args: any) => infer R ? R : never;
     }),
   };
@@ -155,13 +161,34 @@ describe('MySQLStore configuration', () => {
     const store = new MySQLStore({ host: 'localhost', user: 'user', password: 'pw', database: 'db' });
 
     // Mock that the table already exists
-    const { pool, release } = poolInstances[poolInstances.length - 1];
-    pool.query = vi.fn().mockResolvedValue([[{ count: 1 }]]); // table exists
+    const { pool, connection, release } = poolInstances[poolInstances.length - 1];
+    connection.query = vi.fn().mockResolvedValue([[{ count: 1 }]]); // table exists
 
     await store.init();
 
     expect(pool.getConnection).toHaveBeenCalled();
     expect(release).toHaveBeenCalled(); // Connection should be released even when table exists
+
+    await store.close();
+  });
+
+  it('uses a non-undefined database bind when connection string omits database', async () => {
+    const store = new MySQLStore({ connectionString: 'mysql://user:pass@localhost:3306' });
+    const { connection } = poolInstances[poolInstances.length - 1];
+
+    connection.query = vi.fn().mockImplementation(async (_sql: string, args: unknown[] = []) => {
+      if (args.some(value => value === undefined)) {
+        throw new TypeError('Bind parameters must not contain undefined');
+      }
+      return [[{ count: 1 }]];
+    });
+
+    await expect(store.init()).resolves.toBeUndefined();
+    for (const [, args] of connection.query.mock.calls) {
+      if (Array.isArray(args)) {
+        expect(args).not.toContain(undefined);
+      }
+    }
 
     await store.close();
   });

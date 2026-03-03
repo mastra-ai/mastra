@@ -109,7 +109,12 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
 
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = scorerDefinition;
       const versionId = crypto.randomUUID();
-      await this.createVersion({ id: versionId, scorerDefinitionId: scorerDefinition.id, versionNumber: 1, ...snapshotConfig, changedFields: Object.keys(snapshotConfig), changeMessage: 'Initial version' });
+      try {
+        await this.createVersion({ id: versionId, scorerDefinitionId: scorerDefinition.id, versionNumber: 1, ...snapshotConfig, changedFields: Object.keys(snapshotConfig), changeMessage: 'Initial version' });
+      } catch (versionError) {
+        await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id: scorerDefinition.id } });
+        throw versionError;
+      }
 
       return { id: scorerDefinition.id, status: 'draft', activeVersionId: undefined, authorId: scorerDefinition.authorId, metadata: scorerDefinition.metadata, createdAt: now, updatedAt: now };
     } catch (error) {
@@ -122,7 +127,15 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing) throw new Error(`Scorer definition with id ${id} not found`);
+      if (!existing) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Scorer definition with id ${id} not found`,
+          details: { id },
+        });
+      }
 
       const { authorId, activeVersionId, metadata, status } = updates;
       const updateData: Record<string, unknown> = { updatedAt: new Date() };

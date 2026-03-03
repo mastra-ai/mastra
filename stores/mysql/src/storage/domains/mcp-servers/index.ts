@@ -130,7 +130,15 @@ export class MCPServersMySQL extends MCPServersStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing) throw new Error(`MCP server with id ${id} not found`);
+      if (!existing) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_MCP_SERVER', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `MCP server with id ${id} not found`,
+          details: { id },
+        });
+      }
 
       const { authorId, activeVersionId, metadata, status } = updates;
       const updateData: Record<string, unknown> = { updatedAt: new Date() };

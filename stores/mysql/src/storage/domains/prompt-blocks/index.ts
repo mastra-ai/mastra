@@ -122,14 +122,19 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
 
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = promptBlock;
       const versionId = crypto.randomUUID();
-      await this.createVersion({
-        id: versionId,
-        blockId: promptBlock.id,
-        versionNumber: 1,
-        ...snapshotConfig,
-        changedFields: Object.keys(snapshotConfig),
-        changeMessage: 'Initial version',
-      });
+      try {
+        await this.createVersion({
+          id: versionId,
+          blockId: promptBlock.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
+      } catch (versionError) {
+        await this.operations.delete({ tableName: TABLE_PROMPT_BLOCKS, keys: { id: promptBlock.id } });
+        throw versionError;
+      }
 
       return {
         id: promptBlock.id,
@@ -153,7 +158,15 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing) throw new Error(`Prompt block with id ${id} not found`);
+      if (!existing) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Prompt block with id ${id} not found`,
+          details: { id },
+        });
+      }
 
       const { authorId, activeVersionId, metadata, status } = updates;
       const updateData: Record<string, unknown> = { updatedAt: new Date() };

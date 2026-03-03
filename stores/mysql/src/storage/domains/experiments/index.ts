@@ -317,12 +317,37 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async deleteExperiment(args: { id: string }): Promise<void> {
     try {
-      await this.pool.execute(
-        `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
-        [args.id],
-      );
-      await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE id = ?`, [args.id]);
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        await connection.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
+          [args.id],
+        );
+        await connection.execute(`DELETE FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE id = ?`, [args.id]);
+        await connection.commit();
+      } catch (error) {
+        try {
+          await connection.rollback();
+        } catch (rollbackError) {
+          throw new MastraError(
+            {
+              id: 'MYSQL_DELETE_EXPERIMENT_ROLLBACK_FAILED',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { experimentId: args.id },
+            },
+            rollbackError,
+          );
+        }
+        throw error;
+      } finally {
+        connection.release();
+      }
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'MYSQL_DELETE_EXPERIMENT_FAILED',

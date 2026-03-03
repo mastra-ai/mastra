@@ -2,7 +2,7 @@ import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
-type SqlParam = any;
+export type SqlParam = any;
 
 export function quoteIdentifier(value: string, context: string): string {
   return `\`${parseSqlIdentifier(value, context)}\``;
@@ -161,6 +161,10 @@ export function prepareDeleteStatement({
   sql: string;
   args: SqlParam[];
 } {
+  if (Object.keys(keys).length === 0) {
+    throw new Error('Keys object cannot be empty for DELETE statement');
+  }
+
   const tableIdent = formatTableName(tableName, database);
   const whereClause = prepareWhereClause(keys);
 
