@@ -1,4 +1,3 @@
-import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
   AgentIcon,
   AuthStatus,
@@ -16,6 +15,7 @@ import {
   useAuthCapabilities,
   isAuthenticated,
 } from '@mastra/playground-ui';
+import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
   GaugeIcon,
   EyeIcon,

@@ -1,7 +1,8 @@
-import react from '@vitejs/plugin-react';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
-import { defineConfig, Plugin, PluginOption, UserConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import type { Plugin, PluginOption, UserConfig } from 'vite';
+import { defineConfig } from 'vite';
 
 const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginOption => ({
   name: 'studio-standalone-plugin',
