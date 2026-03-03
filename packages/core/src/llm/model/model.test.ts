@@ -15,6 +15,8 @@ describe('MastraLLM', () => {
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
     } as any,
   };
 
@@ -757,8 +759,9 @@ describe('MastraLLM', () => {
       trackException: vi.fn(),
     } as any;
 
-    function createErrorLLM() {
+    function createErrorLLM(objectMode = false) {
       const errorModel = new MockLanguageModelV1({
+        defaultObjectGenerationMode: objectMode ? 'json' : undefined,
         doGenerate: async () => {
           throw new Error('input too long');
         },
@@ -776,19 +779,29 @@ describe('MastraLLM', () => {
       errorLogger.error.mockClear();
       const llm = createErrorLLM();
       const messages: CoreMessage[] = [{ role: 'user', content: 'test' }];
+      const testRunId = 'test-run-id';
+      const testThreadId = 'test-thread-id';
+      const testResourceId = 'test-resource-id';
 
       await expect(
         llm.__text({
           messages,
+          runId: testRunId,
+          threadId: testThreadId,
+          resourceId: testResourceId,
           requestContext: new RequestContext(),
           tracingContext: {},
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow('input too long');
 
+      expect(errorLogger.error).toHaveBeenCalledTimes(1);
       expect(errorLogger.error).toHaveBeenCalledWith(
         '[LLM] - Generate text failed',
         expect.objectContaining({
-          runId: undefined,
+          error: expect.any(Object),
+          runId: testRunId,
+          threadId: testThreadId,
+          resourceId: testResourceId,
           modelId: expect.any(String),
           modelProvider: expect.any(String),
         }),
@@ -797,23 +810,33 @@ describe('MastraLLM', () => {
 
     it('should log errors through Mastra logger when generateObject fails', async () => {
       errorLogger.error.mockClear();
-      const llm = createErrorLLM();
+      const llm = createErrorLLM(true); // Enable object mode
       const messages: CoreMessage[] = [{ role: 'user', content: 'test' }];
       const schema = z.object({ content: z.string() }) as z.ZodType<any>;
+      const testRunId = 'test-run-id';
+      const testThreadId = 'test-thread-id';
+      const testResourceId = 'test-resource-id';
 
       await expect(
         llm.__textObject({
           messages,
           structuredOutput: schema,
+          runId: testRunId,
+          threadId: testThreadId,
+          resourceId: testResourceId,
           requestContext: new RequestContext(),
           tracingContext: {},
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow('input too long');
 
+      expect(errorLogger.error).toHaveBeenCalledTimes(1);
       expect(errorLogger.error).toHaveBeenCalledWith(
         '[LLM] - Generate object failed',
         expect.objectContaining({
-          runId: undefined,
+          error: expect.any(Object),
+          runId: testRunId,
+          threadId: testThreadId,
+          resourceId: testResourceId,
           modelId: expect.any(String),
           modelProvider: expect.any(String),
         }),
