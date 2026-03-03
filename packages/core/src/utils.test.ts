@@ -257,6 +257,79 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeUndefined();
   });
 
+  it('should preserve lifecycle hooks through createTool → makeCoreTool pipeline', async () => {
+    const onInputStart = vi.fn();
+    const onInputDelta = vi.fn();
+    const onInputAvailable = vi.fn();
+    const onOutput = vi.fn();
+
+    const tool = createTool({
+      id: 'hook-test',
+      description: 'Tool with hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+      onInputStart,
+      onInputDelta,
+      onInputAvailable,
+      onOutput,
+    });
+
+    const coreTool = makeCoreTool(tool, mockOptions);
+
+    expect('onInputStart' in coreTool).toBe(true);
+    expect('onInputDelta' in coreTool).toBe(true);
+    expect('onInputAvailable' in coreTool).toBe(true);
+    expect('onOutput' in coreTool).toBe(true);
+    expect((coreTool as any).onInputStart).toBe(onInputStart);
+    expect((coreTool as any).onInputDelta).toBe(onInputDelta);
+    expect((coreTool as any).onInputAvailable).toBe(onInputAvailable);
+    expect((coreTool as any).onOutput).toBe(onOutput);
+  });
+
+  it('should work correctly for tools without lifecycle hooks', async () => {
+    const tool = createTool({
+      id: 'no-hooks',
+      description: 'Tool without hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const coreTool = makeCoreTool(tool, mockOptions);
+
+    expect(coreTool.description).toBe('Tool without hooks');
+    expect(typeof coreTool.execute).toBe('function');
+    expect((coreTool as any).onInputStart).toBeUndefined();
+    expect((coreTool as any).onInputDelta).toBeUndefined();
+    expect((coreTool as any).onInputAvailable).toBeUndefined();
+    expect((coreTool as any).onOutput).toBeUndefined();
+
+    const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('should preserve lifecycle hooks on Tool instance from createTool', () => {
+    const onInputStart = vi.fn();
+    const onInputDelta = vi.fn();
+    const onInputAvailable = vi.fn();
+    const onOutput = vi.fn();
+
+    const tool = createTool({
+      id: 'instance-hooks',
+      description: 'Tool instance with hooks',
+      inputSchema: z.object({ value: z.number() }),
+      execute: async () => ({ done: true }),
+      onInputStart,
+      onInputDelta,
+      onInputAvailable,
+      onOutput,
+    });
+
+    expect(tool.onInputStart).toBe(onInputStart);
+    expect(tool.onInputDelta).toBe(onInputDelta);
+    expect(tool.onInputAvailable).toBe(onInputAvailable);
+    expect(tool.onOutput).toBe(onOutput);
+  });
+
   it('should have default parameters if no parameters are provided for Vercel tool', () => {
     const coreTool = makeCoreTool(
       {
