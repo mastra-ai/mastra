@@ -46,7 +46,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
 
   return (
     <aside className={cn('learn-sidebar-container', className)}>
-      <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
+      <nav className="learn-sidebar flex h-full flex-col overflow-y-auto pt-4">
         <div className="px-4 pb-4">
           <Link
             to="/learn"
