@@ -45,7 +45,6 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-tooltip": "^1.2.7",
     "hast-util-to-jsx-runtime": "^2.3.6",
@@ -54,6 +53,7 @@
     "tailwind-merge": "^3.4.1"
   },
   "peerDependencies": {
+    "@mastra/core": ">=1.8.0-0 <2.0.0-0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "zod": "^3.25.0 || ^4.0.0"
@@ -62,6 +62,7 @@
     "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.12.10",
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@storybook/react-vite": "^9.1.16",
     "@tailwindcss/cli": "^4",
