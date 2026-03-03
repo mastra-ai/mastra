@@ -61,11 +61,25 @@ export function setupKeyboardShortcuts(
 
   // Ctrl+Z - suspend process (SIGTSTP)
   state.editor.onAction('suspend', () => {
+    if (process.platform === 'win32') {
+      showInfo(state, 'Suspend is not supported on Windows');
+      return;
+    }
+
     state.ui.stop();
-    process.once('SIGCONT', () => {
+    const onContinue = () => {
       state.ui.start();
-    });
-    process.kill(process.pid, 'SIGTSTP');
+      state.ui.requestRender();
+    };
+    process.once('SIGCONT', onContinue);
+    try {
+      process.kill(process.pid, 'SIGTSTP');
+    } catch {
+      process.off('SIGCONT', onContinue);
+      state.ui.start();
+      state.ui.requestRender();
+      showError(state, 'Unable to suspend in the current terminal');
+    }
   });
 
   // Ctrl+D - exit when editor is empty

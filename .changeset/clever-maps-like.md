@@ -2,4 +2,11 @@
 'mastracode': patch
 ---
 
-Ctrl+Z now suspends the process (SIGTSTP) instead of undoing the last clear. Run `fg` to resume. Fixes #13582.
+**Added** Ctrl+Z now suspends mastracode and returns control to your shell. Run `fg` to resume.
+
+```bash
+# while mastracode is running, press Ctrl+Z to suspend
+$ fg   # resume mastracode
+```
+
+Fixes #13582.
