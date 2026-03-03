@@ -14,6 +14,8 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
+
+import packageJson from '../../package.json';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -44,7 +46,12 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    */
   constructor({ url, id, auth }: { url: string } & { id: string } & { auth?: ElasticSearchAuth }) {
     super({ id });
-    this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
+    this.client = new ElasticSearchClient({
+      node: url,
+      ...(auth && { auth }),
+      name: 'mastra-elasticsearch',
+      headers: { 'user-agent': `mastra-elasticsearch/${packageJson.version}` },
+    });
   }
 
   /**
