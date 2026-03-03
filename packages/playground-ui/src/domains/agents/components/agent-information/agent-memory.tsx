@@ -6,7 +6,13 @@ import { cn } from '@/lib/utils';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch, useCloneThread, useMemoryWithOMStatus, useThread } from '@/domains/memory/hooks';
+import {
+  useMemoryConfig,
+  useMemorySearch,
+  useCloneThread,
+  useMemoryWithOMStatus,
+  useThread,
+} from '@/domains/memory/hooks';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
