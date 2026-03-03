@@ -250,6 +250,32 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Spawn Failure Handling
+  // ===========================================================================
+  describe('spawn failure handling', () => {
+    beforeEach(async () => {
+      await sandbox._start();
+    });
+
+    it('should throw a descriptive error when cwd does not exist', async () => {
+      if (os.platform() === 'win32') return;
+      await expect(sandbox.executeCommand('pwd', [], { cwd: '/nonexistent/path/that/does/not/exist' })).rejects.toThrow(
+        /ENOENT|no such file or directory|cwd/i,
+      );
+    });
+
+    it('should return exit code 127 for nonexistent command', async () => {
+      if (os.platform() === 'win32') return;
+      // With shell: true (isolation: none), the shell spawns fine but reports
+      // "command not found" via stderr and exits with code 127.
+      const result = await sandbox.executeCommand('nonexistent-command-xyz-12345', []);
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toMatch(/not found/i);
+    });
+  });
+
+  // ===========================================================================
   // Timeout Handling
   // ===========================================================================
   describe('timeout handling', () => {
@@ -259,13 +285,25 @@ describe('LocalSandbox', () => {
 
     it('should respect custom timeout for command execution', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
-      // This should timeout quickly
       const result = await sandbox.executeCommand('sleep', ['5'], {
-        timeout: 100, // Very short timeout
+        timeout: 100,
       });
 
       expect(result.success).toBe(false);
-      // The error might be a timeout or killed signal
+      expect(result.exitCode).toBe(124);
+      expect(result.timedOut).toBe(true);
+    });
+
+    it('should timeout a compound command and kill the process group', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const result = await sandbox.executeCommand('sleep 2 && echo done', [], {
+        timeout: 100,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(124);
+      expect(result.timedOut).toBe(true);
+      expect(result.stdout).not.toContain('done');
     });
   });
 

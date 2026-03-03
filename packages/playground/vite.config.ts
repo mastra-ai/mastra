@@ -25,11 +25,18 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
 // stub them so Rollup can resolve the imports without erroring.
 // enforce: 'pre' ensures this runs before Vite's built-in vite:resolve which
 // would otherwise replace them with __vite-browser-external (no named exports).
+// Node-only npm packages imported by @mastra/core server-only code (e.g. sandbox).
+// These are never called in the browser — stub them alongside Node builtins.
+const nodeOnlyPackages = new Set(['execa']);
+
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
   enforce: 'pre',
   apply: 'build',
   resolveId(source) {
+    if (nodeOnlyPackages.has(source)) {
+      return { id: `\0node-stub:${source}`, moduleSideEffects: false };
+    }
     const mod = source.startsWith('node:') ? source.slice(5) : source;
     const baseMod = mod.split('/')[0];
     if (builtinModules.includes(baseMod)) {
