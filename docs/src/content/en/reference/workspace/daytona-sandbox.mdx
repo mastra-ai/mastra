@@ -429,6 +429,11 @@ const workspace = new Workspace({
     description:
       'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
   },
+  {
+    name: 'processes',
+    type: 'DaytonaProcessManager',
+    description: 'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
@@ -603,6 +608,28 @@ new DaytonaSandbox({
 // 'Cloud sandbox with isolated execution (python runtime). Default working directory: /home/daytona. Command timeout: 60s. Running as user: app. 1 volume(s) attached. Network access is blocked.'
 ```
 
+## Background processes
+
+`DaytonaSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the Daytona cloud sandbox using session-based command execution.
+
+```typescript
+const sandbox = new DaytonaSandbox({ language: 'typescript' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
 ## Mounting Cloud Storage
 
 Daytona sandboxes can mount S3 or GCS buckets, making cloud storage accessible as local directories inside the sandbox. This is useful for:
@@ -741,6 +768,7 @@ Resources are only applied when `image` is set. Passing `resources` without `ima
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)

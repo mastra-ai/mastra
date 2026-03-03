@@ -11,7 +11,7 @@ packages:
 
 Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them.
 
-Both [`LocalSandbox`](/reference/workspace/local-sandbox) and [`E2BSandbox`](/reference/workspace/e2b-sandbox) include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
+[`LocalSandbox`](/reference/workspace/local-sandbox), [`E2BSandbox`](/reference/workspace/e2b-sandbox), and [`DaytonaSandbox`](/reference/workspace/daytona-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
 
 ## Usage example
 
@@ -90,6 +90,12 @@ isOptional: true,
 name: "options.onStderr",
 type: "(data: string) => void",
 description: "Callback for stderr chunks. Called as data arrives.",
+isOptional: true,
+},
+{
+name: "options.abortSignal",
+type: "AbortSignal",
+description: "Signal to abort the process. When aborted, the process is killed.",
 isOptional: true,
 },
 ]}
@@ -390,3 +396,4 @@ When a process manager is provided, `MastraSandbox` automatically creates a defa
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [E2BSandbox reference](/reference/workspace/e2b-sandbox)
+- [DaytonaSandbox reference](/reference/workspace/daytona-sandbox)
