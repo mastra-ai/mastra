@@ -16,7 +16,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { normalizeStudioBase } from '../build/utils';
+import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -367,7 +367,7 @@ export async function createHonoServer(
       const studioPath = getStudioPath();
       let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
 
-      // Inject the server configuration information
+      // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
@@ -396,21 +396,18 @@ export async function createHonoServer(
           .replace(/\u2029/g, '\\u2029');
       };
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_API_PREFIX%%'`, `'${serverOptions?.apiPrefix ?? '/api'}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, `'${experimentalFeatures}'`);
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`,
-        `'${escapeForHtml(requestContextPresets)}'`,
-      );
-
-      // Inject the base path for frontend routing
-      // The <base href> tag uses this to resolve all relative URLs correctly
-      indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);
+      indexHtml = injectStudioHtmlConfig(indexHtml, {
+        host: `'${host}'`,
+        port: `'${port}'`,
+        protocol: `'${protocol}'`,
+        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        basePath: studioBasePath,
+        hideCloudCta: `'${hideCloudCta}'`,
+        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        experimentalFeatures: `'${experimentalFeatures}'`,
+        telemetryDisabled: `''`,
+        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+      });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }

@@ -15,12 +15,14 @@ import {
   handleModeCommand,
   handleSkillsCommand,
   handleNewCommand,
+  handleCloneCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
+  handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
@@ -65,6 +67,9 @@ export async function dispatchSlashCommand(
     case 'new':
       handleNewCommand(buildCtx());
       return true;
+    case 'clone':
+      await handleCloneCommand(buildCtx());
+      return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
       return true;
@@ -82,6 +87,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'models':
       await handleModelsPackCommand(buildCtx());
+      return true;
+    case 'custom-providers':
+      await handleCustomProvidersCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());

@@ -5,6 +5,7 @@
  * "understand how module Y works") and uses read-only tools to explore
  * the codebase, then returns a concise summary of its findings.
  */
+import { MC_TOOLS } from '../../tool-names.js';
 import type { SubagentDefinition } from './types.js';
 
 export const exploreSubagent: SubagentDefinition = {
@@ -36,5 +37,5 @@ End with a structured summary:
 . **Details**: Additional context if needed
 
 Keep your summary under 300 words.`,
-  allowedTools: ['view', 'search_content', 'find_files'],
+  allowedTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };
