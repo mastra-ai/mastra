@@ -37,4 +37,4 @@ Open Studio and select the "Web Assistant" agent.
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-browsing-agent/CONTRIBUTING.md).
