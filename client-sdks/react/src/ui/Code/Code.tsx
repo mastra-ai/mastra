@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import type { JSX} from 'react';
+import type { JSX } from 'react';
 import { useLayoutEffect, useState } from 'react';
 import type { BundledLanguage } from 'shiki/bundle/web';
 import { IconButton } from '../IconButton/IconButton';

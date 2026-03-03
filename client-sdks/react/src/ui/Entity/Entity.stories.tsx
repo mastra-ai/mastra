@@ -17,7 +17,6 @@ import {
 } from './ToolApproval';
 import type { EntityVariant } from './types';
 
-
 interface ComponentProps {
   className?: string;
   additionalClass?: string;

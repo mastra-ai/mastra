@@ -1,4 +1,4 @@
-import type { HTMLAttributes} from 'react';
+import type { HTMLAttributes } from 'react';
 import { useEffect, useRef } from 'react';
 import { twMerge } from 'tailwind-merge';
 

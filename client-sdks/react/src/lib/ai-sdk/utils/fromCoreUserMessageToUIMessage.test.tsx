@@ -1,4 +1,4 @@
-import type {CoreUserMessage} from '@mastra/core/llm';
+import type { CoreUserMessage } from '@mastra/core/llm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MastraUIMessage } from '../types';
 import { fromCoreUserMessageToUIMessage } from './fromCoreUserMessageToUIMessage';

@@ -1,4 +1,4 @@
-import type { NetworkChunkType} from '@mastra/core/stream';
+import type { NetworkChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';

@@ -1,4 +1,4 @@
-import type { ChunkType} from '@mastra/core/stream';
+import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { describe, it, expect } from 'vitest';

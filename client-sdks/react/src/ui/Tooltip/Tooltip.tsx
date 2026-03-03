@@ -1,12 +1,10 @@
-import type {
-  TooltipTriggerProps,
-  TooltipContentProps} from '@radix-ui/react-tooltip';
+import type { TooltipTriggerProps, TooltipContentProps } from '@radix-ui/react-tooltip';
 import {
   TooltipTrigger as RTooltipTrigger,
   TooltipProvider as RTooltipProvider,
   Root as RTooltipRoot,
   TooltipPortal as RTooltipPortal,
-  TooltipContent as RTooltipContent
+  TooltipContent as RTooltipContent,
 } from '@radix-ui/react-tooltip';
 
 export interface TooltipProps extends React.ComponentPropsWithoutRef<'div'> {
