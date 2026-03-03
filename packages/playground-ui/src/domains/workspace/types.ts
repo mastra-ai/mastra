@@ -34,6 +34,7 @@ export interface WorkspaceInfo {
   capabilities?: WorkspaceCapabilities;
   safety?: WorkspaceSafety;
   filesystem?: WorkspaceFilesystemInfo;
+  mounts?: MountInfo[];
 }
 
 export interface WorkspaceItem {
@@ -234,6 +235,19 @@ export interface SearchSkillsParams {
 }
 
 // =============================================================================
+// Mount Types
+// =============================================================================
+
+export interface MountInfo {
+  path: string;
+  provider: string;
+  readOnly: boolean;
+  displayName?: string;
+  icon?: string;
+  name?: string;
+}
+
+// =============================================================================
 // skills.sh Types
 // =============================================================================
 
@@ -267,6 +281,7 @@ export interface SkillsShInstallParams {
   owner: string;
   repo: string;
   skillName: string;
+  mount?: string;
 }
 
 export interface SkillsShInstallResponse {

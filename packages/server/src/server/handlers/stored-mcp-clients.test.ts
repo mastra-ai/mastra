@@ -51,6 +51,17 @@ interface MockMCPClientsStore {
   listResolved: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
+  list: ReturnType<typeof vi.fn>;
+  getLatestVersion: ReturnType<typeof vi.fn>;
+  createVersion: ReturnType<typeof vi.fn>;
+  listVersions: ReturnType<typeof vi.fn>;
+  getVersion: ReturnType<typeof vi.fn>;
+  getVersionByNumber: ReturnType<typeof vi.fn>;
+  deleteVersion: ReturnType<typeof vi.fn>;
+  deleteVersionsByParentId: ReturnType<typeof vi.fn>;
+  countVersions: ReturnType<typeof vi.fn>;
+  dangerouslyClearAll: ReturnType<typeof vi.fn>;
+  init: ReturnType<typeof vi.fn>;
 }
 
 function createMockMCPClientsStore(data: Map<string, MockStoredMCPClient> = new Map()): MockMCPClientsStore {
@@ -121,8 +132,29 @@ function createMockMCPClientsStore(data: Map<string, MockStoredMCPClient> = new 
       return updated;
     }),
     delete: vi.fn().mockImplementation(async (id: string) => {
-      return data.delete(id);
+      data.delete(id);
     }),
+    list: vi.fn().mockImplementation(async () => {
+      return {
+        mcpClients: Array.from(data.values()),
+        total: data.size,
+        page: 1,
+        perPage: 20,
+        hasMore: false,
+      };
+    }),
+    getLatestVersion: vi.fn().mockResolvedValue(null),
+    createVersion: vi.fn().mockResolvedValue({}),
+    listVersions: vi.fn().mockResolvedValue({ versions: [], total: 0, page: 0, perPage: 20, hasMore: false }),
+    getVersion: vi.fn().mockResolvedValue(null),
+    getVersionByNumber: vi.fn().mockResolvedValue(null),
+    deleteVersion: vi.fn().mockResolvedValue(undefined),
+    deleteVersionsByParentId: vi.fn().mockResolvedValue(undefined),
+    countVersions: vi.fn().mockResolvedValue(0),
+    dangerouslyClearAll: vi.fn().mockImplementation(async () => {
+      data.clear();
+    }),
+    init: vi.fn().mockResolvedValue(undefined),
   };
 }
 

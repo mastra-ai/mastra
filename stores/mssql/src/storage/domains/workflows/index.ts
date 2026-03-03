@@ -42,6 +42,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   /**
    * Returns default index definitions for the workflows domain tables.
    * Currently no default indexes are defined for workflows.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import type { StoredMCPServerConfig } from '@mastra/client-js';
@@ -12,18 +12,34 @@ import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
 import { MCPClientToolPreview } from './mcp-client-tool-preview';
 
 interface MCPClientCreateContentProps {
-  onAdd?: (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => void;
+  onAdd?: (config: {
+    name: string;
+    description?: string;
+    servers: Record<string, StoredMCPServerConfig>;
+    selectedTools: Record<string, { description?: string }>;
+  }) => void;
   readOnly?: boolean;
   initialValues?: MCPClientFormValues;
+  initialSelectedTools?: Record<string, { description?: string }>;
   submitLabel?: string;
 }
 
-export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitLabel }: MCPClientCreateContentProps) {
+export function MCPClientCreateContent({
+  onAdd,
+  readOnly,
+  initialValues,
+  initialSelectedTools,
+  submitLabel,
+}: MCPClientCreateContentProps) {
   const { form } = useMCPClientForm(initialValues);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const serverType = useWatch({ control: form.control, name: 'serverType' });
   const url = useWatch({ control: form.control, name: 'url' });
+
+  const [selectedTools, setSelectedTools] = useState<Record<string, { description?: string }>>(
+    initialSelectedTools ?? {},
+  );
 
   const tryConnect = useTryConnectMcp();
   const hasAutoConnected = useRef(false);
@@ -40,6 +56,24 @@ export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitL
       tryConnect.mutate(url);
     }
   }, [serverType, url, tryConnect]);
+
+  const handleToggleTool = useCallback((toolName: string, description?: string) => {
+    setSelectedTools(prev => {
+      if (toolName in prev) {
+        const next = { ...prev };
+        delete next[toolName];
+        return next;
+      }
+      return { ...prev, [toolName]: { description } };
+    });
+  }, []);
+
+  const handleDescriptionChange = useCallback((toolName: string, description: string) => {
+    setSelectedTools(prev => ({
+      ...prev,
+      [toolName]: { ...prev[toolName], description },
+    }));
+  }, []);
 
   const handlePreFillFromServer = (serverId: string) => {
     const host = window.MASTRA_SERVER_HOST;
@@ -94,6 +128,7 @@ export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitL
       name: values.name,
       description: values.description || undefined,
       servers: serverConfig,
+      selectedTools,
     });
   };
 
@@ -108,13 +143,21 @@ export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitL
             onPreFillFromServer={handlePreFillFromServer}
             containerRef={containerRef}
             readOnly={readOnly}
+            showSubmit={!!onAdd}
             submitLabel={submitLabel}
             onTryConnect={handleTryConnect}
             isTryingConnect={tryConnect.isPending}
           />
         }
       >
-        <MCPClientToolPreview serverType={serverType} url={url} tryConnect={tryConnect} />
+        <MCPClientToolPreview
+          serverType={serverType}
+          url={url}
+          tryConnect={tryConnect}
+          selectedTools={selectedTools}
+          onToggleTool={onAdd ? handleToggleTool : undefined}
+          onDescriptionChange={onAdd ? handleDescriptionChange : undefined}
+        />
       </MCPClientEditLayout>
     </div>
   );

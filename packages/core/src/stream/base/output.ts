@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { resolveObservabilityContext } from '../../observability';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -18,8 +19,10 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  StreamTransport,
   StepTripwireData,
 } from '../types';
+import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 
@@ -187,6 +190,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #tripwire: StepTripwireData | undefined = undefined;
+  #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
+  #transportClosed = false;
 
   #delayedPromises: DelayedPromises<OUTPUT> = {
     suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
@@ -260,6 +265,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
+    this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
@@ -353,7 +359,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
-                options.tracingContext,
+                resolveObservabilityContext(options),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -629,7 +635,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 usage: self.#usageCount,
                 warnings: self.#warnings,
                 providerMetadata: undefined,
-                response: {},
+                response: {
+                  dbMessages: self.messageList.get.response.db(),
+                },
                 request: {},
                 reasoning: [],
                 reasoningText: undefined,
@@ -643,6 +651,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
                 resumeSchema: undefined,
               });
+
+              self.#closeTransportIfNeeded();
 
               // Emit the tripwire chunk for listeners
               self.#emitChunk(chunk);
@@ -720,10 +730,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
                   const originalText = lastStep?.text || '';
 
+                  // Create a writer from the controller so processOutputResult can emit custom chunks.
+                  // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
+                  // controller.enqueue (for raw stream consumers) to ensure visibility.
+                  const outputResultWriter = {
+                    custom: async (data: { type: string }) => {
+                      self.#emitChunk(data as ChunkType<OUTPUT>);
+                      controller.enqueue(data as ChunkType<OUTPUT>);
+                    },
+                  };
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
-                    options.tracingContext,
+                    resolveObservabilityContext(options),
                     self.#options.requestContext,
+                    0,
+                    outputResultWriter,
                   );
 
                   // Get text from the latest response message (the last assistant message)
@@ -798,7 +820,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 usage: self.#usageCount,
                 warnings: self.#warnings,
                 providerMetadata: chunk.payload.metadata?.providerMetadata,
-                response,
+                response: { ...response, dbMessages: self.messageList.get.response.db() },
                 request: self.#request || {},
                 reasoningText,
                 reasoning: Object.values(self.#bufferedReasoningDetails || {}),
@@ -834,6 +856,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     ...(await self.response),
                     ...baseFinishStep.response,
                     messages: messageList.get.response.aiV5.model(),
+                    dbMessages: self.messageList.get.response.db(),
                   },
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
@@ -867,6 +890,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 await options?.onFinish?.(onFinishPayload);
               }
+
+              self.#closeTransportIfNeeded();
               break;
 
             case 'error':
@@ -883,6 +908,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               });
 
+              self.#closeTransportIfNeeded();
               break;
           }
           self.#emitChunk(chunk);
@@ -918,7 +944,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               content: self.messageList.get.response.aiV5.stepContent(),
               object: undefined,
               request: self.#request,
-              response: {},
+              response: {
+                dbMessages: self.messageList.get.response.db(),
+              },
               providerMetadata: undefined,
             });
           }
@@ -932,6 +960,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
             }
           });
+
+          self.#closeTransportIfNeeded();
 
           // Emit finish event for EventEmitter streams
           self.#streamFinished = true;
@@ -961,6 +991,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     for (const keyString in data) {
       const key = keyString as keyof PromiseResults<OUTPUT>;
       this.resolvePromise(key, data[key]);
+    }
+  }
+
+  #closeTransportIfNeeded() {
+    const transport = this.#transportRef?.current as StreamTransport | undefined;
+    if (!transport || !transport.closeOnFinish || this.#transportClosed) {
+      return;
+    }
+
+    this.#transportClosed = true;
+    try {
+      transport.close();
+    } catch {
+      // best-effort close
     }
   }
 
@@ -1073,6 +1117,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get request() {
     return this.#getDelayedPromise(this.#delayedPromises.request);
+  }
+
+  /**
+   * Transport handle for the current stream (when available).
+   */
+  get transport(): StreamTransport | undefined {
+    return this.#transportRef?.current as StreamTransport | undefined;
   }
 
   /**
@@ -1414,13 +1465,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // Listen for new chunks and stream finish
         const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
-          controller.enqueue(chunk);
+          safeEnqueue(controller, chunk);
         };
 
         const finishHandler = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
-          controller.close();
+          safeClose(controller);
         };
 
         self.#emitter.on('chunk', chunkHandler);

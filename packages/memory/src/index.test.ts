@@ -1103,4 +1103,180 @@ describe('Memory', () => {
       expect(writeIndexName).toContain('384');
     });
   });
+
+  describe('toModelOutput persistence', () => {
+    it('should preserve raw tool result and stored modelOutput through save/load cycle', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+      });
+      const resourceId = 'tmo-resource';
+      const threadId = 'tmo-thread';
+
+      // Create thread
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'toModelOutput test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save messages with a tool result that has stored modelOutput on providerMetadata
+      // (this simulates what llm-mapping-step.ts does at creation time)
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'tmo-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'What is the weather?' }] },
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'tmo-msg-2',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'getWeather',
+                  args: { city: 'NYC' },
+                  result: {
+                    temperature: 72,
+                    conditions: 'sunny',
+                    humidity: 45,
+                    windSpeed: 12,
+                    forecast: [
+                      { day: 'Monday', high: 75, low: 60 },
+                      { day: 'Tuesday', high: 70, low: 55 },
+                    ],
+                  },
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: { type: 'text', value: '72°F, sunny' },
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+        },
+      ];
+
+      await memory.saveMessages({ messages });
+
+      // Load messages back from storage
+      const { messages: loadedMessages } = await memory.recall({
+        threadId,
+        resourceId,
+      });
+
+      // Verify raw result is preserved in storage
+      expect(loadedMessages).toHaveLength(2);
+      const toolMsg = loadedMessages[1]!;
+      expect(toolMsg.content).toHaveProperty('format', 2);
+      const parts = (toolMsg.content as any).parts;
+      expect(parts[0].type).toBe('tool-invocation');
+      expect(parts[0].toolInvocation.result).toEqual({
+        temperature: 72,
+        conditions: 'sunny',
+        humidity: 45,
+        windSpeed: 12,
+        forecast: [
+          { day: 'Monday', high: 75, low: 60 },
+          { day: 'Tuesday', high: 70, low: 55 },
+        ],
+      });
+
+      // Verify stored modelOutput is also preserved
+      expect(parts[0].providerMetadata?.mastra?.modelOutput).toEqual({
+        type: 'text',
+        value: '72°F, sunny',
+      });
+
+      // Create a MessageList from loaded messages and call llmPrompt
+      const list = new MessageList({ threadId, resourceId }).add(loadedMessages, 'memory');
+
+      // llmPrompt should use the stored modelOutput — no tools needed
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResult = prompt.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
+      expect(toolResult).toBeDefined();
+      expect(toolResult.output).toEqual({
+        type: 'text',
+        value: '72°F, sunny',
+      });
+    });
+  });
+
+  describe('recall pagination metadata', () => {
+    let memory: Memory;
+    const resourceId = 'resource-pagination';
+    const threadId = 'thread-pagination';
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Pagination Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save 5 messages
+      const messages: MastraDBMessage[] = [];
+      for (let i = 1; i <= 5; i++) {
+        messages.push({
+          id: `msg-page-${i}`,
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+          createdAt: new Date(`2024-01-01T10:0${i}:00Z`),
+        });
+      }
+      await memory.saveMessages({ messages });
+    });
+
+    it('should return pagination metadata from recall()', async () => {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: 2,
+      });
+
+      expect(result.messages).toHaveLength(2);
+      // Verifies the fix for #13277 — recall() now surfaces pagination metadata
+      expect(result).toHaveProperty('total', 5);
+      expect(result).toHaveProperty('page', 0);
+      expect(result).toHaveProperty('perPage', 2);
+      expect(result).toHaveProperty('hasMore', true);
+    });
+
+    it('should return correct hasMore=false on last page', async () => {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(result.messages).toHaveLength(5);
+      expect(result).toHaveProperty('total', 5);
+      expect(result).toHaveProperty('hasMore', false);
+    });
+  });
 });

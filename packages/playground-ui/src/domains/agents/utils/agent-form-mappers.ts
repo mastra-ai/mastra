@@ -1,12 +1,14 @@
 import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
+import type { StoredAgentSkillConfig, StoredWorkspaceRef, ConditionalField } from '@mastra/client-js';
 
 import type {
   EntityConfig,
   ScorerConfig,
+  SkillConfig,
   InstructionBlock,
   AgentFormValues,
 } from '../components/agent-edit-page/utils/form-validation';
-import { createInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
+import { createInstructionBlock, createRefInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
 
 // ---------------------------------------------------------------------------
 // Primitive helpers
@@ -97,18 +99,74 @@ export const normalizeIntegrationToolsToRecord = (
 };
 
 // ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+
+/** Normalize API skills (ConditionalField<Record<string, StoredAgentSkillConfig>>) to form SkillConfig records. */
+export const normalizeSkillsFromApi = (
+  skills: ConditionalField<Record<string, StoredAgentSkillConfig>> | undefined,
+): Record<string, SkillConfig> => {
+  if (!skills) return {};
+
+  // Conditional variants array — merge all variant values
+  if (Array.isArray(skills)) {
+    const result: Record<string, SkillConfig> = {};
+    for (const variant of skills) {
+      for (const [key, value] of Object.entries(variant.value)) {
+        result[key] = {
+          description: value.description,
+          instructions: value.instructions,
+          pin: value.pin,
+          strategy: value.strategy,
+        };
+      }
+    }
+    return result;
+  }
+
+  // Static record
+  const result: Record<string, SkillConfig> = {};
+  for (const [key, value] of Object.entries(skills)) {
+    result[key] = {
+      description: value.description,
+      instructions: value.instructions,
+      pin: value.pin,
+      strategy: value.strategy,
+    };
+  }
+  return result;
+};
+
+// ---------------------------------------------------------------------------
+// Workspace
+// ---------------------------------------------------------------------------
+
+/** Normalize API workspace ref (ConditionalField<StoredWorkspaceRef>) to a static workspace ref. */
+export const normalizeWorkspaceFromApi = (
+  workspace: ConditionalField<StoredWorkspaceRef> | undefined,
+): StoredWorkspaceRef | undefined => {
+  if (!workspace) return undefined;
+
+  // Conditional variants array — take the first value
+  if (Array.isArray(workspace)) {
+    return workspace[0]?.value as StoredWorkspaceRef | undefined;
+  }
+
+  return workspace as StoredWorkspaceRef;
+};
+
+// ---------------------------------------------------------------------------
 // Instruction blocks
 // ---------------------------------------------------------------------------
 
 /** Map form instruction blocks to the API instruction array. */
-export const mapInstructionBlocksToApi = (
-  blocks: InstructionBlock[] | undefined,
-): Array<{ type: 'prompt_block'; content: string; rules?: InstructionBlock['rules'] }> =>
-  (blocks ?? []).map(block => ({
-    type: block.type,
-    content: block.content,
-    rules: block.rules,
-  }));
+export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined): AgentInstructionBlock[] =>
+  (blocks ?? []).map(block => {
+    if (block.type === 'prompt_block_ref') {
+      return { type: 'prompt_block_ref' as const, id: block.promptBlockId };
+    }
+    return { type: 'prompt_block' as const, content: block.content, rules: block.rules };
+  });
 
 /** Map API instruction data to form instruction blocks. */
 export const mapInstructionBlocksFromApi = (
@@ -121,13 +179,18 @@ export const mapInstructionBlocksFromApi = (
         .join('\n\n')
     : instructionsRaw || '';
 
-  const instructionBlocks = Array.isArray(instructionsRaw)
+  const instructionBlocks: InstructionBlock[] = Array.isArray(instructionsRaw)
     ? instructionsRaw
         .filter(
-          (b: AgentInstructionBlock): b is Extract<AgentInstructionBlock, { type: 'prompt_block' }> =>
-            b.type === 'prompt_block',
+          (b: AgentInstructionBlock): b is Exclude<AgentInstructionBlock, { type: 'text' }> =>
+            b.type === 'prompt_block' || b.type === 'prompt_block_ref',
         )
-        .map(b => createInstructionBlock(b.content, b.rules))
+        .map(b => {
+          if (b.type === 'prompt_block_ref') {
+            return createRefInstructionBlock(b.id);
+          }
+          return createInstructionBlock(b.content, b.rules);
+        })
     : [createInstructionBlock(instructionsRaw || '')];
 
   return { instructionsString, instructionBlocks };

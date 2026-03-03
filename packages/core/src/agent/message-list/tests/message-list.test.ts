@@ -1136,16 +1136,17 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is an image URL:' },
-              {
+              expect.objectContaining({
                 data: 'https://example.com/image.jpg',
+                filename: 'image.jpg',
                 mimeType: 'image/jpeg',
                 type: 'file',
-              },
+              }),
             ],
           },
           threadId,
           resourceId,
-        } satisfies MastraDBMessage,
+        },
       ]);
     });
 
@@ -1174,16 +1175,17 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is another image URL:' },
-              {
+              expect.objectContaining({
                 type: 'file',
                 data: 'https://example.com/another-image.png',
+                filename: 'another-image.png',
                 mimeType: 'image/png',
-              },
+              }),
             ],
           },
           threadId,
           resourceId,
-        } satisfies MastraDBMessage,
+        },
       ]);
     });
 

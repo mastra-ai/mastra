@@ -218,6 +218,10 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
   async doEmbed(
     args: Parameters<EmbeddingModelV2<VALUE>['doEmbed']>[0],
   ): Promise<Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>> {
-    return this.providerModel.doEmbed(args);
+    const result = await this.providerModel.doEmbed(args);
+    // Ensure warnings is always an array — AI SDK v6's embedMany spreads
+    // result.warnings and crashes if it's undefined.
+    const warnings = (result as { warnings?: unknown[] }).warnings ?? [];
+    return { ...result, warnings } as Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>;
   }
 }

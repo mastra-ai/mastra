@@ -160,8 +160,11 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
 
   await storage.init()
   mastra?.setStorage(storage)
-} else if (mastra?.storage) {
-  mastra.storage.init()
+} else {
+  const userStorage = mastra?.getStorage();
+  if (userStorage && !userStorage.disableInit) {
+    userStorage.init();
+  }
 }
 
 if (mastra?.getStorage()) {

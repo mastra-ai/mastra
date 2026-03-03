@@ -1,93 +1,112 @@
-import { Check, Blocks } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
-import { Button } from '@/ds/components/Button';
+
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Spinner } from '@/ds/components/Spinner';
-import { Icon, AgentIcon, ToolsIcon, JudgeIcon, WorkflowIcon, MemoryIcon, VariablesIcon } from '@/ds/icons';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface NavItem {
-  name: string;
-  icon: React.ReactNode;
-  pathSuffix: string;
-}
-
-const navItems: NavItem[] = [
-  { name: 'Identity', icon: <AgentIcon />, pathSuffix: '' },
-  { name: 'Instructions', icon: <Blocks />, pathSuffix: '/instruction-blocks' },
-  { name: 'Tools', icon: <ToolsIcon className="text-accent6" />, pathSuffix: '/tools' },
-  { name: 'Agents', icon: <AgentIcon className="text-accent1" />, pathSuffix: '/agents' },
-  { name: 'Scorers', icon: <JudgeIcon className="text-neutral3" />, pathSuffix: '/scorers' },
-  { name: 'Workflows', icon: <WorkflowIcon className="text-accent3" />, pathSuffix: '/workflows' },
-  { name: 'Memory', icon: <MemoryIcon className="text-neutral3" />, pathSuffix: '/memory' },
-  { name: 'Variables', icon: <VariablesIcon />, pathSuffix: '/variables' },
-];
+import { Txt } from '@/ds/components/Txt';
+import { useSidebarDescriptions } from './use-sidebar-descriptions';
+import { AGENT_CMS_SECTIONS } from './agent-cms-sections';
+import { isActive } from './agent-cms-is-active';
 
 interface AgentCmsSidebarProps {
   basePath: string;
   currentPath: string;
+  versionId?: string;
 }
 
-function isActive(basePath: string, currentPath: string, pathSuffix: string): boolean {
-  const fullPath = basePath + pathSuffix;
-  if (pathSuffix === '') {
-    return currentPath === basePath || currentPath === basePath + '/';
-  }
-  return currentPath.startsWith(fullPath);
-}
-
-export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
-  const { Link } = useLinkComponent();
-  const { handlePublish, isSubmitting, mode, readOnly } = useAgentEditFormContext();
+export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSidebarProps) {
+  const { form } = useAgentEditFormContext();
+  const descriptions = useSidebarDescriptions(form.control);
 
   return (
     <div className="h-full flex flex-col">
       <ScrollArea className="flex-1 min-h-0">
-        <nav className="p-2">
-          <ul className="flex flex-col gap-0.5">
-            {navItems.map(item => {
-              const active = isActive(basePath, currentPath, item.pathSuffix);
-              return (
-                <li key={item.name}>
-                  <Link
-                    href={basePath + item.pathSuffix}
-                    className={cn(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
-                      active ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
-                    )}
-                  >
-                    <Icon size="sm">{item.icon}</Icon>
-                    {item.name}
-                  </Link>
-                </li>
-              );
-            })}
+        <nav className="py-4">
+          <ul className="flex flex-col gap-0">
+            {AGENT_CMS_SECTIONS.map((section, index) => (
+              <SidebarLink
+                key={section.descriptionKey}
+                index={index}
+                name={section.name}
+                pathSuffix={section.pathSuffix}
+                isLast={index === AGENT_CMS_SECTIONS.length - 1}
+                basePath={basePath}
+                active={isActive(basePath, currentPath, section.pathSuffix)}
+                description={descriptions[section.descriptionKey].description}
+                done={descriptions[section.descriptionKey].done}
+                versionId={versionId}
+              />
+            ))}
           </ul>
         </nav>
       </ScrollArea>
-
-      {!readOnly && (
-        <div className="flex-shrink-0 p-4">
-          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                {mode === 'edit' ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Check />
-                </Icon>
-                {mode === 'edit' ? 'Update agent' : 'Create agent'}
-              </>
-            )}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
+
+interface SidebarLinkProps {
+  index: number;
+  name: string;
+  pathSuffix: string;
+  isLast: boolean;
+  basePath: string;
+  active: boolean;
+  description: string;
+  done: boolean;
+  versionId?: string;
+}
+
+const SidebarLink = ({
+  index,
+  name,
+  pathSuffix,
+  isLast,
+  basePath,
+  active,
+  description,
+  done,
+  versionId,
+}: SidebarLinkProps) => {
+  const { Link } = useLinkComponent();
+  const href = basePath + pathSuffix + (versionId ? `?versionId=${versionId}` : '');
+
+  return (
+    <li className="flex flex-col gap-0">
+      <Link
+        href={href}
+        className={cn(
+          'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-r-2 border-transparent',
+          active ? 'bg-surface2 text-neutral5 border-accent1' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
+        )}
+      >
+        {done ? (
+          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center flex-shrink-0">
+            <Check className="size-3.5 text-white" />
+          </div>
+        ) : (
+          <Txt
+            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono flex-shrink-0"
+            variant="ui-sm"
+          >
+            {index + 1}
+          </Txt>
+        )}
+
+        <div>
+          <Txt variant="ui-sm" className="text-neutral5">
+            {name}
+          </Txt>
+
+          <Txt variant="ui-xs" className="text-neutral2">
+            {description}
+          </Txt>
+        </div>
+      </Link>
+
+      {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
+    </li>
+  );
+};

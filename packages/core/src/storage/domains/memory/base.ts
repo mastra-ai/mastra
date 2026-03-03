@@ -294,6 +294,14 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
+   * Insert a fully-formed observational memory record.
+   * Used by thread cloning to copy OM state with remapped IDs.
+   */
+  async insertObservationalMemoryRecord(_record: ObservationalMemoryRecord): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
    * Clear all observational memory for a thread/resource.
    * Removes all records and history.
    */

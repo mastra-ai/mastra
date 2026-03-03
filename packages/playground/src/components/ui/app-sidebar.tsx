@@ -1,9 +1,25 @@
 import {
+  AgentIcon,
+  GithubIcon,
+  McpServerIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  MainSidebar,
+  useMainSidebar,
+  LogoWithoutText,
+  SettingsIcon,
+  MastraVersionFooter,
+  useMastraPlatform,
+  useIsCmsAvailable,
+} from '@mastra/playground-ui';
+import type { NavLink, NavSection } from '@mastra/playground-ui';
+import {
   GaugeIcon,
   EyeIcon,
   PackageIcon,
   GlobeIcon,
   BookIcon,
+  FileTextIcon,
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
@@ -12,23 +28,6 @@ import {
   DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
-
-import {
-  AgentIcon,
-  GithubIcon,
-  McpServerIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  MainSidebar,
-  useMainSidebar,
-  type NavSection,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  NavLink,
-  useExperimentalFeatures,
-} from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
   {
@@ -39,6 +38,12 @@ const mainNavigation: NavSection[] = [
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Prompts',
+        url: '/prompts',
+        icon: <FileTextIcon />,
         isOnMastraPlatform: true,
       },
       {
@@ -99,7 +104,6 @@ const mainNavigation: NavSection[] = [
         url: '/datasets',
         icon: <DatabaseIcon />,
         isOnMastraPlatform: false,
-        isExperimental: true,
       },
     ],
   },
@@ -175,10 +179,12 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+
+  const cmsOnlyLinks = new Set(['/prompts']);
 
   const filterPlatformLink = (link: NavLink) => {
-    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
+    if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
       return false;
     }
     if (isMastraPlatform) {

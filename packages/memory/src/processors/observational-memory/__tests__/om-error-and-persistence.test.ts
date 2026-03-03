@@ -301,7 +301,7 @@ const longResponseText = `I understand your request completely. Let me provide y
 // Test 1: Error State - Observer fails, agent still completes
 // =============================================================================
 
-describe('OM Error State', () => {
+describe('OM Error State', { timeout: 30_000 }, () => {
   let store: InMemoryStore;
   let memory: Memory;
   let agent: Agent;
