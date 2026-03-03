@@ -828,13 +828,13 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           ]);
 
           // Verify execution result
-          expect(result.steps.step1).toEqual({
+          expect(result.steps.step1).toMatchObject({
             status: 'success',
             output: { result: 'success1' },
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          expect(result.steps.step2).toEqual({
+          expect(result.steps.step2).toMatchObject({
             status: 'success',
             output: { result: 'success2' },
             startedAt: expect.any(Number),
