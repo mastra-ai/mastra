@@ -36,16 +36,23 @@ class LocalProcessHandle extends ProcessHandle {
     this.startTime = startTime;
 
     let timedOut = false;
-    if (options?.timeout) {
-      // Track timeout state so we can distinguish timeout kills from manual kills
-      // in the close handler. Execa handles the actual SIGTERM → SIGKILL escalation.
-      setTimeout(() => {
-        timedOut = true;
-      }, options.timeout);
-    }
+    const timeoutId = options?.timeout
+      ? setTimeout(() => {
+          timedOut = true;
+          // Kill the entire process group so child processes are also terminated.
+          // We handle timeout ourselves rather than using execa's timeout option
+          // because execa only kills the direct subprocess, not the process group.
+          try {
+            process.kill(-this.pid, 'SIGTERM');
+          } catch {
+            subprocess.kill('SIGTERM');
+          }
+        }, options.timeout)
+      : undefined;
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+        if (timeoutId) clearTimeout(timeoutId);
         if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
@@ -65,6 +72,7 @@ class LocalProcessHandle extends ProcessHandle {
       });
 
       subprocess.on('error', (err: Error) => {
+        if (timeoutId) clearTimeout(timeoutId);
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
@@ -148,8 +156,6 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       stripFinalNewline: false,
       // Don't extend process.env — the sandbox controls the full environment via buildEnv().
       extendEnv: false,
-      // Timeout — execa sends SIGTERM then SIGKILL after forceKillAfterDelay.
-      timeout: options.timeout,
     };
 
     const subprocess = execa(wrapped.command, wrapped.args, execaOptions);
