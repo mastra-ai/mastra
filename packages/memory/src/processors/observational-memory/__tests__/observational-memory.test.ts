@@ -7619,32 +7619,33 @@ describe('Full Async Buffering Flow', () => {
       bufferActivation: 0.5,
       reflectionObservationTokens: 50000,
       reflectionAsyncActivation: 0.5,
-      messageCount: 10,
+      messageCount: 20,
     });
 
     const messageListAfterStep0 = await step(0);
     await waitForAsyncOps();
 
     const contextMsgs = messageListAfterStep0.get.all.db();
-    const chunkMsgIds = contextMsgs.slice(0, 4).map((m: any) => m.id);
-    expect(chunkMsgIds.length).toBe(4);
+    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    expect(tokensBeforeActivation).toBeGreaterThanOrEqual(2200);
+
+    const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(6);
 
     const record = await storage.getObservationalMemory(threadId, resourceId);
     const recordId = record!.id;
-    for (let i = 0; i < 2; i++) {
-      const ids = chunkMsgIds.slice(i * 2, (i + 1) * 2);
-      await storage.updateBufferedObservations({
-        id: recordId,
-        chunk: {
-          observations: `Manual chunk ${i} observations`,
-          tokenCount: 50,
-          messageIds: ids,
-          messageTokens: 400,
-          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-          cycleId: `manual-cycle-floor-${i}`,
-        },
-      });
-    }
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk floor observations',
+        tokenCount: 80,
+        messageIds: chunkMsgIds,
+        messageTokens: 1200,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+        cycleId: 'manual-cycle-floor',
+      },
+    });
 
     (om as any).observationConfig.messageTokens = 1000;
     (om as any).observationConfig.bufferTokens = 500;
@@ -7662,11 +7663,15 @@ describe('Full Async Buffering Flow', () => {
     await waitForAsyncOps();
 
     const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
-    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk');
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
     expect(capturedMinRemaining).toBe(2000);
 
-    const remainingTokens = new TokenCounter().countMessages(messageListAfterStep1.get.all.db());
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
     expect(remainingTokens).toBeGreaterThanOrEqual(2000);
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
