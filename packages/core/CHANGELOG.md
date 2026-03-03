@@ -15235,7 +15235,7 @@
 - 74b3078: Reduce verbosity in workflows API
 - 8b416d9: Breaking changes
 - 16e5b04: Moved @mastra/vector-libsql into @mastra/core/vector/libsql
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 
 ### Patch Changes
 
@@ -15594,7 +15594,7 @@
 ### Minor Changes
 
 - 30322ce: Added new Memory API for managed agent memory via MastraStorage and MastraVector classes
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 
 ### Patch Changes
 
