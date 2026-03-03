@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
 import type { CustomAvailableModel, HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ProviderConfig } from '@mastra/core/llm';
 
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -58,8 +59,8 @@ export interface MastraCodeConfig {
   modes?: HarnessMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
-  /** Extra tools merged into the dynamic tool set */
-  extraTools?: Record<string, any>;
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>);
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
