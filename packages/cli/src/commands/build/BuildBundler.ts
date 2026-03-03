@@ -84,9 +84,11 @@ export class BuildBundler extends Bundler {
     // @ts-expect-error
     await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
-    if (mastra.getStorage()) {
-      // start storage init in the background
-      mastra.getStorage().init();
+    const storage = mastra.getStorage();
+    if (storage) {
+      if (!storage.disableInit) {
+        storage.init();
+      }
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
     }
     `;

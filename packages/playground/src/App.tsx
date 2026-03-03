@@ -76,7 +76,7 @@ import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
-import DatasetCompare from './pages/datasets/dataset/compare';
+import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
@@ -243,7 +243,7 @@ const routes = [
             { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
             { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
             { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
+            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
             { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
           ]

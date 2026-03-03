@@ -1,5 +1,4 @@
 import { cn } from '@/index';
-import { WithLabel } from '../Checkbox/checkbox.stories';
 
 export type ColumnProps = {
   children: React.ReactNode;

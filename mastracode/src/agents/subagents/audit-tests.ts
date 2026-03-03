@@ -5,6 +5,7 @@
  * explores the repo's existing testing conventions, and produces
  * a detailed audit report with actionable improvement recommendations.
  */
+import { MC_TOOLS } from '../../tool-names.js';
 import type { SubagentDefinition } from './types.js';
 
 export const auditTestsSubagent: SubagentDefinition = {
@@ -117,5 +118,5 @@ Prioritized, actionable list. Most impactful improvements first. Be specific —
 - Ground all feedback in the repo's actual conventions, not generic best practices.
 - Be direct. If tests are sloppy, say so. If they're good, say that too.
 - Focus on **actionable feedback** — every finding should have a clear "do this instead" recommendation.`,
-  allowedTools: ['view', 'search_content', 'find_files'],
+  allowedTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };
