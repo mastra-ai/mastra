@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentLayout,
@@ -6,16 +7,16 @@ import {
   ThreadInputProvider,
   useAgent,
   useMemory,
+  useThread,
   useThreads,
   AgentInformation,
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
-  type AgentSettingsType,
 } from '@mastra/playground-ui';
+import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -39,14 +40,17 @@ function Agent() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: hasMemory });
+  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory });
+
+  const { data: thread } = useThread({ threadId, agentId });
+  const effectiveResourceId = thread?.resourceId ?? agentId!;
 
   useEffect(() => {
     if (!hasMemory) return;
     if (threadId) return;
 
     // After redirects on /agents/:agentId
-    navigate(`/agents/${agentId}/chat/new`);
+    void navigate(`/agents/${agentId}/chat/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -97,7 +101,7 @@ function Agent() {
     await refreshThreads();
 
     if (isNewThread) {
-      navigate(`/agents/${agentId}/chat/${newThreadId}`);
+      void navigate(`/agents/${agentId}/chat/${newThreadId}`);
     }
   };
 
@@ -105,7 +109,7 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={effectiveResourceId}>
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
                 <ActivatedSkillsProvider>

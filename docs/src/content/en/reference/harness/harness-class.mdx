@@ -547,6 +547,34 @@ Retrieve the first user message for a given thread.
 const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-abc123' })
 ```
 
+### Memory
+
+The `memory` property exposes thread management operations. These are also available as top-level methods on the harness.
+
+#### `memory.createThread({ title? })`
+
+Create a new thread. Same as `harness.createThread()`.
+
+#### `memory.switchThread({ threadId })`
+
+Switch to a different thread. Same as `harness.switchThread()`.
+
+#### `memory.listThreads(options?)`
+
+List threads from storage. Same as `harness.listThreads()`.
+
+#### `memory.renameThread({ title })`
+
+Update the title of the current thread. Same as `harness.renameThread()`.
+
+#### `memory.deleteThread({ threadId })`
+
+Delete a thread and all its messages from storage. If the deleted thread is the currently active thread, the thread lock is released and the harness clears its active thread. Emits a `thread_deleted` event.
+
+```typescript
+await harness.memory.deleteThread({ threadId: 'thread-abc123' })
+```
+
 ### Flow control
 
 #### `abort()`
@@ -842,6 +870,7 @@ The harness emits events through registered listeners. The following table lists
 | `model_changed` | The active model changed. |
 | `thread_changed` | The active thread changed. |
 | `thread_created` | A new thread was created. |
+| `thread_deleted` | A thread was deleted. |
 | `state_changed` | Harness state was updated. |
 | `agent_start` | The agent started processing. |
 | `agent_end` | The agent finished processing. |

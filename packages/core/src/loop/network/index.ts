@@ -456,6 +456,8 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
+  onStepFinish,
+  onError,
   onAbort,
   abortSignal,
 }: {
@@ -469,6 +471,8 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
+  onStepFinish?: (event: any) => Promise<void> | void;
+  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
 }) {
@@ -853,6 +857,8 @@ export async function createNetworkLoop({
                 lastMessages: 0,
               },
             },
+            onStepFinish,
+            onError,
             abortSignal,
             onAbort,
           })
@@ -866,6 +872,8 @@ export async function createNetworkLoop({
                 lastMessages: 0,
               },
             },
+            onStepFinish,
+            onError,
             abortSignal,
             onAbort,
           }));
@@ -1998,6 +2006,8 @@ export async function networkLoop<OUTPUT = undefined>({
   autoResumeSuspendedTools,
   mastra,
   structuredOutput,
+  onStepFinish,
+  onError,
   onAbort,
   abortSignal,
 }: {
@@ -2042,6 +2052,8 @@ export async function networkLoop<OUTPUT = undefined>({
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
   mastra?: Mastra;
+  onStepFinish?: NetworkOptions<OUTPUT>['onStepFinish'];
+  onError?: NetworkOptions<OUTPUT>['onError'];
   onAbort?: NetworkOptions<OUTPUT>['onAbort'];
   abortSignal?: NetworkOptions<OUTPUT>['abortSignal'];
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
@@ -2158,6 +2170,8 @@ export async function networkLoop<OUTPUT = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
+    onStepFinish,
+    onError,
     onAbort,
     abortSignal,
   });
