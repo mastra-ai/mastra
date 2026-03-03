@@ -232,6 +232,7 @@ export interface StudioInjectionConfig {
   experimentalFeatures: string;
   telemetryDisabled: string;
   requestContextPresets: string;
+  autoDetectUrl?: string;
 }
 
 /**
@@ -253,6 +254,9 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
   html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
   html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  if (config.autoDetectUrl) {
+    html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+  }
   html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
 
   return html;

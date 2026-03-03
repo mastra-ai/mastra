@@ -9,6 +9,17 @@ const mockRequest = (headers: Record<string, string | string[]> = {}) =>
     header: (name: string) => headers[name],
   }) as HonoRequest;
 
+/**
+ * Mock a standard Web Request (what c.req.raw returns in Hono).
+ * This does NOT have a .header() method — only .headers.get().
+ */
+const mockRawRequest = (headers: Record<string, string> = {}) =>
+  ({
+    url: 'http://localhost/test',
+    method: 'GET',
+    headers: new Headers(headers),
+  }) as unknown as HonoRequest;
+
 describe('SimpleAuth', () => {
   describe('constructor', () => {
     it('should accept token-to-user mapping', () => {
@@ -275,6 +286,51 @@ describe('SimpleAuth', () => {
       const invalidUser = { id: 2, name: 'Invalid User' };
       const authorized = await auth.authorizeUser(invalidUser, request);
       expect(authorized).toBe(false);
+    });
+  });
+
+  describe('raw Request compatibility (c.req.raw)', () => {
+    it('should authenticate via direct token when given a raw Request', async () => {
+      const user = { id: 1, name: 'John' };
+      const auth = new SimpleAuth({ tokens: { 'valid-token': user } });
+      const result = await auth.authenticateToken('valid-token', mockRawRequest());
+      expect(result).toEqual(user);
+    });
+
+    it('should authenticate via Authorization header from raw Request', async () => {
+      const user = { id: 1, name: 'User' };
+      const auth = new SimpleAuth({ tokens: { 'header-token': user } });
+      const request = mockRawRequest({ Authorization: 'Bearer header-token' });
+
+      const result = await auth.authenticateToken('wrong-token', request);
+      expect(result).toEqual(user);
+    });
+
+    it('should authenticate via cookie from raw Request', async () => {
+      const user = { id: 1, name: 'Cookie User' };
+      const auth = new SimpleAuth({ tokens: { 'cookie-token': user } });
+      const request = mockRawRequest({ Cookie: 'mastra-token=cookie-token' });
+
+      const result = await auth.authenticateToken('wrong-token', request);
+      expect(result).toEqual(user);
+    });
+
+    it('should reject invalid token with raw Request', async () => {
+      const auth = new SimpleAuth({ tokens: { 'valid-token': { id: 1 } } });
+      const result = await auth.authenticateToken('invalid-token', mockRawRequest());
+      expect(result).toBeNull();
+    });
+
+    it('should check custom headers from raw Request', async () => {
+      const user = { id: 1, name: 'User' };
+      const auth = new SimpleAuth({
+        tokens: { 'api-token': user },
+        headers: 'X-API-Key',
+      });
+      const request = mockRawRequest({ 'X-API-Key': 'api-token' });
+
+      const result = await auth.authenticateToken('wrong-token', request);
+      expect(result).toEqual(user);
     });
   });
 });
