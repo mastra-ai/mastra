@@ -138,6 +138,12 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
    * Optional MCP-specific properties including annotations and metadata.
    * Only relevant when the tool is being used in an MCP context.
    * @example
@@ -156,6 +162,43 @@ export class Tool<
    * ```
    */
   mcp?: MCPToolProperties;
+
+  onInputStart?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputStart'];
+  onInputDelta?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputDelta'];
+  onInputAvailable?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputAvailable'];
+  onOutput?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onOutput'];
 
   /**
    * Creates a new Tool instance with input validation wrapper.
@@ -183,7 +226,12 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
+    this.onInputStart = opts.onInputStart;
+    this.onInputDelta = opts.onInputDelta;
+    this.onInputAvailable = opts.onInputAvailable;
+    this.onOutput = opts.onOutput;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

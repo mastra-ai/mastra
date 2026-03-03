@@ -112,15 +112,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // This is required when writing directly to reply.raw
     reply.hijack();
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Write headers directly to the raw response, merging existing headers (like CORS)
     // with our stream-specific headers
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     reply.raw.writeHead(200, {
       ...existingHeaders,
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -438,6 +450,24 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
+      // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+      if (params.urlParams) {
+        try {
+          params.urlParams = await this.parsePathParams(route, params.urlParams);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error parsing path params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          if (error instanceof ZodError) {
+            return reply.status(400).send(formatZodError(error, 'path parameters'));
+          }
+          return reply.status(400).send({
+            error: 'Invalid path parameters',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          });
+        }
+      }
+
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,
@@ -593,5 +623,53 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     this.app.addHook('preHandler', authenticationMiddleware);
     this.app.addHook('preHandler', authorizationMiddleware);
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
+      return;
+    }
+
+    this.app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+      const urlPath = request.url.split('?')[0]!;
+      if (!this.shouldLogRequest(urlPath)) {
+        return;
+      }
+
+      const start = Date.now();
+      const method = request.method;
+      const path = urlPath;
+
+      reply.raw.once('finish', () => {
+        const duration = Date.now() - start;
+        const status = reply.statusCode;
+        const level = this.httpLoggingConfig?.level || 'info';
+
+        const logData: Record<string, any> = {
+          method,
+          path,
+          status,
+          duration: `${duration}ms`,
+        };
+
+        if (this.httpLoggingConfig?.includeQueryParams) {
+          logData.query = request.query;
+        }
+
+        if (this.httpLoggingConfig?.includeHeaders) {
+          const headers = { ...request.headers };
+          const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+          redactHeaders.forEach((h: string) => {
+            const key = h.toLowerCase();
+            if (headers[key] !== undefined) {
+              headers[key] = '[REDACTED]';
+            }
+          });
+          logData.headers = headers;
+        }
+
+        this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+      });
+    });
   }
 }

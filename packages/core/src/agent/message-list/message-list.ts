@@ -371,6 +371,7 @@ export class MessageList {
         },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
+        // Stored toModelOutput results from providerMetadata are applied automatically
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
@@ -893,6 +894,21 @@ export class MessageList {
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else {
+          const isExistingFromMemory = this.memoryMessages.has(existingMessage);
+          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
+            existingMessage,
+            messageV2,
+            messageSource,
+            isExistingFromMemory,
+            this._agentNetworkAppend,
+          );
+          if (shouldMergeIntoExisting) {
+            MessageMerger.merge(existingMessage, messageV2);
+            this.pushMessageToSource(existingMessage, messageSource);
+            // Sort messages and return early — existingMessage stays in messages[] and its Sets
+            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            return this;
+          }
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

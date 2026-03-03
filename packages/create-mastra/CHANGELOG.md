@@ -1,5 +1,43 @@
 # create-mastra
 
+## 1.3.5
+
+## 1.3.5-alpha.0
+
+## 1.3.4
+
+## 1.3.4-alpha.0
+
+## 1.3.3
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.2
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
+## 1.3.2-alpha.1
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
 ## 1.3.1
 
 ### Patch Changes

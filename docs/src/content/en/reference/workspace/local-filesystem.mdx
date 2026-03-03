@@ -22,81 +22,106 @@ For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/
 Add a `LocalFilesystem` to a workspace and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
-});
+})
 
 const agent = new Agent({
   id: 'file-agent',
   model: 'openai/gpt-4o',
   workspace,
-});
+})
 
 // The agent now has filesystem tools available
-const response = await agent.generate('List all files in the workspace');
+const response = await agent.generate('List all files in the workspace')
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "basePath",
-      type: "string",
-      description: "Base directory path on disk. All file paths are resolved relative to this directory.",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this filesystem instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, all write operations are blocked. Read operations are still allowed.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "basePath",
+type: "string",
+description: "Base directory path on disk. All file paths are resolved relative to this directory.",
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this filesystem instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "contained",
+type: "boolean",
+description: "When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "allowedPaths",
+type: "string[]",
+description: "Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.",
+isOptional: true,
+defaultValue: "[]",
+},
+{
+name: "instructions",
+type: "string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)",
+description: "Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.",
+isOptional: true,
+},
+{
+name: "readOnly",
+type: "boolean",
+description: "When true, all write operations are blocked. Read operations are still allowed.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Filesystem instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('LocalFilesystem')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('local')",
-    },
-    {
-      name: "basePath",
-      type: "string",
-      description: "The absolute base path on disk",
-    },
-    {
-      name: "readOnly",
-      type: "boolean | undefined",
-      description: "Whether the filesystem is in read-only mode",
-    },
-  ]}
+{
+name: "id",
+type: "string",
+description: "Filesystem instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('LocalFilesystem')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('local')",
+},
+{
+name: "basePath",
+type: "string",
+description: "The absolute base path on disk",
+},
+{
+name: "readOnly",
+type: "boolean | undefined",
+description: "Whether the filesystem is in read-only mode",
+},
+{
+name: "allowedPaths",
+type: "readonly string[]",
+description: "Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.",
+},
+]}
 />
 
 ## Methods
@@ -106,7 +131,7 @@ const response = await agent.generate('List all files in the workspace');
 Initialize the filesystem. Creates the base directory if it doesn't exist.
 
 ```typescript
-await filesystem.init();
+await filesystem.init()
 ```
 
 Called by `workspace.init()`.
@@ -120,37 +145,64 @@ LocalFilesystem initializes on first operation if not already initialized, creat
 Clean up filesystem resources.
 
 ```typescript
-await filesystem.destroy();
+await filesystem.destroy()
 ```
 
 Called by `workspace.destroy()`.
 
-### `readFile(path, options?)`
+### `setAllowedPaths(pathsOrUpdater)`
 
-Read file contents.
+Update the allowed paths at runtime. Accepts a new paths array (replaces current) or an updater callback that receives the current paths and returns the new set.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md');
-const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+// Set directly
+filesystem.setAllowedPaths(['/home/user/.config'])
+
+// Update with callback
+filesystem.setAllowedPaths(prev => [...prev, '/home/user/documents'])
+
+// Clear all allowed paths
+filesystem.setAllowedPaths([])
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path relative to basePath",
-    },
-    {
-      name: "options.encoding",
-      type: "'utf-8' | 'binary'",
-      description: "Text or binary encoding",
-      isOptional: true,
-      defaultValue: "'utf-8'",
-    },
-  ]}
+{
+name: "pathsOrUpdater",
+type: "string[] | ((current: readonly string[]) => string[])",
+description: "New allowed paths array or updater function receiving current paths",
+},
+]}
+/>
+
+### `readFile(path, options?)`
+
+Read file contents.
+
+```typescript
+const content = await filesystem.readFile('/docs/guide.md')
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "path",
+type: "string",
+description: "File path relative to basePath",
+},
+{
+name: "options.encoding",
+type: "'utf-8' | 'binary'",
+description: "Text or binary encoding",
+isOptional: true,
+defaultValue: "'utf-8'",
+},
+]}
 />
 
 ### `writeFile(path, content, options?)`
@@ -158,39 +210,39 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
 Write content to a file.
 
 ```typescript
-await filesystem.writeFile('/docs/new.md', '# New Document');
-await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+await filesystem.writeFile('/docs/new.md', '# New Document')
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path relative to basePath",
-    },
-    {
-      name: "content",
-      type: "string | Buffer",
-      description: "File content",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Create parent directories if they don't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "options.overwrite",
-      type: "boolean",
-      description: "Overwrite existing file",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path relative to basePath",
+},
+{
+name: "content",
+type: "string | Buffer",
+description: "File content",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Create parent directories if they don't exist",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite existing file",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />
 
 ### `appendFile(path, content)`
@@ -198,24 +250,24 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 Append content to an existing file.
 
 ```typescript
-await filesystem.appendFile('/logs/app.log', 'New log entry\n');
+await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path relative to basePath",
-    },
-    {
-      name: "content",
-      type: "string | Buffer",
-      description: "Content to append",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path relative to basePath",
+},
+{
+name: "content",
+type: "string | Buffer",
+description: "Content to append",
+},
+]}
 />
 
 ### `deleteFile(path, options?)`
@@ -223,27 +275,27 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n');
 Delete a file.
 
 ```typescript
-await filesystem.deleteFile('/docs/old.md');
-await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw if missing
+await filesystem.deleteFile('/docs/old.md')
+await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if missing
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "File path",
-    },
-    {
-      name: "options.force",
-      type: "boolean",
-      description: "Don't throw error if file doesn't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "File path",
+},
+{
+name: "options.force",
+type: "boolean",
+description: "Don't throw error if file doesn't exist",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `copyFile(src, dest, options?)`
@@ -251,32 +303,32 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw i
 Copy a file to a new location.
 
 ```typescript
-await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md');
-await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite: false });
+await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
+await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite: false })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "src",
-      type: "string",
-      description: "Source file path",
-    },
-    {
-      name: "dest",
-      type: "string",
-      description: "Destination file path",
-    },
-    {
-      name: "options.overwrite",
-      type: "boolean",
-      description: "Overwrite destination if it exists",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "src",
+type: "string",
+description: "Source file path",
+},
+{
+name: "dest",
+type: "string",
+description: "Destination file path",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite destination if it exists",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />
 
 ### `moveFile(src, dest, options?)`
@@ -284,32 +336,32 @@ await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite
 Move or rename a file.
 
 ```typescript
-await filesystem.moveFile('/docs/draft.md', '/docs/final.md');
-await filesystem.moveFile('/temp/upload.txt', '/files/document.txt');
+await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
+await filesystem.moveFile('/temp/upload.txt', '/files/document.txt')
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "src",
-      type: "string",
-      description: "Source file path",
-    },
-    {
-      name: "dest",
-      type: "string",
-      description: "Destination file path",
-    },
-    {
-      name: "options.overwrite",
-      type: "boolean",
-      description: "Overwrite destination if it exists",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
+{
+name: "src",
+type: "string",
+description: "Source file path",
+},
+{
+name: "dest",
+type: "string",
+description: "Destination file path",
+},
+{
+name: "options.overwrite",
+type: "boolean",
+description: "Overwrite destination if it exists",
+isOptional: true,
+defaultValue: "true",
+},
+]}
 />
 
 ### `mkdir(path, options?)`
@@ -317,27 +369,27 @@ await filesystem.moveFile('/temp/upload.txt', '/files/document.txt');
 Create a directory.
 
 ```typescript
-await filesystem.mkdir('/docs/api');
-await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+await filesystem.mkdir('/docs/api')
+await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "Directory path",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Create parent directories",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "Directory path",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Create parent directories",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `rmdir(path, options?)`
@@ -345,34 +397,34 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true });
 Remove a directory.
 
 ```typescript
-await filesystem.rmdir('/docs/old');
-await filesystem.rmdir('/docs/nested', { recursive: true });
+await filesystem.rmdir('/docs/old')
+await filesystem.rmdir('/docs/nested', { recursive: true })
 ```
 
 **Parameters:**
 
 <PropertiesTable
   content={[
-    {
-      name: "path",
-      type: "string",
-      description: "Directory path",
-    },
-    {
-      name: "options.recursive",
-      type: "boolean",
-      description: "Remove contents recursively",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "options.force",
-      type: "boolean",
-      description: "Don't throw if directory doesn't exist",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+{
+name: "path",
+type: "string",
+description: "Directory path",
+},
+{
+name: "options.recursive",
+type: "boolean",
+description: "Remove contents recursively",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "options.force",
+type: "boolean",
+description: "Don't throw if directory doesn't exist",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### `readdir(path, options?)`
@@ -380,7 +432,7 @@ await filesystem.rmdir('/docs/nested', { recursive: true });
 List directory contents.
 
 ```typescript
-const entries = await filesystem.readdir('/docs');
+const entries = await filesystem.readdir('/docs')
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
 ```
 
@@ -389,7 +441,7 @@ const entries = await filesystem.readdir('/docs');
 Check if a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/docs/guide.md');
+const exists = await filesystem.exists('/docs/guide.md')
 ```
 
 ### `stat(path)`
@@ -397,7 +449,7 @@ const exists = await filesystem.exists('/docs/guide.md');
 Get file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/docs/guide.md');
+const stat = await filesystem.stat('/docs/guide.md')
 // { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
 ```
 
@@ -406,18 +458,41 @@ const stat = await filesystem.stat('/docs/guide.md');
 Returns metadata about this filesystem instance.
 
 ```typescript
-const info = filesystem.getInfo();
+const info = filesystem.getInfo()
 // { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
 ```
 
-### `getInstructions()`
+### `getInstructions(opts?)`
 
-Returns a description of how paths work in this filesystem. Used in tool descriptions.
+Returns a description of how paths work in this filesystem. When assigned to an agent, this is injected into the agent's system message.
 
 ```typescript
-const instructions = filesystem.getInstructions();
+const instructions = filesystem.getInstructions()
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
+
+Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
+
+```typescript
+const instructions = filesystem.getInstructions({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+{
+name: "opts.requestContext",
+type: "RequestContext",
+description: "Forwarded to the `instructions` function if one was provided in the constructor.",
+isOptional: true,
+},
+]}
+/>
+
+**Returns:** `string`
+
+To override the default output, pass an `instructions` option to the constructor. See [constructor parameters](#constructor-parameters).
 
 ## Path resolution
 
@@ -432,11 +507,11 @@ The `basePath` option sets the root directory for all file operations. File path
 ```typescript
 const filesystem = new LocalFilesystem({
   basePath: './workspace',
-});
+})
 
 // These all resolve to ./workspace/docs/guide.md
-await filesystem.readFile('/docs/guide.md');
-await filesystem.readFile('docs/guide.md');
+await filesystem.readFile('/docs/guide.md')
+await filesystem.readFile('docs/guide.md')
 ```
 
 ### Relative paths and execution context
@@ -444,7 +519,7 @@ await filesystem.readFile('docs/guide.md');
 When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
 
 | Context | Working directory | `./workspace` resolves to |
-|---------|------------------|---------------------------|
+| - | - | - |
 | `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
 | `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
 | Direct script | Where you ran the command | Relative to that location |
@@ -456,11 +531,11 @@ This can cause confusion when the same relative path resolves to different locat
 For consistent paths across all execution contexts, use an environment variable with an absolute path:
 
 ```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
+import { LocalFilesystem } from '@mastra/core/workspace'
 
 const filesystem = new LocalFilesystem({
   basePath: process.env.WORKSPACE_PATH!,
-});
+})
 ```
 
 Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures the workspace path is consistent regardless of how you run your code.

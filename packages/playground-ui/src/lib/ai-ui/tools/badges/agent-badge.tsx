@@ -32,6 +32,7 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   metadata?: MastraUIMessage['metadata'];
   suspendPayload?: any;
   toolCalled?: boolean;
+  isComplete?: boolean;
 }
 
 export const AgentBadge = ({
@@ -44,6 +45,7 @@ export const AgentBadge = ({
   isNetwork,
   suspendPayload,
   toolCalled: toolCalledProp,
+  isComplete = false,
 }: AgentBadgeProps) => {
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
@@ -74,7 +76,7 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
-      initialCollapsed={false}
+      initialCollapsed={isComplete}
       extraInfo={
         metadata?.mode === 'network' && (
           <NetworkChoiceMetadataDialogTrigger

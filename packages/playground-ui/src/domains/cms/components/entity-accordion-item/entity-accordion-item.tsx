@@ -45,7 +45,7 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="sm">{icon}</Icon>
-            <span className="text-xs font-medium text-icon6">{name}</span>
+            <span className="text-xs font-medium text-neutral6">{name}</span>
           </div>
           {onRemove && (
             <IconButton tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="sm">
@@ -70,7 +70,7 @@ export function EntityAccordionItem({
           <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
             <Icon>
               <ChevronRight
-                className={cn('text-icon3 transition-transform', {
+                className={cn('text-neutral3 transition-transform', {
                   'rotate-90': isRulesOpen,
                 })}
               />

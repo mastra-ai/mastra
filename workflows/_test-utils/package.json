@@ -1,0 +1,25 @@
+{
+  "name": "@internal/workflow-test-utils",
+  "version": "0.0.1",
+  "description": "Test utilities for workflow engines",
+  "type": "module",
+  "main": "src/index.ts",
+  "private": true,
+  "scripts": {},
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "vitest": "*",
+    "@mastra/core": "*"
+  },
+  "devDependencies": {
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "zod": "^3.25.76"
+  }
+}

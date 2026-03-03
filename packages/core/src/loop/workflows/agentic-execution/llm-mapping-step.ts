@@ -1,15 +1,13 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
-import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
+import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
-import { ToolNotFoundError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -42,16 +40,17 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         })
       : undefined;
 
-  // Get tracing context from modelSpanTracker if available
-  const tracingContext = rest.modelSpanTracker?.getTracingContext();
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
 
   // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
   const streamWriter = rest.outputWriter
     ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
     : undefined;
 
-  // Helper function to process a chunk through output processors and enqueue it
-  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
+  // Helper function to process a chunk through output processors and enqueue it.
+  // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
     if (processorRunner && rest.processorStates) {
       const {
         part: processed,
@@ -62,7 +61,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        tracingContext,
+        observabilityContext,
         rest.requestContext,
         rest.messageList,
         0,
@@ -80,15 +79,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             processorId,
           },
         } as ChunkType<OUTPUT>);
-        return;
+        return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
+        return processed as ChunkType<OUTPUT>;
       }
+
+      return null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
+      return chunk;
     }
   }
 
@@ -98,6 +101,28 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
+
+      // Compute toModelOutput for a successful tool call and return providerMetadata
+      // with the result stored at mastra.modelOutput
+      async function getProviderMetadataWithModelOutput(toolCall: {
+        toolName: string;
+        result?: unknown;
+        providerMetadata?: Record<string, unknown>;
+      }) {
+        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        let modelOutput: unknown;
+        if (tool?.toModelOutput && toolCall.result != null) {
+          modelOutput = await tool.toModelOutput(toolCall.result);
+        }
+
+        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
+        const providerMetadata = {
+          ...toolCall.providerMetadata,
+          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+        };
+        const hasMetadata = Object.keys(providerMetadata).length > 0;
+        return hasMetadata ? providerMetadata : undefined;
+      }
 
       if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
@@ -118,7 +143,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 providerMetadata: toolCall.providerMetadata,
               },
             };
-            await processAndEnqueueChunk(chunk);
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
           }
 
           const msg: MastraDBMessage = {
@@ -147,18 +173,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(msg, 'response');
         }
 
-        // When all errors are tool-not-found errors, continue the agentic loop
-        // so the model can self-correct with the correct tool name.
-        // For other errors (e.g., tool execution failures), bail as before.
-        const allErrorsAreToolNotFound =
-          errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
-
+        // When tool errors occur, continue the agentic loop so the model can see the
+        // error and self-correct (e.g., retry with different args, or respond to the user).
+        // The error messages are already added to the messageList above, so the model
+        // will see them on the next turn. This handles both tool-not-found errors
+        // (hallucinated tool names) and tool execution errors (tool throws).
+        //
         // Check for pending HITL tool calls (tools with no result and no error).
-        // In mixed turns with both ToolNotFoundError and pending HITL tools,
+        // In mixed turns with errors and pending HITL tools,
         // the HITL suspension path should take priority over continuing the loop.
-        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error);
+        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error && !tc.providerExecuted);
 
-        if (allErrorsAreToolNotFound && !hasPendingHITL) {
+        if (errorResults?.length > 0 && !hasPendingHITL) {
           // Process any successful tool results from this turn before continuing.
           // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
           // results need their chunks emitted and messages added to the messageList.
@@ -178,30 +204,66 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   providerExecuted: toolCall.providerExecuted,
                 },
               };
-              await processAndEnqueueChunk(chunk);
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
             }
 
-            const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-            const successMessage: MastraDBMessage = {
-              id: successMessageId || '',
-              role: 'assistant' as const,
-              content: {
-                format: 2,
-                parts: successfulResults.map(toolCall => ({
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'result' as const,
-                    toolCallId: toolCall.toolCallId,
-                    toolName: toolCall.toolName,
-                    args: toolCall.args,
-                    result: toolCall.result,
-                  },
-                  ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-                })),
-              },
-              createdAt: new Date(),
-            };
-            rest.messageList.add(successMessage, 'response');
+            // Split client-executed and provider-executed tools the same way as the main path
+            const clientResults = successfulResults.filter(tc => !tc.providerExecuted);
+            if (clientResults.length > 0) {
+              const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+              const successMessage: MastraDBMessage = {
+                id: successMessageId || '',
+                role: 'assistant' as const,
+                content: {
+                  format: 2,
+                  parts: await Promise.all(
+                    clientResults.map(async toolCall => {
+                      const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                      return {
+                        type: 'tool-invocation' as const,
+                        toolInvocation: {
+                          state: 'result' as const,
+                          toolCallId: toolCall.toolCallId,
+                          toolName: toolCall.toolName,
+                          args: toolCall.args,
+                          result: toolCall.result,
+                        },
+                        ...(providerMetadata ? { providerMetadata } : {}),
+                      };
+                    }),
+                  ),
+                },
+                createdAt: new Date(),
+              };
+              rest.messageList.add(successMessage, 'response');
+            }
+
+            if (successfulResults.some(tc => tc.providerExecuted)) {
+              const providerResults = successfulResults.filter(tc => tc.providerExecuted);
+              const providerMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+              const providerMessage: MastraDBMessage = {
+                id: providerMessageId || '',
+                role: 'assistant' as const,
+                content: {
+                  format: 2,
+                  parts: providerResults.map(toolCall => ({
+                    type: 'tool-invocation' as const,
+                    toolInvocation: {
+                      state: 'result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.result,
+                    },
+                    ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                    providerExecuted: true as const,
+                  })),
+                },
+                createdAt: new Date(),
+              };
+              rest.messageList.add(providerMessage, 'response');
+            }
           }
 
           // Continue the loop — the error messages are already in the messageList,
@@ -252,26 +314,56 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             },
           };
 
-          await processAndEnqueueChunk(chunk);
-
-          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
-            await rest.options?.onChunk?.({
-              chunk: convertMastraChunkToAISDKv5({
-                chunk,
-              }),
-            } as any);
-          }
+          const processed = await processAndEnqueueChunk(chunk);
+          if (processed) await rest.options?.onChunk?.(processed);
         }
 
-        const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+        // Exclude provider-executed tools from the tool-result message. These tools (e.g.
+        // Anthropic web_search) are executed server-side — sending a client-fabricated result
+        // would conflict with the provider's deferred execution.
+        const clientExecutedToolCalls = inputData.filter(toolCall => !toolCall.providerExecuted);
 
-        const toolResultMessage: MastraDBMessage = {
-          id: toolResultMessageId || '',
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: inputData.map(toolCall => {
-              return {
+        if (clientExecutedToolCalls.length > 0) {
+          const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+          const toolResultMessage: MastraDBMessage = {
+            id: toolResultMessageId || '',
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: await Promise.all(
+                clientExecutedToolCalls.map(async toolCall => {
+                  const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                  return {
+                    type: 'tool-invocation' as const,
+                    toolInvocation: {
+                      state: 'result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.result,
+                    },
+                    ...(providerMetadata ? { providerMetadata } : {}),
+                  };
+                }),
+              ),
+            },
+            createdAt: new Date(),
+          };
+          rest.messageList.add(toolResultMessage, 'response');
+        }
+
+        // Persist provider-executed tool results (e.g. Anthropic web_search) so
+        // MessageMerger updates their invocations from state:"call" to state:"result".
+        // Without this, they stay at "call" in the DB and cause HTTP 400 on resume.
+        const providerExecutedToolCalls = inputData.filter(toolCall => toolCall.providerExecuted);
+        if (providerExecutedToolCalls.length > 0) {
+          const providerResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+          const providerResultMessage: MastraDBMessage = {
+            id: providerResultMessageId || '',
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: providerExecutedToolCalls.map(toolCall => ({
                 type: 'tool-invocation' as const,
                 toolInvocation: {
                   state: 'result' as const,
@@ -281,13 +373,21 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   result: toolCall.result,
                 },
                 ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-              };
-            }),
-          },
-          createdAt: new Date(),
-        };
+                providerExecuted: true as const,
+              })),
+            },
+            createdAt: new Date(),
+          };
+          rest.messageList.add(providerResultMessage, 'response');
+        }
 
-        rest.messageList.add(toolResultMessage, 'response');
+        // Check if any delegation hook called ctx.bail() — signal the loop to stop.
+        // The bail flag is communicated via requestContext because Zod output validation
+        // strips unknown fields (like _bailed) from the tool result object.
+        if (rest.requestContext?.get('__mastra_delegationBailed') && _internal) {
+          _internal._delegationBailed = true;
+          rest.requestContext.set('__mastra_delegationBailed', false);
+        }
 
         return {
           ...initialResult,

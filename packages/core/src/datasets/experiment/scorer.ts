@@ -46,6 +46,7 @@ export async function runScorersForItem(
   itemId: string,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
+  traceId?: string,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
@@ -67,10 +68,12 @@ export async function runScorersForItem(
             entityId: itemId,
             source: 'TEST',
             runId,
+            traceId,
             scorer: {
               id: scorer.id,
               name: scorer.name,
               description: scorer.description ?? '',
+              hasJudge: !!scorer.judge,
             },
             entity: {
               id: targetId,

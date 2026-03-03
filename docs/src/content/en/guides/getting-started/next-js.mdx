@@ -10,11 +10,9 @@ In this guide, you'll build a tool-calling AI agent using Mastra, then connect i
 You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 <figure>
+  ![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
 
-![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
-
-<figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
-
+  <figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
 </figure>
 
 ## Before you begin
@@ -50,9 +48,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
@@ -60,7 +58,7 @@ You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 If you want to run `mastra dev` (Mastra Studio) alongside your Next.js app and have both share the same database, update the storage URL in `src/mastra/index.ts` to use an absolute path:
 
 ```typescript
-url: "file:/absolute/path/to/your/project/mastra.db"
+url: 'file:/absolute/path/to/your/project/mastra.db'
 ```
 
 Relative paths resolve based on each process's working directory, which differs between `next dev` and `mastra dev`.
@@ -87,17 +85,17 @@ This downloads the entire AI Elements UI component library into a `@/components/
 Create `src/app/api/chat/route.ts`:
 
 ```ts title="src/app/api/chat/route.ts"
-import { handleChatStream } from '@mastra/ai-sdk';
+import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
-import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '@/mastra';
-import { NextResponse } from 'next/server';
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/mastra'
+import { NextResponse } from 'next/server'
 
-const THREAD_ID = 'example-user-id';
-const RESOURCE_ID = 'weather-chat';
+const THREAD_ID = 'example-user-id'
+const RESOURCE_ID = 'weather-chat'
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = await req.json()
   const stream = await handleChatStream({
     mastra,
     agentId: 'weather-agent',
@@ -107,16 +105,16 @@ export async function POST(req: Request) {
         ...params.memory,
         thread: THREAD_ID,
         resource: RESOURCE_ID,
-      }
+      },
     },
-  });
-  return createUIMessageStreamResponse({ stream });
+  })
+  return createUIMessageStreamResponse({ stream })
 }
 
 export async function GET() {
   const memory = await mastra.getAgentById('weather-agent').getMemory()
   let response = null
-  
+
   try {
     response = await memory?.recall({
       threadId: THREAD_ID,
@@ -126,7 +124,7 @@ export async function GET() {
     console.log('No previous messages found.')
   }
 
-  const uiMessages = toAISdkV5Messages(response?.messages || []);
+  const uiMessages = toAISdkV5Messages(response?.messages || [])
 
   return NextResponse.json(uiMessages)
 }
@@ -139,79 +137,70 @@ The `POST` route accepts a prompt and streams the agent's response back in AI SD
 Create `src/app/chat/page.tsx`:
 
 ```tsx title="src/app/chat/page.tsx"
-'use client';
+'use client'
 
-import '@/app/globals.css';
-import { useEffect, useState } from 'react';
-import { DefaultChatTransport, ToolUIPart } from 'ai';
-import { useChat } from '@ai-sdk/react';
+import '@/app/globals.css'
+import { useEffect, useState } from 'react'
+import { DefaultChatTransport, ToolUIPart } from 'ai'
+import { useChat } from '@ai-sdk/react'
 
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
-} from '@/components/ai-elements/prompt-input';
+} from '@/components/ai-elements/prompt-input'
 
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
+} from '@/components/ai-elements/conversation'
 
-import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from '@/components/ai-elements/tool';
-
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 
 function Chat() {
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useState<string>('')
 
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
-  });
+  })
 
   useEffect(() => {
     const fetchMessages = async () => {
-      const res = await fetch('/api/chat');
-      const data = await res.json();
-      setMessages([...data]);
-    };
-    fetchMessages();
-  }, [setMessages]);
+      const res = await fetch('/api/chat')
+      const data = await res.json()
+      setMessages([...data])
+    }
+    fetchMessages()
+  }, [setMessages])
 
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input.trim()) return
 
-    sendMessage({ text: input });
-    setInput('');
-  };
+    sendMessage({ text: input })
+    setInput('')
+  }
 
   return (
-    <div className="w-full p-6 relative size-full h-screen">
-      <div className="flex flex-col h-full">
+    <div className="relative size-full h-screen w-full p-6">
+      <div className="flex h-full flex-col">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message) => (
+            {messages.map(message => (
               <div key={message.id}>
                 {message.parts?.map((part, i) => {
                   if (part.type === 'text') {
                     return (
-                      <Message
-                        key={`${message.id}-${i}`}
-                        from={message.role}>
-                          <MessageContent>
-                            <MessageResponse>{part.text}</MessageResponse>
-                          </MessageContent>
+                      <Message key={`${message.id}-${i}`} from={message.role}>
+                        <MessageContent>
+                          <MessageResponse>{part.text}</MessageResponse>
+                        </MessageContent>
                       </Message>
-                    );
+                    )
                   }
 
                   if (part.type?.startsWith('tool-')) {
@@ -230,10 +219,10 @@ function Chat() {
                           />
                         </ToolContent>
                       </Tool>
-                    );
+                    )
                   }
 
-                  return null;
+                  return null
                 })}
               </div>
             ))}
@@ -244,7 +233,7 @@ function Chat() {
         <PromptInput onSubmit={handleSubmit} className="mt-20">
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               className="md:leading-10"
               value={input}
               placeholder="Type your message..."
@@ -254,10 +243,10 @@ function Chat() {
         </PromptInput>
       </div>
     </div>
-  );
+  )
 }
 
-export default Chat;
+export default Chat
 ```
 
 This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
@@ -267,8 +256,8 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 ## Test your agent
 
 1. Run your Next.js app with `npm run dev`
-2. Open the chat at http://localhost:3000/chat
-3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+1. Open the chat at [http://localhost:3000/chat](http://localhost:3000/chat)
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 

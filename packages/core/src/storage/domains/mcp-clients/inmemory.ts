@@ -120,7 +120,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryMCPClientsStorage: list called`);
@@ -142,7 +142,9 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
     let configs = Array.from(this.db.mcpClients.values());
 
     // Filter by status
-    configs = configs.filter(config => config.status === status);
+    if (status) {
+      configs = configs.filter(config => config.status === status);
+    }
 
     // Filter by authorId if provided
     if (authorId !== undefined) {

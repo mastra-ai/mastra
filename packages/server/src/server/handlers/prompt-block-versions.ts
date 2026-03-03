@@ -251,6 +251,9 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         status: 'published',
       });
 
+      // Clear the editor cache so subsequent requests see the new active version
+      mastra.getEditor()?.prompt.clearCache(promptBlockId);
+
       return {
         success: true,
         message: `Version ${version.versionNumber} is now active`,
@@ -343,6 +346,9 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         promptBlock.activeVersionId,
       );
 
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.prompt.clearCache(promptBlockId);
+
       return newVersion;
     } catch (error) {
       return handleError(error, 'Error restoring prompt block version');
@@ -398,6 +404,9 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       }
 
       await promptBlockStore.deleteVersion(versionId);
+
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.prompt.clearCache(promptBlockId);
 
       return {
         success: true,

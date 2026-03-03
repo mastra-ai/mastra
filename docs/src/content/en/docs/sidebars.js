@@ -74,6 +74,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
         },
@@ -595,6 +600,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -649,6 +670,7 @@ const sidebars = {
         },
       ],
     },
+
     {
       type: 'category',
       label: 'Build with AI',

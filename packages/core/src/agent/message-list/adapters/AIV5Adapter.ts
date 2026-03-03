@@ -150,6 +150,7 @@ export class AIV5Adapter {
               output: inv.result,
               state: 'output-available',
               callProviderMetadata: part.providerMetadata,
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
@@ -158,6 +159,7 @@ export class AIV5Adapter {
               input: inv.args,
               state: 'input-available',
               callProviderMetadata: part.providerMetadata,
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           }
           continue;
@@ -426,6 +428,7 @@ export class AIV5Adapter {
             mimeType: p.mediaType,
             data: p.url || '',
             providerMetadata: p.providerMetadata,
+            ...((p as { filename?: string }).filename ? { filename: (p as { filename?: string }).filename } : {}),
           };
         }
 
@@ -668,6 +671,9 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           v2FilePart.providerMetadata = part.providerOptions;
+        }
+        if ((filePart as { filename?: string }).filename) {
+          (v2FilePart as Record<string, unknown>).filename = (filePart as { filename?: string }).filename;
         }
         mastraDBParts.push(v2FilePart);
         experimental_attachments.push({

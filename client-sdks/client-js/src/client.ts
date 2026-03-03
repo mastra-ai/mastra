@@ -16,9 +16,12 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
+  StoredSkill,
   ToolProvider,
+  ProcessorProvider,
   Workspace,
 } from './resources';
 import type {
@@ -58,6 +61,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  StoredPromptBlockResponse,
   ListStoredScorersParams,
   ListStoredScorersResponse,
   CreateStoredScorerParams,
@@ -66,6 +73,10 @@ import type {
   ListStoredMCPClientsResponse,
   CreateStoredMCPClientParams,
   StoredMCPClientResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  StoredSkillResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
@@ -92,6 +103,7 @@ import type {
   DatasetItemVersionResponse,
   DatasetVersionResponse,
   ListToolProvidersResponse,
+  GetProcessorProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -895,6 +907,67 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored Prompt Blocks
+  // ============================================================================
+
+  /**
+   * Lists all stored prompt blocks with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored prompt blocks
+   */
+  public listStoredPromptBlocks(params?: ListStoredPromptBlocksParams): Promise<ListStoredPromptBlocksResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/prompt-blocks${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored prompt block
+   * @param params - Prompt block configuration including name, content, rules, etc.
+   * @returns Promise containing the created stored prompt block
+   */
+  public createStoredPromptBlock(params: CreateStoredPromptBlockParams): Promise<StoredPromptBlockResponse> {
+    return this.request('/stored/prompt-blocks', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored prompt block instance by ID for further operations (details, update, delete)
+   * @param storedPromptBlockId - ID of the stored prompt block to retrieve
+   * @returns StoredPromptBlock instance
+   */
+  public getStoredPromptBlock(storedPromptBlockId: string): StoredPromptBlock {
+    return new StoredPromptBlock(this.options, storedPromptBlockId);
+  }
+
+  // ============================================================================
   // Stored Scorer Definitions
   // ============================================================================
 
@@ -1011,6 +1084,64 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored Skills
+  // ============================================================================
+
+  /**
+   * Lists all stored skills with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored skills
+   */
+  public listStoredSkills(params?: ListStoredSkillsParams): Promise<ListStoredSkillsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/skills${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored skill
+   * @param params - Skill configuration
+   * @returns Promise containing the created stored skill
+   */
+  public createStoredSkill(params: CreateStoredSkillParams): Promise<StoredSkillResponse> {
+    return this.request('/stored/skills', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored skill instance by ID for further operations (details, update, delete)
+   * @param storedSkillId - ID of the stored skill
+   * @returns StoredSkill instance
+   */
+  public getStoredSkill(storedSkillId: string): StoredSkill {
+    return new StoredSkill(this.options, storedSkillId);
+  }
+
+  // ============================================================================
   // Tool Providers
   // ============================================================================
 
@@ -1029,6 +1160,27 @@ export class MastraClient extends BaseResource {
    */
   public getToolProvider(providerId: string): ToolProvider {
     return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // Processor Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered processor providers
+   * @returns Promise containing list of processor provider info
+   */
+  public getProcessorProviders(): Promise<GetProcessorProvidersResponse> {
+    return this.request('/processor-providers');
+  }
+
+  /**
+   * Gets a processor provider instance by ID for further operations
+   * @param providerId - ID of the processor provider
+   * @returns ProcessorProvider instance
+   */
+  public getProcessorProvider(providerId: string): ProcessorProvider {
+    return new ProcessorProvider(this.options, providerId);
   }
 
   // ============================================================================

@@ -112,7 +112,7 @@ export default function WorkspaceSkillDetailPage() {
         <div className="grid place-items-center h-full">
           <div className="text-center">
             <p className="text-red-400 mb-2">Failed to load skill</p>
-            <p className="text-sm text-icon3">{error?.message ?? 'Skill not found'}</p>
+            <p className="text-sm text-neutral3">{error?.message ?? 'Skill not found'}</p>
           </div>
         </div>
       </MainContentLayout>

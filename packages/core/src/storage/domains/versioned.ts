@@ -265,6 +265,7 @@ export abstract class VersionedStorageDomain<
       return {
         ...entity,
         ...snapshotConfig,
+        resolvedVersionId: version.id,
       } as unknown as TResolved;
     }
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
-import { Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -10,6 +10,7 @@ import {
   Crumb,
   MainHeader,
   TextAndIcon,
+  Button,
   useDataset,
   useDatasetItems,
   Columns,
@@ -62,10 +63,7 @@ function DatasetCompareVersionsPage() {
               </Icon>
               Datasets
             </Crumb>
-            <Crumb isCurrent>
-              <Icon>
-                <ScaleIcon />
-              </Icon>
+            <Crumb isCurrent as="span">
               Compare Versions
             </Crumb>
           </Breadcrumb>
@@ -104,7 +102,7 @@ function DatasetCompareVersionsPage() {
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
-          <Crumb isCurrent>
+          <Crumb isCurrent as="span">
             <Icon>
               <ScaleIcon />
             </Icon>
@@ -127,6 +125,12 @@ function DatasetCompareVersionsPage() {
                 </TextAndIcon>
               </MainHeader.Description>
             </MainHeader.Column>
+            <MainHeader.Column>
+              <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+                <ArrowLeft />
+                Back to Dataset
+              </Button>
+            </MainHeader.Column>
           </MainHeader>
 
           <Columns>
@@ -138,6 +142,9 @@ function DatasetCompareVersionsPage() {
                 onVersionChange={handleVersionChange}
               />
               <DatasetCompareVersionsList
+                datasetId={datasetId}
+                versionA={versionNumbers[0]}
+                versionB={versionNumbers[1]}
                 allItems={allItems}
                 itemsAMap={itemsAMap}
                 itemsBMap={itemsBMap}

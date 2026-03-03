@@ -283,6 +283,9 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         status: 'published',
       });
 
+      // Clear the editor cache so subsequent requests see the new active version
+      mastra.getEditor()?.agent.clearCache(agentId);
+
       return {
         success: true,
         message: `Version ${version.versionNumber} is now active`,
@@ -385,6 +388,9 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         agent.activeVersionId,
       );
 
+      // Clear the editor cache so subsequent requests see the restored config
+      mastra.getEditor()?.agent.clearCache(agentId);
+
       return newVersion;
     } catch (error) {
       return handleError(error, 'Error restoring agent version');
@@ -441,6 +447,9 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       await agentsStore.deleteVersion(versionId);
+
+      // Clear the editor cache in case the deleted version affected resolution
+      mastra.getEditor()?.agent.clearCache(agentId);
 
       return {
         success: true,
