@@ -128,7 +128,14 @@ export async function fetchLatestVersion(): Promise<string | null> {
  */
 export function isNewerVersion(current: string, latest: string): boolean {
   const parse = (v: string) =>
-    v.replace(/^v/, '').split('-')[0]!.split('.').map(s => { const n = Number(s); return Number.isFinite(n) ? n : 0; });
+    v
+      .replace(/^v/, '')
+      .split('-')[0]!
+      .split('.')
+      .map(s => {
+        const n = Number(s);
+        return Number.isFinite(n) ? n : 0;
+      });
   const [cMajor = 0, cMinor = 0, cPatch = 0] = parse(current);
   const [lMajor = 0, lMinor = 0, lPatch = 0] = parse(latest);
   if (lMajor !== cMajor) return lMajor > cMajor;

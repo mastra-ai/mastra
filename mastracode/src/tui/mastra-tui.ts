@@ -854,7 +854,6 @@ export class MastraTUI {
   // Auto-Update
   // ===========================================================================
 
-
   /**
    * Check npm for a newer version and prompt the user to update.
    * - If the user previously dismissed this version, show a passive note instead.
@@ -924,10 +923,7 @@ export class MastraTUI {
                 process.exit(0);
               } else {
                 const cmd = getInstallCommand(pm, latestVersion);
-                showError(
-                  this.state,
-                  `Auto-update failed. Run \`${cmd}\` manually.`,
-                );
+                showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
               }
             } else {
               // User declined — save the dismissed version
@@ -935,10 +931,7 @@ export class MastraTUI {
               settings.updateDismissedVersion = latestVersion;
               saveSettings(settings);
               const cmd = getInstallCommand(pm);
-              showInfo(
-                this.state,
-                `Update skipped. Run \`${cmd}\` to update manually.`,
-              );
+              showInfo(this.state, `Update skipped. Run \`${cmd}\` to update manually.`);
             }
             resolve();
           },
