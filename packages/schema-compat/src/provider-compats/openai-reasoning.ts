@@ -3,7 +3,14 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import {
+  isAllOfSchema,
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
@@ -18,6 +25,7 @@ import {
   isDate,
   isNullable,
   isNull,
+  isIntersection,
 } from '../zodTypes';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
@@ -131,10 +139,18 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
         );
     }
 
+    if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
+    }
+
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
     // Process based on schema type
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);

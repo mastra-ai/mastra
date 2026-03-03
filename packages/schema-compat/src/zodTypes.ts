@@ -155,3 +155,9 @@ export function isNullable<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.Zod
 export function isNullable<Z extends typeof zV3 | typeof zV4>(z: Z) {
   return (v: any): v is Z['ZodNullable'] => v instanceof z['ZodNullable'];
 }
+
+export function isIntersection<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodIntersection<any, any>;
+export function isIntersection<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodIntersection;
+export function isIntersection<Z extends typeof zV3 | typeof zV4>(z: Z) {
+  return (v: any): v is Z['ZodIntersection'] => v instanceof z['ZodIntersection'];
+}

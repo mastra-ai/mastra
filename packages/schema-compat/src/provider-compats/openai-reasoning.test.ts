@@ -304,3 +304,55 @@ describe('OpenAIReasoningSchemaCompatLayer - ZodAny Handling', () => {
     });
   });
 });
+
+describe('OpenAIReasoningSchemaCompatLayer - ZodIntersection', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'o3',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should handle simple two-object intersection without throwing', () => {
+    const schemaA = z.object({ name: z.string() });
+    const schemaB = z.object({ age: z.number() });
+    const schema = z.object({ person: schemaA.and(schemaB) });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+
+    const jsonSchema = layer.processToJSONSchema(schema);
+    expect(jsonSchema.properties?.person).toBeDefined();
+  });
+
+  it('should handle chained .and().and() (three-way merge)', () => {
+    const schemaA = z.object({ name: z.string() });
+    const schemaB = z.object({ age: z.number() });
+    const schemaC = z.object({ email: z.string() });
+    const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+  });
+
+  it('should handle intersection inside a parent object', () => {
+    const schema = z.object({
+      metadata: z.object({ key: z.string() }).and(z.object({ value: z.number() })),
+      label: z.string(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+  });
+
+  it('should handle optional intersection wrapper', () => {
+    const schema = z.object({
+      data: z
+        .object({ a: z.string() })
+        .and(z.object({ b: z.number() }))
+        .optional(),
+    });
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+  });
+});

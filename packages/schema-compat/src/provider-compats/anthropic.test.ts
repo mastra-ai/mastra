@@ -798,4 +798,56 @@ describe('AnthropicSchemaCompatLayer', () => {
       expect(() => layer.toJSONSchema(schema)).not.toThrow();
     });
   });
+
+  describe('processZodType - ZodIntersection', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle simple two-object intersection without throwing', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schema = z.object({ person: schemaA.and(schemaB) });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+
+      const jsonSchema = layer.toJSONSchema(schema);
+      expect(jsonSchema.properties?.person).toBeDefined();
+    });
+
+    it('should handle chained .and().and() (three-way merge)', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schemaC = z.object({ email: z.string() });
+      const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle intersection inside a parent object', () => {
+      const schema = z.object({
+        metadata: z.object({ key: z.string() }).and(z.object({ value: z.number() })),
+        label: z.string(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle optional intersection wrapper', () => {
+      const schema = z.object({
+        data: z
+          .object({ a: z.string() })
+          .and(z.object({ b: z.number() }))
+          .optional(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+  });
 });
