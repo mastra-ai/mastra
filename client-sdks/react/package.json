@@ -29,8 +29,10 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
+    "build": "echo 'Use turbo to run build'",
+    "build:js": "tsup --config tsup.config.ts",
+    "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
+    "dev": "tsup --config tsup.config.ts --watch",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
@@ -60,7 +62,9 @@
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.12.10",
+    "@internal/types-builder": "workspace:*",
     "@storybook/react-vite": "^9.1.16",
+    "@tailwindcss/cli": "^4",
     "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
@@ -71,12 +75,11 @@
     "eslint-plugin-storybook": "^10.1.11",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "rollup-plugin-node-externals": "^8.0.1",
     "storybook": "^9.1.10",
     "tailwindcss": "^4",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vite": "^7.3.0",
-    "vite-plugin-dts": "^4.5.4",
     "vitest": "catalog:",
     "zod": "^3.25.0"
   },
