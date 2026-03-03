@@ -1,8 +1,5 @@
-import { coreFeatures } from '@mastra/core/features';
 import { v4 as uuid } from '@lukeed/uuid';
-import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
-
-import { Layout } from '@/components/layout';
+import { coreFeatures } from '@mastra/core/features';
 
 // Extend window type for Mastra config
 declare global {
@@ -19,67 +16,66 @@ declare global {
   }
 }
 
-import { AgentLayout } from '@/domains/agents/agent-layout';
-import Tools from '@/pages/tools';
-import { Processors } from '@/pages/processors';
-import { Processor } from '@/pages/processors/processor';
-
-import Agents from './pages/agents';
-import Agent from './pages/agents/agent';
-import AgentTool from './pages/tools/agent-tool';
-import Tool from './pages/tools/tool';
-import Workflows from './pages/workflows';
-import { Workflow } from './pages/workflows/workflow';
-import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import { PostHogProvider } from './lib/analytics';
-import RequestContext from './pages/request-context';
-import MCPs from './pages/mcps';
-import MCPServerToolExecutor from './pages/mcps/tool';
-
-import { McpServerPage } from './pages/mcps/[serverId]';
-
+import type { LinkComponentProviderProps } from '@mastra/playground-ui';
 import {
   LinkComponentProvider,
-  LinkComponentProviderProps,
   PlaygroundConfigGuard,
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
 } from '@mastra/playground-ui';
-import { Link } from './lib/framework';
-import Scorers from './pages/scorers';
-import Scorer from './pages/scorers/scorer';
-import Observability from './pages/observability';
-import Workspace from './pages/workspace';
-import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
-import Templates from './pages/templates';
-import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
-import { StudioSettingsPage } from './pages/settings';
+import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import { PostHogProvider } from './lib/analytics';
+import { Link } from './lib/framework';
+import Agents from './pages/agents';
+import Agent from './pages/agents/agent';
+import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
 import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
 import CmsAgentInformationPage from './pages/cms/agents/information';
-import CmsAgentToolsPage from './pages/cms/agents/tools';
-import CmsAgentAgentsPage from './pages/cms/agents/agents';
-import CmsAgentScorersPage from './pages/cms/agents/scorers';
-import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
-import CmsAgentMemoryPage from './pages/cms/agents/memory';
-import CmsAgentVariablesPage from './pages/cms/agents/variables';
-import CmsAgentSkillsPage from './pages/cms/agents/skills';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
-import CmsScorersCreatePage from './pages/cms/scorers/create';
-import CmsScorersEditPage from './pages/cms/scorers/edit';
-import PromptBlocks from './pages/prompt-blocks';
+import CmsAgentMemoryPage from './pages/cms/agents/memory';
+import CmsAgentScorersPage from './pages/cms/agents/scorers';
+import CmsAgentSkillsPage from './pages/cms/agents/skills';
+import CmsAgentToolsPage from './pages/cms/agents/tools';
+import CmsAgentVariablesPage from './pages/cms/agents/variables';
+import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
 import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
+import CmsScorersCreatePage from './pages/cms/scorers/create';
+import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
-import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
+import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import MCPs from './pages/mcps';
+import { McpServerPage } from './pages/mcps/[serverId]';
+import MCPServerToolExecutor from './pages/mcps/tool';
+import Observability from './pages/observability';
+import PromptBlocks from './pages/prompt-blocks';
+import RequestContext from './pages/request-context';
+import Scorers from './pages/scorers';
+import Scorer from './pages/scorers/scorer';
+import { StudioSettingsPage } from './pages/settings';
+import Templates from './pages/templates';
+import Template from './pages/templates/template';
+import AgentTool from './pages/tools/agent-tool';
+import Tool from './pages/tools/tool';
+import Workflows from './pages/workflows';
+import { Workflow } from './pages/workflows/workflow';
+import Workspace from './pages/workspace';
+import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
+import { Layout } from '@/components/layout';
+import { AgentLayout } from '@/domains/agents/agent-layout';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
+import Tools from '@/pages/tools';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
