@@ -58,8 +58,12 @@ describe('LocalSandbox', () => {
 
     it('should accept custom working directory', () => {
       const customSandbox = new LocalSandbox({ workingDirectory: '/tmp/custom' });
-      // We can't directly check the working directory, but we can verify it's set by running a command
-      expect(customSandbox).toBeDefined();
+      expect(customSandbox.workingDirectory).toBe('/tmp/custom');
+    });
+
+    it('should expand ~ in working directory', () => {
+      const customSandbox = new LocalSandbox({ workingDirectory: '~/my-sandbox' });
+      expect(customSandbox.workingDirectory).toBe(path.join(os.homedir(), 'my-sandbox'));
     });
   });
 
