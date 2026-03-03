@@ -6,7 +6,10 @@ import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
-export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<string, any>) {
+export function createDynamicTools(
+  mcpManager?: McpManager,
+  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>),
+) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
     const state = ctx?.getState?.();
@@ -39,7 +42,8 @@ export function createDynamicTools(mcpManager?: McpManager, extraTools?: Record<
     }
 
     if (extraTools) {
-      for (const [name, tool] of Object.entries(extraTools)) {
+      const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
+      for (const [name, tool] of Object.entries(resolved)) {
         if (!(name in tools)) {
           tools[name] = tool;
         }

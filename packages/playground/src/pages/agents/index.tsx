@@ -1,4 +1,3 @@
-import { Plus } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -14,6 +13,7 @@ import {
   AgentIcon,
   useIsCmsAvailable,
 } from '@mastra/playground-ui';
+import { Plus } from 'lucide-react';
 
 function Agents() {
   const { Link, navigate } = useLinkComponent();
