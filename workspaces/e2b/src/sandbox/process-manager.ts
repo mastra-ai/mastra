@@ -22,7 +22,7 @@ import type { E2BSandbox } from './index';
  * methods wire E2B's constructor-time callbacks to handle.emitStdout/emitStderr.
  */
 class E2BProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string | number;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -83,7 +83,7 @@ class E2BProcessHandle extends ProcessHandle {
     if (this.exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
     }
-    await this._sandbox.commands.sendStdin(this.pid, data);
+    await this._sandbox.commands.sendStdin(this._e2bHandle.pid, data);
   }
 }
 
@@ -122,7 +122,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       });
 
       handle = new E2BProcessHandle(e2bHandle, e2b, Date.now(), options);
-      this._tracked.set(handle.pid, handle);
+      this._tracked.set(this.pidKey(handle.pid), handle);
       return handle;
     });
   }
@@ -146,20 +146,24 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
    * Checks base class tracking first, then falls back to commands.connect()
    * for processes spawned externally or before reconnection.
    */
-  async get(pid: number): Promise<ProcessHandle | undefined> {
-    const tracked = this._tracked.get(pid);
+  async get(pid: string | number): Promise<ProcessHandle | undefined> {
+    const tracked = this._tracked.get(this.pidKey(pid));
     if (tracked) return tracked;
 
-    // Fall back to connect() for unknown PIDs (e.g., pre-existing processes)
+    // Fall back to connect() for unknown PIDs (e.g., pre-existing processes).
+    // E2B supports numeric PIDs; accept numeric strings as well.
+    const numericPid = typeof pid === 'number' ? pid : /^\d+$/.test(pid) ? Number(pid) : undefined;
+    if (numericPid === undefined) return undefined;
+
     const e2b = this.sandbox.e2b;
     let handle: E2BProcessHandle;
     try {
-      const e2bHandle = await e2b.commands.connect(pid, {
+      const e2bHandle = await e2b.commands.connect(numericPid, {
         onStdout: (data: string) => handle.emitStdout(data),
         onStderr: (data: string) => handle.emitStderr(data),
       });
       handle = new E2BProcessHandle(e2bHandle, e2b, Date.now());
-      this._tracked.set(pid, handle);
+      this._tracked.set(this.pidKey(e2bHandle.pid), handle);
       return handle;
     } catch {
       return undefined;

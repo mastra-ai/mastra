@@ -22,7 +22,7 @@ import type { CommandResult } from './types';
  * Not exported — internal to this module.
  */
 class LocalProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string | number;
   exitCode: number | undefined;
 
   private proc: ChildProcess;
@@ -44,7 +44,7 @@ class LocalProcessHandle extends ProcessHandle {
           timedOut = true;
           // Kill the process group so child processes are also terminated
           try {
-            process.kill(-this.pid, 'SIGTERM');
+            process.kill(-proc.pid!, 'SIGTERM');
           } catch {
             proc.kill('SIGTERM');
           }
@@ -105,7 +105,7 @@ class LocalProcessHandle extends ProcessHandle {
     // spawned by the shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
     try {
-      process.kill(-this.pid, 'SIGKILL');
+      process.kill(-this.proc.pid!, 'SIGKILL');
       return true;
     } catch {
       // Fallback to direct kill if process group kill fails
@@ -152,7 +152,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       stdio: 'pipe',
     });
     const handle = new LocalProcessHandle(proc, Date.now(), options);
-    this._tracked.set(handle.pid, handle);
+    this._tracked.set(this.pidKey(handle.pid), handle);
     return handle;
   }
 

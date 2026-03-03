@@ -20,7 +20,7 @@ import {
 
 /** Create a mock ProcessHandle with controllable state. */
 function createMockHandle(opts: {
-  pid: number;
+  pid: string | number;
   stdout?: string;
   stderr?: string;
   exitCode?: number;
@@ -56,8 +56,8 @@ function createMockSandbox(
     executeCommand?: (...args: any[]) => Promise<any>;
     processes?: {
       spawn?: (...args: any[]) => Promise<any>;
-      get?: (pid: number) => Promise<any>;
-      kill?: (pid: number) => Promise<boolean>;
+      get?: (pid: string | number) => Promise<any>;
+      kill?: (pid: string | number) => Promise<boolean>;
       list?: () => Promise<any[]>;
     };
   } = {},
@@ -319,6 +319,23 @@ describe('get_process_output tool', () => {
     expect(result).toContain('No background process found with PID 99999');
   });
 
+  it('works with string PIDs', async () => {
+    const handle = createMockHandle({
+      pid: 'session-abc',
+      stdout: 'string pid output\n',
+      stderr: '',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: 'session-abc' }, ctx);
+    expect(result).toContain('string pid output');
+  });
+
   it('returns output and exit code for already-exited process (no wait)', async () => {
     const handle = createMockHandle({
       pid: 12,
@@ -482,6 +499,25 @@ describe('kill_process tool', () => {
     expect(result).toContain('server log 100');
     expect(result).not.toContain('server log 1\n');
     expect(result).toContain('warn: something');
+  });
+
+  it('kills a process with a string PID', async () => {
+    const handle = createMockHandle({
+      pid: 'mastra-proc-abc-1',
+      stdout: 'bg output\n',
+      stderr: '',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+        kill: vi.fn().mockResolvedValue(true),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await killProcessTool.execute({ pid: 'mastra-proc-abc-1' }, ctx);
+    expect(result).toContain('Process mastra-proc-abc-1 has been killed');
+    expect(result).toContain('bg output');
   });
 
   it('returns not found for unknown PID', async () => {
