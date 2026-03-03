@@ -6,10 +6,11 @@ import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
   Step,
+  StepResult,
   WorkflowConfig,
   StepFlowEntry,
   WorkflowResult,
-  WorkflowRunStatus,
+  WorkflowRunState,
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
@@ -369,7 +370,7 @@ export class InngestWorkflow<
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
             const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
-              workflowStatus: result.status as WorkflowRunStatus,
+              workflowStatus: result.status,
               stepResults: result.steps,
             });
             if (shouldPersistFinalSnapshot) {
@@ -396,15 +397,14 @@ export class InngestWorkflow<
                     runId,
                     status: result.status,
                     value: result.state ?? initialState ?? {},
-                    // StepResult is a structural subset of SerializedStepResult; cast needed due to generics
-                    context: result.steps as any,
+                    context: toSnapshotContext(result.steps),
                     activePaths: [],
                     activeStepsPath: {},
                     serializedStepGraph: this.serializedStepGraph,
                     suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
                     waitingPaths: {},
                     resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? (result.result as Record<string, any>) : undefined,
+                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                     error: result.status === 'failed' ? result.error : undefined,
                     timestamp: Date.now(),
                   },
@@ -486,4 +486,21 @@ export class InngestWorkflow<
       ...this.getNestedFunctions(this.executionGraph.steps),
     ];
   }
+}
+
+/**
+ * Converts runtime step results to the serialized context shape expected by WorkflowRunState.
+ * StepResult is a structural subset of SerializedStepResult (widening), so no data
+ * transformation is needed — this bridges the generic type mismatch at the persistence boundary.
+ */
+function toSnapshotContext(steps: Record<string, StepResult<any, any, any, any>>): WorkflowRunState['context'] {
+  return steps as unknown as WorkflowRunState['context'];
+}
+
+/**
+ * Converts a workflow output value to the record shape expected by WorkflowRunState.result.
+ * Workflow outputs are generic (TOutput) but the snapshot schema stores them as Record<string, any>.
+ */
+function toSnapshotResult(output: unknown): WorkflowRunState['result'] {
+  return output as WorkflowRunState['result'];
 }
