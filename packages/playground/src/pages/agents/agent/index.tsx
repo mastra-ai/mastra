@@ -12,6 +12,8 @@ import {
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
+  PermissionDenied,
+  is403ForbiddenError,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -23,7 +25,7 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
@@ -83,7 +85,16 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading || !agent) {
+  // 403 check - permission denied for agents
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
+  }
+
+  if (isAgentLoading) {
     return null;
   }
 
