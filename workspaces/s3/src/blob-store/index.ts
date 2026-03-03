@@ -26,6 +26,11 @@ export interface S3BlobStoreOptions {
   /** AWS secret access key */
   secretAccessKey: string;
   /**
+   * AWS session token for temporary credentials (STS).
+   * Required when using AWS STS, IAM role assumption, or federated access.
+   */
+  sessionToken?: string;
+  /**
    * Custom endpoint URL for S3-compatible storage.
    * Examples:
    * - Cloudflare R2: 'https://{accountId}.r2.cloudflarestorage.com'
@@ -94,6 +99,7 @@ export class S3BlobStore extends BlobStore {
   private readonly region: string;
   private readonly accessKeyId: string;
   private readonly secretAccessKey: string;
+  private readonly sessionToken?: string;
   private readonly endpoint?: string;
   private readonly forcePathStyle: boolean;
 
@@ -103,6 +109,7 @@ export class S3BlobStore extends BlobStore {
     this.region = options.region;
     this.accessKeyId = options.accessKeyId;
     this.secretAccessKey = options.secretAccessKey;
+    this.sessionToken = options.sessionToken;
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint;
     this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : 'mastra_skill_blobs/';
@@ -115,6 +122,7 @@ export class S3BlobStore extends BlobStore {
       credentials: {
         accessKeyId: this.accessKeyId,
         secretAccessKey: this.secretAccessKey,
+        ...(this.sessionToken ? { sessionToken: this.sessionToken } : {}),
       },
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
