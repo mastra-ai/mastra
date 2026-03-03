@@ -328,6 +328,20 @@ isOptional: true,
 description:
 "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
 },
+{
+name: "onStepFinish",
+type: "(event: any) => Promise<void> | void",
+isOptional: true,
+description:
+"Callback fired after each LLM step within a sub-agent execution. Receives step details including finish reason and token usage.",
+},
+{
+name: "onError",
+type: "({ error }: { error: Error | string }) => Promise<void> | void",
+isOptional: true,
+description:
+"Callback fired when an error occurs during sub-agent execution.",
+},
 ]}
 />
 
