@@ -6,6 +6,7 @@ import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
+import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -111,6 +112,23 @@ export function resolveModel(
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean },
 ): ResolvedModel {
   authStorage.reload();
+  const [providerId, modelName] = modelId.split('/', 2);
+  const settings = loadSettings();
+  const customProvider =
+    providerId && modelName
+      ? settings.customProviders.find(provider => {
+          return providerId === getCustomProviderId(provider.name);
+        })
+      : undefined;
+
+  if (customProvider) {
+    return new ModelRouterLanguageModel({
+      id: modelId,
+      url: customProvider.url,
+      apiKey: customProvider.apiKey,
+    });
+  }
+
   const isAnthropicModel = modelId.startsWith('anthropic/');
   const isOpenAIModel = modelId.startsWith(OPENAI_PREFIX);
   const isMoonshotModel = modelId.startsWith('moonshotai/');

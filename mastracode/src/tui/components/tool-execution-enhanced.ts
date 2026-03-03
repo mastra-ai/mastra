@@ -9,6 +9,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
+import { MC_TOOLS } from '../../tool-names.js';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -149,7 +150,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
    * Only for execute_command tool - shows live output while command runs.
    */
   appendStreamingOutput(output: string): void {
-    if (this.toolName !== 'execute_command' && this.toolName !== 'mastra_workspace_execute_command') {
+    if (
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      this.toolName !== MC_TOOLS.GET_PROCESS_OUTPUT &&
+      this.toolName !== MC_TOOLS.KILL_PROCESS
+    ) {
       return;
     }
     this.streamingOutput += output;
@@ -179,14 +184,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private updateBgColor(): void {
-    // For shell, view, and edit commands, skip background - we use bordered box style instead
-    const isShellCommand = this.toolName === 'execute_command' || this.toolName === 'mastra_workspace_execute_command';
-    const isViewCommand = this.toolName === 'view' || this.toolName === 'mastra_workspace_read_file';
-    const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
-    const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
+    // For shell, view, edit, and process commands, skip background - we use bordered box style instead
+    const isShellCommand = this.toolName === MC_TOOLS.EXECUTE_COMMAND;
+    const isViewCommand = this.toolName === MC_TOOLS.VIEW;
+    const isEditCommand = this.toolName === MC_TOOLS.STRING_REPLACE_LSP;
+    const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
+    const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
     const isTaskWrite = this.toolName === 'task_write';
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isTaskWrite) {
+    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
@@ -209,25 +215,24 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.collapsible = undefined;
 
     switch (this.toolName) {
-      case 'view':
-      case 'mastra_workspace_read_file':
+      case MC_TOOLS.VIEW:
         this.renderViewToolEnhanced();
         break;
-      case 'execute_command':
-      case 'mastra_workspace_execute_command':
+      case MC_TOOLS.EXECUTE_COMMAND:
         this.renderBashToolEnhanced();
         break;
-      case 'string_replace_lsp':
-      case 'mastra_workspace_edit_file':
+      case MC_TOOLS.STRING_REPLACE_LSP:
         this.renderEditToolEnhanced();
         break;
-      case 'write_file':
-      case 'mastra_workspace_write_file':
+      case MC_TOOLS.WRITE_FILE:
         this.renderWriteToolEnhanced();
         break;
-      case 'find_files':
-      case 'mastra_workspace_list_files':
+      case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
+        break;
+      case MC_TOOLS.GET_PROCESS_OUTPUT:
+      case MC_TOOLS.KILL_PROCESS:
+        this.renderProcessToolEnhanced();
         break;
       case 'task_write':
         this.renderTaskWriteEnhanced();
@@ -419,6 +424,57 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
     renderBorderedShell(status, prepareOutputLines(output));
   }
+
+  private renderProcessToolEnhanced(): void {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const pid = argsObj?.pid ? Number(argsObj.pid) : 0;
+    const isKill = this.toolName === MC_TOOLS.KILL_PROCESS;
+    const isWait = !isKill && argsObj?.wait === true;
+
+    const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();
+    const label = isKill ? 'kill' : isWait ? 'wait' : 'output';
+
+    const renderBorderedProcess = (status: string, outputLines: string[]) => {
+      const border = (char: string) => theme.bold(theme.fg('accent', char));
+      const footerText = `${theme.fg('toolTitle', label)} ${theme.fg('accent', `PID ${pid}`)}${timeSuffix}${status}`;
+
+      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+
+      const termWidth = process.stdout.columns || 80;
+      const maxLineWidth = termWidth - 6;
+      const borderedLines = outputLines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncated;
+      });
+      const displayOutput = borderedLines.join('\n');
+      if (displayOutput.trim()) {
+        this.contentBox.addChild(new Text(displayOutput, 0, 0));
+      }
+
+      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    };
+
+    const prepareOutputLines = (output: string): string[] => {
+      let lines = output.split('\n');
+      while (lines.length > 0 && lines[0] === '') lines.shift();
+      while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+      return lines;
+    };
+
+    if (!this.result || this.isPartial) {
+      const status = this.getStatusIndicator();
+      let lines = this.streamingOutput ? this.streamingOutput.split('\n') : [];
+      while (lines.length > 0 && lines[0] === '') lines.shift();
+      while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+      renderBorderedProcess(status, lines);
+      return;
+    }
+
+    const status = this.result.isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
+    const output = this.streamingOutput.trim() || this.getFormattedOutput();
+    renderBorderedProcess(status, prepareOutputLines(output));
+  }
+
   private renderEditToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const fullPath = argsObj?.path ? String(argsObj.path) : '';
@@ -433,8 +489,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         ? fileLink(theme.fg('accent', path), fullPath, startLineNum)
         : theme.fg('accent', path);
 
-      // If both old_str and new_str are available, show a bordered diff preview
-      if (argsObj?.old_str && argsObj?.new_str) {
+      // If both old_str/old_string and new_str/new_string are available, show a bordered diff preview
+      const oldStr = argsObj?.old_str ?? argsObj?.old_string;
+      const newStr = argsObj?.new_str ?? argsObj?.new_string;
+      if (oldStr != null && newStr != null) {
         const border = (char: string) => theme.bold(theme.fg('accent', char));
         const termWidth = process.stdout.columns || 80;
         const maxLineWidth = termWidth - 6;
@@ -443,9 +501,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text('', 0, 0));
         this.contentBox.addChild(new Text(border('┌──'), 0, 0));
 
-        const oldStr = String(argsObj.old_str);
-        const newStr = String(argsObj.new_str);
-        const { lines: diffLines } = this.generateDiffLines(oldStr, newStr);
+        const { lines: diffLines } = this.generateDiffLines(String(oldStr), String(newStr));
 
         // While streaming, show the tail so new content scrolls in at the bottom
         const collapsedLines = 15;
@@ -504,10 +560,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.contentBox.addChild(new Text(border('┌──'), 0, 0));
 
     // For edits, show the diff
-    if (argsObj?.old_str && argsObj?.new_str && !this.result.isError) {
-      const oldStr = String(argsObj.old_str);
-      const newStr = String(argsObj.new_str);
-      const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(oldStr, newStr);
+    const finalOldStr = argsObj?.old_str ?? argsObj?.old_string;
+    const finalNewStr = argsObj?.new_str ?? argsObj?.new_string;
+    if (finalOldStr != null && finalNewStr != null && !this.result.isError) {
+      const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(String(finalOldStr), String(finalNewStr));
 
       // Limit lines when collapsed, windowed around first change
       const collapsedLines = 15;
@@ -566,7 +622,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // LSP diagnostics below the box
     const diagnostics = this.parseLSPDiagnostics();
-    if (diagnostics && diagnostics.hasIssues) {
+    if (diagnostics && !diagnostics.hasIssues) {
+      this.contentBox.addChild(new Text(theme.fg('muted', `  ✓ No LSP issues`), 0, 0));
+    } else if (diagnostics && diagnostics.hasIssues) {
       const COLLAPSED_DIAG_LINES = 3;
       const shouldCollapse = !this.expanded && diagnostics.entries.length > COLLAPSED_DIAG_LINES + 1;
       const maxDiags = shouldCollapse ? COLLAPSED_DIAG_LINES : diagnostics.entries.length;
@@ -810,14 +868,17 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const output = this.getFormattedOutput();
     if (output) {
-      const lines = output.split('\n');
-      const fileCount = lines.filter(l => l.trim() && !l.includes('└') && !l.includes('├') && !l.includes('│')).length;
       const listStatus = this.getStatusIndicator();
+
+      // Extract summary line (e.g. "5 directories, 9 files") from tree output for the header
+      const lines = output.split('\n');
+      const lastLine = lines[lines.length - 1]?.trim() || '';
+      const summaryMatch = lastLine.match(/^\d+\s+directories?,\s+\d+\s+files?$/);
+      const summaryDisplay = summaryMatch ? ' ' + theme.fg('muted', lastLine) : '';
 
       this.collapsible = new CollapsibleComponent(
         {
-          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${listStatus}`,
-          summary: `${fileCount} items`,
+          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${summaryDisplay}${listStatus}`,
           expanded: this.expanded,
           collapsedLines: 15,
           expandedLines: 100,
