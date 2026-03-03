@@ -12,13 +12,13 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
+import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
 
 // Use vi.hoisted to define mocks before vi.mock is hoisted
-const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi.hoisted(() => {
+const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError } = vi.hoisted(() => {
   const mockSandbox = {
     id: 'mock-sandbox-id',
     state: 'started',
@@ -50,7 +50,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
 
   const mockDaytona = {
     create: vi.fn().mockResolvedValue(mockSandbox),
-    get: vi.fn().mockResolvedValue(mockSandbox),
+    get: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     findOne: vi.fn().mockRejectedValue(new Error('No sandbox found')),
     delete: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
@@ -60,8 +60,8 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
 
   const resetMockDefaults = () => {
     mockDaytona.create.mockResolvedValue(mockSandbox);
-    mockDaytona.get.mockResolvedValue(mockSandbox);
-    mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
+    mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
+    mockDaytona.findOne.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
     mockDaytona.delete.mockResolvedValue(undefined);
     mockDaytona.stop.mockResolvedValue(undefined);
     mockDaytona.start.mockResolvedValue(undefined);
@@ -81,14 +81,23 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi
     mockSandbox.delete.mockResolvedValue(undefined);
   };
 
-  class DaytonaNotFoundError extends Error {
+  class DaytonaError extends Error {
+    statusCode?: number;
+    constructor(message?: string, statusCode?: number) {
+      super(message ?? 'Error');
+      this.name = 'DaytonaError';
+      this.statusCode = statusCode;
+    }
+  }
+
+  class DaytonaNotFoundError extends DaytonaError {
     constructor(message?: string) {
-      super(message ?? 'Not found');
+      super(message ?? 'Not found', 404);
       this.name = 'DaytonaNotFoundError';
     }
   }
 
-  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError };
+  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError };
 });
 
 // Mock the Daytona SDK — must use `function` (not arrow) so `new Daytona()` works
@@ -96,15 +105,24 @@ vi.mock('@daytonaio/sdk', () => ({
   Daytona: vi.fn().mockImplementation(function () {
     return mockDaytona;
   }),
+  DaytonaError,
   DaytonaNotFoundError,
   SandboxState: {
+    CREATING: 'creating',
+    RESTORING: 'restoring',
     DESTROYED: 'destroyed',
     DESTROYING: 'destroying',
     STARTED: 'started',
     STOPPED: 'stopped',
+    STARTING: 'starting',
+    STOPPING: 'stopping',
     ERROR: 'error',
     BUILD_FAILED: 'build_failed',
     ARCHIVED: 'archived',
+    ARCHIVING: 'archiving',
+    RESIZING: 'resizing',
+    PULLING_SNAPSHOT: 'pulling_snapshot',
+    BUILDING_SNAPSHOT: 'building_snapshot',
   },
 }));
 
@@ -438,18 +456,30 @@ describe('DaytonaSandbox', () => {
 
   describe('Start - Reconnection', () => {
     it('reconnects to an existing started sandbox without calling create', async () => {
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await sandbox._start();
+
+      expect(mockDaytona.get).toHaveBeenCalledWith('my-id');
+      expect(mockDaytona.create).not.toHaveBeenCalled();
+      expect(mockDaytona.start).not.toHaveBeenCalled();
+    });
+
+    it('falls back to findOne when get() fails', async () => {
+      mockDaytona.get.mockRejectedValue(new DaytonaNotFoundError('No sandbox found'));
       mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
 
+      expect(mockDaytona.get).toHaveBeenCalled();
       expect(mockDaytona.findOne).toHaveBeenCalledWith({ labels: { 'mastra-sandbox-id': 'my-id' } });
       expect(mockDaytona.create).not.toHaveBeenCalled();
-      expect(mockDaytona.start).not.toHaveBeenCalled();
     });
 
     it('restarts a stopped sandbox and reconnects without calling create', async () => {
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'stopped' });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'stopped' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -459,7 +489,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('restarts an archived sandbox and reconnects without calling create', async () => {
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'archived' });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, id: 'my-id', state: 'archived' });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -472,7 +502,7 @@ describe('DaytonaSandbox', () => {
       for (const state of ['destroyed', 'destroying', 'error', 'build_failed']) {
         vi.clearAllMocks();
         resetMockDefaults();
-        mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state });
+        mockDaytona.get.mockResolvedValue({ ...mockSandbox, state });
         const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
         await sandbox._start();
@@ -482,7 +512,6 @@ describe('DaytonaSandbox', () => {
     });
 
     it('creates fresh sandbox when no existing sandbox is found', async () => {
-      mockDaytona.findOne.mockRejectedValue(new Error('No sandbox found'));
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -492,7 +521,7 @@ describe('DaytonaSandbox', () => {
 
     it('uses createdAt from existing sandbox on reconnect', async () => {
       const createdAt = '2024-01-15T10:00:00.000Z';
-      mockDaytona.findOne.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started', createdAt });
       const sandbox = new DaytonaSandbox({ id: 'my-id' });
 
       await sandbox._start();
@@ -734,6 +763,17 @@ describe('DaytonaSandbox', () => {
     it('does not include network notice when networkBlockAll is not set', () => {
       const sandbox = new DaytonaSandbox();
       expect(sandbox.getInstructions()).not.toContain('Network access is blocked');
+    });
+
+    it('includes working directory when detected', () => {
+      const sandbox = new DaytonaSandbox();
+      (sandbox as any)._workingDir = '/home/daytona';
+      expect(sandbox.getInstructions()).toContain('Default working directory: /home/daytona');
+    });
+
+    it('omits working directory when not yet detected', () => {
+      const sandbox = new DaytonaSandbox();
+      expect(sandbox.getInstructions()).not.toContain('working directory');
     });
   });
 
@@ -999,10 +1039,10 @@ describe('DaytonaSandbox', () => {
       if (conformanceSandbox) await conformanceSandbox._destroy();
     });
 
-    createSandboxLifecycleTests(() => ({
+    const getContext = () => ({
       sandbox: conformanceSandbox as any,
       capabilities: {
-        supportsMounting: false,
+        supportsMounting: true,
         supportsReconnection: true,
         supportsConcurrency: true,
         supportsEnvVars: true,
@@ -1010,10 +1050,14 @@ describe('DaytonaSandbox', () => {
         supportsTimeout: true,
         defaultCommandTimeout: 300000,
         supportsStreaming: true,
+        supportsStdin: true,
       },
       testTimeout: 30000,
       fastOnly: true,
       createSandbox: () => new DaytonaSandbox(),
-    }));
+    });
+
+    createSandboxLifecycleTests(getContext);
+    createMountOperationsTests(getContext);
   });
 });

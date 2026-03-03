@@ -1682,6 +1682,52 @@ Line 3 conclusion`;
           }),
       ).toThrow('Cannot use both "filesystem" and "mounts"');
     });
+
+    it('should warn when a mount uses LocalFilesystem with contained: false', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        new Workspace({
+          mounts: {
+            '/a': new LocalFilesystem({ basePath: tempDirA }),
+            '/b': new LocalFilesystem({ basePath: tempDirB, contained: false }),
+          },
+        });
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('contained: false'));
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('incompatible with mounts'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should include mount path in warning for contained: false mount', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        new Workspace({
+          mounts: {
+            '/data': new LocalFilesystem({ basePath: tempDirA, contained: false }),
+          },
+        });
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('mount "/data"'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should not warn for contained: true LocalFilesystem in mounts', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const workspace = new Workspace({
+          mounts: {
+            '/a': new LocalFilesystem({ basePath: tempDirA }),
+            '/b': new LocalFilesystem({ basePath: tempDirB, contained: true }),
+          },
+        });
+        expect(workspace.filesystem).toBeInstanceOf(CompositeFilesystem);
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
   // ===========================================================================

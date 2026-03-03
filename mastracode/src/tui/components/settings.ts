@@ -22,6 +22,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
+  quietMode: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -32,6 +33,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onQuietModeChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onClose: () => void;
 }
@@ -317,6 +319,34 @@ export class SettingsComponent extends Box implements Focusable {
               config.escapeAsCancel = value === 'on';
               callbacks.onEscapeAsCancelChange(config.escapeAsCancel);
               done(config.escapeAsCancel ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'quietMode',
+        label: 'Quiet mode',
+        description: 'Collapse subagent output to a single line after completion.',
+        currentValue: config.quietMode ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Auto-collapse subagent output when done',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Keep subagent output visible when done',
+              },
+            ],
+            config.quietMode ? 'on' : 'off',
+            value => {
+              config.quietMode = value === 'on';
+              callbacks.onQuietModeChange(config.quietMode);
+              done(config.quietMode ? 'On' : 'Off');
             },
             () => done(),
           ),
