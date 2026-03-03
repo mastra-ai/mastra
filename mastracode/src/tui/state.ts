@@ -120,6 +120,8 @@ export interface TUIState {
   /** Track the most recent ask_user tool for inline question placement */
   lastAskUserComponent?: IToolExecutionComponent;
   activeInlineQuestion?: AskQuestionInlineComponent;
+  /** Queue of pending inline questions waiting to be shown (when one is already active) */
+  pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
@@ -211,6 +213,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingNewThread: false,
 
     // Inline interaction
+    pendingInlineQuestions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,

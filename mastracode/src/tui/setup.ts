@@ -45,12 +45,14 @@ export function setupKeyboardShortcuts(
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else if (state.harness.isRunning()) {
       // Clean up active inline components on abort
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -361,6 +363,9 @@ export function setupKeyHandlers(
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
+    state.activeInlinePlanApproval = undefined;
+    state.activeInlineQuestion = undefined;
+    state.pendingInlineQuestions.length = 0;
     state.userInitiatedAbort = true;
     state.harness.abort();
   });

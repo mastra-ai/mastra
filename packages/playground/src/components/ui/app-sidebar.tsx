@@ -1,3 +1,19 @@
+import type {
+  NavLink,
+  AgentIcon,
+  GithubIcon,
+  McpServerIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  MainSidebar,
+  useMainSidebar,
+  type NavSection,
+  LogoWithoutText,
+  SettingsIcon,
+  MastraVersionFooter,
+  useMastraPlatform,
+  useIsCmsAvailable,
+} from '@mastra/playground-ui';
 import {
   GaugeIcon,
   EyeIcon,
@@ -13,23 +29,6 @@ import {
   DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
-
-import {
-  AgentIcon,
-  GithubIcon,
-  McpServerIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  MainSidebar,
-  useMainSidebar,
-  type NavSection,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  NavLink,
-} from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
   {

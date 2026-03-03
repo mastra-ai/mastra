@@ -1,5 +1,3 @@
-import { Link, useParams, Navigate } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -14,6 +12,7 @@ import {
   useProcessor,
   Skeleton,
 } from '@mastra/playground-ui';
+import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {
   const { processorId } = useParams();
