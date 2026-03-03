@@ -7,7 +7,7 @@ Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see w
 Start the development server:
 
 ```shell
-pnpm run dev
+npm run dev
 ```
 
 Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/getting-started/studio). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
