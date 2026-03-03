@@ -350,12 +350,12 @@ async function runScorers(
       const stepScorerResults: Record<string, any> = {};
       for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
         const stepResult = targetResult.scoringData.stepResults?.[stepId];
-        if (stepResult?.status === 'success' && stepResult.payload && stepResult.output) {
+        if (stepResult?.status === 'success' && stepResult.output) {
           const stepResults: Record<string, any> = {};
           for (const scorer of stepScorers) {
             try {
               const score = await scorer.run({
-                input: stepResult.payload,
+                input: stepResult.payload ?? targetResult.scoringData.input,
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 requestContext: item.requestContext,
