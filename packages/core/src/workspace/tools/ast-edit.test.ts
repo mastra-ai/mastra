@@ -623,7 +623,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       );
 
       expect(result).toContain('File not found');
-      expect(result).toContain('write_file');
+      expect(result).toContain('write file');
     });
   });
 });

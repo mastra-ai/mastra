@@ -6041,43 +6041,60 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
-    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
       bufferTokens: 500,
       bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
-      blockAfter: 0,
       messageCount: 10,
       observerResponses: [
-        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>Implement sync path</current-task>\n<suggested-response>Continue with step 2</suggested-response>',
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
         '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
       ],
     });
 
+    // Step 0 triggers async buffering; step 1 activates the buffered chunk,
+    // propagating the continuation hints to thread metadata.
     await step(0);
+    await waitForAsyncOps();
+    await step(1);
+    await waitForAsyncOps();
     const threadAfterFirstObservation = await storage.getThreadById({ threadId });
     const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(firstOM.currentTask).toBe('Implement sync path');
     expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'sync-clear-msg-1',
-          threadId,
-          resourceId,
-          role: 'user',
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'New message to trigger observation' }],
-          },
-          type: 'text',
-          createdAt: new Date('2025-01-01T12:30:00Z'),
-        },
-      ],
-    });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-    await step(1);
+    // Step 2 starts a new async buffering round (observer call 2, no hints).
+    // Step 3 activates the new chunk, clearing the stale hints.
+    await step(2, { freshState: true });
+    await waitForAsyncOps();
+    await step(3);
+    await waitForAsyncOps();
     const threadAfterSecondObservation = await storage.getThreadById({ threadId });
     const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(secondOM.currentTask).toBeUndefined();
@@ -6085,15 +6102,18 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
-    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+    // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
+    // With 20 messages at ~112 tokens each ≈ 2240 tokens, forceMaxActivation triggers.
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
       bufferTokens: 200,
       bufferActivation: 1,
       reflectionObservationTokens: 50000,
-      messageCount: 10,
+      messageCount: 20,
     });
 
-    const record = await storage.getObservationalMemory(threadId, resourceId);
+    // Create the OM record (the helper does not initialize one automatically).
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
     expect(record).toBeDefined();
 
     await storage.updateBufferedObservations({
@@ -6140,6 +6160,7 @@ describe('Full Async Buffering Flow', () => {
     });
 
     await step(0, { freshState: true });
+    await waitForAsyncOps();
 
     const threadAfterActivation = await storage.getThreadById({ threadId });
     const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
