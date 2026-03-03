@@ -239,6 +239,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
+    const wasTilde = inputPath.startsWith('~');
     inputPath = expandTilde(inputPath);
 
     if (!this._contained && nodePath.isAbsolute(inputPath)) {
@@ -250,6 +251,12 @@ export class LocalFilesystem extends MastraFilesystem {
       // convention (e.g. "/file.txt" meaning "basePath/file.txt")
       const normalized = nodePath.normalize(inputPath);
       if (this._isWithinAnyRoot(normalized)) {
+        absolutePath = normalized;
+      } else if (wasTilde) {
+        // Path started with ~ so the user meant a real filesystem path,
+        // not a virtual-root path. Treat as a real absolute path — the
+        // containment check below will throw PermissionError if it's not
+        // within basePath or allowedPaths.
         absolutePath = normalized;
       } else {
         absolutePath = resolveWorkspacePath(this._basePath, inputPath);
@@ -774,7 +781,7 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  getInstructions(opts?: { requestContext?: RequestContext }): string {
+  getInstructions(opts?: { requestContext?: RequestContext<any> }): string {
     return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
   }
 
