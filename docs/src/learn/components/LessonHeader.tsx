@@ -33,7 +33,7 @@ export function LessonHeader({
         {lesson.status === 'comingSoon' && (
           <>
             <span className="learn-meta-text">·</span>
-            <LessonStatusChip status={lesson.status} />
+            <LessonStatusChip status={lesson.status} module={lesson.module} />
           </>
         )}
         {onWatchedChange != null && (

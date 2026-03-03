@@ -1,8 +1,16 @@
 import { cn } from '@site/src/lib/utils'
 import type { LessonStatus } from '../types'
 
-export function LessonStatusChip({ status, className }: { status: LessonStatus; className?: string }) {
+type LessonStatusChipProps = {
+  status: LessonStatus
+  module?: string
+  className?: string
+}
+
+export function LessonStatusChip({ status, module, className }: LessonStatusChipProps) {
   if (status === 'published') return null
+
+  const label = module === 'Production' ? 'Coming soon' : 'Coming next week'
 
   return (
     <span
@@ -11,7 +19,7 @@ export function LessonStatusChip({ status, className }: { status: LessonStatus; 
         className,
       )}
     >
-      Coming Early March 2026
+      {label}
     </span>
   )
 }

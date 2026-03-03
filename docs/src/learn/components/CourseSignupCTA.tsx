@@ -72,12 +72,15 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
 
   return (
     <div id="learn-signup-cta" className={cn('rounded-lg border border-(--border) p-6 text-center', className)}>
-      <h3 className="text-lg font-semibold text-(--mastra-text-primary)">New lessons arriving early March</h3>
-      <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">Get a heads-up the moment they go live.</p>
+      <h3 className="text-lg font-semibold text-(--mastra-text-primary)">Don’t miss the next Mastra lessons</h3>
+      <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">
+        Be notified the moment new lessons release and stay ahead of every update. We’ll email you about course
+        improvements, new Mastra features, and upcoming live workshops. Unsubscribe anytime.
+      </p>
       <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-2">
         <Input
           type="email"
-          placeholder="you@example.com"
+          placeholder="Enter your email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           required

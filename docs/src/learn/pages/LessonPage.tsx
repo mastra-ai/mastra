@@ -51,18 +51,6 @@ function PublishedContent({
           onAutoComplete={() => setWatched(true)}
         />
       )}
-      <p className="mt-4 text-sm opacity-60">
-        Follow along with the{' '}
-        <a
-          href="https://github.com/mastra-ai/mastra-agent-course"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          course code on GitHub
-        </a>
-        .
-      </p>
       {MdxContent && (
         <div className="markdown mt-6">
           <MDXContent>
@@ -126,7 +114,7 @@ export default function LessonPage() {
   const prev = lessonIndex > 0 ? course.lessons[lessonIndex - 1] : undefined
   const next = lessonIndex < course.lessons.length - 1 ? course.lessons[lessonIndex + 1] : undefined
 
-  const seoTitle = lesson.seo?.title ?? `${lesson.title} | Mastra Learn`
+  const seoTitle = lesson.seo?.title ?? `${lesson.title} | Mastra`
   const seoDescription = lesson.seo?.description ?? lesson.preview.intro
 
   return (

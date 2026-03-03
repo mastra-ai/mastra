@@ -1364,10 +1364,19 @@ article p {
 
 /* Override Infima's a:hover color for sidebar items */
 a.learn-sidebar-item:hover {
-  color: var(--mastra-green-accent-3) !important;
+  color: #027930 !important;
 }
 [data-theme='dark'] a.learn-sidebar-item:hover {
-  color: var(--mastra-green-accent) !important;
+  color: #1AFB6F !important;
+}
+
+/* Active sidebar item */
+a.learn-sidebar-item.is-active {
+  color: #027930 !important;
+  font-weight: 500;
+}
+[data-theme='dark'] a.learn-sidebar-item.is-active {
+  color: #1AFB6F !important;
 }
 
 .learn-sidebar ul,

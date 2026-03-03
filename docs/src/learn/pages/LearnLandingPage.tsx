@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import Head from '@docusaurus/Head'
+import Link from '@docusaurus/Link'
 import { course } from '../course'
 import type { Lesson } from '../types'
 import { useSharedLearnStorage } from '../hooks/LearnStorageContext'
@@ -28,29 +29,55 @@ function LandingContent() {
   return (
     <>
       <Head>
-        <meta property="og:title" content="Learn | Mastra" />
+        <meta property="og:title" content={`${course.title} - Free Full Course`} />
         <meta property="og:description" content={course.description} />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://mastra.ai/img/guil-hernandez.jpg" />
+        <meta name="author" content="Guil Hernandez" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Course',
+            name: course.title,
+            description: course.description,
+            provider: {
+              '@type': 'Organization',
+              name: 'Mastra',
+              url: 'https://mastra.ai',
+            },
+            instructor: {
+              '@type': 'Person',
+              name: 'Guil Hernandez',
+              url: 'https://www.linkedin.com/in/guiljh/',
+              image: 'https://mastra.ai/img/guil-hernandez.jpg',
+              jobTitle: 'Developer Educator',
+              description: 'Over a decade building and teaching software, with courses used by 500,000+ learners.',
+            },
+            isAccessibleForFree: true,
+            hasCourseInstance: {
+              '@type': 'CourseInstance',
+              courseMode: 'online',
+              courseWorkload: 'PT90M',
+            },
+          })}
+        </script>
       </Head>
 
       {/* Hero */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">{course.title}</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-(--mastra-text-primary)">
+          {course.title.replace('AI ', '')}
+        </h1>
         {course.description.split('\n\n').map((para, i) => (
           <p key={i} className="mt-2 text-(--mastra-text-tertiary)">
             {para}
           </p>
         ))}
-        <p className="mt-4 text-sm text-(--mastra-text-tertiary)">
-          All course code is available on{' '}
-          <a
-            href="https://github.com/mastra-ai/mastra-agent-course"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-(--ifm-link-hover-color)"
-          >
-            GitHub
-          </a>
-          .
+        <p className="mt-2 text-(--mastra-text-tertiary)">
+          <Link to="/learn/what-is-an-agent" className="text-[#027930] hover:underline">
+            Head to the first lesson
+          </Link>{' '}
+          to start building with Guil.
         </p>
       </div>
 
@@ -76,7 +103,7 @@ function LandingContent() {
 
 export default function LearnLandingPage() {
   return (
-    <LearnLayout title="Learn | Mastra" description={course.description}>
+    <LearnLayout title={`${course.title} - Free Full Course`} description={course.description}>
       <LandingContent />
     </LearnLayout>
   )
