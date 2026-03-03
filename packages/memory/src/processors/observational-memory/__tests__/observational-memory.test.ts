@@ -7998,7 +7998,18 @@ describe('Per-step save deduplication', () => {
       }
     }
 
-    return { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps };
+    return {
+      storage,
+      threadId,
+      resourceId,
+      om,
+      state,
+      messageList,
+      runStep,
+      addToolResponse,
+      finalize,
+      waitForAsyncOps,
+    };
   }
 
   it('should save each user message exactly once across a multi-step turn', async () => {
@@ -8097,5 +8108,118 @@ describe('Per-step save deduplication', () => {
     const userMessages = messages.filter(m => m.role === 'user');
 
     expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not insert the same logical user message with different IDs across steps', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Track this exact user message identity across agent steps' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Finished analysis.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const logicalUserKey = (m: any) => {
+      const text = m?.content?.parts?.find((p: any) => p?.type === 'text')?.text ?? '';
+      const createdAt = new Date(m.createdAt).toISOString();
+      return `${m.role}|${createdAt}|${text}`;
+    };
+
+    const matchingUserMessages = messages.filter(
+      m =>
+        logicalUserKey(m) === 'user|2025-01-01T10:00:00.000Z|Track this exact user message identity across agent steps',
+    );
+
+    expect(matchingUserMessages.length).toBe(1);
+    expect(new Set(matchingUserMessages.map(m => m.id)).size).toBe(1);
+    expect(matchingUserMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should upsert sealed messages with completed boundaries instead of inserting new IDs', async () => {
+    const { storage, threadId, resourceId, om, state } = await setupMultiStepScenario({ messageTokens: 50 });
+
+    const messageWithCompletedBoundary = {
+      id: 'user-1',
+      threadId,
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'same logical message' },
+          { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+        ],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      resourceId,
+    } as any;
+
+    state.sealedIds = new Set(['user-1']);
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const sameLogical = messages.filter(
+      m =>
+        m.role === 'user' &&
+        new Date(m.createdAt).toISOString() === '2025-01-01T10:00:00.000Z' &&
+        m.content?.parts?.some((p: any) => p?.type === 'text' && p?.text === 'same logical message'),
+    );
+
+    expect(sameLogical.length).toBe(1);
+    expect(sameLogical[0]!.id).toBe('user-1');
   });
 });
