@@ -29,6 +29,7 @@ import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 
 import type { SlashCommandContext } from './commands/types.js';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';

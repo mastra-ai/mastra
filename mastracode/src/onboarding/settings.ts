@@ -252,7 +252,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
-        updateDismissedVersion: raw.updateDismissedVersion ?? null,
+        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
@@ -368,7 +368,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
-      updateDismissedVersion: raw.updateDismissedVersion ?? null,
+      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
