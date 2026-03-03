@@ -224,10 +224,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
     it('should handle ask_question and sandbox_access_request arriving concurrently', async () => {
       const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
 
-      const p1 = handleAskQuestion(ctx, 'q1', 'Pick one', [
-        { label: 'A' },
-        { label: 'B' },
-      ]);
+      const p1 = handleAskQuestion(ctx, 'q1', 'Pick one', [{ label: 'A' }, { label: 'B' }]);
       const p2 = handleSandboxAccessRequest(ctx, 'sa1', '/some/path', 'need access');
 
       // First should be the ask_question
