@@ -241,6 +241,22 @@ visible.txt`,
       expect(result.paths).toEqual(['visible.txt']);
       expect(result.fileCount).toBe(1);
     });
+
+    it('should match root-qualified .gitignore patterns when listing a subdirectory', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), 'apps/web/dist/\n');
+      await fs.mkdir(path.join(tempDir, 'apps', 'web', 'dist'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'apps', 'web', 'src'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'apps', 'web', 'dist', 'bundle.js'), '');
+      await fs.writeFile(path.join(tempDir, 'apps', 'web', 'src', 'index.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/apps/web');
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('bundle.js');
+      expect(result.fileCount).toBe(1);
+    });
   });
 
   // ===========================================================================

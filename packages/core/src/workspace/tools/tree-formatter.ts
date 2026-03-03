@@ -86,10 +86,17 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const pattern = options?.pattern;
   const respectGitignore = options?.respectGitignore ?? true;
 
-  // Use provided ignoreFilter, or load from .gitignore if respectGitignore is enabled
+  // Use provided ignoreFilter, or load from .gitignore if respectGitignore is enabled.
+  // If the user explicitly targets an ignored path (e.g. "/dist"), skip filtering
+  // so they can still list there.
   let ignoreFilter = options?.ignoreFilter;
   if (!ignoreFilter && respectGitignore) {
-    ignoreFilter = await loadGitignore(fs);
+    const rawFilter = await loadGitignore(fs);
+    if (rawFilter) {
+      const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '').replace(/\/$/, '');
+      const targetIsIgnored = normalizedPath && rawFilter(normalizedPath + '/');
+      ignoreFilter = targetIsIgnored ? undefined : rawFilter;
+    }
   }
 
   // Compile glob matcher once before the walk (if pattern provided)
@@ -142,10 +149,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       });
     }
 
-    // Filter by gitignore rules
+    // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
     if (ignoreFilter) {
       filtered = filtered.filter(e => {
-        const relativePath = getRelativePath(path, currentPath, e.name);
+        const relativePath = getRelativePath('/', currentPath, e.name);
         // Append trailing slash for directories so gitignore dir patterns match
         const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
         return !ignoreFilter!(checkPath);
