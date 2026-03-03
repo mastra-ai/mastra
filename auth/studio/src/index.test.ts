@@ -319,19 +319,12 @@ describe('MastraAuthStudio', () => {
   // -------------------------------------------------------------------------
 
   describe('handleCallback', () => {
-    it('should forward code and state to shared API callback', async () => {
-      // Mock redirect response with Set-Cookie header
-      const headers = new Headers();
-      headers.append('Set-Cookie', 'wos-session=new-sealed-token; HttpOnly; Path=/');
-      headers.set('Location', 'https://dashboard.mastra.ai');
+    it('should validate sealed session passed as code and return user', async () => {
+      // The shared API passes the sealed session as the `code` param.
+      // handleCallback validates it via /auth/me.
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
 
-      fetchSpy
-        // First call: /auth/callback (redirect response)
-        .mockResolvedValueOnce(new Response(null, { status: 302, headers }))
-        // Second call: /auth/me (verify the new session)
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
-
-      const result = await auth.handleCallback('auth-code-123', 'state-abc');
+      const result = await auth.handleCallback('sealed-session-token', 'deploy|%2Fagents');
 
       expect(result.user).toEqual({
         id: 'user-1',
@@ -342,34 +335,21 @@ describe('MastraAuthStudio', () => {
         role: 'admin',
         permissions: ['projects:read', 'projects:write'],
       });
-      expect(result.tokens.accessToken).toBe('new-sealed-token');
+      expect(result.tokens.accessToken).toBe('sealed-session-token');
       // cookies should NOT be returned — the Mastra server fallback path
       // calls createSession() + getSessionHeaders() to build a cookie
       // scoped to the deployed instance's domain instead.
       expect(result.cookies).toBeUndefined();
 
-      // Verify the callback URL was constructed correctly
+      // Verify it called /auth/me with the sealed session as cookie
       const callUrl = fetchSpy.mock.calls[0]![0] as string;
-      expect(callUrl).toContain(`${SHARED_API}/auth/callback`);
-      expect(callUrl).toContain('code=auth-code-123');
-      expect(callUrl).toContain('state=state-abc');
+      expect(callUrl).toContain(`${SHARED_API}/auth/me`);
     });
 
-    it('should throw when no session cookie in callback response', async () => {
-      fetchSpy.mockResolvedValueOnce(new Response(null, { status: 302 }));
+    it('should throw when session validation fails', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
-      await expect(auth.handleCallback('code', 'state')).rejects.toThrow('No session cookie returned from callback');
-    });
-
-    it('should throw when session validation fails after callback', async () => {
-      const headers = new Headers();
-      headers.append('Set-Cookie', 'wos-session=invalid-sealed; HttpOnly; Path=/');
-
-      fetchSpy
-        .mockResolvedValueOnce(new Response(null, { status: 302, headers }))
-        .mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
-
-      await expect(auth.handleCallback('code', 'state')).rejects.toThrow('Session validation failed after callback');
+      await expect(auth.handleCallback('invalid-session', 'state')).rejects.toThrow('Session validation failed');
     });
   });
 

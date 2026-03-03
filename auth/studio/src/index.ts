@@ -139,36 +139,22 @@ export class MastraAuthStudio
     return `${this.sharedApiUrl}/auth/login?${params.toString()}`;
   }
 
-  async handleCallback(code: string, state: string): Promise<SSOCallbackResult<StudioUser>> {
-    // Forward the callback to the shared API
-    const url = `${this.sharedApiUrl}/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
-
-    const res = await fetch(url, {
-      redirect: 'manual',
-    });
-
-    // The shared API redirects after setting cookies — extract the session cookie
-    const setCookieHeaders = res.headers.getSetCookie?.() ?? [];
-    const sessionValue = extractCookieValue(setCookieHeaders, COOKIE_NAME);
-
-    if (!sessionValue) {
-      throw new Error('No session cookie returned from callback');
-    }
-
-    // Validate the new session to get user info
-    const user = await this.verifySessionCookie(sessionValue);
+  async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<StudioUser>> {
+    // The shared API already consumed the OAuth code and passes the sealed
+    // session directly as the `code` parameter in the redirect to this callback.
+    // Validate it to get user info.
+    const user = await this.verifySessionCookie(code);
     if (!user) {
-      throw new Error('Session validation failed after callback');
+      throw new Error('Session validation failed');
     }
 
-    // Don't forward the shared API's Set-Cookie headers — they're scoped to
-    // the shared API domain. Instead, omit `cookies` so the Mastra server
-    // fallback path calls createSession() + getSessionHeaders() to build a
-    // cookie scoped to the deployed instance's domain.
+    // Omit `cookies` so the Mastra server fallback path calls
+    // createSession() + getSessionHeaders() to build a cookie scoped to
+    // the deployed instance's domain.
     return {
       user,
       tokens: {
-        accessToken: sessionValue,
+        accessToken: code,
       },
     };
   }
@@ -398,14 +384,6 @@ function parseCookie(cookieHeader: string | null | undefined, name: string): str
   if (!cookieHeader) return null;
   const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
   return match?.[1] ?? null;
-}
-
-function extractCookieValue(setCookieHeaders: string[], name: string): string | null {
-  for (const header of setCookieHeaders) {
-    const match = header.match(new RegExp(`^${name}=([^;]+)`));
-    if (match?.[1]) return match[1];
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
