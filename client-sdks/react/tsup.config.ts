@@ -1,8 +1,8 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsup';
-import fs from 'fs/promises';
-import path from 'path';
 import { globby } from 'globby';
+import { defineConfig } from 'tsup';
 
 /**
  * Rewrite `@/` path aliases in generated .d.ts files to relative imports.

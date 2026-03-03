@@ -1,4 +1,4 @@
-import { ExtendedMastraUIMessage, MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import type { ExtendedMastraUIMessage, MastraUIMessage, MastraUIMessageMetadata } from '../types';
 
 // Type definitions for parsing network execution data
 
@@ -165,7 +165,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
 
             return nextMessage;
           }
-        } catch (error) {
+        } catch {
           // If parsing fails, return the original message
           return message;
         }

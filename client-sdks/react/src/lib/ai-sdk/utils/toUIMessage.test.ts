@@ -1,9 +1,10 @@
+import type { ChunkType} from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { ChunkType, ChunkFrom } from '@mastra/core/stream';
-import { WorkflowStreamResult } from '@mastra/core/workflows';
 
 describe('toUIMessage', () => {
   describe('mapWorkflowStreamChunkToWatchResult', () => {

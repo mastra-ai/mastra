@@ -1,8 +1,9 @@
-import { JSX, useLayoutEffect, useState } from 'react';
-import { highlight } from './highlight';
-import { BundledLanguage } from 'shiki/bundle/web';
-import { IconButton } from '../IconButton/IconButton';
 import { CheckIcon, CopyIcon } from 'lucide-react';
+import type { JSX} from 'react';
+import { useLayoutEffect, useState } from 'react';
+import type { BundledLanguage } from 'shiki/bundle/web';
+import { IconButton } from '../IconButton/IconButton';
+import { highlight } from './highlight';
 
 export interface CodeBlockProps {
   code: string;
@@ -37,7 +38,7 @@ export const CodeCopyButton = ({ code }: CodeCopyButtonProps) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    void navigator.clipboard.writeText(code);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };

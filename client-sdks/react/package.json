@@ -29,14 +29,13 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
+    "lint": "eslint .",
     "build": "echo 'Use turbo to run build'",
     "build:js": "tsup --config tsup.config.ts",
     "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
     "dev": "tsup --config tsup.config.ts --watch",
     "test": "vitest",
-    "test:watch": "vitest --watch",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage",
+    "test:unit": "vitest run",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -62,6 +61,7 @@
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.12.10",
+    "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@storybook/react-vite": "^9.1.16",
     "@tailwindcss/cli": "^4",

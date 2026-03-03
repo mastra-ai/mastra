@@ -485,6 +485,9 @@ importers:
       '@assistant-ui/react':
         specifier: ^0.12.10
         version: 0.12.10(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
