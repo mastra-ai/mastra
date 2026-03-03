@@ -1,5 +1,4 @@
-import type {
-  NavLink,
+import {
   AgentIcon,
   GithubIcon,
   McpServerIcon,
@@ -7,13 +6,13 @@ import type {
   WorkflowIcon,
   MainSidebar,
   useMainSidebar,
-  type NavSection,
   LogoWithoutText,
   SettingsIcon,
   MastraVersionFooter,
   useMastraPlatform,
   useIsCmsAvailable,
 } from '@mastra/playground-ui';
+import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
   GaugeIcon,
   EyeIcon,
