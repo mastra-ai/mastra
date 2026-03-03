@@ -120,3 +120,7 @@ isOptional: true,
 ## Returns
 
 A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+## Streaming behavior
+
+Output processors that implement `processOutputResult` run after the stream finishes. Consume the stream to completion to persist message history and semantic recall.

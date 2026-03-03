@@ -12,7 +12,24 @@ on:
       - '.github/workflows/test-workspaces.yml'
 
 jobs:
+  setup:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.set-packages.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: set-packages
+        run: |
+          PACKAGES=$(ls -d workspaces/*/ | grep -v '_test-utils' | xargs -I{} basename {} | jq -R -s -c 'split("\n")[:-1]')
+          if [ "$PACKAGES" = "[]" ]; then
+            echo "::error::No workspace packages found"
+            exit 1
+          fi
+          echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+
   test-unit:
+    needs: setup
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
@@ -23,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [e2b, s3, gcs, daytona]
+        package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
       - uses: actions/checkout@v5
 
