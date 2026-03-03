@@ -1693,7 +1693,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -1702,20 +1702,15 @@ export class Agent<
     for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
-        // The .ui() conversion may produce parts with `url`/`mediaType` (AIV5 format)
-        // instead of `data`/`mimeType` (AIV4 FileUIPart type), so handle both.
-        const filePart = part as unknown as Record<string, unknown>;
-        const fileData = typeof filePart.url === 'string' ? filePart.url : typeof filePart.data === 'string' ? filePart.data : undefined;
-        const fileType = typeof filePart.mediaType === 'string' ? filePart.mediaType : typeof filePart.mimeType === 'string' ? filePart.mimeType : 'unknown';
         partsToGen.push({
           type: 'text',
-          text: `User added ${fileType} file: ${fileData ? fileData.slice(0, 100) : '(binary)'}`,
+          text: `User added ${part.mediaType} file: ${part.url.slice(0, 100)}`,
         });
       }
     }

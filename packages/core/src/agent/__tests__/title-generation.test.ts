@@ -2416,10 +2416,13 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // because generateTitleFromUserMessage accessed part.data on UI-format parts
       // which use part.url instead
       const result = await agent.generateTitleFromUserMessage({
-        message: [
-          { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
-          { type: 'text' as const, text: 'Describe this image' },
-        ],
+        message: {
+          role: 'user',
+          content: [
+            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+            { type: 'text' as const, text: 'Describe this image' },
+          ],
+        },
       });
 
       expect(typeof result).toBe('string');
@@ -2435,33 +2438,42 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       });
 
       const result = await agent.generateTitleFromUserMessage({
-        message: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' }],
+        message: {
+          role: 'user',
+          content: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' }],
+        },
       });
 
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(0);
     });
 
-    it('should handle UI-format file parts with url/mediaType (regression)', async () => {
-      const agent = new Agent({
-        id: 'ui-format-file-title-test-agent',
-        name: 'UI Format File Title Test Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-      });
+    it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
+      // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
+      // into UI-format (url/mediaType), which is what generateTitleFromUserMessage
+      // iterates over. The original bug was that the code read part.data/part.mimeType
+      // on UI-format parts where those properties are undefined.
+      const { MessageList } = await import('../../agent/message-list/message-list');
+      const uiMessage = new MessageList()
+        .add(
+          {
+            role: 'user',
+            content: [
+              { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+              { type: 'text' as const, text: 'Describe this image' },
+            ],
+          },
+          'user',
+        )
+        .get.all.aiV5.ui()
+        .at(-1);
 
-      // UI-format file parts use url/mediaType instead of data/mimeType.
-      // The .ui() conversion produces this format, and the original bug was
-      // that the code referenced part.data (undefined in UI format).
-      const result = await agent.generateTitleFromUserMessage({
-        message: [
-          { type: 'file' as const, url: 'data:image/png;base64,iVBOR', mediaType: 'image/png' } as any,
-          { type: 'text' as const, text: 'Describe this image' },
-        ],
-      });
-
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(0);
+      expect(uiMessage).toBeDefined();
+      const filePart = uiMessage!.parts.find((p: any) => p.type === 'file') as any;
+      expect(filePart).toBeDefined();
+      // UI format uses url/mediaType, not data/mimeType
+      expect(filePart.url).toBeDefined();
+      expect(filePart.mediaType).toBe('image/png');
     });
   });
 }
