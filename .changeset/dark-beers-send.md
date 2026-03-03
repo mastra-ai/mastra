@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed parallel interactive tool calls (ask_user, request_sandbox_access) corrupting TUI input. When the agent fires multiple interactive tool calls simultaneously, they are now queued and shown one at a time instead of overwriting each other.
+Fixed an issue where multiple interactive prompts could appear at once and make earlier prompts unresponsive. Prompts are now shown one at a time so each can be answered reliably.

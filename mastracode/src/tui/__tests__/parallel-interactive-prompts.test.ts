@@ -220,6 +220,51 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
     });
   });
 
+  describe('abort clears queued prompts', () => {
+    it('should clear the queue and not activate pending questions after abort', async () => {
+      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+
+      // Fire two concurrent questions: first is active, second is queued
+      handleAskQuestion(ctx, 'q1', 'Active question?');
+      handleAskQuestion(ctx, 'q2', 'Queued question?');
+
+      expect(state.activeInlineQuestion).toBeDefined();
+      expect(state.pendingInlineQuestions).toHaveLength(1);
+
+      // Simulate abort: clear state the same way setup.ts does on Ctrl+C
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+
+      // The queue should stay empty and no new question should activate
+      expect(state.activeInlineQuestion).toBeUndefined();
+      expect(state.pendingInlineQuestions).toHaveLength(0);
+
+      // respondToQuestion should not have been called (nothing was answered)
+      expect(respondToQuestion).not.toHaveBeenCalled();
+    });
+
+    it('should not activate queued questions if the active one is cancelled after abort', async () => {
+      // Fire two concurrent questions
+      handleAskQuestion(ctx, 'q1', 'First?');
+      handleAskQuestion(ctx, 'q2', 'Second?');
+
+      const comp1 = state.activeInlineQuestion!;
+      expect(state.pendingInlineQuestions).toHaveLength(1);
+
+      // Abort: clear everything
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+
+      // Even if comp1's onCancel fires after abort (e.g. cleanup), the queue is empty
+      // so processNextInlineQuestion should be a no-op
+      comp1.handleInput('\x1b'); // Esc to cancel
+
+      // Queue should still be empty, no new active question
+      expect(state.activeInlineQuestion).toBeUndefined();
+      expect(state.pendingInlineQuestions).toHaveLength(0);
+    });
+  });
+
   describe('mixed interactive tool calls', () => {
     it('should handle ask_question and sandbox_access_request arriving concurrently', async () => {
       const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;

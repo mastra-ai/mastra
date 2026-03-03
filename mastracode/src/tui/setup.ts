@@ -353,6 +353,9 @@ export function setupKeyHandlers(
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
+    state.activeInlinePlanApproval = undefined;
+    state.activeInlineQuestion = undefined;
+    state.pendingInlineQuestions.length = 0;
     state.userInitiatedAbort = true;
     state.harness.abort();
   });
