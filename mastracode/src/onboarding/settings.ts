@@ -106,6 +106,8 @@ export interface GlobalSettings {
   customProviders: CustomProviderSetting[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // Version the user dismissed the update prompt for (skip until they manually update past this)
+  updateDismissedVersion: string | null;
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
 }
@@ -141,6 +143,7 @@ const DEFAULTS: GlobalSettings = {
   customModelPacks: [],
   customProviders: [],
   modelUseCounts: {},
+  updateDismissedVersion: null,
   lsp: {},
 };
 
@@ -249,6 +252,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
@@ -364,6 +368,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
