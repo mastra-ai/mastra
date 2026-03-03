@@ -67,6 +67,7 @@ import CmsAgentMemoryPage from './pages/cms/agents/memory';
 import CmsAgentVariablesPage from './pages/cms/agents/variables';
 import CmsAgentSkillsPage from './pages/cms/agents/skills';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
+import CmsAgentProcessorsPage from './pages/cms/agents/processors';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
 import PromptBlocks from './pages/prompt-blocks';
@@ -151,6 +152,7 @@ const agentCmsChildRoutes = [
   { path: 'skills', element: <CmsAgentSkillsPage /> },
   { path: 'memory', element: <CmsAgentMemoryPage /> },
   { path: 'variables', element: <CmsAgentVariablesPage /> },
+  { path: 'processors', element: <CmsAgentProcessorsPage /> },
 ];
 
 const routes = [

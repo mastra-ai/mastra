@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { getLabel, ParsedField } from '@autoform/core';
 import { CustomObjectField } from './custom-object-field';
@@ -12,13 +12,28 @@ export const CustomAutoFormField: React.FC<{
   const { formComponents, uiComponents } = useAutoForm();
   const {
     register,
-    formState: { errors },
+    formState: { errors, defaultValues },
     getValues,
   } = useFormContext();
 
   const fullPath = path.join('.');
   const error = getPathInObject(errors, path)?.message as string | undefined;
   const value = getValues(fullPath);
+
+  const fieldDefault = useMemo(() => {
+    if (!defaultValues) return undefined;
+    const firstPath = path[0];
+    let current = defaultValues[firstPath];
+    for (let i = 1; i < path.length; i++) {
+      const key = path[i];
+      if (current[key] !== undefined) {
+        current = current[key];
+      } else {
+        return undefined;
+      }
+    }
+    return current;
+  }, [defaultValues, path]);
 
   const FieldWrapper = field.fieldConfig?.fieldWrapper || uiComponents.FieldWrapper;
 
@@ -42,7 +57,7 @@ export const CustomAutoFormField: React.FC<{
     <FieldWrapper label={getLabel(field)} error={error} id={fullPath} field={field}>
       <FieldComponent
         label={getLabel(field)}
-        field={field}
+        field={{ ...field, default: fieldDefault }}
         value={value}
         error={error}
         id={fullPath}

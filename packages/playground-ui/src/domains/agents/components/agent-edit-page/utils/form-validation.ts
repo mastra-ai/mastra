@@ -245,6 +245,16 @@ export const agentFormSchema = z.object({
       z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
     ])
     .optional(),
+  inputProcessors: z
+    .object({
+      steps: z.array(z.any()),
+    })
+    .optional(),
+  outputProcessors: z
+    .object({
+      steps: z.array(z.any()),
+    })
+    .optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

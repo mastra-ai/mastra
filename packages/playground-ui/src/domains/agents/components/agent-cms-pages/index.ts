@@ -7,3 +7,4 @@ export * from './workflows-page';
 export * from './memory-page';
 export * from './variables-page';
 export * from './skills-page';
+export * from './processors-page';

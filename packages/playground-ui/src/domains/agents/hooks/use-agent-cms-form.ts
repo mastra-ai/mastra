@@ -143,6 +143,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         skills: values.skills,
         workspace: values.workspace,
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
+        inputProcessors: values.inputProcessors,
+        outputProcessors: values.outputProcessors,
       };
     },
     [isEdit, client],

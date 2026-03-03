@@ -27,6 +27,8 @@ export interface AgentDataSource {
   skills?: StoredAgentResponse['skills'];
   workspace?: StoredAgentResponse['workspace'];
   requestContextSchema?: unknown;
+  inputProcessors?: unknown;
+  outputProcessors?: unknown;
 }
 
 export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<AgentFormValues> {
@@ -95,5 +97,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],
+    inputProcessors: dataSource.inputProcessors as AgentFormValues['inputProcessors'],
+    outputProcessors: dataSource.outputProcessors as AgentFormValues['outputProcessors'],
   };
 }

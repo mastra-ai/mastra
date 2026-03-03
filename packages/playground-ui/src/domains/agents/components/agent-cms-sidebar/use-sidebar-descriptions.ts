@@ -39,6 +39,11 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
     const variableCount = Object.keys(values.variables?.properties ?? {}).length;
     const variables = variableCount === 0 ? 'None defined' : pluralize(variableCount, 'variable');
 
+    const inputStepCount = (values.inputProcessors?.steps ?? []).length;
+    const outputStepCount = (values.outputProcessors?.steps ?? []).length;
+    const totalProcessors = inputStepCount + outputStepCount;
+    const processors = totalProcessors === 0 ? 'None configured' : pluralize(totalProcessors, 'processor');
+
     return {
       identity: { description: identity, done: identity !== 'Required' },
       instructions: { description: instructions, done: blockCount > 0 },
@@ -49,6 +54,7 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
       skills: { description: skills, done: skillCount > 0 },
       memory: { description: memory, done: !!values.memory?.enabled },
       variables: { description: variables, done: variableCount > 0 },
+      processors: { description: processors, done: totalProcessors > 0 },
     };
   }, [values]);
 }
