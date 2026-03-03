@@ -122,14 +122,19 @@ export class AgentsMySQL extends AgentsStorage {
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
 
       const versionId = crypto.randomUUID();
-      await this.createVersion({
-        id: versionId,
-        agentId: agent.id,
-        versionNumber: 1,
-        ...snapshotConfig,
-        changedFields: Object.keys(snapshotConfig),
-        changeMessage: 'Initial version',
-      });
+      try {
+        await this.createVersion({
+          id: versionId,
+          agentId: agent.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
+      } catch (versionError) {
+        await this.operations.delete({ tableName: TABLE_AGENTS, keys: { id: agent.id } });
+        throw versionError;
+      }
 
       const created = await this.getById(agent.id);
       if (!created) {

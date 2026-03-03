@@ -9,13 +9,14 @@ import {
   prepareUpdateStatement,
   prepareWhereClause,
   quoteIdentifier,
+  type SqlParam,
   transformFromSqlRow,
   transformToSqlValue,
 } from '../utils';
 
 type WhereClause = {
   sql: string;
-  args: any[];
+  args: SqlParam[];
 };
 
 export class StoreOperationsMySQL extends StoreOperations {
@@ -34,7 +35,7 @@ export class StoreOperationsMySQL extends StoreOperations {
     return this.pool;
   }
 
-  async query<T = RowDataPacket>(sql: string, args: any[] = []): Promise<T[]> {
+  async query<T = RowDataPacket>(sql: string, args: SqlParam[] = []): Promise<T[]> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(sql, args.map(transformToSqlValue));
     return rows as unknown as T[];
   }
@@ -52,7 +53,7 @@ export class StoreOperationsMySQL extends StoreOperations {
 
   async hasColumn(table: string, column: string): Promise<boolean> {
     const db = await this.getDatabase();
-    const params: any[] = [table, column];
+    const params: SqlParam[] = [table, column];
     let sql =
       'SELECT COUNT(*) as count FROM information_schema.columns WHERE table_name = ? AND (column_name = ? OR column_name = ? )';
     params.push(column.toLowerCase());
@@ -187,9 +188,10 @@ export class StoreOperationsMySQL extends StoreOperations {
   }): Promise<void> {
     const connection = await (this.pool).getConnection();
     try {
+      const db = await this.getDatabase();
       const [t_rows] = await connection.query(
         'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
-        [this.database, tableName],
+        [db ?? '', tableName],
       );
       const exists = Array.isArray(t_rows) && t_rows.length > 0 && (t_rows[0] as any).count > 0;
       if (exists) {
@@ -452,7 +454,7 @@ export class StoreOperationsMySQL extends StoreOperations {
   }): Promise<R[]> {
     try {
       let sql = `SELECT * FROM ${formatTableName(tableName, this.database)}`;
-      const args: any[] = [];
+      const args: SqlParam[] = [];
 
       if (whereClause?.sql) {
         sql += whereClause.sql;
@@ -499,7 +501,7 @@ export class StoreOperationsMySQL extends StoreOperations {
   }): Promise<number> {
     try {
       let sql = `SELECT COUNT(*) as count FROM ${formatTableName(tableName, this.database)}`;
-      const args: any[] = [];
+      const args: SqlParam[] = [];
       if (whereClause?.sql) {
         sql += whereClause.sql;
         args.push(...whereClause.args.map(transformToSqlValue));
@@ -540,7 +542,7 @@ export class StoreOperationsMySQL extends StoreOperations {
       return; // Silently return if table doesn't exist
     }
 
-    const params: any[] = [tableName];
+    const params: SqlParam[] = [tableName];
     let sql =
       'SELECT column_name FROM information_schema.columns WHERE table_name = ?';
     if (db) {

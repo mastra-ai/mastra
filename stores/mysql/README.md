@@ -75,4 +75,5 @@ If issues arise with this version, follow these steps to rollback:
 - The test suite includes both unit tests and integration tests
 - Unit tests use mocked MySQL connections and run quickly without external dependencies
 - Integration tests verify real database interactions and require a running MySQL instance
-- AI tracing features (span creation, updates, pagination, and batch operations) are **not currently implemented** for the MySQL adapter. Observability tables are not initialized and `supports.observabilityInstance` is `false` to avoid unexpected runtime errors.
+- AI tracing features (span creation, updates, pagination, and batch operations) are supported by the MySQL observability domain.
+- Observability tables are initialized during store setup.

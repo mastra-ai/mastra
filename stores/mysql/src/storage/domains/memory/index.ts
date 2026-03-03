@@ -742,6 +742,10 @@ export class MemoryMySQL extends MemoryStorage {
           data.content = JSON.stringify(mergedContent);
         }
 
+        if (Object.keys(data).length === 0) {
+          continue;
+        }
+
         updates.push({ keys: { id: update.id }, data });
 
         const now = new Date();

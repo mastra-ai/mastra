@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose ps | grep db && break || sleep 1; done) && (for i in $(seq 1 30); do docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q db) | grep healthy && break || sleep 2; done)",
+    "pretest": "docker compose up -d && (found=0; for i in $(seq 1 30); do docker compose ps | grep db >/dev/null && { found=1; break; } || sleep 1; done; [ \"$found\" -eq 1 ]) && (found=0; for i in $(seq 1 30); do container=$(docker compose ps -q db); [ -n \"$container\" ] && docker inspect --format='{{.State.Health.Status}}' \"$container\" | grep healthy >/dev/null && { found=1; break; } || sleep 2; done; [ \"$found\" -eq 1 ])",
     "test": "vitest run",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
