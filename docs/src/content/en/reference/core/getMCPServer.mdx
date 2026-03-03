@@ -17,46 +17,48 @@ const myServer = new MCPServer({
   id: 'my-mcp-server',
   name: 'My Server',
   version: '1.0.0',
-  tools: { /* ... */ },
-});
+  tools: {
+    /* ... */
+  },
+})
 
 export const mastra = new Mastra({
   mcpServers: {
-    customKey: myServer,  // 'customKey' is the registry key
+    customKey: myServer, // 'customKey' is the registry key
   },
-});
+})
 
 // Retrieve by registry key
-const server = mastra.getMCPServer('customKey');
+const server = mastra.getMCPServer('customKey')
 
 // Alternatively, retrieve by intrinsic ID
-const serverById = mastra.getMCPServerById('my-mcp-server');
+const serverById = mastra.getMCPServerById('my-mcp-server')
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "registryKey",
-      type: "string",
-      description:
-        "The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
-    },
-  ]}
+{
+name: "registryKey",
+type: "string",
+description:
+"The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "server",
-      type: "MCPServerBase | undefined",
-      description:
-        "The MCP server instance with the specified registry key, or undefined if not found.",
-    },
-  ]}
+{
+name: "server",
+type: "MCPServerBase | undefined",
+description:
+"The MCP server instance with the specified registry key, or undefined if not found.",
+},
+]}
 />
 
 ## Related Methods

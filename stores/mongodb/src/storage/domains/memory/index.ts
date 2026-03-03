@@ -28,6 +28,9 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
@@ -1113,6 +1116,179 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    const newThreadId = providedThreadId || randomUUID();
+
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    try {
+      const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+
+      // Build query filter
+      const filter: Record<string, any> = { thread_id: sourceThreadId };
+
+      if (options?.messageFilter?.startDate) {
+        filter.createdAt = filter.createdAt || {};
+        filter.createdAt.$gte =
+          options.messageFilter.startDate instanceof Date
+            ? options.messageFilter.startDate
+            : new Date(options.messageFilter.startDate);
+      }
+      if (options?.messageFilter?.endDate) {
+        filter.createdAt = filter.createdAt || {};
+        filter.createdAt.$lte =
+          options.messageFilter.endDate instanceof Date
+            ? options.messageFilter.endDate
+            : new Date(options.messageFilter.endDate);
+      }
+      if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+        filter.id = { $in: options.messageFilter.messageIds };
+      }
+
+      let query = messagesCollection.find(filter).sort({ createdAt: 1 });
+
+      // Apply message limit (from most recent)
+      let sourceMessages: any[];
+      if (options?.messageLimit && options.messageLimit > 0) {
+        // Get all matching, sort desc, limit, then reverse
+        const limited = await messagesCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .limit(options.messageLimit)
+          .toArray();
+        sourceMessages = limited.reverse();
+      } else {
+        sourceMessages = await query.toArray();
+      }
+
+      const now = new Date();
+      const targetResourceId = resourceId || sourceThread.resourceId;
+
+      const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+
+      const cloneMetadata: ThreadCloneMetadata = {
+        sourceThreadId,
+        clonedAt: now,
+        ...(lastMessageId && { lastMessageId }),
+      };
+
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: targetResourceId,
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
+        metadata: {
+          ...metadata,
+          clone: cloneMetadata,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save the new thread
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+      await threadsCollection.insertOne({ ...newThread });
+
+      // Clone messages with new IDs
+      const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = {};
+
+      if (sourceMessages.length > 0) {
+        const messageDocs: any[] = [];
+        for (const sourceMsg of sourceMessages) {
+          const newMessageId = randomUUID();
+          messageIdMap[sourceMsg.id] = newMessageId;
+
+          let parsedContent = sourceMsg.content;
+          if (typeof parsedContent === 'string') {
+            try {
+              parsedContent = JSON.parse(parsedContent);
+            } catch {
+              parsedContent = { format: 2, parts: [{ type: 'text', text: parsedContent }] };
+            }
+          }
+
+          const newDoc = {
+            id: newMessageId,
+            thread_id: newThreadId,
+            content: sourceMsg.content,
+            role: sourceMsg.role,
+            type: sourceMsg.type || 'v2',
+            createdAt: sourceMsg.createdAt,
+            resourceId: targetResourceId,
+          };
+          messageDocs.push(newDoc);
+
+          clonedMessages.push({
+            id: newMessageId,
+            threadId: newThreadId,
+            content: parsedContent,
+            role: sourceMsg.role as MastraDBMessage['role'],
+            type: sourceMsg.type || 'v2',
+            createdAt: formatDateForMongoDB(sourceMsg.createdAt),
+            resourceId: targetResourceId,
+          });
+        }
+        try {
+          await messagesCollection.insertMany(messageDocs);
+        } catch (msgError) {
+          // Compensating rollback: remove partially-inserted messages and the thread
+          try {
+            await messagesCollection.deleteMany({ thread_id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
+          try {
+            await threadsCollection.deleteOne({ id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
+          throw msgError;
+        }
+      }
+
+      return {
+        thread: newThread,
+        clonedMessages,
+        messageIdMap,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Observational Memory Methods
   // ============================================
@@ -1279,6 +1455,56 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const collection = await this.getCollection(OM_TABLE);
+      await collection.insertOne({
+        id: record.id,
+        lookupKey,
+        scope: record.scope,
+        resourceId: record.resourceId,
+        threadId: record.threadId || null,
+        activeObservations: record.activeObservations || '',
+        activeObservationsPendingUpdate: null,
+        originType: record.originType || 'initial',
+        config: record.config || null,
+        generationCount: record.generationCount || 0,
+        lastObservedAt: record.lastObservedAt || null,
+        lastReflectionAt: null,
+        pendingMessageTokens: record.pendingMessageTokens || 0,
+        totalTokensObserved: record.totalTokensObserved || 0,
+        observationTokenCount: record.observationTokenCount || 0,
+        observedMessageIds: record.observedMessageIds || null,
+        bufferedObservationChunks: record.bufferedObservationChunks || null,
+        bufferedReflection: record.bufferedReflection || null,
+        bufferedReflectionTokens: record.bufferedReflectionTokens ?? null,
+        bufferedReflectionInputTokens: record.bufferedReflectionInputTokens ?? null,
+        reflectedObservationLineCount: record.reflectedObservationLineCount ?? null,
+        isObserving: record.isObserving || false,
+        isReflecting: record.isReflecting || false,
+        isBufferingObservation: record.isBufferingObservation || false,
+        isBufferingReflection: record.isBufferingReflection || false,
+        lastBufferedAtTokens: record.lastBufferedAtTokens || 0,
+        lastBufferedAtTime: record.lastBufferedAtTime || null,
+        observedTimezone: record.observedTimezone || null,
+        metadata: record.metadata || null,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
         },
         error,
       );
@@ -1733,24 +1959,22 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Safeguard: if the over boundary would eat into more than 95% of the
       // retention floor, fall back to the best under boundary instead.
       // This prevents edge cases where a large chunk overshoots dramatically.
-      // When forceMaxActivation is set (above blockAfter), skip the safeguard
-      // and always prefer the over boundary to aggressively reduce context.
-      // Additionally, never bias over if it would leave fewer than 1000 tokens
-      // remaining — at that level the agent may lose all meaningful context.
+      // When forceMaxActivation is set (above blockAfter), still prefer the over
+      // boundary, but never if it would leave fewer than the smaller of 1000
+      // tokens or the retention floor remaining.
       const maxOvershoot = retentionFloor * 0.95;
       const overshoot = bestOverTokens - targetMessageTokens;
       const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+      const minRemaining = Math.min(1000, retentionFloor);
 
       let chunksToActivate: number;
-      if (input.forceMaxActivation && bestOverBoundary > 0) {
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
         chunksToActivate = bestOverBoundary;
-      } else if (
-        bestOverBoundary > 0 &&
-        overshoot <= maxOvershoot &&
-        (remainingAfterOver >= 1000 || retentionFloor === 0)
-      ) {
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
         chunksToActivate = bestOverBoundary;
-      } else if (bestUnderBoundary > 0) {
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
         chunksToActivate = bestUnderBoundary;
       } else if (bestOverBoundary > 0) {
         // All boundaries are over and exceed the safeguard — still activate
@@ -1808,6 +2032,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         },
       );
 
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
       return {
         chunksActivated: activatedChunks.length,
         messageTokensActivated: activatedMessageTokens,
@@ -1823,6 +2050,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           messageCount: c.messageIds.length,
           observations: c.observations,
         })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
       if (error instanceof MastraError) {

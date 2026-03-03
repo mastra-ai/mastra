@@ -1,9 +1,15 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
-import type { HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
-import { noopLogger } from '@mastra/core/logger';
-import { LibSQLStore } from '@mastra/libsql';
+import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
+import type {
+  CustomAvailableModel,
+  HeartbeatHandler,
+  HarnessConfig,
+  HarnessMode,
+  HarnessSubagent,
+} from '@mastra/core/harness';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -16,10 +22,21 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
-import { MCPManager } from './mcp/index.js';
+import { createMcpManager } from './mcp/index.js';
+import type { ProviderAccess } from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
+import {
+  getCustomProviderId,
+  loadSettings,
+  resolveModelDefaults,
+  resolveOmModel,
+  saveSettings,
+  toCustomProviderModelId,
+} from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+
 import { stateSchema } from './schema.js';
 import {
   createViewTool,
@@ -27,13 +44,14 @@ import {
   createGlobTool,
   createExecuteCommandTool,
   createWriteFileTool,
-  stringReplaceLspTool,
-  todoWriteTool,
-  todoCheckTool,
+  createStringReplaceLspTool,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
+import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
+import type { StorageConfig } from './utils/project.js';
+import { createStorage } from './utils/storage-factory.js';
+import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
@@ -47,21 +65,23 @@ export interface MastraCodeConfig {
   modes?: HarnessMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
-  /** Extra tools merged into the dynamic tool set */
-  extraTools?: Record<string, any>;
-  /** Custom storage config instead of auto-detected LibSQL */
-  storage?: { url: string; authToken?: string };
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>);
+  /** Custom storage config instead of auto-detected default */
+  storage?: StorageConfig;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
+  /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
+  workspace?: HarnessConfig['workspace'];
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
 }
 
-export function createMastraCode(config?: MastraCodeConfig) {
+export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
@@ -78,44 +98,28 @@ export function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
-  console.info(`Project: ${project.name}`);
-  console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
-  if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
-  if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
-
-  const userId = getUserId(project.rootPath);
-  console.info(`User: ${userId}`);
-  console.info('--------------------------------');
+  // Load global settings to resolve storage preferences (needed before storage creation)
+  const globalSettings = loadSettings();
 
   // Storage
-  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath);
-  const storage = new LibSQLStore({
-    id: 'mastra-code-storage',
-    url: storageConfig.url,
-    ...(storageConfig.authToken ? { authToken: storageConfig.authToken } : {}),
-  });
+  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
+  const storageResult = await createStorage(storageConfig);
+  const storage = storageResult.storage;
+  const storageWarning = storageResult.warning;
 
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : new MCPManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
 
   // Agent
-  const codeAgentInstance = new Agent({
+  const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager),
+    tools: createDynamicTools(mcpManager, config?.extraTools),
   });
-
-  const mastraInstance = new Mastra({
-    agents: { codeAgentInstance },
-    logger: noopLogger,
-    storage,
-  });
-
-  const codeAgent = mastraInstance.getAgent('codeAgentInstance');
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
@@ -132,6 +136,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
   const globTool = createGlobTool(project.rootPath);
   const executeCommandTool = createExecuteCommandTool(project.rootPath);
   const writeFileTool = createWriteFileTool(project.rootPath);
+  const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
 
   const readOnlyTools = {
     view: viewTool,
@@ -167,8 +172,8 @@ export function createMastraCode(config?: MastraCodeConfig) {
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
-        todo_write: todoWriteTool,
-        todo_check: todoCheckTool,
+        task_write: taskWriteTool,
+        task_check: taskCheckTool,
       },
     },
   ];
@@ -206,13 +211,74 @@ export function createMastraCode(config?: MastraCodeConfig) {
     },
   ];
 
+  // Build lightweight provider access for resolving built-in packs at startup.
+  // OAuth providers are checked via authStorage, env-only providers via process.env.
+  // Also scan the full provider registry so any configured API key satisfies access checks.
+  const startupAccess: ProviderAccess = {
+    anthropic: authStorage.isLoggedIn('anthropic') ? 'oauth' : process.env.ANTHROPIC_API_KEY ? 'apikey' : false,
+    openai: authStorage.isLoggedIn('openai-codex') ? 'oauth' : process.env.OPENAI_API_KEY ? 'apikey' : false,
+    cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
+    google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
+    deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+  };
+  // Check all providers in the registry for API keys
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    for (const [provider, config] of Object.entries(registry)) {
+      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      const envVars = config?.apiKeyEnvVar;
+      const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
+      if (envVarList.some(envVar => process.env[envVar])) {
+        startupAccess[provider] = 'apikey';
+      }
+    }
+  } catch {
+    // Registry may not be loaded yet; the 5 hardcoded providers are sufficient fallback
+  }
+  const builtinPacks = getAvailableModePacks(startupAccess);
+  const builtinOmPacks = getAvailableOmPacks(startupAccess);
+  const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
+  const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+
+  // Apply resolved model defaults to modes
+  const modes = (config?.modes ?? defaultModes).map(mode => {
+    const savedModel = effectiveDefaults[mode.id];
+    return savedModel ? { ...mode, defaultModelId: savedModel } : mode;
+  });
+
+  // Map subagent types to mode models: explore→fast, plan→plan, execute→build
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
+    const modeId = subagentModeMap[sa.id];
+    const model = modeId ? effectiveDefaults[modeId] : undefined;
+    return model ? { ...sa, defaultModelId: model } : sa;
+  });
+
+  // Build initial state with global preferences
+  const globalInitialState: Record<string, unknown> = {};
+  if (effectiveOmModel) {
+    globalInitialState.observerModelId = effectiveOmModel;
+    globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (globalSettings.preferences.yolo !== null) {
+    globalInitialState.yolo = globalSettings.preferences.yolo;
+  }
+  // Seed subagent models from global settings
+  for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
+    if (key === '_default') {
+      globalInitialState.subagentModelId = modelId;
+    } else {
+      globalInitialState[`subagentModelId_${key}`] = modelId;
+    }
+  }
+
   const harness = new Harness({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
     memory,
     stateSchema,
-    subagents: config?.subagents ?? defaultSubagents,
+    subagents,
     resolveModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
@@ -220,19 +286,58 @@ export function createMastraCode(config?: MastraCodeConfig) {
       projectName: project.name,
       gitBranch: project.gitBranch,
       yolo: true,
+      ...globalInitialState,
       ...config?.initialState,
     },
-    workspace: getDynamicWorkspace,
-    modes: config?.modes ?? defaultModes,
+    workspace: config?.workspace ?? getDynamicWorkspace,
+    modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;
       }
+
+      const customProvider = loadSettings().customProviders.find(entry => {
+        return provider === getCustomProviderId(entry.name);
+      });
+      if (customProvider) {
+        return true;
+      }
+
       return undefined;
     },
-    modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+    modelUseCountProvider: () => loadSettings().modelUseCounts,
+    modelUseCountTracker: modelId => {
+      try {
+        const settings = loadSettings();
+        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        saveSettings(settings);
+      } catch (error) {
+        console.error('Failed to persist model usage count', error);
+      }
+    },
+    customModelCatalogProvider: () => {
+      const settings = loadSettings();
+      const customModels: CustomAvailableModel[] = [];
+      for (const provider of settings.customProviders) {
+        const providerId = getCustomProviderId(provider.name);
+        for (const modelName of provider.models) {
+          customModels.push({
+            id: toCustomProviderModelId(provider.name, modelName),
+            provider: providerId,
+            modelName,
+            hasApiKey: true,
+            apiKeyEnvVar: undefined,
+          });
+        }
+      }
+      return customModels;
+    },
+    threadLock: {
+      acquire: acquireThreadLock,
+      release: releaseThreadLock,
+    },
   });
 
   // Sync hookManager session ID on thread changes
@@ -246,5 +351,5 @@ export function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage };
+  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
 }

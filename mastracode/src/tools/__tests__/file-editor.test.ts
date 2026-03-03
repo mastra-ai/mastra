@@ -52,12 +52,12 @@ describe('FileEditor.strReplace whitespace-agnostic matching', () => {
     const filePath = writeTmpFile(
       'mixed-indent.ts',
       [
-        '\tprivate renderTodos(',
-        '\t\ttodos: TodoItem[],',
+        '\tprivate renderTasks(',
+        '\t\ttasks: TaskItem[],',
         '\t\tinsertIndex = -1,',
         '\t): void {',
         '\t\tconst MAX_VISIBLE = 4',
-        '\t\tconst visible = todos.slice(0, MAX_VISIBLE)',
+        '\t\tconst visible = tasks.slice(0, MAX_VISIBLE)',
         '',
         '\t\tif (insertIndex >= 0) {',
         '\t\t\tthis.container.splice(insertIndex, 0)',
@@ -72,23 +72,23 @@ describe('FileEditor.strReplace whitespace-agnostic matching', () => {
     const result = await sharedFileEditor.strReplace({
       path: filePath,
       old_str: [
-        '    private renderTodos(',
-        '        todos: TodoItem[],',
+        '    private renderTasks(',
+        '        tasks: TaskItem[],',
         '        insertIndex = -1,',
         '    ): void {',
         '        const MAX_VISIBLE = 4',
-        '        const visible = todos.slice(0, MAX_VISIBLE)',
+        '        const visible = tasks.slice(0, MAX_VISIBLE)',
         '',
         '        if (insertIndex >= 0) {',
       ].join('\n'),
       new_str: [
-        '\tprivate renderTodos(',
-        '\t\ttodos: TodoItem[],',
+        '\tprivate renderTasks(',
+        '\t\ttasks: TaskItem[],',
         '\t\tinsertIndex = -1,',
         '\t\tcollapsed = false,',
         '\t): void {',
         '\t\tconst MAX_VISIBLE = 4',
-        '\t\tconst visible = collapsed ? todos.slice(0, MAX_VISIBLE) : todos',
+        '\t\tconst visible = collapsed ? tasks.slice(0, MAX_VISIBLE) : tasks',
         '',
         '\t\tif (insertIndex >= 0) {',
       ].join('\n'),
@@ -97,7 +97,7 @@ describe('FileEditor.strReplace whitespace-agnostic matching', () => {
     expect(result).toContain('has been edited');
     const content = fs.readFileSync(filePath, 'utf-8');
     expect(content).toContain('collapsed = false');
-    expect(content).toContain('collapsed ? todos.slice');
+    expect(content).toContain('collapsed ? tasks.slice');
   });
 
   it('matches when old_str has different amounts of whitespace than file', async () => {

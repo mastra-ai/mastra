@@ -1,8 +1,15 @@
 export { Harness } from './harness';
-export { askUserTool, parseSubagentMeta, submitPlanTool } from './tools';
+export { askUserTool, parseSubagentMeta, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+export type { TaskItem } from './tools';
+export { defaultDisplayState, defaultOMProgressState } from './types';
 export type {
+  ActiveSubagentState,
+  ActiveToolState,
   AvailableModel,
+  CustomAvailableModel,
+  CustomModelCatalogProvider,
   HarnessConfig,
+  HarnessDisplayState,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -18,6 +25,10 @@ export type {
   ModelAuthChecker,
   ModelAuthStatus,
   ModelUseCountProvider,
+  ModelUseCountTracker,
+  OMBufferedStatus,
+  OMProgressState,
+  OMStatus,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,

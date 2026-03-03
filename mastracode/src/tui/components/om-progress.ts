@@ -3,69 +3,14 @@
  * Shows when OM is observing or reflecting on conversation history.
  */
 import { Container, Text } from '@mariozechner/pi-tui';
+import { defaultOMProgressState } from '@mastra/core/harness';
+import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { fg, mastra } from '../theme.js';
-export type OMStatus = 'idle' | 'observing' | 'reflecting';
+import { theme, mastra } from '../theme.js';
 
-export type OMBufferedStatus = 'idle' | 'running' | 'complete';
-
-export interface OMProgressState {
-  status: OMStatus;
-  // Active window tokens/thresholds (from data-om-status)
-  pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
-  // Buffered state (from data-om-status)
-  buffered: {
-    observations: {
-      status: OMBufferedStatus;
-      chunks: number;
-      messageTokens: number;
-      projectedMessageRemoval: number;
-      observationTokens: number;
-    };
-    reflection: {
-      status: OMBufferedStatus;
-      inputObservationTokens: number;
-      observationTokens: number;
-    };
-  };
-  generationCount: number;
-  stepNumber: number;
-  cycleId?: string;
-  startTime?: number;
-}
-
-export function defaultOMProgressState(): OMProgressState {
-  return {
-    status: 'idle',
-    pendingTokens: 0,
-    threshold: 30000,
-    thresholdPercent: 0,
-    observationTokens: 0,
-    reflectionThreshold: 40000,
-    reflectionThresholdPercent: 0,
-    buffered: {
-      observations: {
-        status: 'idle',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
-      },
-      reflection: {
-        status: 'idle',
-        inputObservationTokens: 0,
-        observationTokens: 0,
-      },
-    },
-    generationCount: 0,
-    stepNumber: 0,
-  };
-}
+// Re-export types from core for backward compatibility
+export type { OMBufferedStatus, OMProgressState, OMStatus };
+export { defaultOMProgressState };
 
 /**
  * Component that displays OM progress in the status line area.
@@ -143,7 +88,7 @@ export class OMProgressComponent extends Container {
       if (this.state.thresholdPercent > 0) {
         const percent = Math.round(this.state.thresholdPercent);
         const bar = this.renderProgressBar(percent, 10);
-        this.statusText.setText(fg('muted', `OM ${bar} ${percent}%`));
+        this.statusText.setText(theme.fg('muted', `OM ${bar} ${percent}%`));
       } else {
         this.statusText.setText('');
       }
@@ -233,7 +178,7 @@ export function formatObservationStatus(
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
   const buffered =
     compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? chalk.hex('#555')(` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
+      ? theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
       : '';
   return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
 }
@@ -266,7 +211,7 @@ export function formatReflectionStatus(
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
     compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
-      ? chalk.hex('#555')(` ↓${formatTokensThreshold(savings)}`)
+      ? theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)
       : '';
   return label + colorByPercent(fraction, percent) + buffered;
 }

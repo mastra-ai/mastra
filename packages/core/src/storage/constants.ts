@@ -186,6 +186,7 @@ export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   description: { type: 'text', nullable: true },
   content: { type: 'text', nullable: false },
   rules: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
@@ -369,6 +370,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

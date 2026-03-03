@@ -6,6 +6,8 @@
  * Session-scoped grants let the user approve a category once per session.
  */
 
+import { MC_TOOLS } from './tool-names.js';
+
 // ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
@@ -37,28 +39,28 @@ export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description:
 
 const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   // Read-only tools — always safe
-  view: 'read',
-  search_content: 'read',
-  find_files: 'read',
+  [MC_TOOLS.VIEW]: 'read',
+  [MC_TOOLS.SEARCH_CONTENT]: 'read',
+  [MC_TOOLS.FIND_FILES]: 'read',
   web_search: 'read',
   'web-search': 'read',
   web_extract: 'read',
   'web-extract': 'read',
   // Edit tools — modify files
-  string_replace_lsp: 'edit',
-  ast_smart_edit: 'edit',
-  write_file: 'edit',
+  [MC_TOOLS.STRING_REPLACE_LSP]: 'edit',
+  [MC_TOOLS.AST_SMART_EDIT]: 'edit',
+  [MC_TOOLS.WRITE_FILE]: 'edit',
   subagent: 'edit',
 
   // Execute tools — run arbitrary commands
-  execute_command: 'execute',
+  [MC_TOOLS.EXECUTE_COMMAND]: 'execute',
 
   // Interactive / planning tools — always allowed (no category needed)
-  // ask_user, todo_write, todo_check, submit_plan, request_sandbox_access
+  // ask_user, task_write, task_check, submit_plan, request_sandbox_access
 };
 
 // Tools that never need approval regardless of policy
-const ALWAYS_ALLOW_TOOLS = new Set(['ask_user', 'todo_write', 'todo_check', 'submit_plan', 'request_sandbox_access']);
+const ALWAYS_ALLOW_TOOLS = new Set(['ask_user', 'task_write', 'task_check', 'submit_plan', 'request_sandbox_access']);
 
 /**
  * Get the category for a tool, or null if the tool is always-allowed.
@@ -157,7 +159,7 @@ export type ApprovalDecision = 'allow' | 'ask' | 'deny';
  * Determine whether a tool call should be allowed, prompted, or denied.
  *
  * Priority order:
- *  1. Always-allowed tools (ask_user, todo_write, etc.) → allow
+ *  1. Always-allowed tools (ask_user, task_write, etc.) → allow
  *  2. Per-tool policy override → use that policy
  *  3. Session grants (user said "always allow" during this session) → allow
  *  4. Category policy → use that policy

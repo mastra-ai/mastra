@@ -47,14 +47,12 @@ When using `agent.network()` for multi-agent collaboration, additional event typ
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript
-const testAgent = mastra.getAgent("testAgent");
+const testAgent = mastra.getAgent('testAgent')
 
-const stream = await testAgent.stream([
-  { role: "user", content: "Help me organize my day" },
-]);
+const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -68,7 +66,7 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 Below is an example of events that may be emitted. Each event always includes a `type` and can include additional fields like `from` and `payload`.
 
-```typescript {2,7,15}
+```typescript {2,7,15} prettier:false
 {
   type: 'start',
   from: 'AGENT',
@@ -98,18 +96,18 @@ Below is an example of events that may be emitted. Each event always includes a 
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript {5,11}
-const testWorkflow = mastra.getWorkflow("testWorkflow");
+const testWorkflow = mastra.getWorkflow('testWorkflow')
 
-const run = await testWorkflow.createRun();
+const run = await testWorkflow.createRun()
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -117,7 +115,7 @@ for await (const chunk of stream) {
 
 Below is an example of events that may be emitted. Each event always includes a `type` and can include additional fields like `from` and `payload`.
 
-```typescript {2,8,11}
+```typescript {2,8,11} prettier:false
 {
   type: 'workflow-start',
   runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
@@ -146,8 +144,8 @@ When a workflow uses `.foreach()`, each iteration emits a `workflow-step-progres
 for await (const chunk of stream) {
   if (chunk.type === 'workflow-step-progress') {
     console.log(
-      `${chunk.payload.id}: ${chunk.payload.completedCount}/${chunk.payload.totalCount} — ${chunk.payload.iterationStatus}`
-    );
+      `${chunk.payload.id}: ${chunk.payload.completedCount}/${chunk.payload.totalCount} — ${chunk.payload.iterationStatus}`,
+    )
   }
 }
 ```
@@ -166,14 +164,12 @@ Each progress event includes:
 When using multi-agent collaboration with `agent.network()`, iterate over the stream to track how tasks are delegated and executed across agents, workflows, and tools.
 
 ```typescript {3,5}
-const networkAgent = mastra.getAgent("networkAgent");
+const networkAgent = mastra.getAgent('networkAgent')
 
-const networkStream = await networkAgent.network(
-  "Research dolphins then write a report",
-);
+const networkStream = await networkAgent.network('Research dolphins then write a report')
 
 for await (const chunk of networkStream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -187,7 +183,7 @@ Visit [Agent.network()](/reference/agents/network) for more information.
 
 Network streams emit events that track the orchestration flow. Each iteration begins with routing, followed by execution of the selected primitive.
 
-```typescript {3,13,22,31}
+```typescript prettier:false {3,13,22,31}
 // Routing agent decides what to do
 {
   type: 'routing-agent-start',
@@ -235,29 +231,23 @@ Network streams emit events that track the orchestration flow. Each iteration be
 You can filter events by type to track specific aspects of the network execution:
 
 ```typescript {5-8,11-13,16-18}
-const networkStream = await networkAgent.network(
-  "Analyze data and create visualization",
-);
+const networkStream = await networkAgent.network('Analyze data and create visualization')
 
 for await (const chunk of networkStream) {
   // Track routing decisions
-  if (chunk.type === "routing-agent-end") {
-    console.log(
-      "Selected:",
-      chunk.payload.resourceType,
-      chunk.payload.resourceId,
-    );
-    console.log("Reason:", chunk.payload.selectionReason);
+  if (chunk.type === 'routing-agent-end') {
+    console.log('Selected:', chunk.payload.resourceType, chunk.payload.resourceId)
+    console.log('Reason:', chunk.payload.selectionReason)
   }
 
   // Track agent delegations
-  if (chunk.type === "agent-execution-start") {
-    console.log("Delegating to agent:", chunk.payload.agentId);
+  if (chunk.type === 'agent-execution-start') {
+    console.log('Delegating to agent:', chunk.payload.agentId)
   }
 
   // Track workflow delegations
-  if (chunk.type === "workflow-execution-start") {
-    console.log("Executing workflow:", chunk.payload.name);
+  if (chunk.type === 'workflow-execution-start') {
+    console.log('Executing workflow:', chunk.payload.name)
   }
 }
 ```

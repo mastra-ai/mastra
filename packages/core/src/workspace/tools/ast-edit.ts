@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 
 // =============================================================================
 // Types
@@ -428,7 +428,7 @@ Pattern replace (for everything else):
       .describe('Required for add-import transform. Specifies the module and names to import.'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
 
     if (filesystem.readOnly) {
@@ -448,13 +448,13 @@ Pattern replace (for everything else):
       content = await filesystem.readFile(path, { encoding: 'utf-8' });
     } catch (error) {
       if (error instanceof FileNotFoundError) {
-        return `File not found: ${path}. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} to create it first.`;
+        return `File not found: ${path}. Use the write file tool to create it first.`;
       }
       throw error;
     }
 
     if (typeof content !== 'string') {
-      return `Cannot perform AST edits on binary files. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} instead.`;
+      return `Cannot perform AST edits on binary files. Use the write file tool instead.`;
     }
 
     // Parse AST
@@ -523,6 +523,8 @@ Pattern replace (for everything else):
       return `No changes made to ${path} (${changes.join('; ')})`;
     }
 
-    return `${path}: ${changes.join('; ')}`;
+    let output = `${path}: ${changes.join('; ')}`;
+    output += await getEditDiagnosticsText(workspace, path, modifiedContent);
+    return output;
   },
 });

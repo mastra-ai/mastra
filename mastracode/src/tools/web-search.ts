@@ -2,6 +2,11 @@ import { createTool } from '@mastra/core/tools';
 import { tavily } from '@tavily/core';
 import { z } from 'zod';
 
+import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
+
+const MAX_WEB_SEARCH_TOKENS = 2_000;
+const MAX_WEB_EXTRACT_TOKENS = 2_000;
+
 const MIN_RELEVANCE_SCORE = 0.25;
 
 // Lazily cached Tavily client — created on first use when the API key is available.
@@ -39,21 +44,10 @@ export function createWebSearchTool() {
       maxResults: z.number().optional().default(10).describe('Maximum number of results to return'),
       includeImages: z.boolean().optional().default(false).describe('Whether to include related images in results'),
     }),
-    outputSchema: z.object({
-      results: z.array(
-        z.object({
-          title: z.string(),
-          url: z.string(),
-          content: z.string(),
-        }),
-      ),
-      images: z.array(z.string()).optional(),
-      answer: z.string().optional(),
-    }),
     execute: async context => {
       const tavilyClient = getTavilyClient();
       if (!tavilyClient) {
-        return { results: [], images: [], answer: undefined };
+        return 'No results (TAVILY_API_KEY not configured)';
       }
       try {
         const response = await tavilyClient.search(context.query, {
@@ -65,23 +59,28 @@ export function createWebSearchTool() {
 
         const filteredResults = response.results.filter(r => (r.score ?? 1) >= MIN_RELEVANCE_SCORE);
 
-        return {
-          results: filteredResults.map(r => ({
-            title: r.title,
-            url: r.url,
-            content: r.content,
-          })),
-          images: (response.images || [])
-            .map((img: { url?: string } | string) => (typeof img === 'string' ? img : img.url || ''))
-            .filter(Boolean),
-          answer: response.answer,
-        };
+        const parts: string[] = [];
+
+        if (response.answer) {
+          parts.push(`Answer: ${response.answer}`);
+        }
+
+        for (const r of filteredResults) {
+          parts.push(`## ${r.title}\n${r.url}\n${r.content}`);
+        }
+
+        const images = (response.images || [])
+          .map((img: { url?: string } | string) => (typeof img === 'string' ? img : img.url || ''))
+          .filter(Boolean);
+
+        if (images.length > 0) {
+          parts.push(`Images:\n${images.join('\n')}`);
+        }
+
+        const text = parts.join('\n\n');
+        return truncateStringForTokenEstimate(text, MAX_WEB_SEARCH_TOKENS);
       } catch {
-        return {
-          results: [],
-          images: [],
-          answer: undefined,
-        };
+        return 'No results';
       }
     },
   });
@@ -101,30 +100,10 @@ export function createWebExtractTool() {
         .describe("Extraction depth - 'basic' for simple text, 'advanced' for JS-rendered pages"),
       includeImages: z.boolean().optional().default(false).describe('Whether to include extracted image URLs'),
     }),
-    outputSchema: z.object({
-      results: z.array(
-        z.object({
-          url: z.string(),
-          rawContent: z.string(),
-        }),
-      ),
-      failedResults: z.array(
-        z.object({
-          url: z.string(),
-          error: z.string(),
-        }),
-      ),
-    }),
     execute: async context => {
       const tavilyClient = getTavilyClient();
       if (!tavilyClient) {
-        return {
-          results: [],
-          failedResults: context.urls.map(url => ({
-            url,
-            error: 'TAVILY_API_KEY not configured',
-          })),
-        };
+        return 'Extraction failed (TAVILY_API_KEY not configured)';
       }
       try {
         const response = await tavilyClient.extract(context.urls, {
@@ -132,24 +111,20 @@ export function createWebExtractTool() {
           includeImages: context.includeImages || false,
         });
 
-        return {
-          results: (response.results || []).map((r: { url: string; rawContent: string }) => ({
-            url: r.url,
-            rawContent: r.rawContent,
-          })),
-          failedResults: (response.failedResults || []).map((r: { url: string; error: string }) => ({
-            url: r.url,
-            error: r.error,
-          })),
-        };
+        const parts: string[] = [];
+
+        for (const r of (response.results || []) as { url: string; rawContent: string }[]) {
+          parts.push(`## ${r.url}\n${r.rawContent}`);
+        }
+
+        for (const r of (response.failedResults || []) as { url: string; error: string }[]) {
+          parts.push(`## ${r.url}\nError: ${r.error}`);
+        }
+
+        const text = parts.join('\n\n');
+        return truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
       } catch (error) {
-        return {
-          results: [],
-          failedResults: context.urls.map(url => ({
-            url,
-            error: String(error),
-          })),
-        };
+        return `Extraction failed: ${String(error)}`;
       }
     },
   });

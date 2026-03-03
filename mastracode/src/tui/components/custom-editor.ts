@@ -4,7 +4,7 @@
 
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
-import { getClipboardImage } from '../../clipboard/index.js';
+import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
 
 const PASTE_START = '\x1b[200~';
@@ -76,6 +76,28 @@ export class CustomEditor extends Editor {
       }
     }
 
+    // Ctrl+V - explicit paste (handles image-only clipboard where terminals
+    // don't generate a bracketed paste event, and text clipboard)
+    if (matchesKey(data, 'ctrl+v')) {
+      // Check for image first
+      if (this.onImagePaste) {
+        const clipboardImage = getClipboardImage();
+        if (clipboardImage) {
+          this.onImagePaste(clipboardImage);
+          return;
+        }
+      }
+      // No image — read text and synthesize a bracketed paste so the parent
+      // Editor.handlePaste() logic kicks in (large paste condensation, etc.)
+      const clipboardText = getClipboardText();
+      if (clipboardText) {
+        const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
+        super.handleInput(syntheticPaste);
+        return;
+      }
+      return;
+    }
+
     // Ctrl+C - interrupt
     if (matchesKey(data, 'ctrl+c')) {
       const handler = this.actionHandlers.get('clear');
@@ -130,6 +152,11 @@ export class CustomEditor extends Editor {
 
     // Ctrl+F - follow-up (queue message while streaming)
     if (matchesKey(data, 'ctrl+f')) {
+      // Accept autocomplete suggestion if one is showing, so the resolved
+      // text (e.g. "/review" instead of "/rev") is read by the handler.
+      if (this.isShowingAutocomplete()) {
+        super.handleInput('\t');
+      }
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
         handler();

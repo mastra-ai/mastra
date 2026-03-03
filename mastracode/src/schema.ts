@@ -15,8 +15,8 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
-  // Thinking level for extended thinking (Anthropic models)
-  thinkingLevel: z.string().default('off'),
+  // Thinking level for model reasoning effort
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies
@@ -30,8 +30,8 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Todo list (persisted per-thread)
-  todos: z
+  // Task list (persisted per-thread)
+  tasks: z
     .array(
       z.object({
         content: z.string(),

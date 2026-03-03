@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { applyTokenLimit } from './output-helpers';
 
 export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
@@ -26,7 +27,7 @@ export const readFileTool = createTool({
       .describe('Whether to prefix each line with its line number (default: true)'),
   }),
   execute: async ({ path, encoding, offset, limit, showLineNumbers }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
 
     const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
@@ -35,12 +36,22 @@ export const readFileTool = createTool({
 
     const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
 
+    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.maxOutputTokens;
+
     if (!isTextEncoding) {
-      return `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`;
+      return await applyTokenLimit(
+        `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`,
+        tokenLimit,
+        'end',
+      );
     }
 
     if (typeof fullContent !== 'string') {
-      return `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`;
+      return await applyTokenLimit(
+        `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`,
+        tokenLimit,
+        'end',
+      );
     }
 
     const hasLineRange = offset !== undefined || limit !== undefined;
@@ -58,6 +69,6 @@ export const readFileTool = createTool({
       header = `${stat.path} (${stat.size} bytes)`;
     }
 
-    return `${header}\n${formattedContent}`;
+    return await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
   },
 });
