@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -43,7 +42,7 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      expect(result.tree).toBe('.\n└── file.txt');
+      expect(result.tree).toBe('.\nfile.txt');
       expect(result.summary).toBe('0 directories, 1 file');
       expect(result.fileCount).toBe(1);
     });
@@ -53,7 +52,7 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      expect(result.tree).toBe('.\n└── dir');
+      expect(result.tree).toBe('.\ndir');
       expect(result.summary).toBe('1 directory, 0 files');
       expect(result.dirCount).toBe(1);
     });
@@ -66,13 +65,13 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      // Directories first, then files, all ASCII alphabetical (to match native tree's strcmp)
+      // Directories first, then files, all ASCII alphabetical
       expect(result.tree).toBe(
         `.
-├── src
-│   └── index.ts
-├── README.md
-└── package.json`,
+src
+\tindex.ts
+README.md
+package.json`,
       );
       expect(result.dirCount).toBe(1);
       expect(result.fileCount).toBe(3);
@@ -89,11 +88,11 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── src
-│   ├── utils
-│   │   └── helpers.ts
-│   └── index.ts
-└── package.json`,
+src
+\tutils
+\t\thelpers.ts
+\tindex.ts
+package.json`,
       );
       expect(result.dirCount).toBe(2);
       expect(result.fileCount).toBe(3);
@@ -108,8 +107,8 @@ describe('tree-formatter', () => {
       // Directory 'zzz' should come before file 'aaa.txt'
       expect(result.tree).toBe(
         `.
-├── zzz
-└── aaa.txt`,
+zzz
+aaa.txt`,
       );
     });
 
@@ -122,9 +121,9 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── alpha.txt
-├── beta.txt
-└── zebra.txt`,
+alpha.txt
+beta.txt
+zebra.txt`,
       );
     });
   });
@@ -143,7 +142,7 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── level1`,
+level1`,
       );
       expect(result.truncated).toBe(true);
       expect(result.summary).toContain('truncated at depth 1');
@@ -161,9 +160,9 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── level1
-    ├── level2
-    └── file1.txt`,
+level1
+\tlevel2
+\tfile1.txt`,
       );
       expect(result.truncated).toBe(true);
       expect(result.dirCount).toBe(2);
@@ -206,7 +205,7 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── visible.txt`,
+visible.txt`,
       );
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(0);
@@ -220,10 +219,43 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── .gitignore
-└── visible.txt`,
+.gitignore
+visible.txt`,
       );
       expect(result.fileCount).toBe(2);
+    });
+
+    it('should respect .gitignore patterns by default', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), 'node_modules\n*.log\n');
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'index.js'), '');
+      await fs.writeFile(path.join(tempDir, 'debug.log'), '');
+      await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
+
+      const result = await formatAsTree(filesystem, '/');
+
+      expect(result.tree).toBe(
+        `.
+visible.txt`,
+      );
+      expect(result.paths).toEqual(['visible.txt']);
+      expect(result.fileCount).toBe(1);
+    });
+
+    it('should match root-qualified .gitignore patterns when listing a subdirectory', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), 'apps/web/dist/\n');
+      await fs.mkdir(path.join(tempDir, 'apps', 'web', 'dist'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'apps', 'web', 'src'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'apps', 'web', 'dist', 'bundle.js'), '');
+      await fs.writeFile(path.join(tempDir, 'apps', 'web', 'src', 'index.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/apps/web');
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('bundle.js');
+      expect(result.fileCount).toBe(1);
     });
   });
 
@@ -240,8 +272,8 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── index.ts
-└── utils.ts`,
+index.ts
+utils.ts`,
       );
       expect(result.fileCount).toBe(2);
     });
@@ -254,7 +286,7 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── index.ts`,
+index.ts`,
       );
     });
 
@@ -267,8 +299,8 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── index.ts
-└── test.tsx`,
+index.ts
+test.tsx`,
       );
       expect(result.fileCount).toBe(2);
     });
@@ -283,8 +315,8 @@ describe('tree-formatter', () => {
       // Directory 'src' should be included because it contains .ts files
       expect(result.tree).toBe(
         `.
-└── src
-    └── index.ts`,
+src
+\tindex.ts`,
       );
       expect(result.dirCount).toBe(1);
       expect(result.fileCount).toBe(1);
@@ -299,7 +331,7 @@ describe('tree-formatter', () => {
       // Directory is shown (no files inside match, but directory itself isn't filtered)
       expect(result.tree).toBe(
         `.
-└── empty-dir`,
+empty-dir`,
       );
     });
   });
@@ -318,9 +350,9 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── utils
-│   └── helpers.ts
-└── index.ts`,
+utils
+\thelpers.ts
+index.ts`,
       );
     });
   });
@@ -373,12 +405,12 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── level1
-    └── level2
-        └── level3
-            └── level4
-                └── level5
-                    └── deep.txt`,
+level1
+\tlevel2
+\t\tlevel3
+\t\t\tlevel4
+\t\t\t\tlevel5
+\t\t\t\t\tdeep.txt`,
       );
       expect(result.dirCount).toBe(5);
       expect(result.fileCount).toBe(1);
@@ -415,12 +447,12 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-├── src
-│   ├── components
-│   │   └── Button.tsx
-│   └── index.ts
-└── tests
-    └── test.ts`,
+src
+\tcomponents
+\t\tButton.tsx
+\tindex.ts
+tests
+\ttest.ts`,
       );
     });
   });
@@ -455,8 +487,8 @@ describe('tree-formatter', () => {
 
       expect(result.tree).toBe(
         `.
-└── src
-    └── utils`,
+src
+\tutils`,
       );
       expect(result.fileCount).toBe(0);
       expect(result.dirCount).toBe(2);
@@ -659,11 +691,11 @@ describe('tree-formatter', () => {
 
       expect(result).toBe(
         `.
-├── src
-│   ├── utils
-│   │   └── helpers.ts
-│   └── index.ts
-└── package.json`,
+src
+\tutils
+\t\thelpers.ts
+\tindex.ts
+package.json`,
       );
     });
 
@@ -678,7 +710,7 @@ describe('tree-formatter', () => {
 
       expect(result).toBe(
         `.
-└── file.txt`,
+file.txt`,
       );
     });
 
@@ -693,9 +725,9 @@ describe('tree-formatter', () => {
       // 'dir' directory should come before 'file.txt'
       expect(result).toBe(
         `.
-├── dir
-│   └── nested.txt
-└── file.txt`,
+dir
+\tnested.txt
+file.txt`,
       );
     });
   });
@@ -773,128 +805,54 @@ describe('tree-formatter', () => {
   });
 
   // ===========================================================================
-  // Comparison with Native `tree` Command
+  // ignoreFilter Option
   // ===========================================================================
-  describe('comparison with native tree command', () => {
-    /**
-     * Check if the `tree` command is available on this system.
-     * Cached at describe-time for use with it.skipIf.
-     */
-    const treeAvailable = (() => {
-      // Only run native tree comparison in CI (Linux) to avoid macOS sort-order differences
-      if (!process.env.CI) return false;
-      try {
-        execSync('which tree', { encoding: 'utf-8' });
-        return true;
-      } catch {
-        return false;
-      }
-    })();
+  describe('ignoreFilter', () => {
+    it('should filter out files matched by ignoreFilter', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'generated.ts'), '');
 
-    /**
-     * Normalize tree output for comparison.
-     * Native tree uses non-breaking spaces (U+00A0) in some positions,
-     * while our formatter uses regular spaces. Both are visually equivalent.
-     */
-    function normalizeTreeOutput(output: string): string {
-      // Replace all whitespace with regular spaces for comparison
-      // Preserves box-drawing characters while normalizing spacing
-      return output.replace(/\u00a0/g, ' ');
-    }
-
-    /**
-     * Get output from native `tree` command and normalize it
-     */
-    function getNativeTreeOutput(dir: string): string {
-      // Use --noreport to skip the summary line, --charset=utf-8 for Unicode chars
-      // --dirsfirst to match our sorting (directories before files)
-      const output = execSync(`tree --noreport --charset=utf-8 --dirsfirst "${dir}"`, {
-        encoding: 'utf-8',
-        cwd: dir,
+      const result = await formatAsTree(filesystem, '/', {
+        ignoreFilter: (p: string) => p.includes('generated'),
       });
 
-      // Native tree shows the full path as root, we use "."
-      // Replace the first line (full path) with "."
-      const lines = output.trim().split('\n');
-      lines[0] = '.';
-      return normalizeTreeOutput(lines.join('\n'));
-    }
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('generated.ts');
+    });
 
-    it.skipIf(!treeAvailable)('should match native tree output for simple structure', async function () {
-      // Create a simple structure
+    it('should filter out directories matched by ignoreFilter', async () => {
       await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'dist'));
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
-      await fs.writeFile(path.join(tempDir, 'package.json'), '');
-      await fs.writeFile(path.join(tempDir, 'README.md'), '');
+      await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
 
-      const ourResult = await formatAsTree(filesystem, '/');
-      const nativeResult = getNativeTreeOutput(tempDir);
+      const result = await formatAsTree(filesystem, '/', {
+        ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
+      });
 
-      expect(ourResult.tree).toBe(nativeResult);
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('bundle.js');
     });
 
-    it.skipIf(!treeAvailable)('should match native tree output for nested structure', async function () {
-      // Create nested structure
+    it('should combine with other filters', async () => {
       await fs.mkdir(path.join(tempDir, 'src'));
-      await fs.mkdir(path.join(tempDir, 'src', 'utils'));
-      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
-      await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
-      await fs.mkdir(path.join(tempDir, 'tests'));
-      await fs.writeFile(path.join(tempDir, 'tests', 'test.ts'), '');
-
-      const ourResult = await formatAsTree(filesystem, '/');
-      const nativeResult = getNativeTreeOutput(tempDir);
-
-      expect(ourResult.tree).toBe(nativeResult);
-    });
-
-    it.skipIf(!treeAvailable)('should match native tree output for deeply nested structure', async function () {
-      // Create deep structure
-      let currentPath = tempDir;
-      for (let i = 1; i <= 4; i++) {
-        currentPath = path.join(currentPath, `level${i}`);
-        await fs.mkdir(currentPath);
-      }
-      await fs.writeFile(path.join(currentPath, 'deep.txt'), '');
-
-      const ourResult = await formatAsTree(filesystem, '/');
-      const nativeResult = getNativeTreeOutput(tempDir);
-
-      expect(ourResult.tree).toBe(nativeResult);
-    });
-
-    it.skipIf(!treeAvailable)('should match native tree output for multiple branches', async function () {
-      // Create structure with multiple branches at same level
-      await fs.mkdir(path.join(tempDir, 'alpha'));
-      await fs.mkdir(path.join(tempDir, 'beta'));
-      await fs.mkdir(path.join(tempDir, 'gamma'));
-      await fs.writeFile(path.join(tempDir, 'alpha', 'a.txt'), '');
-      await fs.writeFile(path.join(tempDir, 'beta', 'b.txt'), '');
-      await fs.writeFile(path.join(tempDir, 'gamma', 'c.txt'), '');
-      await fs.writeFile(path.join(tempDir, 'root.txt'), '');
-
-      const ourResult = await formatAsTree(filesystem, '/');
-      const nativeResult = getNativeTreeOutput(tempDir);
-
-      expect(ourResult.tree).toBe(nativeResult);
-    });
-
-    it.skipIf(!treeAvailable)('should match native tree output for symlinks', async function () {
-      // Create structure with symlinks
-      await fs.mkdir(path.join(tempDir, 'packages'));
-      await fs.mkdir(path.join(tempDir, 'packages', 'core'));
-      await fs.writeFile(path.join(tempDir, 'packages', 'core', 'index.ts'), '');
+      await fs.mkdir(path.join(tempDir, 'dist'));
       await fs.mkdir(path.join(tempDir, 'node_modules'));
-      // Create relative symlink
-      await fs.symlink('../packages/core', path.join(tempDir, 'node_modules', 'core'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.js'), '');
 
-      const ourResult = await formatAsTree(filesystem, '/');
-      const nativeResult = getNativeTreeOutput(tempDir);
+      const result = await formatAsTree(filesystem, '/', {
+        exclude: 'node_modules',
+        ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
+      });
 
-      // Both should show the symlink with its target
-      expect(ourResult.tree).toContain('core -> ../packages/core');
-      expect(nativeResult).toContain('core -> ../packages/core');
-      expect(ourResult.tree).toBe(nativeResult);
+      expect(result.tree).toContain('src');
+      expect(result.tree).not.toContain('dist');
+      expect(result.tree).not.toContain('node_modules');
     });
   });
 });

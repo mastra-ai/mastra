@@ -84,6 +84,45 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('tool_b');
   });
 
+  it('should support extraTools as a function that receives requestContext', () => {
+    const myCustomTool = createTool({
+      id: 'dynamic_tool',
+      description: 'A dynamically provided tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'dynamic' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
+      // Verify requestContext is usable
+      const ctx = requestContext.get('harness') as any;
+      if (!ctx) return {};
+      return { dynamic_tool: myCustomTool };
+    });
+
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).toHaveProperty('dynamic_tool');
+    expect(tools.dynamic_tool).toBe(myCustomTool);
+  });
+
+  it('should support extraTools function that conditionally returns empty', () => {
+    const myCustomTool = createTool({
+      id: 'conditional_tool',
+      description: 'A conditionally provided tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'conditional' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
+      // Condition that won't match — harness context has no 'featureFlag' key
+      const flag = requestContext.get('featureFlag') as string | undefined;
+      if (!flag) return {};
+      return { conditional_tool: myCustomTool };
+    });
+
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('conditional_tool');
+  });
+
   it('should return only built-in tools when extraTools is undefined', () => {
     const getDynamicTools = createDynamicTools(undefined, undefined);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
@@ -193,7 +232,8 @@ describe('createDynamicTools – disabledTools filtering', () => {
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('request_sandbox_access');
     expect(tools).not.toHaveProperty('execute_command');
-    expect(tools).toHaveProperty('view');
+    // web_search is provided by the Anthropic model mock and should survive filtering
+    expect(tools).toHaveProperty('web_search');
   });
 
   it('should omit disabled extraTools', () => {

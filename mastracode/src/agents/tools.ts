@@ -48,7 +48,7 @@ function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookM
 
 export function createDynamicTools(
   mcpManager?: McpManager,
-  extraTools?: Record<string, ToolLike>,
+  extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
   hookManager?: HookManager,
   disabledTools?: string[],
 ) {
@@ -84,7 +84,8 @@ export function createDynamicTools(
     }
 
     if (extraTools) {
-      for (const [name, tool] of Object.entries(extraTools)) {
+      const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
+      for (const [name, tool] of Object.entries(resolved)) {
         if (!(name in tools)) {
           tools[name] = tool;
         }

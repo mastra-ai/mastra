@@ -817,6 +817,117 @@ describe('LocalFilesystem', () => {
   });
 
   // ===========================================================================
+  // Tilde (~) expansion
+  // ===========================================================================
+  describe('tilde expansion', () => {
+    let homeDir: string;
+    let tildeTargetDir: string;
+
+    beforeEach(async () => {
+      homeDir = os.homedir();
+      // Create a temp directory inside the real home dir for tilde tests
+      tildeTargetDir = await fs.mkdtemp(path.join(homeDir, '.mastra-tilde-test-'));
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(tildeTargetDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should expand ~ in basePath', () => {
+      const tildeFs = new LocalFilesystem({ basePath: '~/my-project' });
+      expect(tildeFs.basePath).toBe(path.join(homeDir, 'my-project'));
+    });
+
+    it('should expand ~ in allowedPaths constructor option', () => {
+      const tildeFs = new LocalFilesystem({
+        basePath: tempDir,
+        allowedPaths: ['~/allowed-dir'],
+      });
+      expect(tildeFs.allowedPaths).toEqual([path.join(homeDir, 'allowed-dir')]);
+    });
+
+    it('should expand ~ to home directory when contained is false', async () => {
+      const uncontainedFs = new LocalFilesystem({
+        basePath: tempDir,
+        contained: false,
+      });
+      const relativeTildePath = tildeTargetDir.replace(homeDir, '~');
+      const filePath = `${relativeTildePath}/tilde-test.txt`;
+
+      await uncontainedFs.writeFile(filePath, 'tilde works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-test.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde works');
+    });
+
+    it('should expand ~ to home directory when path is in allowedPaths', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      const fsWithAllowed = new LocalFilesystem({
+        basePath: tempDir,
+        contained: true,
+        allowedPaths: [relativeTildeDir],
+      });
+      const filePath = `${relativeTildeDir}/tilde-allowed.txt`;
+
+      await fsWithAllowed.writeFile(filePath, 'tilde allowed works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-allowed.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde allowed works');
+    });
+
+    it('should expand ~ in setAllowedPaths', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      localFs.setAllowedPaths([relativeTildeDir]);
+
+      const filePath = `${relativeTildeDir}/tilde-set-allowed.txt`;
+      await localFs.writeFile(filePath, 'tilde set allowed works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-set-allowed.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde set allowed works');
+    });
+
+    it('should contain tilde paths inside basePath when not in allowedPaths', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      const filePath = `${relativeTildeDir}/contained.txt`;
+
+      // Default contained: true, no allowedPaths — should write inside basePath
+      await localFs.writeFile(filePath, 'should be contained');
+
+      // File should NOT exist at the real home dir location
+      const realPath = path.join(tildeTargetDir, 'contained.txt');
+      await expect(fs.access(realPath)).rejects.toThrow();
+
+      // File should exist inside basePath instead (tilde expands, then containment
+      // strips leading / and joins the full absolute path under basePath)
+      const containedPath = path.join(tempDir, tildeTargetDir, 'contained.txt');
+      const content = await fs.readFile(containedPath, 'utf-8');
+      expect(content).toBe('should be contained');
+    });
+
+    it('should read files written via tilde path', async () => {
+      const uncontainedFs = new LocalFilesystem({
+        basePath: tempDir,
+        contained: false,
+      });
+      const relativeTildePath = tildeTargetDir.replace(homeDir, '~');
+
+      // Write directly to disk
+      await fs.writeFile(path.join(tildeTargetDir, 'read-test.txt'), 'read via tilde');
+
+      // Read via tilde path
+      const content = await uncontainedFs.readFile(`${relativeTildePath}/read-test.txt`);
+      expect(content.toString()).toBe('read via tilde');
+    });
+  });
+
+  // ===========================================================================
   // MIME Type Detection
   // ===========================================================================
   describe('mime type detection', () => {

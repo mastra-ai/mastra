@@ -1,5 +1,3 @@
-import { Link, useParams } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -12,6 +10,7 @@ import {
   ToolPanel,
   ToolCombobox,
 } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 
 const Tool = () => {
   const { toolId } = useParams();

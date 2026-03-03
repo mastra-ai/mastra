@@ -122,6 +122,8 @@ export interface TUIState {
   /** Saved editor text for Ctrl+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
+  /** Queue of pending inline questions waiting to be shown (when one is already active) */
+  pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
@@ -214,6 +216,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Inline interaction
     lastClearedText: '',
+    pendingInlineQuestions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,

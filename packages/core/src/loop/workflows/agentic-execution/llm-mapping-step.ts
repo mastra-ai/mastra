@@ -1,5 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
+import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import type { MastraDBMessage } from '../../../memory';
 import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
@@ -158,7 +159,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   toolInvocation: {
                     state: 'result' as const,
                     toolCallId: toolCallErrorResult.toolCallId,
-                    toolName: toolCallErrorResult.toolName,
+                    toolName: sanitizeToolName(toolCallErrorResult.toolName),
                     args: toolCallErrorResult.args,
                     result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
                   },
@@ -225,7 +226,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                         toolInvocation: {
                           state: 'result' as const,
                           toolCallId: toolCall.toolCallId,
-                          toolName: toolCall.toolName,
+                          toolName: sanitizeToolName(toolCall.toolName),
                           args: toolCall.args,
                           result: toolCall.result,
                         },
@@ -252,7 +253,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolInvocation: {
                       state: 'result' as const,
                       toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
+                      toolName: sanitizeToolName(toolCall.toolName),
                       args: toolCall.args,
                       result: toolCall.result,
                     },
@@ -338,7 +339,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolInvocation: {
                       state: 'result' as const,
                       toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
+                      toolName: sanitizeToolName(toolCall.toolName),
                       args: toolCall.args,
                       result: toolCall.result,
                     },
@@ -368,7 +369,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolInvocation: {
                   state: 'result' as const,
                   toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
+                  toolName: sanitizeToolName(toolCall.toolName),
                   args: toolCall.args,
                   result: toolCall.result,
                 },

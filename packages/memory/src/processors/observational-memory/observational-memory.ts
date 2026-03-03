@@ -3831,11 +3831,10 @@ ${suggestedResponse}
   }
 
   /**
-   * Save messages to storage, regenerating IDs for any messages that were
-   * previously saved with observation markers (sealed).
+   * Save messages to storage while preventing duplicate inserts for sealed messages.
    *
-   * After saving, tracks which messages now have observation markers
-   * so their IDs won't be reused in future save cycles.
+   * Sealed messages that do not yet contain a completed observation boundary are
+   * skipped because async buffering already persisted them.
    */
   private async saveMessagesWithSealedIdTracking(
     messagesToSave: MastraDBMessage[],
@@ -3844,23 +3843,33 @@ ${suggestedResponse}
     resourceId: string | undefined,
     state: Record<string, unknown>,
   ): Promise<void> {
-    // Regenerate IDs for messages that were already saved with observation markers
-    // This prevents overwriting sealed messages in the DB
+    // Handle sealed messages:
+    // - Messages with observation markers: keep the same ID so storage upserts instead of inserting duplicates
+    // - Messages without observation markers (e.g., sealed for async buffering): skip entirely,
+    //   they were already persisted by runAsyncBufferedObservation (fixes #13089)
+    const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       if (sealedIds.has(msg.id)) {
-        msg.id = crypto.randomUUID();
+        if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+          filteredMessages.push(msg);
+        }
+        // else: sealed for buffering only, already persisted — skip to avoid duplication
+      } else {
+        filteredMessages.push(msg);
       }
     }
 
-    await this.messageHistory.persistMessages({
-      messages: messagesToSave,
-      threadId,
-      resourceId,
-    });
+    if (filteredMessages.length > 0) {
+      await this.messageHistory.persistMessages({
+        messages: filteredMessages,
+        threadId,
+        resourceId,
+      });
+    }
 
     // After successful save, track IDs of messages that now have observation markers (sealed)
     // These IDs cannot be reused in future cycles
-    for (const msg of messagesToSave) {
+    for (const msg of filteredMessages) {
       if (this.findLastCompletedObservationBoundary(msg) !== -1) {
         sealedIds.add(msg.id);
       }
