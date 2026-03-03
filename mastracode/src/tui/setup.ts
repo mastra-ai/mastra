@@ -54,22 +54,18 @@ export function setupKeyboardShortcuts(
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
-      const current = state.editor.getText();
-      if (current.length > 0) {
-        state.lastClearedText = current;
-      }
       state.editor.setText('');
       state.ui.requestRender();
     }
   });
 
-  // Ctrl+Z - undo last clear (restore editor text)
-  state.editor.onAction('undo', () => {
-    if (state.lastClearedText && state.editor.getText().length === 0) {
-      state.editor.setText(state.lastClearedText);
-      state.lastClearedText = '';
-      state.ui.requestRender();
-    }
+  // Ctrl+Z - suspend process (SIGTSTP)
+  state.editor.onAction('suspend', () => {
+    state.ui.stop();
+    process.once('SIGCONT', () => {
+      state.ui.start();
+    });
+    process.kill(process.pid, 'SIGTSTP');
   });
 
   // Ctrl+D - exit when editor is empty

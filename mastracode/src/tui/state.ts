@@ -119,8 +119,6 @@ export interface TUIState {
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
   lastAskUserComponent?: IToolExecutionComponent;
-  /** Saved editor text for Ctrl+Z undo */
-  lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
@@ -213,7 +211,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingNewThread: false,
 
     // Inline interaction
-    lastClearedText: '',
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,

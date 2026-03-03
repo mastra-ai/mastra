@@ -66,7 +66,7 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
-    { key: 'Ctrl+Z', description: 'Undo last clear' },
+    { key: 'Ctrl+Z', description: 'Suspend process (fg to resume)' },
   ];
 
   if (modes > 1) {
