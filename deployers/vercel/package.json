@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",

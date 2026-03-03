@@ -4614,13 +4614,13 @@ ${formattedMessages}
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
     // Call observer with combined context
-    // Allow the observer to produce suggestedResponse/currentTask so they survive
-    // activation and maintain continuity when the context window shrinks
+    // Skip continuation hints during async buffering — they reflect the observer's
+    // understanding at buffering time and become stale by activation.
     const result = await this.callObserver(
       combinedObservations,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { requestContext },
+      { skipContinuationHints: true, requestContext },
     );
 
     // If the observer returned empty observations, skip buffering

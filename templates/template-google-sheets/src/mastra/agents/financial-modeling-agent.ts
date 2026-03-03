@@ -1,7 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Composio } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
 
@@ -26,28 +25,13 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: process.env.MODEL || 'anthropic/claude-3-7-sonnet-20250219',
+  model: 'openai/gpt-5-mini',
   memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'financial-modeling-agent-storage',
-      url: 'file:../../mastra.db',
-    }),
-    vector: new LibSQLVector({
-      id: 'financial-modeling-agent-vector',
-      url: 'file:../../mastra.db',
-    }),
     embedder: fastembed,
     options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-        scope: 'thread',
+      observationalMemory: {
+        model: 'openai/gpt-5-mini',
       },
-      workingMemory: {
-        enabled: true,
-      },
-      generateTitle: true,
     },
   }),
   tools: async ({ requestContext }) => {

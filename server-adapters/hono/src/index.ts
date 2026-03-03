@@ -619,4 +619,51 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
     // No global middleware needed
   }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
+      return;
+    }
+
+    this.app.use('*', async (c, next) => {
+      if (!this.shouldLogRequest(c.req.path)) {
+        return next();
+      }
+
+      const start = Date.now();
+      const method = c.req.method;
+      const path = c.req.path;
+
+      await next();
+
+      const duration = Date.now() - start;
+      const status = c.res.status;
+      const level = this.httpLoggingConfig?.level || 'info';
+
+      const logData: Record<string, any> = {
+        method,
+        path,
+        status,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = c.req.query();
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = Object.fromEntries(c.req.raw.headers.entries());
+        const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+        redactHeaders.forEach(h => {
+          const key = h.toLowerCase();
+          if (headers[key] !== undefined) {
+            headers[key] = '[REDACTED]';
+          }
+        });
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+    });
+  }
 }
