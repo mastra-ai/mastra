@@ -19,7 +19,7 @@ describe('workspace_list_files', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('should list directory contents as tree (default depth 1)', async () => {
+  it('should list directory contents as compact paths (default depth 1)', async () => {
     await fs.mkdir(path.join(tempDir, 'dir'));
     await fs.writeFile(path.join(tempDir, 'dir', 'file1.txt'), 'content1');
     await fs.writeFile(path.join(tempDir, 'dir', 'file2.txt'), 'content2');
@@ -31,6 +31,8 @@ describe('workspace_list_files', () => {
     expect(typeof result).toBe('string');
     expect(result).toContain('file1.txt');
     expect(result).toContain('file2.txt');
+    expect(result).not.toContain('├──');
+    expect(result).not.toContain('└──');
     expect(result).toContain('0 directories, 2 files');
   });
 
@@ -51,6 +53,9 @@ describe('workspace_list_files', () => {
     expect(result).toContain('subdir');
     expect(result).toContain('file1.txt');
     expect(result).toContain('file2.txt');
+    expect(result).toContain('\tfile2.txt');
+    expect(result).not.toContain('├──');
+    expect(result).not.toContain('└──');
     expect(result).toContain('1 directory');
     expect(result).toContain('2 files');
   });
@@ -186,6 +191,32 @@ describe('workspace_list_files', () => {
     expect(result).toContain('index.ts');
     expect(result).not.toContain('node_modules');
     expect(result).not.toContain('lodash');
+  });
+
+  it('should respect .gitignore by default', async () => {
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'node_modules\n*.log\n');
+    await fs.mkdir(path.join(tempDir, 'node_modules'));
+    await fs.writeFile(path.join(tempDir, 'node_modules', 'index.js'), '');
+    await fs.writeFile(path.join(tempDir, 'app.log'), '');
+    await fs.writeFile(path.join(tempDir, 'src.ts'), '');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const defaultResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '/' },
+      { workspace },
+    )) as string;
+    expect(defaultResult).toContain('src.ts');
+    expect(defaultResult).not.toContain('node_modules');
+    expect(defaultResult).not.toContain('app.log');
+
+    const ignoreDisabledResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '/', showHidden: true, respectGitignore: false },
+      { workspace },
+    )) as string;
+    expect(ignoreDisabledResult).toContain('.gitignore');
+    expect(ignoreDisabledResult).toContain('node_modules');
+    expect(ignoreDisabledResult).toContain('app.log');
   });
 
   it('should filter files by glob pattern', async () => {

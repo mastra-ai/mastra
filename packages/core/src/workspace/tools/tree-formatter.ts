@@ -22,6 +22,8 @@
  */
 
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
+import type { IgnoreFilter } from '../gitignore';
+import { loadGitignore } from '../gitignore';
 import { createGlobMatcher } from '../glob';
 import type { GlobMatcher } from '../glob';
 
@@ -43,7 +45,9 @@ export interface TreeOptions {
   /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
   pattern?: string | string[];
   /** Filter function that returns true if a relative path should be ignored (e.g., from .gitignore). */
-  ignoreFilter?: (relativePath: string) => boolean;
+  ignoreFilter?: IgnoreFilter;
+  /** Respect .gitignore entries in the listed directory (default: true). */
+  respectGitignore?: boolean;
 }
 
 export interface TreeResult {
@@ -57,6 +61,8 @@ export interface TreeResult {
   fileCount: number;
   /** Whether output was truncated due to maxDepth */
   truncated: boolean;
+  /** Relative paths for compact output */
+  paths: string[];
 }
 
 // =============================================================================
@@ -87,7 +93,13 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const exclude = options?.exclude;
   const extension = options?.extension;
   const pattern = options?.pattern;
-  const ignoreFilter = options?.ignoreFilter;
+  const respectGitignore = options?.respectGitignore ?? true;
+
+  // Use provided ignoreFilter, or load from .gitignore if respectGitignore is enabled
+  let ignoreFilter = options?.ignoreFilter;
+  if (!ignoreFilter && respectGitignore) {
+    ignoreFilter = await loadGitignore(fs);
+  }
 
   // Compile glob matcher once before the walk (if pattern provided)
   let globMatcher: GlobMatcher | undefined;
@@ -97,6 +109,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   }
 
   const lines: string[] = ['.'];
+  const paths: string[] = [];
   let dirCount = 0;
   let fileCount = 0;
   let truncated = false;
@@ -141,14 +154,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     // Filter by gitignore rules
     if (ignoreFilter) {
       filtered = filtered.filter(e => {
-        // Build relative path from the tree root
-        const relativePath =
-          currentPath === path || currentPath === '.' || currentPath === './'
-            ? e.name
-            : `${currentPath.replace(/^\.\//, '')}/${e.name}`;
+        const relativePath = getRelativePath(path, currentPath, e.name);
         // Append trailing slash for directories so gitignore dir patterns match
         const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
-        return !ignoreFilter(checkPath);
+        return !ignoreFilter!(checkPath);
       });
     }
 
@@ -174,17 +183,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     if (globMatcher && !dirsOnly) {
       filtered = filtered.filter(e => {
         if (e.type === 'directory') return true;
-        // Build relative path from the root of the tree walk
-        const entryPath = currentPath === path ? e.name : `${currentPath === '/' ? '' : currentPath}/${e.name}`;
-        // Strip the root path prefix to make it relative
-        let relativePath: string;
-        if (path === '/' || path === '') {
-          relativePath = entryPath.startsWith('/') ? entryPath.slice(1) : entryPath;
-        } else {
-          relativePath = entryPath.startsWith(path + '/') ? entryPath.slice(path.length + 1) : entryPath;
-          // If entryPath starts with path but no slash (shouldn't happen), fall back
-          if (!relativePath) relativePath = entryPath;
-        }
+        const relativePath = getRelativePath(path, currentPath, e.name);
         return globMatcher!(relativePath);
       });
     }
@@ -207,6 +206,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         entry.isSymlink && entry.symlinkTarget ? `${entry.name} -> ${entry.symlinkTarget}` : entry.name;
 
       lines.push(prefix + connector + displayName);
+      paths.push(getRelativePath(path, currentPath, entry.name));
 
       if (entry.type === 'directory') {
         dirCount++;
@@ -238,6 +238,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     dirCount,
     fileCount,
     truncated,
+    paths,
   };
 }
 
@@ -310,6 +311,17 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
 // =============================================================================
 // Helpers
 // =============================================================================
+
+function getRelativePath(rootPath: string, currentPath: string, entryName: string): string {
+  const entryPath = currentPath === rootPath ? entryName : `${currentPath === '/' ? '' : currentPath}/${entryName}`;
+
+  if (rootPath === '/' || rootPath === '') {
+    return entryPath.startsWith('/') ? entryPath.slice(1) : entryPath;
+  }
+
+  const relativePath = entryPath.startsWith(rootPath + '/') ? entryPath.slice(rootPath.length + 1) : entryPath;
+  return relativePath || entryPath;
+}
 
 /**
  * Join path segments, handling root paths correctly

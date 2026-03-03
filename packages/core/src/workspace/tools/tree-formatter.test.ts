@@ -225,6 +225,23 @@ describe('tree-formatter', () => {
       );
       expect(result.fileCount).toBe(2);
     });
+
+    it('should respect .gitignore patterns by default', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), 'node_modules\n*.log\n');
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'index.js'), '');
+      await fs.writeFile(path.join(tempDir, 'debug.log'), '');
+      await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
+
+      const result = await formatAsTree(filesystem, '/');
+
+      expect(result.tree).toBe(
+        `.
+└── visible.txt`,
+      );
+      expect(result.paths).toEqual(['visible.txt']);
+      expect(result.fileCount).toBe(1);
+    });
   });
 
   // ===========================================================================
