@@ -6,6 +6,8 @@ export type {
   ActiveSubagentState,
   ActiveToolState,
   AvailableModel,
+  CustomAvailableModel,
+  CustomModelCatalogProvider,
   HarnessConfig,
   HarnessDisplayState,
   HarnessEvent,

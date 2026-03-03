@@ -249,6 +249,18 @@ type: "string",
 description: "Default model ID for this subagent type.",
 isOptional: true,
 },
+{
+name: "maxSteps",
+type: "number",
+description: "Optional maximum number of steps for the spawned subagent. Defaults to `50` when omitted.",
+isOptional: true,
+},
+{
+name: "stopWhen",
+type: "LoopOptions['stopWhen']",
+description: "Optional stop condition for the spawned subagent.",
+isOptional: true,
+},
 ]}
 />
 
@@ -455,6 +467,23 @@ Update the title of the current thread.
 ```typescript
 await harness.renameThread({ title: 'Updated title' })
 ```
+
+#### `cloneThread({ sourceThreadId?, title?, resourceId? })`
+
+Clone an existing thread and switch to the clone. Copies all messages, acquires a lock on the new thread, releases the lock on the previous thread, and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/docs/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
+
+```typescript
+// Clone the current thread
+const cloned = await harness.cloneThread()
+
+// Clone a specific thread with a custom title
+const cloned = await harness.cloneThread({
+  sourceThreadId: 'thread-abc123',
+  title: 'Alternative approach',
+})
+```
+
+See [`Memory.cloneThread()`](/reference/memory/cloneThread) for details on what gets cloned.
 
 #### `getResourceId()`
 
