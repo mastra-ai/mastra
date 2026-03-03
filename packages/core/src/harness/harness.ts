@@ -1625,13 +1625,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const policy = this.resolveToolApproval(toolName);
 
           if (policy === 'allow') {
-            const result = await this.handleToolApprove({ toolCallId, runtimeContext: requestContext });
+            const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
 
           if (policy === 'deny') {
-            const result = await this.handleToolDecline({ toolCallId, runtimeContext: requestContext });
+            const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -2077,10 +2077,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   private async handleToolApprove({
     toolCallId,
-    runtimeContext,
+    requestContext: requestContextInput,
   }: {
     toolCallId?: string;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
@@ -2092,7 +2092,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext(runtimeContext);
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -2108,10 +2108,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   private async handleToolDecline({
     toolCallId,
-    runtimeContext,
+    requestContext: requestContextInput,
   }: {
     toolCallId?: string;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
@@ -2122,7 +2122,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext(runtimeContext);
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -2602,8 +2602,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(runtimeContext?: RequestContext): Promise<RequestContext> {
-    const requestContext = runtimeContext ?? new RequestContext();
+  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+    requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
       state: this.getState(),
