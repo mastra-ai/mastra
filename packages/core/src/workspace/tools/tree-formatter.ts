@@ -11,11 +11,11 @@
  * const result = await formatAsTree(filesystem, '/', { maxDepth: 3 });
  * console.log(result.tree);
  * // .
- * // ├── src
- * // │   ├── index.ts
- * // │   └── utils
- * // │       └── helpers.ts
- * // └── package.json
+ * // src
+ * //   index.ts
+ * //   utils
+ * //     helpers.ts
+ * // package.json
  * console.log(result.summary);
  * // "2 directories, 3 files"
  * ```
@@ -66,15 +66,6 @@ export interface TreeResult {
 }
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-const BRANCH = '├── ';
-const LAST_BRANCH = '└── ';
-const VERTICAL = '│   ';
-const SPACE = '    ';
-
-// =============================================================================
 // Tree Formatting
 // =============================================================================
 
@@ -115,9 +106,9 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   let truncated = false;
 
   /**
-   * Build tree recursively
+   * Build tree recursively using tab indentation
    */
-  async function buildTree(currentPath: string, prefix: string, depth: number): Promise<void> {
+  async function buildTree(currentPath: string, depth: number): Promise<void> {
     if (depth >= maxDepth) {
       truncated = true;
       return;
@@ -188,24 +179,23 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       });
     }
 
-    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
+    // Sort: directories first, then alphabetically
     filtered.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
+    const indent = '\t'.repeat(depth);
+
     for (let i = 0; i < filtered.length; i++) {
       const entry = filtered[i]!;
-      const isLast = i === filtered.length - 1;
-      const connector = isLast ? LAST_BRANCH : BRANCH;
-      const childPrefix = prefix + (isLast ? SPACE : VERTICAL);
 
       // Format entry name, including symlink target if present
       const displayName =
         entry.isSymlink && entry.symlinkTarget ? `${entry.name} -> ${entry.symlinkTarget}` : entry.name;
 
-      lines.push(prefix + connector + displayName);
+      lines.push(`${indent}${displayName}`);
       paths.push(getRelativePath(path, currentPath, entry.name));
 
       if (entry.type === 'directory') {
@@ -214,7 +204,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         // This also prevents infinite loops from circular symlinks
         if (!entry.isSymlink) {
           const childPath = joinPath(currentPath, entry.name);
-          await buildTree(childPath, childPrefix, depth + 1);
+          await buildTree(childPath, depth + 1);
         }
       } else {
         fileCount++;
@@ -222,7 +212,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
   }
 
-  await buildTree(path, '', 0);
+  await buildTree(path, 0);
 
   // Build summary
   const dirPart = dirCount === 1 ? '1 directory' : `${dirCount} directories`;
@@ -281,30 +271,29 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
   // Render tree
   const lines: string[] = ['.'];
 
-  function renderNode(node: TreeNode, prefix: string): void {
+  function renderNode(node: TreeNode, depth: number): void {
     const children = Array.from(node.children.values());
-    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
+    // Sort: directories first, then alphabetically
     children.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
+    const indent = '\t'.repeat(depth);
+
     for (let i = 0; i < children.length; i++) {
       const child = children[i]!;
-      const isLast = i === children.length - 1;
-      const connector = isLast ? LAST_BRANCH : BRANCH;
-      const childPrefix = prefix + (isLast ? SPACE : VERTICAL);
 
-      lines.push(prefix + connector + child.name);
+      lines.push(`${indent}${child.name}`);
 
       if (child.children.size > 0) {
-        renderNode(child, childPrefix);
+        renderNode(child, depth + 1);
       }
     }
   }
 
-  renderNode(root, '');
+  renderNode(root, 0);
   return lines.join('\n');
 }
 

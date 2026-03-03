@@ -1,26 +1,14 @@
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { loadGitignore } from '../gitignore';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
 import { formatAsTree } from './tree-formatter';
 
-function formatIndentedHierarchy(paths: string[]): string {
-  return paths
-    .map(path => {
-      const segments = path.split('/').filter(Boolean);
-      const name = segments[segments.length - 1] ?? path;
-      const depth = Math.max(0, segments.length - 1);
-      return `${'\t'.repeat(depth)}${name}`;
-    })
-    .join('\n');
-}
-
 export const listFilesTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
   description: `List files and directories in the workspace filesystem.
-Returns a compact path list for efficient token usage.
+Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
 
 Examples:
@@ -69,8 +57,6 @@ Examples:
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
-    const ignoreFilter = respectGitignore ? await loadGitignore(filesystem) : undefined;
-
     const result = await formatAsTree(filesystem, path, {
       maxDepth,
       showHidden,
@@ -78,14 +64,11 @@ Examples:
       exclude: exclude || undefined,
       extension: extension || undefined,
       pattern: pattern || undefined,
-      ignoreFilter,
       respectGitignore,
     });
 
-    const compactOutput = result.paths.length > 0 ? formatIndentedHierarchy(result.paths) : '.';
-
     return await applyTokenLimit(
-      `${compactOutput}\n\n${result.summary}`,
+      `${result.tree}\n\n${result.summary}`,
       workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
       'end',
     );

@@ -287,7 +287,7 @@ describe('workspace_list_files', () => {
     expect(result).toContain('[output truncated');
   });
 
-  it('should respect .gitignore by default', async () => {
+  it('should respect .gitignore for directory patterns', async () => {
     await fs.mkdir(path.join(tempDir, 'src'));
     await fs.mkdir(path.join(tempDir, 'dist'));
     await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
