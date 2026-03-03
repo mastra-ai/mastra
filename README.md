@@ -62,8 +62,6 @@ If you are a developer and would like to contribute with code, please open an is
 
 Information about the project setup can be found in the [development documentation](./DEVELOPMENT.md)
 
-For fork maintainers: this repository includes a daily GitHub Action at `.github/workflows/sync-upstream-fork.yml` that syncs your fork's default branch from `mastra-ai/mastra`.
-
 ## Support
 
 We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say hello and let us know if you have any questions or need any help getting things running.
