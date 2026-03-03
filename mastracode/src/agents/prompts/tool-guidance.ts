@@ -38,8 +38,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (!denied.has(MC_TOOLS.SEARCH_CONTENT)) {
     readTools.push(`
 **${MC_TOOLS.SEARCH_CONTENT}** — Search file contents using regex
-- Use this for ALL content search (finding functions, variables, error messages, imports, etc.)
-- NEVER use \`execute_command\` with grep, rg, or ag. Always use this tool.
+- Preferred for content search (finding functions, variables, error messages, imports, etc.)
 - Use \`path\` to filter by directory or glob pattern. Supports \`contextLines\`, \`caseSensitive\`, and \`maxCount\`.
 - Example: Find a function: \`{ pattern: "function handleSubmit", path: "**/*.ts" }\`
 - Example: Find imports: \`{ pattern: "from ['\\"\\]express['\\"\\]", path: "**/*.ts" }\`
@@ -49,8 +48,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (!denied.has(MC_TOOLS.FIND_FILES)) {
     readTools.push(`
 **${MC_TOOLS.FIND_FILES}** — List files and directories as a tree
-- Use this to explore project structure and find files by pattern.
-- NEVER use \`execute_command\` with find or ls. Always use this tool.
+- Preferred for exploring project structure and finding files by pattern.
 - Returns tree-style output. Respects .gitignore by default.
 - Example: List project root: \`{ path: "./" }\`
 - Example: Find test files: \`{ path: "./src", pattern: "**/*.test.ts" }\`
@@ -61,7 +59,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
     readTools.push(`
 **${MC_TOOLS.EXECUTE_COMMAND}** — Run shell commands
 - Use for: git, npm/pnpm, docker, build tools, test runners, and other terminal operations.
-- Do NOT use for: file reading (use ${MC_TOOLS.VIEW}), file search (use ${MC_TOOLS.SEARCH_CONTENT}/${MC_TOOLS.FIND_FILES}), file editing (use ${MC_TOOLS.STRING_REPLACE_LSP}/${MC_TOOLS.WRITE_FILE}).
+- Prefer dedicated tools for: file reading (${MC_TOOLS.VIEW}), file search (${MC_TOOLS.SEARCH_CONTENT}/${MC_TOOLS.FIND_FILES}), file editing (${MC_TOOLS.STRING_REPLACE_LSP}/${MC_TOOLS.WRITE_FILE}).
 - Commands have a 30-second default timeout. Use \`timeout\` for longer commands, \`cwd\` for working directory.
 - Use the \`tail\` parameter or pipe to \`| tail -N\` to limit output — the full output streams to the user, only the tail is returned to you. If you're building any kind of package you should be tailing.
 - Good: Run independent commands in parallel when possible.
@@ -94,7 +92,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 **${MC_TOOLS.WRITE_FILE}** — Create new files or overwrite existing ones
 - Use this to create new files.
 - If overwriting an existing file, you MUST have read it first with \`${MC_TOOLS.VIEW}\`.
-- NEVER create files unless necessary. Prefer editing existing files.`);
+- Prefer editing existing files over creating new ones.`);
     }
 
     if (writeTools.length > 0) {
