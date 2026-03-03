@@ -283,8 +283,13 @@ export class AgentsMySQL extends AgentsStorage {
               details: { key },
             });
           }
-          conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = ?`);
-          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+          if (typeof value === 'string') {
+            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            queryParams.push(value);
+          } else {
+            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            queryParams.push(JSON.stringify(value));
+          }
         }
       }
 

@@ -504,7 +504,13 @@ export class MemoryMySQL extends MemoryStorage {
     try {
       const existing = await this.getThreadById({ threadId: id });
       if (!existing) {
-        throw new Error(`Thread ${id} not found`);
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Thread ${id} not found`,
+          details: { threadId: id },
+        });
       }
 
       const mergedMetadata = {
@@ -530,6 +536,9 @@ export class MemoryMySQL extends MemoryStorage {
         updatedAt,
       } satisfies StorageThreadType;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'MYSQL_MEMORY_UPDATE_THREAD_FAILED',
@@ -593,20 +602,36 @@ export class MemoryMySQL extends MemoryStorage {
     const threadIds = new Set<string>();
     for (const message of messages) {
       if (!message.threadId || !message.threadId.trim()) {
-        throw new Error('Thread ID is required');
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'SAVE_MESSAGES', 'INVALID_INPUT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Thread ID is required',
+          details: { messageId: message.id ?? null },
+        });
       }
       threadIds.add(message.threadId);
       if (!message.resourceId) {
-        throw new Error(
-          `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
-        );
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'SAVE_MESSAGES', 'INVALID_INPUT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          details: { messageId: message.id ?? null, threadId: message.threadId },
+        });
       }
     }
 
     for (const threadId of threadIds) {
       const existingThread = await this.getThreadById({ threadId });
       if (!existingThread) {
-        throw new Error(`Thread ${threadId} not found`);
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'SAVE_MESSAGES', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Thread ${threadId} not found`,
+          details: { threadId },
+        });
       }
     }
 
@@ -619,7 +644,13 @@ export class MemoryMySQL extends MemoryStorage {
 
       for (const message of messages) {
         if (!message.threadId) {
-          throw new Error('Message must have threadId');
+          throw new MastraError({
+            id: createStorageErrorId('MYSQL', 'SAVE_MESSAGES', 'INVALID_INPUT'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: 'Message must have threadId',
+            details: { messageId: message.id ?? null },
+          });
         }
         const createdAt = message.createdAt ? new Date(message.createdAt) : new Date();
         const id = message.id ?? randomUUID();
@@ -664,6 +695,9 @@ export class MemoryMySQL extends MemoryStorage {
       await connection.commit();
     } catch (error) {
       await connection.rollback();
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'MYSQL_MEMORY_SAVE_MESSAGES_FAILED',
@@ -1253,10 +1287,19 @@ export class MemoryMySQL extends MemoryStorage {
       });
       const updated = await this.getResourceById({ resourceId });
       if (!updated) {
-        throw new Error(`Resource ${resourceId} not found after update`);
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_RESOURCE', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Resource ${resourceId} not found after update`,
+          details: { resourceId },
+        });
       }
       return updated;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'MYSQL_MEMORY_UPDATE_RESOURCE_FAILED',

@@ -2,12 +2,11 @@
 '@mastra/mysql': patch
 ---
 
-Fixed several MySQL storage reliability issues reported in PR review:
+Improved MySQL storage reliability and startup behavior.
 
-- Fixed `createTable` to avoid passing `undefined` bind parameters when database is not explicitly configured.
-- Fixed `updateMessages` to skip no-op updates, preventing invalid SQL in batched updates.
-- Made experiment deletion transactional to avoid partial deletes.
-- Added rollback behavior when creating agents, prompt blocks, and scorer definitions if initial version creation fails.
-- Improved error semantics for update-not-found cases in MCP servers, prompt blocks, and scorer definitions.
-- Hardened delete statement utilities to reject empty key filters.
-- Improved MySQL package test startup checks so `pretest` fails when the DB never becomes ready.
+- Fixed table initialization when the database is inferred from the active connection.
+- Fixed batched message updates to skip no-op items and avoid invalid SQL.
+- Improved delete and create safety to reduce partial-write states in multi-step operations.
+- Improved error reporting when update requests target missing resources.
+- Added stricter guards for delete statements with empty key filters.
+- Improved pretest startup checks so test runs fail fast when MySQL never becomes ready.
