@@ -242,6 +242,11 @@ export class MastraTUI {
       hookMgr.runSessionEnd().catch(() => {});
     }
 
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer);
+      this.updateCheckTimer = null;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
