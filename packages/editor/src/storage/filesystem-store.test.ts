@@ -506,7 +506,12 @@ describe('FilesystemStore', () => {
     it('published data persists when a new store instance is created', async () => {
       const agents = await store.getStore('agents');
       await agents!.create({
-        agent: { id: 'a1', name: 'Persistent Agent', instructions: 'persist me', model: { provider: 'openai', name: 'gpt-4' } },
+        agent: {
+          id: 'a1',
+          name: 'Persistent Agent',
+          instructions: 'persist me',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
       });
 
       // Publish so it gets written to disk

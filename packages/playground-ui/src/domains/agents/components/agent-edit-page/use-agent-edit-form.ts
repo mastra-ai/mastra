@@ -3,7 +3,9 @@ import { useForm, Resolver } from 'react-hook-form';
 import { AgentFormValues, createInstructionBlock } from './utils/form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts
-function createAgentFormResolver({ isCodeAgentOverride }: { isCodeAgentOverride?: boolean } = {}): Resolver<AgentFormValues> {
+function createAgentFormResolver({
+  isCodeAgentOverride,
+}: { isCodeAgentOverride?: boolean } = {}): Resolver<AgentFormValues> {
   return async values => {
     const errors: Record<string, { type: string; message: string }> = {};
 
@@ -22,7 +24,8 @@ function createAgentFormResolver({ isCodeAgentOverride }: { isCodeAgentOverride?
     // Validate instructions: check blocks if present, otherwise check plain instructions string
     const blocks = values.instructionBlocks;
     const hasBlockContent =
-      blocks && blocks.some(b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content.trim() !== ''));
+      blocks &&
+      blocks.some(b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content.trim() !== ''));
     const hasPlainInstructions = values.instructions && values.instructions.trim() !== '';
 
     if (!hasBlockContent && !hasPlainInstructions) {

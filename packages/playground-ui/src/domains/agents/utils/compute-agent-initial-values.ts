@@ -22,9 +22,10 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
   let requestContextSchema: unknown;
   if (agent.requestContextSchema) {
     try {
-      requestContextSchema = typeof agent.requestContextSchema === 'string'
-        ? JSON.parse(agent.requestContextSchema)
-        : agent.requestContextSchema;
+      requestContextSchema =
+        typeof agent.requestContextSchema === 'string'
+          ? JSON.parse(agent.requestContextSchema)
+          : agent.requestContextSchema;
     } catch {
       // Invalid JSON — skip
     }
@@ -39,7 +40,7 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
     workflows: agent.workflows,
     agents: agent.agents,
     skills: agent.skills as AgentDataSource['skills'],
-    workspace: agent.workspaceId ? { workspaceId: agent.workspaceId } as AgentDataSource['workspace'] : undefined,
+    workspace: agent.workspaceId ? ({ workspaceId: agent.workspaceId } as AgentDataSource['workspace']) : undefined,
     requestContextSchema,
   };
 }

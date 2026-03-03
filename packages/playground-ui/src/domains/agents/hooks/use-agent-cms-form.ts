@@ -144,9 +144,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           instructions: mapInstructionBlocksToApi(values.instructionBlocks),
           tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
           mcpClients: mcpClientsParam,
-          requestContextSchema: values.variables
-            ? Object.fromEntries(Object.entries(values.variables))
-            : undefined,
+          requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
         };
       }
 
@@ -264,7 +262,18 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     } finally {
       setIsSavingDraft(false);
     }
-  }, [form, isEdit, agentId, needsCreate, options, buildSharedParams, buildMemoryParams, createStoredAgent, updateStoredAgent, queryClient]);
+  }, [
+    form,
+    isEdit,
+    agentId,
+    needsCreate,
+    options,
+    buildSharedParams,
+    buildMemoryParams,
+    createStoredAgent,
+    updateStoredAgent,
+    queryClient,
+  ]);
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
@@ -351,7 +360,18 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, isEdit, needsCreate, client, createStoredAgent, options, agentId, buildSharedParams, buildMemoryParams, queryClient]);
+  }, [
+    form,
+    isEdit,
+    needsCreate,
+    client,
+    createStoredAgent,
+    options,
+    agentId,
+    buildSharedParams,
+    buildMemoryParams,
+    queryClient,
+  ]);
 
   const watched = useWatch({ control: form.control });
 

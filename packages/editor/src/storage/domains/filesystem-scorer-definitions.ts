@@ -49,9 +49,7 @@ export class FilesystemScorerDefinitionsStorage extends ScorerDefinitionsStorage
     return this.helpers.getById(id);
   }
 
-  async create(input: {
-    scorerDefinition: StorageCreateScorerDefinitionInput;
-  }): Promise<StorageScorerDefinitionType> {
+  async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
     const { scorerDefinition } = input;
     const now = new Date();
     const entity: StorageScorerDefinitionType = {
@@ -109,10 +107,7 @@ export class FilesystemScorerDefinitionsStorage extends ScorerDefinitionsStorage
     return this.helpers.getVersion(id);
   }
 
-  async getVersionByNumber(
-    scorerDefinitionId: string,
-    versionNumber: number,
-  ): Promise<ScorerDefinitionVersion | null> {
+  async getVersionByNumber(scorerDefinitionId: string, versionNumber: number): Promise<ScorerDefinitionVersion | null> {
     return this.helpers.getVersionByNumber(scorerDefinitionId, versionNumber);
   }
 

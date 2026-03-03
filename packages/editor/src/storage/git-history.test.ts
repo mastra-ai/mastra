@@ -230,10 +230,7 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
     const helpers = createHelpers();
 
     // listVersions triggers ensureGitHistory
-    const result = await helpers.listVersions(
-      versionInput('agent-1'),
-      'agentId',
-    );
+    const result = await helpers.listVersions(versionInput('agent-1'), 'agentId');
 
     // 2 git versions + 1 hydrated (current disk)
     expect(result.total).toBe(3);
@@ -268,7 +265,7 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
   });
 
   it('git versions are read-only (deleteVersion is no-op)', async () => {
-    writeAndCommit(storageDir, 'agents.json', { 'a': { name: 'test' } }, 'init');
+    writeAndCommit(storageDir, 'agents.json', { a: { name: 'test' } }, 'init');
 
     const helpers = createHelpers();
     const result = await helpers.listVersions(versionInput('a'), 'agentId');
@@ -284,7 +281,7 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
   });
 
   it('deleteVersionsByParentId skips git versions', async () => {
-    writeAndCommit(storageDir, 'agents.json', { 'a': { name: 'test' } }, 'init');
+    writeAndCommit(storageDir, 'agents.json', { a: { name: 'test' } }, 'init');
 
     const helpers = createHelpers();
 
@@ -302,9 +299,9 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
 
   it('new version numbers continue after git history', async () => {
     // 3 git commits
-    writeAndCommit(storageDir, 'agents.json', { 'a': { name: 'v1' } }, 'v1');
-    writeAndCommit(storageDir, 'agents.json', { 'a': { name: 'v2' } }, 'v2');
-    writeAndCommit(storageDir, 'agents.json', { 'a': { name: 'v3' } }, 'v3');
+    writeAndCommit(storageDir, 'agents.json', { a: { name: 'v1' } }, 'v1');
+    writeAndCommit(storageDir, 'agents.json', { a: { name: 'v2' } }, 'v2');
+    writeAndCommit(storageDir, 'agents.json', { a: { name: 'v3' } }, 'v3');
 
     const helpers = createHelpers();
 

@@ -431,9 +431,7 @@ export class FilesystemVersionedHelpers<
     // Check for duplicate (parentId, versionNumber) pair
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === parentId && v.versionNumber === input.versionNumber) {
-        throw new Error(
-          `${this.name}: version number ${input.versionNumber} already exists for entity ${parentId}`,
-        );
+        throw new Error(`${this.name}: version number ${input.versionNumber} already exists for entity ${parentId}`);
       }
     }
 
@@ -474,10 +472,7 @@ export class FilesystemVersionedHelpers<
     return latest ? structuredClone(latest) : null;
   }
 
-  async listVersions(
-    input: ListVersionsInputBase,
-    parentIdField: string,
-  ): Promise<ListVersionsOutputBase<TVersion>> {
+  async listVersions(input: ListVersionsInputBase, parentIdField: string): Promise<ListVersionsOutputBase<TVersion>> {
     await this.ensureGitHistory();
     const { page = 0, perPage: perPageInput, orderBy } = input;
     const entityId = (input as Record<string, unknown>)[parentIdField] as string;
