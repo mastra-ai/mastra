@@ -97,8 +97,8 @@ importers:
         specifier: ^0.7.2
         version: 0.7.2(prettier@3.7.4)
       semver:
-        specifier: ^7.7.2
-        version: 7.7.3
+        specifier: ^7.7.4
+        version: 7.7.4
       tsc-files:
         specifier: ^1.1.4
         version: 1.1.4(typescript@5.9.3)
@@ -1988,8 +1988,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       semver:
-        specifier: ^7.7.2
-        version: 7.7.3
+        specifier: ^7.7.4
+        version: 7.7.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2425,8 +2425,8 @@ importers:
         specifier: ^7.0.5
         version: 7.0.5
       semver:
-        specifier: ^7.7.2
-        version: 7.7.3
+        specifier: ^7.7.4
+        version: 7.7.4
       swpm:
         specifier: ^2.6.0
         version: 2.6.0
@@ -2562,8 +2562,8 @@ importers:
         specifier: ^3.7.4
         version: 3.7.4
       semver:
-        specifier: ^7.7.0
-        version: 7.7.3
+        specifier: ^7.7.4
+        version: 7.7.4
       serve:
         specifier: ^14.2.5
         version: 14.2.5
@@ -2605,7 +2605,7 @@ importers:
         specifier: 22.19.7
         version: 22.19.7
       '@types/semver':
-        specifier: ^7.7.0
+        specifier: ^7.7.1
         version: 7.7.1
       '@types/serve-handler':
         specifier: ^6.1.4
@@ -3863,8 +3863,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       semver:
-        specifier: ^7.7.2
-        version: 7.7.3
+        specifier: ^7.7.4
+        version: 7.7.4
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
@@ -22205,6 +22205,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  semver@7.7.4:
+    resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   send@0.19.0:
     resolution: {integrity: sha512-dW41u5VfLXu8SJh5bwRmyYUbAoSB3c9uQh6L8h/KtsFREPWpbX1lrljJo186Jc4nmci/sGUZ9a0a0J2zgfq2hw==}
     engines: {node: '>= 0.8.0'}
@@ -26791,7 +26796,7 @@ snapshots:
       outdent: 0.5.0
       prettier: 2.8.8
       resolve-from: 5.0.0
-      semver: 7.7.3
+      semver: 7.7.4
 
   '@changesets/assemble-release-plan@6.0.9':
     dependencies:
@@ -26800,7 +26805,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
-      semver: 7.7.3
+      semver: 7.7.4
 
   '@changesets/changelog-git@0.2.1':
     dependencies:
@@ -26833,7 +26838,7 @@ snapshots:
       package-manager-detector: 0.2.11
       picocolors: 1.1.1
       resolve-from: 5.0.0
-      semver: 7.7.3
+      semver: 7.7.4
       spawndamnit: 3.0.1
       term-size: 2.2.1
     transitivePeerDependencies:
@@ -26858,7 +26863,7 @@ snapshots:
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
       picocolors: 1.1.1
-      semver: 7.7.3
+      semver: 7.7.4
 
   '@changesets/get-release-plan@4.0.14':
     dependencies:
@@ -27272,7 +27277,7 @@ snapshots:
       chalk: 4.1.2
       openai: 6.21.0(ws@8.19.0)(zod@3.25.76)
       pusher-js: 8.4.0
-      semver: 7.7.3
+      semver: 7.7.4
       zod: 3.25.76
       zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
@@ -27959,7 +27964,7 @@ snapshots:
       react-router: 5.3.4(react@18.3.1)
       react-router-config: 5.1.1(react-router@5.3.4(react@18.3.1))(react@18.3.1)
       react-router-dom: 5.3.4(react@18.3.1)
-      semver: 7.7.3
+      semver: 7.7.4
       serve-handler: 6.1.6
       tinypool: 1.1.1
       tslib: 2.8.1
@@ -30371,7 +30376,7 @@ snapshots:
       ini: 4.1.3
       nopt: 7.2.1
       proc-log: 4.2.0
-      semver: 7.7.3
+      semver: 7.7.4
       walk-up-path: 3.0.1
     transitivePeerDependencies:
       - bluebird
@@ -30385,7 +30390,7 @@ snapshots:
       proc-log: 4.2.0
       promise-inflight: 1.0.1
       promise-retry: 2.0.1
-      semver: 7.7.3
+      semver: 7.7.4
       which: 4.0.0
     transitivePeerDependencies:
       - bluebird
@@ -30407,7 +30412,7 @@ snapshots:
       json-parse-even-better-errors: 3.0.2
       normalize-package-data: 6.0.2
       proc-log: 4.2.0
-      semver: 7.7.3
+      semver: 7.7.4
     transitivePeerDependencies:
       - bluebird
 
@@ -31185,7 +31190,7 @@ snapshots:
       '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.0)
       '@opentelemetry/semantic-conventions': 1.28.0
       forwarded-parse: 2.1.2
-      semver: 7.7.3
+      semver: 7.7.4
     transitivePeerDependencies:
       - supports-color
 
@@ -31514,7 +31519,7 @@ snapshots:
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.15.0
       require-in-the-middle: 7.5.2
-      semver: 7.7.3
+      semver: 7.7.4
       shimmer: 1.2.1
     transitivePeerDependencies:
       - supports-color
@@ -31862,7 +31867,7 @@ snapshots:
       '@opentelemetry/propagator-b3': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/propagator-jaeger': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.0)
-      semver: 7.7.3
+      semver: 7.7.4
 
   '@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.0)':
     dependencies:
@@ -35048,7 +35053,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.51.0
       debug: 4.4.3
       minimatch: 9.0.5
-      semver: 7.7.3
+      semver: 7.7.4
       tinyglobby: 0.2.15
       ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -36652,7 +36657,7 @@ snapshots:
 
   chromadb@3.1.6:
     dependencies:
-      semver: 7.7.3
+      semver: 7.7.4
     optionalDependencies:
       chromadb-js-bindings-darwin-arm64: 1.1.1
       chromadb-js-bindings-darwin-x64: 1.1.1
@@ -36787,7 +36792,7 @@ snapshots:
       node-api-headers: 1.6.0
       npmlog: 6.0.2
       rc: 1.2.8
-      semver: 7.7.3
+      semver: 7.7.4
       tar: 6.2.1
       url-join: 4.0.1
       which: 2.0.2
@@ -36961,7 +36966,7 @@ snapshots:
       dot-prop: 9.0.0
       env-paths: 3.0.0
       json-schema-typed: 8.0.1
-      semver: 7.7.3
+      semver: 7.7.4
       uint8array-extras: 1.5.0
 
   confbox@0.1.8: {}
@@ -37148,7 +37153,7 @@ snapshots:
       postcss-modules-scope: 3.2.1(postcss@8.5.6)
       postcss-modules-values: 4.0.0(postcss@8.5.6)
       postcss-value-parser: 4.2.0
-      semver: 7.7.3
+      semver: 7.7.4
     optionalDependencies:
       '@rspack/core': 1.7.4(@swc/helpers@0.5.17)
       webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))
@@ -37973,7 +37978,7 @@ snapshots:
       eslint-import-context: 0.1.9(unrs-resolver@1.11.1)
       is-glob: 4.0.3
       minimatch: 10.1.2
-      semver: 7.7.3
+      semver: 7.7.4
       stable-hash-x: 0.2.0
       unrs-resolver: 1.11.1
     optionalDependencies:
@@ -38066,7 +38071,7 @@ snapshots:
       pluralize: 8.0.0
       regexp-tree: 0.1.27
       regjsparser: 0.13.0
-      semver: 7.7.3
+      semver: 7.7.4
       strip-indent: 4.1.1
 
   eslint-scope@5.1.1:
@@ -38451,7 +38456,7 @@ snapshots:
       process-warning: 5.0.0
       rfdc: 1.4.1
       secure-json-parse: 4.1.0
-      semver: 7.7.3
+      semver: 7.7.4
       toad-cache: 3.7.0
 
   fastq@1.19.1:
@@ -38901,7 +38906,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.3
+      semver: 7.7.4
       serialize-error: 7.0.1
 
   global-dirs@3.0.1:
@@ -40201,7 +40206,7 @@ snapshots:
       lodash.isstring: 4.0.1
       lodash.once: 4.1.1
       ms: 2.1.3
-      semver: 7.7.3
+      semver: 7.7.4
 
   jsprim@2.0.2:
     dependencies:
@@ -40313,7 +40318,7 @@ snapshots:
       console-table-printer: 2.15.0
       p-queue: 6.6.2
       p-retry: 4.6.2
-      semver: 7.7.3
+      semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
@@ -40665,7 +40670,7 @@ snapshots:
 
   make-dir@4.0.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.7.4
 
   map-obj@4.3.0: {}
 
@@ -41812,7 +41817,7 @@ snapshots:
   normalize-package-data@6.0.2:
     dependencies:
       hosted-git-info: 7.0.2
-      semver: 7.7.3
+      semver: 7.7.4
       validate-npm-package-license: 3.0.4
 
   normalize-path@3.0.0: {}
@@ -41823,7 +41828,7 @@ snapshots:
 
   npm-install-checks@6.3.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.7.4
 
   npm-normalize-package-bin@3.0.1: {}
 
@@ -41833,7 +41838,7 @@ snapshots:
     dependencies:
       hosted-git-info: 7.0.2
       proc-log: 4.2.0
-      semver: 7.7.3
+      semver: 7.7.4
       validate-npm-package-name: 5.0.1
 
   npm-pick-manifest@9.1.0:
@@ -41841,7 +41846,7 @@ snapshots:
       npm-install-checks: 6.3.0
       npm-normalize-package-bin: 3.0.1
       npm-package-arg: 11.0.3
-      semver: 7.7.3
+      semver: 7.7.4
 
   npm-run-all2@8.0.4:
     dependencies:
@@ -42164,7 +42169,7 @@ snapshots:
       got: 12.6.1
       registry-auth-token: 5.1.0
       registry-url: 6.0.1
-      semver: 7.7.3
+      semver: 7.7.4
 
   package-manager-detector@0.2.11:
     dependencies:
@@ -42643,7 +42648,7 @@ snapshots:
       cosmiconfig: 8.3.6(typescript@5.9.3)
       jiti: 1.21.7
       postcss: 8.5.6
-      semver: 7.7.3
+      semver: 7.7.4
       webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))
     transitivePeerDependencies:
       - typescript
@@ -44424,7 +44429,7 @@ snapshots:
 
   semver-diff@4.0.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.7.4
 
   semver@5.7.2: {}
 
@@ -44437,6 +44442,8 @@ snapshots:
   semver@7.7.2: {}
 
   semver@7.7.3: {}
+
+  semver@7.7.4: {}
 
   send@0.19.0:
     dependencies:
@@ -44578,7 +44585,7 @@ snapshots:
     dependencies:
       color: 4.2.3
       detect-libc: 2.1.2
-      semver: 7.7.3
+      semver: 7.7.4
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -44879,7 +44886,7 @@ snapshots:
       esbuild: 0.25.11
       esbuild-register: 3.6.0(esbuild@0.25.11)
       recast: 0.23.11
-      semver: 7.7.3
+      semver: 7.7.4
       ws: 8.19.0
     optionalDependencies:
       prettier: 3.7.4
@@ -45901,7 +45908,7 @@ snapshots:
       is-yarn-global: 0.4.1
       latest-version: 7.0.0
       pupa: 3.3.0
-      semver: 7.7.3
+      semver: 7.7.4
       semver-diff: 4.0.0
       xdg-basedir: 5.1.0
 
@@ -45916,7 +45923,7 @@ snapshots:
       is-npm: 6.1.0
       latest-version: 7.0.0
       pupa: 3.3.0
-      semver: 7.7.3
+      semver: 7.7.4
       semver-diff: 4.0.0
       xdg-basedir: 5.1.0
 
@@ -46323,7 +46330,7 @@ snapshots:
       jsonc-parser: 3.3.1
       regenerator-runtime: 0.13.11
       request-light: 0.7.0
-      semver: 7.7.3
+      semver: 7.7.4
       typescript: 5.9.3
       vscode-css-languageservice: 6.3.10
       vscode-html-languageservice: 5.6.2
