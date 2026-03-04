@@ -470,14 +470,15 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   const models = await harness.listAvailableModels();
 
   const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
-    if (ctx.authStorage?.isLoggedIn(oauthId)) return 'oauth';
-    if (hasEnv(provider)) return 'apikey';
+  const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
+    const cred = ctx.authStorage?.get(storageProviderId);
+    if (cred?.type === 'oauth') return 'oauth';
+    if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
     return false;
   };
   const access: ProviderAccess = {
-    anthropic: accessLevel('anthropic', 'anthropic'),
-    openai: accessLevel('openai', 'openai-codex'),
+    anthropic: accessLevel('anthropic'),
+    openai: accessLevel('openai-codex'),
     cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
     google: hasEnv('google') ? ('apikey' as const) : false,
     deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
