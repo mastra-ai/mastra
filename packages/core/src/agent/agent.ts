@@ -1979,10 +1979,10 @@ export class Agent<
   }
 
   /**
-   * Returns skill tools (skill-activate, skill-search, skill-read-*) when the
-   * workspace has skills configured. These are added at the Agent level (like
-   * workspace tools) rather than inside a processor, so execute functions survive
-   * serialization across tool-approval pauses.
+   * Returns skill tools (skill, skill_search, skill_read) when the workspace
+   * has skills configured. These are added at the Agent level (like workspace
+   * tools) rather than inside a processor, so they persist across turns and
+   * survive serialization across tool-approval pauses.
    * @internal
    */
   private async listSkillTools({
