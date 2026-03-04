@@ -161,6 +161,41 @@ describe('createSubagentTool requestContext forwarding', () => {
     });
   });
 
+  it('does not default maxSteps when stopWhen is configured', async () => {
+    const stopFn = vi.fn().mockReturnValue({ continue: true });
+    mockStream.mockResolvedValue(createMockStreamResponse('done'));
+
+    const subagentsWithStopWhen: HarnessSubagent[] = [
+      {
+        id: 'custom',
+        name: 'Custom',
+        description: 'Subagent with stopWhen.',
+        instructions: 'You are custom.',
+        tools: { view: { id: 'view' } as any },
+        stopWhen: stopFn,
+      },
+    ];
+
+    const tool = createSubagentTool({
+      subagents: subagentsWithStopWhen,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn() });
+
+    await (tool as any).execute(
+      { agentType: 'custom', task: 'Do stuff' },
+      { requestContext, agent: { toolCallId: 'tc-5' } },
+    );
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts.maxSteps).toBeUndefined();
+    expect(streamOpts.stopWhen).toBe(stopFn);
+  });
+
   it('forwards default RequestContext when parent context has no explicit requestContext', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 

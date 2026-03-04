@@ -154,6 +154,16 @@ defaultValue: "1.2 (when bufferTokens is set)",
 ]}
 />
 
+### Token estimate metadata cache
+
+OM persists token payload estimates so repeated counting can reuse prior tiktoken work.
+
+- Part-level cache: `part.providerMetadata.mastra`.
+- String-content fallback cache: message-level metadata when no parts exist.
+- Cache entries are ignored and recomputed if cache version/tokenizer source does not match.
+- Per-message and per-conversation overhead are always recomputed at runtime and are not cached.
+- `data-*` and `reasoning` parts are skipped and do not receive cache entries.
+
 ### Reflection config
 
 <PropertiesTable
