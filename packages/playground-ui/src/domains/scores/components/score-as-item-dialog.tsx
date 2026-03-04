@@ -35,11 +35,13 @@ export function ScoreAsItemDialog({ score, isOpen, onClose, level = 2 }: ScoreAs
 
   // Initialize form values when dialog opens with score data
   if (isOpen && score && !initialized) {
-    // input = the scorer's input context (what was being evaluated)
-    const scoreInput = { input: score.input, output: score.output };
+    // input = the full scorer.run() payload: { input, output, groundTruth }
+    // groundTruth from the original experiment is not available on ScoreRowData,
+    // so we omit it — user can add it manually in the editor
+    const scoreInput = { input: score.input, output: score.output, groundTruth: undefined };
     setInput(JSON.stringify(scoreInput, null, 2));
-    // ground truth is left empty — user fills in their expected { score, reason }
-    setGroundTruth('');
+    // ground truth = expected scorer result — pre-fill with actual score/reason so user can adjust
+    setGroundTruth(JSON.stringify({ score: score.score, reason: score.reason ?? null }, null, 2));
     setInitialized(true);
   }
 
