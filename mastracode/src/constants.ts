@@ -8,6 +8,10 @@ export const DEFAULT_CONFIG_DIR = '.mastracode';
  * Rejects absolute paths, path separators, and traversal components.
  */
 export function validateConfigDirName(configDirName: string): void {
+  if (configDirName.trim().length === 0) {
+    throw new Error('configDirName must be a non-empty directory name');
+  }
+
   if (
     path.isAbsolute(configDirName) ||
     configDirName.includes('/') ||
