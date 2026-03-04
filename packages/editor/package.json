@@ -36,6 +36,16 @@
         "types": "./dist/arcade.d.ts",
         "default": "./dist/arcade.cjs"
       }
+    },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.cjs"
+      }
     }
   },
   "files": [
@@ -43,8 +53,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -67,7 +77,7 @@
     "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.14.1",
+    "@hono/node-server": "^1.19.9",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -82,7 +92,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.7.1-0 <2.0.0-0",
     "@mastra/mcp": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
