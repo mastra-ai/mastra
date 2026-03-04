@@ -492,6 +492,21 @@ describe('LocalFilesystem', () => {
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
     });
 
+    it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
+      // Write a file via relative path
+      await localFs.writeFile('test.txt', 'relative content');
+
+      // Reading via absolute path /test.txt should NOT find the file at basePath/test.txt —
+      // it should throw PermissionError because /test.txt is a real absolute path outside basePath
+      await expect(localFs.readFile('/test.txt')).rejects.toThrow(PermissionError);
+    });
+
+    it('should resolve the same relative path consistently for read and write', async () => {
+      await localFs.writeFile('consistent.txt', 'written');
+      const content = await localFs.readFile('consistent.txt', { encoding: 'utf-8' });
+      expect(content).toBe('written');
+    });
+
     it('should allow access when containment is disabled', async () => {
       // Create a file in os.tmpdir() (parent of tempDir since tempDir is created via mkdtemp in tmpdir)
       const outsideFile = path.join(os.tmpdir(), 'outside-test.txt');
@@ -655,9 +670,8 @@ describe('LocalFilesystem', () => {
           contained: true,
         });
 
-        // Initially blocked — absolute path outside basePath gets treated as virtual,
-        // resolves to basePath/var/... which doesn't exist
-        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+        // Initially blocked — absolute path outside basePath throws PermissionError
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow(PermissionError);
 
         // Add allowedPath dynamically
         dynamicFs.setAllowedPaths([outsideDir]);
@@ -685,8 +699,8 @@ describe('LocalFilesystem', () => {
         // Remove allowed paths
         dynamicFs.setAllowedPaths([]);
 
-        // Now blocked — path no longer within any root, treated as virtual
-        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+        // Now blocked — path no longer within any root
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow(PermissionError);
       });
 
       it('should check exists() against allowedPaths', async () => {
