@@ -71,7 +71,7 @@ export function isProviderConnected(providerId: string, customProviders?: Record
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
 
   // First, try direct lookup in static registry
-  let provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+  let provider: ProviderConfig | undefined = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
 
   // If not found, check custom providers
   if (!provider && customProviders) {

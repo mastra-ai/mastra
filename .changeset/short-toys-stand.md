@@ -2,4 +2,5 @@
 '@mastra/server': patch
 ---
 
-fixes Studio UI not showing custom gateway models. The /agents/providers endpoint now fetches providers from custom gateways registered with the Mastra instance and merges them with the static registry.
+Fixed Studio so custom gateway models appear in the provider list.
+Improved /agents/providers API to include both built-in providers and providers from configured custom gateways.
