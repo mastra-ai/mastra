@@ -641,15 +641,45 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('new content');
       });
 
-      it('should block path traversal even with allowedPaths', async () => {
+      it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,
           contained: true,
           allowedPaths: [outsideDir],
         });
 
-        // Path traversal escapes all roots → PermissionError
         await expect(restrictedFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
+      });
+
+      it('should allow ../  that stays within an allowed path', async () => {
+        // Create a subdirectory with a file
+        await fs.mkdir(path.join(outsideDir, 'sub'), { recursive: true });
+        await fs.writeFile(path.join(outsideDir, 'sub', 'deep.txt'), 'deep content');
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Navigate into sub then back out, but still within outsideDir
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'sub', '..', 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should block ../ that escapes from allowed path to outside', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Try to escape outsideDir via ../
+        await expect(fsWithAllowed.readFile(path.join(outsideDir, '..', 'etc', 'passwd'))).rejects.toThrow(
+          PermissionError,
+        );
       });
 
       it('should still allow basePath access when allowedPaths are set', async () => {
@@ -678,6 +708,24 @@ describe('LocalFilesystem', () => {
 
         // Now accessible
         const content = await dynamicFs.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should allow ../ within dynamically added allowedPath', async () => {
+        await fs.mkdir(path.join(outsideDir, 'a'), { recursive: true });
+        await fs.writeFile(path.join(outsideDir, 'a', 'file.txt'), 'nested');
+
+        const dynamicFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+        });
+
+        dynamicFs.setAllowedPaths([outsideDir]);
+
+        // ../  that resolves back into outsideDir
+        const content = await dynamicFs.readFile(path.join(outsideDir, 'a', '..', 'external.txt'), {
           encoding: 'utf-8',
         });
         expect(content).toBe('external content');
