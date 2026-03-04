@@ -191,14 +191,18 @@ describe('getProvidersHandler', () => {
       resolveLanguageModel: vi.fn(),
     };
 
-    // Create a mock mastra instance with the custom gateway
-    const mockMastra = {
-      listGateways: () => ({ 'test-gateway': mockGateway }),
-    };
+    const mastra = new Mastra({
+      gateways: {
+        'test-gateway': mockGateway,
+      },
+    });
 
     process.env.CUSTOM_LLM_API_KEY = 'test-key';
 
-    const result = await GET_PROVIDERS_ROUTE.handler({ mastra: mockMastra as any });
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
 
     // Should include default providers from PROVIDER_REGISTRY
     const defaultProvider = result.providers.find(p => p.id === 'openai');

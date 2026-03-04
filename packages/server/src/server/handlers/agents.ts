@@ -2,8 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm/model/gateways/base';
-import type { SystemMessage } from '@mastra/core/llm';
+import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -1145,7 +1144,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   handler: async ({ mastra }) => {
     try {
       const allProviders: Record<string, ProviderConfig> = {};
-      
+
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
         allProviders[id] = provider;
       }
@@ -1153,18 +1152,14 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       if (mastra) {
         const customGateways = mastra.listGateways();
         if (customGateways) {
-          const gatewayList = Object.values(customGateways);
-          
-          if (gatewayList.length > 0) {
+          for (const gateway of Object.values(customGateways)) {
             try {
-              const { fetchProvidersFromGateways } = await import('@mastra/core/llm/model/registry-generator');
-              const { providers: customProviders } = await fetchProvidersFromGateways(gatewayList);
-              
+              const customProviders = await gateway.fetchProviders();
               for (const [providerId, config] of Object.entries(customProviders)) {
                 allProviders[providerId] = config;
               }
             } catch (error) {
-              console.warn('Failed to fetch providers from custom gateways:', error);
+              console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
             }
           }
         }
