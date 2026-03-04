@@ -26,8 +26,8 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
+  const showStoredAgentBadge = isCmsAvailable && isStoredAgent;
   const canWriteAgents = isCmsAvailable && canEdit('stored-agents');
-  const showStoredAgentBadge = canWriteAgents && isStoredAgent;
 
   const handleClone = async () => {
     const clonedAgent = await cloneAgent(agentId);
@@ -59,7 +59,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
           </TooltipTrigger>
           <TooltipContent>Copy Agent ID for use in code</TooltipContent>
         </Tooltip>
-        {showStoredAgentBadge && (
+        {canWriteAgents && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
@@ -68,7 +68,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
                 </Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Edit agent configuration</TooltipContent>
+            <TooltipContent>{isStoredAgent ? 'Edit agent configuration' : 'Edit agent overrides'}</TooltipContent>
           </Tooltip>
         )}
         {canWriteAgents && (
