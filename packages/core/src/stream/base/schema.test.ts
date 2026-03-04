@@ -16,17 +16,9 @@
  * ```
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { describe, it, expect } from 'vitest';
+import { z } from 'zod/v4';
 import { asJsonSchema } from './schema';
-
-// Mock zod to use zod/v4
-vi.mock('zod', async () => {
-  const zodV4 = await import('zod');
-  return {
-    z: zodV4.z,
-  };
-});
 
 describe('asJsonSchema - Zod v4 transform compatibility', () => {
   describe('should handle schemas with transforms', () => {

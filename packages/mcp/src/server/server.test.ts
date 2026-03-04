@@ -2715,11 +2715,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.message).toContain('Please fix the following errors');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toContain('Please fix the following errors');
     }
   });
@@ -2734,11 +2734,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.message).toMatch(/String must contain at least 3|at least 3 characters/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toContain('Message must be at least 3 characters');
     }
   });
@@ -2753,10 +2753,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
     }
   });
 
@@ -2773,11 +2773,11 @@ describe('MCPServer - Tool Input Validation', () => {
     expect(result).toBeDefined();
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.message).toMatch(/Invalid email|Invalid string/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toMatch(/Invalid email|Invalid string/i);
     }
   });
@@ -2796,11 +2796,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.message).toMatch(/Array must contain at least 1|Too small: expected array to have >=1 items/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toMatch(
         /Array must contain at least 1|Too small: expected array to have >=1 items/i,
       );
@@ -2821,10 +2821,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
     }
   });
 
@@ -2843,7 +2843,7 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       const errorText = result.message;
-      expect(errorText).toContain('Tool input validation failed');
+      expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toMatch(/tags: (Array must contain at least 1|Too small: expected array to have >=1 items)/i);
@@ -2851,7 +2851,7 @@ describe('MCPServer - Tool Input Validation', () => {
     } else {
       expect(result.isError).toBe(true);
       const errorText = result.content[0].text;
-      expect(errorText).toContain('Tool input validation failed');
+      expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toMatch(/tags: (Array must contain at least 1|Too small: expected array to have >=1 items)/i);
@@ -2874,7 +2874,7 @@ describe('MCPServer - Tool Input Validation', () => {
 
     // executeTool returns client-side validation format
     expect(invalidResult.error).toBe(true);
-    expect(invalidResult.message).toContain('Tool input validation failed');
+    expect(invalidResult.message).toMatch(/Tool(?: input)? validation failed/i);
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
   });
 });

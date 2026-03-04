@@ -8,6 +8,7 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
@@ -74,8 +75,7 @@ export class CoreToolBuilder extends MastraBase {
       // TODO FIGURE OUT standard schema handling here
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-          // .default(null),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -618,13 +618,11 @@ export class CoreToolBuilder extends MastraBase {
     // Find the first applicable compatibility layer
     const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
     if (isStandardSchemaWithJSON(originalSchema)) {
-      if (applicableLayer) {
-        processedInputSchema = applicableLayer.toJSONSchema(originalSchema as any);
-      } else {
-        processedInputSchema = standardSchemaToJSONSchema(originalSchema, { io: 'output' });
-      }
+      const inputJsonSchema = applicableLayer
+        ? applicableLayer.toJSONSchema(originalSchema as any)
+        : standardSchemaToJSONSchema(originalSchema, { io: 'input' });
 
-      processedInputSchema = toStandardSchema(processedInputSchema);
+      processedInputSchema = jsonSchema(inputJsonSchema);
     } else {
       if (applicableLayer && originalSchema) {
         // Get the transformed Zod schema (with constraints removed/modified)

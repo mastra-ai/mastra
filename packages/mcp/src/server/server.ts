@@ -1930,23 +1930,42 @@ export class MCPServer extends MCPServerBase {
 
       this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
 
-      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-        const validation = tool.parameters.safeParse(args ?? {});
-        if (!validation.success) {
-          const errorMessages = validation.error.issues
-            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      const paramsSchema = tool.parameters as {
+        validate?: (value: unknown) => any;
+        safeParse?: (value: unknown) => any;
+      };
+
+      const validation =
+        typeof paramsSchema?.validate === 'function'
+          ? paramsSchema.validate(args ?? {})
+          : typeof paramsSchema?.safeParse === 'function'
+            ? paramsSchema.safeParse(args ?? {})
+            : null;
+
+      if (validation) {
+        const success = typeof validation.success === 'boolean' ? validation.success : !validation.issues?.length;
+
+        if (!success) {
+          const issues = validation.error?.issues ?? validation.error?.errors ?? validation.issues ?? [];
+          const errorMessages = issues
+            .map(
+              (e: { path?: (string | number)[]; message: string }) => `- ${e.path?.join('.') || 'root'}: ${e.message}`,
+            )
             .join('\n');
+          const validationErrors = validation.error?.format?.() ?? validation.error ?? validation.issues;
+
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
-            errors: validation.error.format(),
+            errors: validationErrors,
           });
           // Return validation error as a result instead of throwing
           return {
             error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
-            validationErrors: validation.error.format(),
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors,
           };
         }
-        validatedArgs = validation.data;
+
+        validatedArgs = validation.data ?? validation.value ?? args;
       } else {
         this.logger.debug(
           `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,

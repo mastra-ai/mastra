@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
-import { applyOpenAICompatTransforms } from '@mastra/schema-compat';
+import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -3833,12 +3833,14 @@ export class Agent<
           supportsStructuredOutputs: false, // Set to false to enable transform
         };
 
+        const compatLayers = [new OpenAIReasoningSchemaCompatLayer(modelInfo), new OpenAISchemaCompatLayer(modelInfo)];
         // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
         // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
-        options.structuredOutput.schema = applyOpenAICompatTransforms(
-          options.structuredOutput.schema,
-          modelInfo,
-        ) as typeof options.structuredOutput.schema;
+        options.structuredOutput.schema = applyCompatLayer({
+          schema: options.structuredOutput.schema,
+          compatLayers,
+          mode: 'jsonSchema',
+        });
       }
     }
 

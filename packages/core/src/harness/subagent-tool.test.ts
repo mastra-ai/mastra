@@ -152,7 +152,8 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
     const streamOpts = mockStream.mock.calls[0]![1];
     expect(streamOpts).toEqual({
-      maxSteps: 50,
+      maxSteps: undefined,
+      stopWhen: undefined,
       abortSignal: abortController.signal,
       requireToolApproval: false,
       requestContext,

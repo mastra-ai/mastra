@@ -39,8 +39,8 @@ export type CoreTool = {
   id?: string | undefined;
   description?: string | undefined;
   outputSchema?: any;
-  execute?: z.core.$InferOuterFunctionType<z.core.$ZodFunctionArgs, z.core.$ZodFunctionOut> | undefined;
-  toModelOutput?: z.core.$InferOuterFunctionType<z.core.$ZodFunctionArgs, z.core.$ZodFunctionOut> | undefined;
+  execute?: (inputData: any, context: any) => any;
+  toModelOutput?: (output: any) => any;
   type?: 'function' | 'provider-defined' | undefined;
   args?: Record<string, any> | undefined;
 };
