@@ -145,17 +145,23 @@ describe('stateless skill tool behavior', () => {
       });
 
       const result = await agent.stream('Activate find-skills');
-      for await (const _ of result.fullStream) {
-        // consume
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        chunks.push(chunk);
       }
 
-      // Step 0 should have <available_skills> but NO <activated_skills>
+      // The skill tool result should contain the full instructions
+      const toolResultChunk = chunks.find(c => c.type === 'tool-result');
+      expect(toolResultChunk).toBeDefined();
+      expect(toolResultChunk.payload.toolName).toBe('skill');
+      expect(toolResultChunk.payload.result).toContain(mockSkill.instructions);
+
+      // System messages should have <available_skills> but never <activated_skills>
       expect(capturedPrompts.length).toBeGreaterThanOrEqual(2);
       const step0System = getSystemMessageContent(capturedPrompts[0]);
       expect(step0System).toContain('available_skills');
       expect(step0System).not.toContain('activated_skills');
 
-      // Step 1 should also NOT have <activated_skills> (stateless design)
       const step1System = getSystemMessageContent(capturedPrompts[1]);
       expect(step1System).not.toContain('activated_skills');
     });
