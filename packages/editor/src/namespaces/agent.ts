@@ -215,7 +215,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---
-    if (storedConfig.tools !== undefined && storedConfig.tools !== null) {
+    const hasStoredTools = storedConfig.tools != null;
+    const hasStoredMCPClients = storedConfig.mcpClients != null;
+    const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+
+    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
