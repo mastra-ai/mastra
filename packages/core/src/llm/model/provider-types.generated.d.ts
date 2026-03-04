@@ -273,6 +273,23 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
   ];
+  readonly 'perplexity-agent': readonly [
+    'anthropic/claude-haiku-4-5',
+    'anthropic/claude-opus-4-5',
+    'anthropic/claude-opus-4-6',
+    'anthropic/claude-sonnet-4-5',
+    'anthropic/claude-sonnet-4-6',
+    'google/gemini-2.5-flash',
+    'google/gemini-2.5-pro',
+    'google/gemini-3-flash-preview',
+    'google/gemini-3-pro-preview',
+    'google/gemini-3.1-pro-preview',
+    'openai/gpt-5-mini',
+    'openai/gpt-5.1',
+    'openai/gpt-5.2',
+    'perplexity/sonar',
+    'xai/grok-4-1-fast-non-reasoning',
+  ];
   readonly xiaomi: readonly ['mimo-v2-flash'];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
@@ -2693,6 +2710,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-codex',
     'openai/gpt-5.2-pro',
     'openai/gpt-5.2-pro-2025-12-11',
+    'openai/gpt-5.3-chat-latest',
     'openai/gpt-5.3-codex',
     'openai/o3',
     'openai/o3-mini',

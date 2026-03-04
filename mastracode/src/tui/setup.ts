@@ -65,7 +65,30 @@ export function setupKeyboardShortcuts(
     }
   });
 
-  // Ctrl+Z - undo last clear (restore editor text)
+  // Ctrl+Z - suspend process (SIGTSTP)
+  state.editor.onAction('suspend', () => {
+    if (process.platform === 'win32') {
+      showInfo(state, 'Suspend is not supported on Windows');
+      return;
+    }
+
+    state.ui.stop();
+    const onContinue = () => {
+      state.ui.start();
+      state.ui.requestRender();
+    };
+    process.once('SIGCONT', onContinue);
+    try {
+      process.kill(process.pid, 'SIGTSTP');
+    } catch {
+      process.off('SIGCONT', onContinue);
+      state.ui.start();
+      state.ui.requestRender();
+      showError(state, 'Unable to suspend in the current terminal');
+    }
+  });
+
+  // Alt+Z - undo last clear (restore editor text)
   state.editor.onAction('undo', () => {
     if (state.lastClearedText && state.editor.getText().length === 0) {
       state.editor.setText(state.lastClearedText);
@@ -278,6 +301,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'update', description: 'Check for and install updates' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
