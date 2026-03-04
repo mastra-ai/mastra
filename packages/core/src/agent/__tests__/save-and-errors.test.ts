@@ -982,6 +982,87 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           expect(onErrorArg).toBeInstanceOf(Error);
           expect((onErrorArg as Error).message).toBe('Error with stop finish');
         });
+
+        it('should throw in resumeGenerate when model errors after resume', async () => {
+          const { Mastra } = await import('../../mastra');
+          const { InMemoryStore } = await import('../../storage');
+
+          const resumeError = new Error('Model failed after resume');
+          let generateCallCount = 0;
+
+          const suspendingTool = createTool({
+            id: 'suspend-tool',
+            description: 'A tool that suspends',
+            inputSchema: z.object({ input: z.string() }),
+            suspendSchema: z.object({ message: z.string() }),
+            resumeSchema: z.object({ data: z.string() }),
+            execute: async (_input, context) => {
+              if (!context?.agent?.resumeData) {
+                return await context?.agent?.suspend({ message: 'Need input' });
+              }
+              return { result: context.agent.resumeData.data };
+            },
+          });
+
+          const model = new MockLanguageModelV2({
+            doGenerate: async () => {
+              generateCallCount++;
+              if (generateCallCount === 1) {
+                // First call: trigger tool suspension
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  content: [
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'tc-1',
+                      toolName: 'suspendTool',
+                      input: '{"input": "test"}',
+                    },
+                  ],
+                  finishReason: 'tool-calls' as const,
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  warnings: [],
+                };
+              }
+              // After resume, model fails
+              throw resumeError;
+            },
+          });
+
+          const storage = new InMemoryStore();
+
+          const agent = new Agent({
+            id: 'test-resume-error',
+            name: 'Test Resume Error',
+            model,
+            instructions: 'You are a helpful assistant.',
+            tools: { suspendTool: suspendingTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { testResumeError: agent },
+            storage,
+            logger: false,
+          });
+
+          const registeredAgent = mastra.getAgent('testResumeError');
+
+          // First call suspends
+          const output = await registeredAgent.generate('test', {
+            maxSteps: 2,
+            modelSettings: { maxRetries: 0 },
+          });
+
+          expect(output.finishReason).toBe('suspended');
+
+          // Resume should throw because model errors after tool result
+          await expect(
+            registeredAgent.resumeGenerate(
+              { data: 'resumed' },
+              { runId: output.runId!, modelSettings: { maxRetries: 0 } },
+            ),
+          ).rejects.toThrow();
+        });
       });
 
       // Helper to create a model that calls a tool which will throw during execution
