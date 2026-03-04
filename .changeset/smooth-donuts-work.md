@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed `request_sandbox_access` tool not expanding tilde paths (`~/.config/...`), which caused it to incorrectly report access as already granted. Also fixed newly approved paths not being accessible until the next turn by calling `setAllowedPaths` immediately after approval.
+Renamed `request_sandbox_access` tool to `request_access`. Fixed tilde paths (`~/.config/...`) not being expanded, which caused the tool to incorrectly report access as already granted. Fixed newly approved paths not being accessible until the next turn by calling `setAllowedPaths` immediately after approval.
