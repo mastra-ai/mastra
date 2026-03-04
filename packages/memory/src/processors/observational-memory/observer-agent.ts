@@ -240,6 +240,10 @@ Group related observations (like tool sequences) by indenting:
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
+* 🔴 (14:36) Agent completed auth issue fix; tests passing
+
+After a grouped sub-item sequence, add a NEW top-level completion observation when work is finished.
+Make completions prominent and explicit (done/finished/completed), not implied.
 
 Group observations by date, then list each with 24-hour time.
 
@@ -278,6 +282,7 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - Add 1 to 5 observations per exchange
 - Use terse language to save tokens. Sentences should be dense without unnecessary words
 - Do not add repetitive observations that have already been observed. Group repeated similar actions (tool calls, file browsing) under a single parent with sub-bullets for new results
+- When a grouped sequence reaches completion, add a separate top-level completion observation immediately after the sub-bullets
 - If the agent calls tools, observe what was called, why, and what was learned
 - When observing files with line numbers, include the line number if useful
 - If the agent provides a detailed response, observe the contents so it could be repeated
@@ -345,6 +350,9 @@ Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context, user messages
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
+
+For grouped tool/action sequences, use indented sub-bullets under one parent observation, then add a NEW top-level completion observation when the work is finished.
+Make completions prominent and explicit (done/finished/completed), not implied.
 
 === GUIDELINES ===
 
