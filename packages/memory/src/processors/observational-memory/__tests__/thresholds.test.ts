@@ -152,6 +152,14 @@ describe('thresholds', () => {
     it('ratio of 0.0 means full retention', () => {
       expect(resolveRetentionFloor(0.0, 30000)).toBe(30000);
     });
+
+    it('clamps negative ratio to 0', () => {
+      expect(resolveRetentionFloor(-0.5, 30000)).toBe(30000);
+    });
+
+    it('clamps ratio > 1 to 1', () => {
+      expect(resolveRetentionFloor(1.5, 30000)).toBe(0);
+    });
   });
 
   describe('resolveActivationRatio', () => {
@@ -175,11 +183,26 @@ describe('thresholds', () => {
       // 30000 / 30000 = 1, 1 - 1 = 0
       expect(resolveActivationRatio(30000, 30000)).toBe(0);
     });
+
+    it('clamps negative ratio to 0', () => {
+      expect(resolveActivationRatio(-0.5, 30000)).toBe(0);
+    });
+
+    it('clamps ratio > 1 to 1', () => {
+      expect(resolveActivationRatio(1.5, 30000)).toBe(1);
+    });
   });
 
   describe('calculateProjectedMessageRemoval', () => {
     it('returns 0 for empty chunks', () => {
       expect(calculateProjectedMessageRemoval([], 0.7, 30000, 25000)).toBe(0);
+    });
+
+    it('returns 0 when already within retention floor', () => {
+      // retentionFloor = 30000 * (1 - 0.7) = 9000
+      // pendingTokens 5000 < retentionFloor → target = 0 → short-circuit
+      const chunks = [makeChunk(5000), makeChunk(5000)];
+      expect(calculateProjectedMessageRemoval(chunks, 0.7, 30000, 5000)).toBe(0);
     });
 
     it('selects the best over-boundary when within safeguards', () => {

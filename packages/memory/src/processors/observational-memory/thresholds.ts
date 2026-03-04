@@ -59,8 +59,7 @@ export function resolveBufferTokens(
   if (bufferTokens === false) return undefined;
   if (bufferTokens === undefined) return undefined;
   if (bufferTokens > 0 && bufferTokens < 1) {
-    const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
-    return Math.round(threshold * bufferTokens);
+    return Math.round(getMaxThreshold(messageTokens) * bufferTokens);
   }
   return bufferTokens;
 }
@@ -81,8 +80,7 @@ export function resolveBlockAfter(
   // e.g. blockAfter: 1.5 means 1.5x the threshold. blockAfter: 1 means exactly at threshold.
   // Values >= 100 are treated as absolute token counts.
   if (blockAfter >= 1 && blockAfter < 100) {
-    const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
-    return Math.round(threshold * blockAfter);
+    return Math.round(getMaxThreshold(messageTokens) * blockAfter);
   }
   return blockAfter;
 }
@@ -94,7 +92,8 @@ export function resolveBlockAfter(
  */
 export function resolveRetentionFloor(bufferActivation: number, messageTokensThreshold: number): number {
   if (bufferActivation >= 1000) return bufferActivation;
-  return messageTokensThreshold * (1 - bufferActivation);
+  const ratio = Math.max(0, Math.min(1, bufferActivation));
+  return messageTokensThreshold * (1 - ratio);
 }
 
 /**
@@ -106,7 +105,7 @@ export function resolveActivationRatio(bufferActivation: number, messageTokensTh
   if (bufferActivation >= 1000) {
     return Math.max(0, Math.min(1, 1 - bufferActivation / messageTokensThreshold));
   }
-  return bufferActivation;
+  return Math.max(0, Math.min(1, bufferActivation));
 }
 
 /**
@@ -123,6 +122,9 @@ export function calculateProjectedMessageRemoval(
 
   const retentionFloor = resolveRetentionFloor(bufferActivation, messageTokensThreshold);
   const targetMessageTokens = Math.max(0, currentPendingTokens - retentionFloor);
+
+  // Already within retention floor — no removal needed
+  if (targetMessageTokens === 0) return 0;
 
   // Find the closest chunk boundary to the target, biased over (prefer removing
   // slightly more than the target so remaining context lands at or below retentionFloor).
