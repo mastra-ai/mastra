@@ -39,7 +39,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       title: 'Run Your First Agent',
       durationMin: 5,
       status: 'published',
-      youtubeId: 'KlBzeoU33iU',
+      youtubeId: 'RaqlPrGBscw',
       module: 'Agents',
       preview: {
         intro:
@@ -124,7 +124,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       title: 'Build with AI',
       durationMin: 3,
       status: 'published',
-      youtubeId: 'AXdVW5chxiA',
+      youtubeId: 'PBtct9tG19k',
       module: 'Tools',
       preview: {
         intro:
