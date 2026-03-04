@@ -820,16 +820,16 @@ export class MessageList {
         }
       }
     }
-    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    // Use MessageMerger to handle the complex merge logic
+
+    const replacementTarget = shouldReplace ? this.messages.find(m => m.id === id) : undefined;
+    const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
+
+    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results.
+    // But if this message is targeting a sealed ID, skip merge so sealed split/remint logic can run deterministically.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
-    const shouldMerge = MessageMerger.shouldMerge(
-      latestMessage,
-      messageV2,
-      messageSource,
-      isLatestFromMemory,
-      this._agentNetworkAppend,
-    );
+    const shouldMerge =
+      !hasSealedReplacementTarget &&
+      MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
@@ -895,6 +895,12 @@ export class MessageList {
             messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
             // Replace the parts with only the new ones
             messageV2.content.parts = newParts;
+            // Preserve how many leading parts belong to the observed sealed prefix.
+            // If later snapshots with the same original ID get merged into this reminted
+            // message, merge logic can skip that observed prefix deterministically.
+            const metadata = (messageV2.content.metadata ??= {} as any);
+            const mastraMetadata = ((metadata as any).mastra ??= {});
+            mastraMetadata.remintObservedPrefixPartCount = sealedPartCount;
             // Ensure the new message has a timestamp after the sealed message
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);

@@ -83,11 +83,21 @@ export class MessageMerger {
     // Update timestamp
     latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
 
+    const remintObservedPrefixPartCount =
+      (latestMessage.content.metadata as { mastra?: { remintObservedPrefixPartCount?: number } } | undefined)?.mastra
+        ?.remintObservedPrefixPartCount ?? 0;
+    const incomingParts =
+      remintObservedPrefixPartCount > 0
+        ? incomingMessage.content.parts.slice(
+            Math.min(remintObservedPrefixPartCount, incomingMessage.content.parts.length),
+          )
+        : incomingMessage.content.parts;
+
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
     const partsToAdd = new Map<number, MastraMessageContentV2['parts'][number]>();
 
-    for (const [index, part] of incomingMessage.content.parts.entries()) {
+    for (const [index, part] of incomingParts.entries()) {
       // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
       if (part.type === 'tool-invocation') {
         const existingCallPart = [...latestMessage.content.parts]
