@@ -146,22 +146,15 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         return `File "${path}" not found in skill "${skillName}".${fileList}`;
       }
 
-      // Buffer — try utf-8 first (text assets), fall back to metadata for true binary
-      if (typeof content !== 'string') {
-        try {
-          const textContent = content.toString('utf-8');
-          if (!textContent.slice(0, 1000).includes('\0')) {
-            content = textContent;
-          }
-        } catch {
-          // fall through
-        }
-        if (typeof content !== 'string') {
-          const skill = await skills.get(skillName);
-          const fullPath = skill ? `${skill.path}/${path}` : path;
-          return `Binary file: ${fullPath} (${content.length} bytes)`;
-        }
+      // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
+      const textContent = typeof content === 'string' ? content : content.toString('utf-8');
+      if (textContent.slice(0, 1000).includes('\0')) {
+        const skill = await skills.get(skillName);
+        const fullPath = skill ? `${skill.path}/${path}` : path;
+        const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
+        return `Binary file: ${fullPath} (${size} bytes)`;
       }
+      content = textContent;
 
       const result = extractLines(content, startLine, endLine);
       return result.content;

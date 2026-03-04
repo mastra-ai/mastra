@@ -1,8 +1,0 @@
----
-name: {{skill-name}}
-description: {{description}}
-license: Apache-2.0
-metadata:
-  author: {{author}}
-  version: "1.0"
----
