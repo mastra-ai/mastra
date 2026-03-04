@@ -26,7 +26,13 @@ export default async function setup() {
     // Ignore errors during cleanup
   }
 
-  // Trigger model download by calling the embedder once
-  const { fastembed } = await import('@mastra/fastembed');
-  await fastembed.small.doEmbed({ values: ['warmup'] });
+  // Run the warmup in a subprocess so the ONNX runtime handle
+  // dies with the subprocess and doesn't keep vitest alive.
+  await $`node -e ${`
+    async function warmup() {
+      const { fastembed } = await import('@mastra/fastembed');
+      await fastembed.small.doEmbed({ values: ['warmup'] });
+    }
+    warmup().catch(() => process.exit(1));
+  `}`;
 }
