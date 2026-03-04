@@ -86,8 +86,9 @@ async function executeToolCallAndRespond<OUTPUT>({
         });
 
         // Build updated messages from the response, adding the tool result
-        // Do NOT re-include the original user message to avoid storage duplicates
-        const updatedMessages = [
+        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+        // When no threadId (stateless), include full conversation history for context
+        const newMessages = [
           ...(response.response.messages || []),
           {
             role: 'tool',
@@ -100,9 +101,13 @@ async function executeToolCallAndRespond<OUTPUT>({
               },
             ],
           },
-        ] as MessageListInput;
+        ];
 
-        return respondFn(updatedMessages, params);
+        const updatedMessages = threadId
+          ? newMessages
+          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
+
+        return respondFn(updatedMessages as MessageListInput, params);
       }
     }
   }
@@ -1124,6 +1129,12 @@ export class Agent extends BaseResource {
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
   ) {
+    // Extract threadId from memory config if present (matching generate() behavior)
+    const { memory } = processedParams ?? {};
+    const { resource, thread } = memory ?? {};
+    const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId = processedParams.resourceId ?? resource;
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
@@ -1208,8 +1219,8 @@ export class Agent extends BaseResource {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
-                    threadId: processedParams.threadId,
-                    resourceId: processedParams.resourceId,
+                    threadId,
+                    resourceId,
                   },
                 });
 
@@ -1240,9 +1251,14 @@ export class Agent extends BaseResource {
                 }
 
                 // Build updated messages for the recursive call
-                // Do NOT re-include the original messages to avoid storage duplicates
-                const updatedMessages =
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing
@@ -1677,6 +1693,12 @@ export class Agent extends BaseResource {
    * Processes the stream response and handles tool calls
    */
   private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
+    // Extract threadId from memory config if present (matching generate() behavior)
+    const { memory } = processedParams ?? {};
+    const { resource, thread } = memory ?? {};
+    const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId = processedParams.resourceId ?? resource;
+
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
@@ -1738,8 +1760,8 @@ export class Agent extends BaseResource {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
-                    threadId: processedParams.threadId,
-                    resourceId: processedParams.resourceId,
+                    threadId,
+                    resourceId,
                   },
                 });
 
@@ -1785,11 +1807,19 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
+                // Build updated messages for the recursive call
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
                 // Recursively call stream with updated messages
                 this.processStreamResponseLegacy(
                   {
                     ...processedParams,
-                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: updatedMessages,
                   },
                   writable,
                 ).catch(error => {

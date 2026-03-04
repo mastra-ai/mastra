@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@blaxel/core": "^0.2.64"
+    "@blaxel/core": "^0.2.66"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
