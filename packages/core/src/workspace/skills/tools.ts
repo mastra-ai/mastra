@@ -56,7 +56,7 @@ function createSkillTool(skills: WorkspaceSkills) {
         return `Skill "${name}" not found. Available skills: ${skillNames.join(', ')}`;
       }
 
-      const parts = [`# Skill: ${skill.name}\n\n${skill.instructions}`];
+      const parts = [skill.instructions];
 
       if (skill.references?.length) {
         parts.push(`\n\n## References\n${skill.references.map(r => `- ${r}`).join('\n')}`);
@@ -146,9 +146,21 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         return `File "${path}" not found in skill "${skillName}".${fileList}`;
       }
 
-      // Buffer means binary (e.g. images) — return as base64
+      // Buffer — try utf-8 first (text assets), fall back to metadata for true binary
       if (typeof content !== 'string') {
-        return `[base64 encoded]\n${content.toString('base64')}`;
+        try {
+          const textContent = content.toString('utf-8');
+          if (!textContent.slice(0, 1000).includes('\0')) {
+            content = textContent;
+          }
+        } catch {
+          // fall through
+        }
+        if (typeof content !== 'string') {
+          const skill = await skills.get(skillName);
+          const fullPath = skill ? `${skill.path}/${path}` : path;
+          return `Binary file: ${fullPath} (${content.length} bytes)`;
+        }
       }
 
       const result = extractLines(content, startLine, endLine);
