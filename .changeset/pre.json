@@ -117,5 +117,7 @@
     "@mastra/gcs": "0.1.1",
     "@mastra/s3": "0.2.1"
   },
-  "changesets": []
+  "changesets": [
+    "dry-suns-mate"
+  ]
 }
