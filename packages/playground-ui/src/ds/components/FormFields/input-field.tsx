@@ -2,12 +2,8 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { TriangleAlertIcon } from 'lucide-react';
 import * as React from 'react';
-import {
-  formElementSizes,
-  formElementFocus,
-  formElementRadius,
-  type FormElementSize,
-} from '@/ds/primitives/form-element';
+import { type FormElementSize } from '@/ds/primitives/form-element';
+import { Input } from '../Input';
 
 export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   name?: string;
@@ -24,12 +20,12 @@ export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 
   variant?: 'default' | 'experimental';
 };
 
-const inputFieldSizeClasses = {
-  sm: `${formElementSizes.sm} px-2`,
-  md: `${formElementSizes.md} px-3`,
-  lg: `${formElementSizes.lg} px-3 py-2`,
-  default: `${formElementSizes.default} px-3`,
-};
+// const inputFieldSizeClasses = {
+//   sm: `${formElementSizes.sm} px-2`,
+//   md: `${formElementSizes.md} px-3`,
+//   lg: `${formElementSizes.lg} px-3 py-2`,
+//   default: `${formElementSizes.default} px-3`,
+// };
 
 export function InputField({
   name,
@@ -51,8 +47,6 @@ export function InputField({
     return labelIsHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
   };
 
-  const isExperimentalVariant = variant === 'experimental';
-
   return (
     <div
       className={cn(
@@ -71,25 +65,25 @@ export function InputField({
         </label>
       </LabelWrapper>
 
-      <input
+      <Input
         id={`input-${name}`}
         name={name}
         value={value}
         autoComplete="off"
-        className={cn(
-          'flex grow items-center cursor-pointer text-ui-md leading-none',
-          inputFieldSizeClasses[size],
-          isExperimentalVariant
-            ? 'text-neutral4 leading-[10] ring-2 ring-inset ring-white/20 bg-surface2 hover:ring-white/30 focus-visible:ring-accent1/60 px-[1em] rounded-lg transition-colors duration-200 ease-out-custom [&:-webkit-autofill]:bg-surface2'
-            : 'text-neutral5 border border-border1 bg-transparent w-full',
-          isExperimentalVariant ? 'focus-visible:outline-none' : formElementFocus,
-          isExperimentalVariant ? '' : formElementRadius,
-          isExperimentalVariant ? 'placeholder:text-neutral2' : 'placeholder:text-neutral3 placeholder:text-ui-sm',
-          {
-            'cursor-not-allowed opacity-50': disabled,
-            'border-red-800 focus:border-border1': !isExperimentalVariant && (error || errorMsg),
-          },
-        )}
+        // className={cn(
+        //   'flex grow items-center cursor-pointer text-ui-md leading-none',
+        //   inputFieldSizeClasses[size],
+        //   isExperimentalVariant
+        //     ? 'text-neutral4 leading-[10] ring-2 ring-inset ring-white/20 bg-surface2 hover:ring-white/30 focus-visible:ring-accent1/60 px-[1em] rounded-lg transition-colors duration-200 ease-out-custom [&:-webkit-autofill]:bg-surface2'
+        //     : 'text-neutral5 border border-border1 bg-transparent w-full',
+        //   isExperimentalVariant ? 'focus-visible:outline-none' : formElementFocus,
+        //   isExperimentalVariant ? '' : formElementRadius,
+        //   isExperimentalVariant ? 'placeholder:text-neutral2' : 'placeholder:text-neutral3 placeholder:text-ui-sm',
+        //   {
+        //     'cursor-not-allowed opacity-50': disabled,
+        //     'border-red-800 focus:border-border1': !isExperimentalVariant && (error || errorMsg),
+        //   },
+        // )}
         data-testid={testId}
         //  style={{ lineHeight: '10' }}
         {...props}

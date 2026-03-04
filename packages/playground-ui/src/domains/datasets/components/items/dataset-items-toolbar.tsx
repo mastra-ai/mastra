@@ -43,7 +43,7 @@ function ActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button variant="standard" size="default" aria-label="Actions menu">
+        <Button aria-label="Actions menu">
           Select <AmpersandIcon />
         </Button>
       </DropdownMenu.Trigger>
@@ -178,8 +178,7 @@ export function DatasetItemsToolbar({
           </Tooltip>
           <ButtonsGroup>
             <Button
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
               onClick={onExecuteAction}
             >
@@ -190,9 +189,7 @@ export function DatasetItemsToolbar({
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
             </Button>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </Column.Toolbar>
@@ -215,12 +212,12 @@ export function DatasetItemsToolbar({
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button variant="standard" size="default" onClick={onAddClick}>
+            <Button onClick={onAddClick}>
               <Plus /> Add Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="standard" size="default" aria-label="Dataset actions menu">
+                <Button aria-label="Dataset actions menu">
                   <ChevronDownIcon />
                 </Button>
               </DropdownMenu.Trigger>
@@ -248,7 +245,7 @@ export function DatasetItemsToolbar({
         )}
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button variant="standard" size="default" onClick={onVersionsClick} aria-label="View versions">
+          <Button onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>

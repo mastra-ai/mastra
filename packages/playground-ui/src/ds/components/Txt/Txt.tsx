@@ -19,6 +19,7 @@ const variants = {
   'ui-md': 'text-ui-md leading-ui-md',
   'ui-lg': 'text-ui-lg leading-ui-lg',
   // Header sizes
+  'header-xs': 'text-header-xs leading-header-xs',
   'header-sm': 'text-header-sm leading-header-sm',
   'header-md': 'text-header-md leading-header-md',
   'header-lg': 'text-header-lg leading-header-lg',

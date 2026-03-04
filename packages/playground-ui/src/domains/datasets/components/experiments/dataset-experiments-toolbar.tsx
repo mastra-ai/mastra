@@ -4,7 +4,6 @@ import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { SelectField } from '@/ds/components/FormFields';
-import { Icon } from '@/ds/icons/Icon';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
@@ -61,13 +60,11 @@ export function DatasetExperimentsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="cta" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
+            <Button variant="primary" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
               <GitCompare className="w-4 h-4" />
               Compare Experiments
             </Button>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </div>
@@ -84,8 +81,6 @@ export function DatasetExperimentsToolbar({
           options={STATUS_OPTIONS}
           value={filters.status ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, status: v === 'all' ? undefined : v })}
-          variant="experimental"
-          size="default"
         />
 
         <SelectField
@@ -95,8 +90,6 @@ export function DatasetExperimentsToolbar({
           options={TARGET_TYPE_OPTIONS}
           value={filters.targetType ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, targetType: v === 'all' ? undefined : v })}
-          variant="experimental"
-          size="default"
         />
 
         {targetIds.length > 0 && (
@@ -107,24 +100,20 @@ export function DatasetExperimentsToolbar({
             options={targetIdOptions}
             value={filters.targetId ?? 'all'}
             onValueChange={v => onFiltersChange({ ...filters, targetId: v === 'all' ? undefined : v })}
-            variant="experimental"
-            size="default"
           />
         )}
 
         {(filters.status || filters.targetType || filters.targetId) && (
-          <Button variant="standard" size="default" onClick={() => onFiltersChange({})}>
-            <Icon>
-              <XIcon />
-            </Icon>
+          <Button onClick={() => onFiltersChange({})}>
+            <XIcon />
             Reset
           </Button>
         )}
       </ButtonsGroup>
 
       {hasExperiments && (
-        <Button variant="standard" size="default" onClick={onCompareClick}>
-          <GitCompare className="w-4 h-4" />
+        <Button onClick={onCompareClick}>
+          <GitCompare />
           Compare
         </Button>
       )}

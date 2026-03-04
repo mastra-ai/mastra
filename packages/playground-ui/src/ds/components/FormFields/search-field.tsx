@@ -24,7 +24,6 @@ export function SearchField({ onReset, variant, ...props }: SearchFieldProps) {
             <Button
               type="button"
               onClick={onReset}
-              variant="standard"
               size="sm"
               className="absolute top-[50%] translate-y-[-50%] rounded-none right-[2px] w-[2rem] h-[calc(100%-4px)] px-0"
               aria-label="Clear"

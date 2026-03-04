@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Fragment } from 'react';
+import { Button } from '../Button/Button';
 import { Input } from './input';
 
 const meta: Meta<typeof Input> = {
@@ -37,33 +39,54 @@ export const Default: Story = {
   },
 };
 
-export const Filled: Story = {
-  args: {
-    placeholder: 'Filled variant',
-    variant: 'filled',
-  },
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-64">
+      <Input variant="default" placeholder="Default" />
+      {/* <Input variant="filled" placeholder="Filled" /> */}
+      <Input variant="unstyled" placeholder="Unstyled" />
+    </div>
+  ),
 };
 
-export const Unstyled: Story = {
-  args: {
-    placeholder: 'Unstyled variant',
-    variant: 'unstyled',
-  },
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-64">
+      <Input size="sm" placeholder="Small" />
+      <Input size="md" placeholder="Medium" />
+      <Input size="default" placeholder="Default" />
+      <Input size="lg" placeholder="Large" />
+    </div>
+  ),
 };
 
-export const Small: Story = {
-  args: {
-    placeholder: 'Small input',
-    size: 'sm',
-  },
-};
+// export const Filled: Story = {
+//   args: {
+//     placeholder: 'Filled variant',
+//     variant: 'filled',
+//   },
+// };
 
-export const Large: Story = {
-  args: {
-    placeholder: 'Large input',
-    size: 'lg',
-  },
-};
+// export const Unstyled: Story = {
+//   args: {
+//     placeholder: 'Unstyled variant',
+//     variant: 'unstyled',
+//   },
+// };
+
+// export const Small: Story = {
+//   args: {
+//     placeholder: 'Small input',
+//     size: 'sm',
+//   },
+// };
+
+// export const Large: Story = {
+//   args: {
+//     placeholder: 'Large input',
+//     size: 'lg',
+//   },
+// };
 
 export const Disabled: Story = {
   args: {
@@ -100,22 +123,15 @@ export const Number: Story = {
   },
 };
 
-export const AllVariants: Story = {
+export const SizesWithButton: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-64">
-      <Input variant="default" placeholder="Default" />
-      <Input variant="filled" placeholder="Filled" />
-      <Input variant="unstyled" placeholder="Unstyled" />
-    </div>
-  ),
-};
-
-export const AllSizes: Story = {
-  render: () => (
-    <div className="flex flex-col gap-3 w-64">
-      <Input size="sm" placeholder="Small" />
-      <Input size="md" placeholder="Medium" />
-      <Input size="lg" placeholder="Large" />
+    <div className="grid grid-cols-[200px_auto] gap-3 items-center">
+      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+        <Fragment key={size}>
+          <Input size={size} placeholder={size} />
+          <Button size={size} className="justify-self-start">Button</Button>
+        </Fragment>
+      ))}
     </div>
   ),
 };
