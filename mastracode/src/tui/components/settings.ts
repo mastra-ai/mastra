@@ -298,7 +298,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'escapeAsCancel',
         label: 'Escape cancels',
-        description: 'Use Escape to cancel/clear (Ctrl+C always works). Ctrl+Z undoes a clear.',
+        description: 'Use Escape to cancel/clear (Ctrl+C always works).',
         currentValue: config.escapeAsCancel ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
