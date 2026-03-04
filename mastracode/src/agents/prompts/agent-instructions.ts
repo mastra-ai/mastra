@@ -43,12 +43,17 @@ function findInstructionFile(basePath: string): string | null {
  * Load all agent instruction files from global and project locations.
  * Returns an array of instruction sources, with global ones first.
  */
-export function loadAgentInstructions(projectPath: string): InstructionSource[] {
+export function loadAgentInstructions(projectPath: string, configDirName = '.mastracode'): InstructionSource[] {
   const sources: InstructionSource[] = [];
   const home = homedir();
 
+  // Construct location arrays dynamically based on configDirName
+  const projectLocations = ['', '.claude', configDirName];
+  const configDirWithoutDot = configDirName.replace(/^\./, '');
+  const globalLocations = ['.claude', configDirName, '.config/claude', '.config/' + configDirWithoutDot];
+
   // Load global instructions first
-  for (const location of GLOBAL_LOCATIONS) {
+  for (const location of globalLocations) {
     const basePath = join(home, location);
     const filePath = findInstructionFile(basePath);
     if (filePath) {
@@ -65,7 +70,7 @@ export function loadAgentInstructions(projectPath: string): InstructionSource[] 
   }
 
   // Load project instructions
-  for (const location of PROJECT_LOCATIONS) {
+  for (const location of projectLocations) {
     const basePath = location ? join(projectPath, location) : projectPath;
     const filePath = findInstructionFile(basePath);
     if (filePath) {

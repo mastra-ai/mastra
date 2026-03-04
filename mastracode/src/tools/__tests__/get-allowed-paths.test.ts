@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// Mock the workspace module to control skillPaths
+// Mock the workspace module to control buildSkillPaths
 vi.mock('../../agents/workspace.js', () => ({
-  skillPaths: ['/mock/skills/dir-a', '/mock/skills/dir-b'],
+  buildSkillPaths: (_projectPath: string, _configDir: string) => ['/mock/skills/dir-a', '/mock/skills/dir-b'],
 }));
 
 import { getAllowedPathsFromContext } from '../utils.js';
@@ -29,6 +29,8 @@ describe('getAllowedPathsFromContext', () => {
           if (key === 'harness') {
             return {
               getState: () => ({
+                projectPath: '/test/project',
+                configDir: '.mastracode',
                 sandboxAllowedPaths: ['/user/sandbox/path-1', '/user/sandbox/path-2'],
               }),
             };
@@ -53,6 +55,7 @@ describe('getAllowedPathsFromContext', () => {
           if (key === 'harness') {
             return {
               state: {
+                projectPath: '/test/project',
                 sandboxAllowedPaths: ['/user/sandbox/static-path'],
               },
             };
@@ -70,7 +73,11 @@ describe('getAllowedPathsFromContext', () => {
       requestContext: {
         get: (key: string) => {
           if (key === 'harness') {
-            return { getState: () => ({}) };
+            return {
+              getState: () => ({
+                projectPath: '/test/project',
+              }),
+            };
           }
           return undefined;
         },
@@ -97,9 +104,11 @@ describe('getAllowedPathsFromContext', () => {
           if (key === 'harness') {
             return {
               getState: () => ({
+                projectPath: '/test/project',
                 sandboxAllowedPaths: ['/from-getState'],
               }),
               state: {
+                projectPath: '/test/project',
                 sandboxAllowedPaths: ['/from-static-state'],
               },
             };

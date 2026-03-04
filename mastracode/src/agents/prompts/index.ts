@@ -80,7 +80,8 @@ export function buildFullPrompt(ctx: PromptContext): string {
   }
 
   // Load and inject agent instructions from AGENTS.md/CLAUDE.md files
-  const instructionSources = loadAgentInstructions(ctx.workingDir);
+  const configDir = ctx.state?.configDir as string | undefined;
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   return base + taskSection + instructionsSection + '\n' + modeSpecific;

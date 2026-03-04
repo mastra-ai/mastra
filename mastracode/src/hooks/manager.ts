@@ -18,15 +18,17 @@ export class HookManager {
   private config: HooksConfig;
   private projectDir: string;
   private sessionId: string;
+  private configDirName: string;
 
-  constructor(projectDir: string, sessionId: string) {
+  constructor(projectDir: string, sessionId: string, configDirName = '.mastracode') {
     this.projectDir = projectDir;
     this.sessionId = sessionId;
-    this.config = loadHooksConfig(projectDir);
+    this.configDirName = configDirName;
+    this.config = loadHooksConfig(projectDir, configDirName);
   }
 
   reload(): void {
-    this.config = loadHooksConfig(this.projectDir);
+    this.config = loadHooksConfig(this.projectDir, this.configDirName);
   }
 
   setSessionId(sessionId: string): void {
@@ -43,8 +45,8 @@ export class HookManager {
 
   getConfigPaths(): { project: string; global: string } {
     return {
-      project: getProjectHooksPath(this.projectDir),
-      global: getGlobalHooksPath(),
+      project: getProjectHooksPath(this.projectDir, this.configDirName),
+      global: getGlobalHooksPath(this.configDirName),
     };
   }
 

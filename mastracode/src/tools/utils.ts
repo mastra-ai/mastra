@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { skillPaths } from '../agents/workspace.js';
+import { buildSkillPaths } from '../agents/workspace.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 import { ToolError } from './types.js';
 
@@ -139,22 +139,26 @@ export function assertPathAllowed(targetPath: string, projectRoot: string, allow
 
 /**
  * Read allowed paths from the Mastra harness runtime context.
- * Combines skill paths (computed at startup) with user-approved sandbox paths
- * from harness state so that both parent and subagent tools have the same access.
- * Returns skill paths when the context is unavailable (e.g. in tests).
+ * Combines skill paths (computed dynamically from projectPath and configDir)
+ * with user-approved sandbox paths from harness state so that both parent
+ * and subagent tools have the same access.
+ * Returns default skill paths when the context is unavailable (e.g. in tests).
  */
 export function getAllowedPathsFromContext(
   toolContext: { requestContext?: { get: (key: string) => unknown } } | undefined,
 ): string[] {
-  if (!toolContext?.requestContext) {
-    return [...skillPaths];
-  }
-  const harnessCtx = toolContext.requestContext.get('harness') as
+  const harnessCtx = toolContext?.requestContext?.get('harness') as
     | {
-        state?: { sandboxAllowedPaths?: string[] };
-        getState?: () => { sandboxAllowedPaths?: string[] };
+        state?: { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
+        getState?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
       }
     | undefined;
-  const sandboxPaths = harnessCtx?.getState?.()?.sandboxAllowedPaths ?? harnessCtx?.state?.sandboxAllowedPaths ?? [];
+
+  const state = harnessCtx?.getState?.() ?? harnessCtx?.state;
+  const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
+  const configDir = state?.configDir ?? '.mastracode';
+  const skillPaths = buildSkillPaths(projectPath, configDir);
+  const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+
   return [...skillPaths, ...sandboxPaths];
 }

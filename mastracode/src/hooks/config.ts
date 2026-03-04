@@ -18,9 +18,9 @@ const VALID_EVENTS: HookEventName[] = [
   'SessionEnd',
 ];
 
-export function loadHooksConfig(projectDir: string): HooksConfig {
-  const globalPath = getGlobalHooksPath();
-  const projectPath = getProjectHooksPath(projectDir);
+export function loadHooksConfig(projectDir: string, configDirName = '.mastracode'): HooksConfig {
+  const globalPath = getGlobalHooksPath(configDirName);
+  const projectPath = getProjectHooksPath(projectDir, configDirName);
 
   const globalConfig = loadSingleConfig(globalPath);
   const projectConfig = loadSingleConfig(projectPath);
@@ -28,12 +28,12 @@ export function loadHooksConfig(projectDir: string): HooksConfig {
   return mergeConfigs(globalConfig, projectConfig);
 }
 
-export function getProjectHooksPath(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'hooks.json');
+export function getProjectHooksPath(projectDir: string, configDirName = '.mastracode'): string {
+  return path.join(projectDir, configDirName, 'hooks.json');
 }
 
-export function getGlobalHooksPath(): string {
-  return path.join(os.homedir(), '.mastracode', 'hooks.json');
+export function getGlobalHooksPath(configDirName = '.mastracode'): string {
+  return path.join(os.homedir(), configDirName, 'hooks.json');
 }
 
 function loadSingleConfig(filePath: string): HooksConfig {

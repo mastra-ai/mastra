@@ -4,6 +4,7 @@ import { DEFAULT_OM_MODEL_ID } from './constants';
 export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  configDir: z.string().default('.mastracode'),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
   currentModelId: z.string().default(''),
