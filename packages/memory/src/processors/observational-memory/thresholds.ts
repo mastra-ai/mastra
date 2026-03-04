@@ -77,7 +77,7 @@ export function resolveBlockAfter(
   messageTokens: number | ThresholdRange,
 ): number | undefined {
   if (blockAfter === undefined) return undefined;
-  // Values between 1 (inclusive) and 2 (exclusive) are treated as multipliers of the threshold.
+  // Values between 1 (inclusive) and 100 (exclusive) are treated as multipliers of the threshold.
   // e.g. blockAfter: 1.5 means 1.5x the threshold. blockAfter: 1 means exactly at threshold.
   // Values >= 100 are treated as absolute token counts.
   if (blockAfter >= 1 && blockAfter < 100) {
