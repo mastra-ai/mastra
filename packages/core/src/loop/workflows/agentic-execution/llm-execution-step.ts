@@ -208,20 +208,22 @@ async function processOutputStream<OUTPUT = undefined>({
         }
         // Buffer text-start instead of enqueuing immediately — will be flushed
         // or discarded based on whether tool-call chunks follow.
-        bufferedTextChunks.push(chunk);
+        if (!hasToolCalls) {
+          bufferedTextChunks.push(chunk);
+        }
         break;
       }
 
       case 'text-delta': {
-        const textDeltasFromState = runState.state.textDeltas;
-        textDeltasFromState.push(chunk.payload.text);
-        runState.setState({
-          textDeltas: textDeltasFromState,
-          isStreaming: true,
-        });
-        // Buffer text-delta instead of enqueuing — flushed on finish if no
-        // tool calls, discarded if tool-call chunks arrive.
+        // Only accumulate text state if the step hasn't made tool calls.
+        // After tool calls, any text is leaked tool-result JSON.
         if (!hasToolCalls) {
+          const textDeltasFromState = runState.state.textDeltas;
+          textDeltasFromState.push(chunk.payload.text);
+          runState.setState({
+            textDeltas: textDeltasFromState,
+            isStreaming: true,
+          });
           bufferedTextChunks.push(chunk);
         }
         break;
@@ -233,8 +235,9 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: undefined,
         });
-        // Buffer text-end along with other text chunks.
-        bufferedTextChunks.push(chunk);
+        if (!hasToolCalls) {
+          bufferedTextChunks.push(chunk);
+        }
         break;
       }
 

@@ -305,11 +305,15 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'text-delta':
       const prevData = bufferedSteps.get(payload.runId!)!;
-      bufferedSteps.set(payload.runId!, {
-        ...prevData,
-        text: `${prevData.text}${payload.payload.text}`,
-      });
-      hasChanged = true;
+      // Only accumulate text if no tool calls have arrived yet.
+      // After tool calls, text-deltas are leaked tool-result JSON.
+      if (prevData.toolCalls.length === 0) {
+        bufferedSteps.set(payload.runId!, {
+          ...prevData,
+          text: `${prevData.text}${payload.payload.text}`,
+        });
+        hasChanged = true;
+      }
       break;
     case 'reasoning-delta':
       bufferedSteps.set(payload.runId!, {
