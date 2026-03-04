@@ -2523,9 +2523,11 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     } else {
-      // No marker found — fall back to source-based clearing
-      const newInput = messageList.clear.input.db();
-      const newOutput = messageList.clear.response.db();
+      // No marker found — save current input/response messages first, then clear.
+      // Keeping them in MessageList until save finishes avoids brief under-inclusion windows
+      // where fresh-next-turn context can disappear during async persistence.
+      const newInput = messageList.get.input.db();
+      const newOutput = messageList.get.response.db();
       const messagesToSave = [...newInput, ...newOutput];
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
@@ -2627,11 +2629,20 @@ ${suggestedResponse}
   }
 
   /**
-   * Filter out already-observed messages from message list (step 0 only).
-   * Historical messages loaded from DB may contain observation markers from previous sessions.
+   * Filter out already-observed messages from the in-memory context.
+   *
+   * Marker-boundary pruning is safest at step 0 (historical resume/rebuild), where
+   * list ordering mirrors persisted history.
+   * For step > 0, the list may include mid-loop mutations (sealing/splitting/trim),
+   * so we prefer record-based fallback pruning over position-based marker pruning.
    */
-  private filterAlreadyObservedMessages(messageList: MessageList, record?: ObservationalMemoryRecord): void {
+  private filterAlreadyObservedMessages(
+    messageList: MessageList,
+    record?: ObservationalMemoryRecord,
+    options?: { useMarkerBoundaryPruning?: boolean },
+  ): void {
     const allMessages = messageList.get.all.db();
+    const useMarkerBoundaryPruning = options?.useMarkerBoundaryPruning ?? true;
 
     // Find the message with the last observation end marker
     let markerMessageIndex = -1;
@@ -2647,7 +2658,7 @@ ${suggestedResponse}
       }
     }
 
-    if (markerMessage && markerMessageIndex !== -1) {
+    if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
       const messagesToRemove: string[] = [];
       for (let i = 0; i < markerMessageIndex; i++) {
         const msg = allMessages[i];
@@ -2680,6 +2691,20 @@ ${suggestedResponse}
       // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
       // been truly observed.
 
+      const observedTextPrefixes = allMessages
+        .filter(msg => !!msg?.id && observedIds.has(msg.id))
+        .map(msg => (msg?.content?.parts ?? []).filter(part => part.type === 'text').map(part => part.text))
+        .filter(parts => parts.length > 0);
+      const observedTextParts = new Set(observedTextPrefixes.flat());
+      if (record.activeObservations) {
+        for (const line of record.activeObservations.split('\n')) {
+          const normalized = line.replace(/^\s*[-*]\s*/, '').trim();
+          if (normalized) {
+            observedTextParts.add(normalized);
+          }
+        }
+      }
+
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
 
@@ -2697,6 +2722,36 @@ ${suggestedResponse}
         if (lastObservedAt && msg.createdAt) {
           const msgDate = new Date(msg.createdAt);
           if (msgDate <= lastObservedAt) {
+            messagesToRemove.push(msg.id);
+            continue;
+          }
+        }
+
+        if (!msg.content?.parts) continue;
+
+        for (const prefix of observedTextPrefixes) {
+          if (msg.content.parts.length <= prefix.length) continue;
+
+          let matches = true;
+          for (let i = 0; i < prefix.length; i++) {
+            const part = msg.content.parts[i];
+            if (!part || part.type !== 'text' || part.text !== prefix[i]) {
+              matches = false;
+              break;
+            }
+          }
+
+          if (!matches) continue;
+
+          msg.content.parts = msg.content.parts.slice(prefix.length);
+          break;
+        }
+
+        if (!useMarkerBoundaryPruning && observedTextParts.size > 0 && msg.content.parts.length > 1) {
+          msg.content.parts = msg.content.parts.filter(
+            part => !(part.type === 'text' && observedTextParts.has(part.text)),
+          );
+          if (msg.content.parts.length === 0 && msg.id) {
             messagesToRemove.push(msg.id);
           }
         }
@@ -3084,11 +3139,11 @@ ${suggestedResponse}
     );
 
     // ════════════════════════════════════════════════════════════════════════
-    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
+    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES
+    // - step 0: use marker-boundary pruning + record fallback (historical resume)
+    // - step >0: use record fallback only (avoid position-based marker over-pruning mid-loop)
     // ════════════════════════════════════════════════════════════════════════
-    if (stepNumber === 0) {
-      this.filterAlreadyObservedMessages(messageList, record);
-    }
+    this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
 
     // ════════════════════════════════════════════════════════════════════════
     // STEP 5: EMIT FINAL STATUS (after all observations/activations/reflections)
