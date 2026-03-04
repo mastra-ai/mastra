@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 
-declare const MASTRACODE_VERSION: string;
+declare const MASTRACODE_VERSION: string | undefined;
 
 const PACKAGE_NAME = 'mastracode';
 const NPM_REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
@@ -98,9 +98,16 @@ export function getInstallCommand(pm: PackageManager, version?: string): string 
 
 /**
  * Read the current version, injected at build time by tsup's `define` option.
+ * Falls back to reading package.json at runtime (e.g. when running from source with tsx).
  */
 export function getCurrentVersion(): string {
-  return MASTRACODE_VERSION;
+  if (typeof MASTRACODE_VERSION !== 'undefined') {
+    return MASTRACODE_VERSION;
+  }
+  // Fallback for running from source (e.g. pnpx tsx mastracode/src/main.ts)
+  const { createRequire } = require('node:module');
+  const req = createRequire(import.meta.url ?? __filename);
+  return req('../../package.json').version;
 }
 
 /**
