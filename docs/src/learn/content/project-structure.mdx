@@ -1,0 +1,40 @@
+You've just run the Weather Agent in Mastra Studio, and in this lesson you'll take a guided tour of the core files you'll keep editing as you build. This is a "what you're looking at" walkthrough to make the project structure feel obvious before you start extending it.
+
+You'll open the agent file to see how behavior is defined through instructions, model choice, tool access, and memory. Then you'll inspect the tools file to understand how tools are shaped with clear inputs/outputs and validated at runtime. Finally, you'll walk through a workflow file to see how multi-step logic is wired together and previewed inside Studio.
+
+This matters because Mastra apps are built from a small set of composable primitives, and the constraints are intentional: agents can only use the tools you attach, and they can only reason over the data shape those tools return. Once you can read these three file types quickly, you'll be able to debug faster and confidently start building your own theme park agent on top of the same patterns.
+
+> "Your agent can only call the tools you attach—and it can only work with what your tools return. So getting those boundaries and data shapes right makes everything downstream easier."
+>
+> — Guil Hernandez
+
+## Mentioned in the Lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Agent Overview](/docs/agents/overview)
+- [Using Tools](/docs/agents/using-tools)
+- [Memory](/docs/agents/agent-memory)
+- [Workflows Overview](/docs/workflows/overview)
+- [Agents & Tools (Workflows)](/docs/workflows/agents-and-tools)
+- [createTool()](/reference/tools/create-tool)
+- [Workflow .then()](/reference/workflows/workflow-methods/then)
+- [Workflow .commit()](/reference/workflows/workflow-methods/commit)
+- [Agent .stream()](/reference/streaming/agents/stream)
+
+## Join the Community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://linkedin.com/in/guilhermehernandez) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates
