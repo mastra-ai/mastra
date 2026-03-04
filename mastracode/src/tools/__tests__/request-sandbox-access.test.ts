@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
 import { LocalFilesystem } from '@mastra/core/workspace';
+import { describe, expect, it, vi } from 'vitest';
 
 import { requestSandboxAccessTool } from '../request-sandbox-access.js';
 
