@@ -27,13 +27,19 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/auth": "workspace:*",
-    "@workos-inc/node": "^7.69.2"
+    "@workos-inc/node": "8.0.0",
+    "@workos/authkit-session": "^0.3.4",
+    "lru-cache": "^11.1.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.7",
+    "hono": "^4.11.9",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

@@ -512,9 +512,9 @@ const session = await harness.getSession()
 
 ### Messages
 
-#### `sendMessage({ content, images? })`
+#### `sendMessage({ content, files?, requestContext? })`
 
-Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically.
+Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically. If you provide `requestContext`, the harness forwards it to tools and subagents during the run.
 
 ```typescript
 await harness.sendMessage({ content: 'Explain the authentication flow' })
@@ -585,7 +585,7 @@ Abort any in-progress generation.
 harness.abort()
 ```
 
-#### `steer({ content })`
+#### `steer({ content, requestContext? })`
 
 Steer the agent mid-stream by injecting an instruction into the current generation.
 
@@ -593,7 +593,7 @@ Steer the agent mid-stream by injecting an instruction into the current generati
 harness.steer({ content: 'Focus on security implications' })
 ```
 
-#### `followUp({ content })`
+#### `followUp({ content, requestContext? })`
 
 Queue a follow-up message to be sent after the current generation completes. If no operation is running, sends the message immediately.
 
@@ -603,7 +603,7 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-#### `respondToToolApproval({ decision })`
+#### `respondToToolApproval({ decision, requestContext? })`
 
 Respond to a pending tool approval request. Called when a `tool_approval_required` event is received.
 
@@ -705,7 +705,7 @@ Return the current workspace instance, or `undefined` if no workspace is configu
 const workspace = harness.getWorkspace()
 ```
 
-#### `resolveWorkspace()`
+#### `resolveWorkspace({ requestContext? })`
 
 Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
 

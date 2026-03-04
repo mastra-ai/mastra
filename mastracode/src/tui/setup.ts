@@ -45,12 +45,14 @@ export function setupKeyboardShortcuts(
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else if (state.harness.isRunning()) {
       // Clean up active inline components on abort
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -63,7 +65,30 @@ export function setupKeyboardShortcuts(
     }
   });
 
-  // Ctrl+Z - undo last clear (restore editor text)
+  // Ctrl+Z - suspend process (SIGTSTP)
+  state.editor.onAction('suspend', () => {
+    if (process.platform === 'win32') {
+      showInfo(state, 'Suspend is not supported on Windows');
+      return;
+    }
+
+    state.ui.stop();
+    const onContinue = () => {
+      state.ui.start();
+      state.ui.requestRender();
+    };
+    process.once('SIGCONT', onContinue);
+    try {
+      process.kill(process.pid, 'SIGTSTP');
+    } catch {
+      process.off('SIGCONT', onContinue);
+      state.ui.start();
+      state.ui.requestRender();
+      showError(state, 'Unable to suspend in the current terminal');
+    }
+  });
+
+  // Alt+Z - undo last clear (restore editor text)
   state.editor.onAction('undo', () => {
     if (state.lastClearedText && state.editor.getText().length === 0) {
       state.editor.setText(state.lastClearedText);
@@ -351,6 +376,9 @@ export function setupKeyHandlers(
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
+    state.activeInlinePlanApproval = undefined;
+    state.activeInlineQuestion = undefined;
+    state.pendingInlineQuestions.length = 0;
     state.userInitiatedAbort = true;
     state.harness.abort();
   });

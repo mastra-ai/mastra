@@ -1,4 +1,3 @@
-import { useState, useCallback } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -8,6 +7,7 @@ import {
   Button,
   DocsIcon,
   PageHeader,
+  Spinner,
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
@@ -24,17 +24,20 @@ import {
   WorkspaceNotConfigured,
   useWorkspaceFile,
   isWorkspaceNotSupportedError,
+  is403ForbiddenError,
+  PermissionDenied,
   // Skills.sh
   AddSkillDialog,
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
   toast,
-  type WorkspaceItem,
 } from '@mastra/playground-ui';
+import type { WorkspaceItem } from '@mastra/playground-ui';
+import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
+import { useState, useCallback } from 'react';
 
 import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
-import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
@@ -55,7 +58,7 @@ export default function Workspace() {
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
-  const { data: workspacesData, error: workspacesError } = useWorkspaces();
+  const { data: workspacesData, error: workspacesError, isLoading: isLoadingWorkspaces } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
   // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
@@ -67,6 +70,9 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Check if 403 forbidden (permission denied)
+  const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
 
   // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
   const fsMetadata = workspaceInfo?.filesystem?.metadata;
@@ -100,7 +106,7 @@ export default function Workspace() {
   const setSelectedWorkspaceId = (id: string) => {
     setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
     setShowSearch(false);
-    navigate(`/workspaces/${id}`);
+    void navigate(`/workspaces/${id}`);
   };
 
   const setCurrentPath = (path: string) => {
@@ -228,7 +234,7 @@ export default function Workspace() {
               const updated = result.updated[0];
               if (updated.success) {
                 toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
-                refetchSkills();
+                void refetchSkills();
               } else {
                 toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
               }
@@ -258,7 +264,7 @@ export default function Workspace() {
             setRemovingSkillName(null);
             if (result.success) {
               toast.success(`Skill "${result.skillName}" removed successfully`);
-              refetchSkills();
+              void refetchSkills();
             } else {
               toast.error(`Failed to remove skill "${result.skillName}"`);
             }
@@ -294,6 +300,35 @@ export default function Workspace() {
   const canSearchFiles = hasFilesystem && (canBM25 || canVector);
   const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
   const hasSearchCapability = canSearchFiles || canSearchSkills;
+
+  // If permission denied (403 error)
+  if (isPermissionDenied) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="workspaces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
@@ -346,8 +381,38 @@ export default function Workspace() {
     );
   }
 
+  // Show loading while fetching workspace list
+  if (isLoadingWorkspaces) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <Spinner />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   // If workspace is not configured, show the not configured message
-  if (!isLoadingInfo && !isWorkspaceConfigured) {
+  // Also wait for workspaces list to load to avoid showing this before 403 is detected
+  if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
       <MainContentLayout>
         <Header>
@@ -521,7 +586,7 @@ export default function Workspace() {
               }}
               onViewSkillResult={skillName => {
                 if (effectiveWorkspaceId) {
-                  navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
+                  void navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
                 }
               }}
             />

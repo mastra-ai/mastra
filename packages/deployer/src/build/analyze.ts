@@ -294,6 +294,7 @@ export async function analyzeBundle(
   {
     outputDir,
     projectRoot,
+    platform,
     isDev = false,
     bundlerOptions,
   }: {
@@ -406,6 +407,7 @@ If you think your configuration is valid, please open an issue.`);
     projectRoot,
     workspaceRoot,
     workspaceMap,
+    platform,
   });
 
   // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
