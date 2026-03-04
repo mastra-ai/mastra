@@ -96,9 +96,10 @@ export function ScoreDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-        |
-        <Button variant="outline" size="sm" onClick={() => setDatasetDialogOpen(true)}>
-          <Icon><SaveIcon /></Icon>
+        <Button variant="standard" size="default" className="ml-auto mr-8" onClick={() => setDatasetDialogOpen(true)}>
+          <Icon>
+            <SaveIcon />
+          </Icon>
           Save as Dataset Item
         </Button>
       </SideDialog.Top>
