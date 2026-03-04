@@ -2442,7 +2442,9 @@ ${suggestedResponse}
       `[OM:cleanupBranch] allMsgs=${allMsgs.length}, markerFound=${markerIdx !== -1}, markerIdx=${markerIdx}, observedMessageIds=${observedMessageIds?.length ?? 'undefined'}, allIds=${allMsgs.map(m => m.id?.slice(0, 8)).join(',')}`,
     );
 
-    if (observedMessageIds && observedMessageIds.length > 0) {
+    const isActivationCleanup = Boolean(observedMessageIds && observedMessageIds.length > 0);
+
+    if (isActivationCleanup) {
       // Activation-based cleanup: remove activated message IDs first.
       // This path must take precedence over marker cleanup so absolute retention
       // floors are enforced during buffered activation.
@@ -2534,10 +2536,13 @@ ${suggestedResponse}
       }
     }
 
-    // Clear any remaining input/response tracking
-    // (only reached for marker-based and fallback paths, NOT activation path)
-    messageList.clear.input.db();
-    messageList.clear.response.db();
+    // Clear any remaining input/response tracking for non-activation cleanup paths.
+    // Activation cleanup only removes observed IDs from context and should not clear
+    // fresh input/response queues, otherwise retention-floor scenarios can drop too much context.
+    if (!isActivationCleanup) {
+      messageList.clear.input.db();
+      messageList.clear.response.db();
+    }
   }
 
   /**
@@ -2979,6 +2984,7 @@ ${suggestedResponse}
     // ════════════════════════════════════════════════════════════════════════
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
+    let didThresholdCleanup = false;
     if (!readOnly) {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = this.getUnobservedMessages(allMessages, record);
@@ -3105,6 +3111,7 @@ ${suggestedResponse}
             observedIds,
             minRemaining,
           );
+          didThresholdCleanup = true;
 
           // Clean up sealed IDs for activated messages (prevents memory leak)
           if (activatedMessageIds?.length) {
@@ -3143,7 +3150,11 @@ ${suggestedResponse}
     // - step 0: use marker-boundary pruning + record fallback (historical resume)
     // - step >0: use record fallback only (avoid position-based marker over-pruning mid-loop)
     // ════════════════════════════════════════════════════════════════════════
-    this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
+    // If step-level cleanup already ran after threshold handling, skip this pass to avoid
+    // a second timestamp-based prune that can undercut retention-floor guarantees.
+    if (!didThresholdCleanup) {
+      this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // STEP 5: EMIT FINAL STATUS (after all observations/activations/reflections)
