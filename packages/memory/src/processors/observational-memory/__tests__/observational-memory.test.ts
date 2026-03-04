@@ -8338,8 +8338,19 @@ describe('Single-thread replay red tests', () => {
     return { om, messageList, threadId, resourceId };
   }
 
-  function getTextParts(message: any): string[] {
-    return (message?.content?.parts ?? []).filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+  function getModelTextParts(message: any): string[] {
+    if (typeof message?.content === 'string') return [message.content];
+    if (Array.isArray(message?.content)) {
+      return message.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+    }
+    return [];
+  }
+
+  function getModelVisibleText(messageList: any): string {
+    return messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
+      .join(' | ');
   }
 
   it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
@@ -8376,10 +8387,7 @@ describe('Single-thread replay red tests', () => {
       lastObservedAt: t0,
     });
 
-    const remainingText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).not.toContain('old-at-boundary');
     expect(remainingText).toContain('new-after-boundary');
@@ -8427,7 +8435,7 @@ describe('Single-thread replay red tests', () => {
     });
 
     const remaining = messageList.get.all.db();
-    const remainingText = remaining.flatMap((m: any) => getTextParts(m)).join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remaining.map((m: any) => m.id)).toEqual(['marker-msg']);
     expect(remainingText).not.toContain('fully-observed-before-marker');
@@ -8487,8 +8495,7 @@ describe('Single-thread replay red tests', () => {
       lastObservedAt: t0,
     });
 
-    const remaining = messageList.get.all.db();
-    const remainingText = remaining.flatMap((m: any) => getTextParts(m)).join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).not.toContain('sealed-prefix');
     expect(remainingText).toContain('fresh-tail');
@@ -8542,10 +8549,7 @@ describe('Single-thread replay red tests', () => {
       lastObservedAt: t0,
     });
 
-    const remainingText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).not.toContain('already-observed');
     expect(remainingText).toContain('new-content-after-seal');
@@ -8626,13 +8630,13 @@ describe('Single-thread replay red tests', () => {
       lastObservedAt: t0,
     });
 
-    const leftText = left.messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
+    const leftText = left.messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
       .filter(Boolean);
-    const rightText = right.messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
+    const rightText = right.messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
       .filter(Boolean);
 
     expect(leftText).toEqual(rightText);
@@ -8715,10 +8719,7 @@ describe('Single-thread replay red tests', () => {
       }) as any,
     });
 
-    const remainingText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).toContain('fresh-after-activation');
     expect(remainingText).not.toContain('already-observed');
@@ -8811,10 +8812,7 @@ describe('Single-thread replay red tests', () => {
       }) as any,
     });
 
-    const remainingText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).toContain('fresh-after-split');
     expect(remainingText).not.toContain('already-observed');
@@ -8909,10 +8907,7 @@ describe('Single-thread replay red tests', () => {
       }) as any,
     });
 
-    const remainingText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const remainingText = getModelVisibleText(messageList);
 
     expect(remainingText).toContain('fresh-3');
     expect(remainingText).not.toContain('already-observed');
@@ -8977,12 +8972,64 @@ describe('Single-thread replay red tests', () => {
       { allowMarkerFiltering: true },
     );
 
-    const duringRaceText = messageList.get.all
-      .db()
-      .flatMap((m: any) => getTextParts(m))
-      .join(' | ');
+    const duringRaceText = getModelVisibleText(messageList);
 
     expect(duringRaceText).not.toContain('already-observed-race');
+
+    await cleanupPromise;
+  });
+
+  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old-debug',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh-debug',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    // Keep this assertion as a debug signal for post-activation under-inclusion windows.
+    expect(duringRaceText).toContain('fresh-next-turn');
 
     await cleanupPromise;
   });
