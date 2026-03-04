@@ -27,9 +27,10 @@ export interface ThreadProps {
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -59,7 +60,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} />
+      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} hideModelSwitcher={hideModelSwitcher} />
     </ThreadWrapper>
   );
 };
@@ -91,9 +92,10 @@ interface ComposerProps {
   hasMemory?: boolean;
   agentId?: string;
   hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   return (
     <div className="mx-4">
@@ -114,7 +116,7 @@ const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center justify-between gap-2">
-            {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
             <div className="flex items-center gap-2 ml-auto">
               <SpeechInput agentId={agentId} />
               <ComposerAction />

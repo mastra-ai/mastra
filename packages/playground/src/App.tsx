@@ -3,6 +3,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
 import { Layout } from '@/components/layout';
+import { MinimalLayout } from '@/components/minimal-layout';
 
 // Extend window type for Mastra config
 declare global {
@@ -26,6 +27,7 @@ import { Processor } from '@/pages/processors/processor';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
+import AgentSession from './pages/agents/agent/session';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
@@ -137,6 +139,19 @@ const RootLayout = () => {
   );
 };
 
+const MinimalRootLayout = () => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+
+  return (
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
+      <MinimalLayout>
+        <Outlet />
+      </MinimalLayout>
+    </LinkComponentProvider>
+  );
+};
+
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
@@ -154,6 +169,13 @@ const agentCmsChildRoutes = [
 ];
 
 const routes = [
+  {
+    element: <MinimalRootLayout />,
+    children: [
+      { path: '/agents/:agentId/session', element: <AgentSession /> },
+      { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+    ],
+  },
   {
     element: <RootLayout />,
     children: [
