@@ -884,6 +884,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 state: {},
+                streamParts: (streamParts ?? []) as ChunkType[],
               });
 
               if (result instanceof MessageList) {

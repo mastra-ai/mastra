@@ -597,6 +597,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               messages: messageList.get.all.db(),
               messageList,
               state: {},
+              streamParts: [],
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -766,6 +767,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                   messages: messageList.get.all.db(),
                   messageList,
                   state: procState?.customState ?? {},
+                  streamParts: (procState?.streamParts ?? []) as ChunkType[],
                   requestContext,
                   abort: (reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');
