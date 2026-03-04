@@ -9,6 +9,7 @@ test-outputs/
 .idea/
 .history/
 .context/
+.mastra-om-repro/
 
 # Dev artifacts
 .dev/db/*
