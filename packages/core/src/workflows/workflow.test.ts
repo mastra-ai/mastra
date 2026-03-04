@@ -270,6 +270,11 @@ describe('Workflow (Default Engine Specifics)', () => {
       provider?: string;
       modelId?: string;
     }) {
+      const toolInput = JSON.stringify({
+        inputData: { taskId: 'test-task-123' },
+        suspendedToolRunId: null,
+        resumeData: null,
+      });
       return new MockLanguageModelV2({
         ...(provider ? { provider: provider as any } : {}),
         ...(modelId ? { modelId: modelId as any } : {}),
@@ -282,7 +287,7 @@ describe('Workflow (Default Engine Specifics)', () => {
               type: 'tool-call' as const,
               toolCallId: 'call-1',
               toolName,
-              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+              input: toolInput,
             },
           ],
           warnings: [],
@@ -298,7 +303,7 @@ describe('Workflow (Default Engine Specifics)', () => {
               toolCallId: 'call-1',
               toolCallType: 'function',
               toolName,
-              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+              input: toolInput,
             },
             {
               type: 'finish',

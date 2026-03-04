@@ -893,22 +893,13 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('tilde set allowed works');
     });
 
-    it('should contain tilde paths inside basePath when not in allowedPaths', async () => {
+    it('should throw PermissionError for tilde path outside basePath in contained mode', async () => {
       const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
       const filePath = `${relativeTildeDir}/contained.txt`;
 
-      // Default contained: true, no allowedPaths — should write inside basePath
-      await localFs.writeFile(filePath, 'should be contained');
-
-      // File should NOT exist at the real home dir location
-      const realPath = path.join(tildeTargetDir, 'contained.txt');
-      await expect(fs.access(realPath)).rejects.toThrow();
-
-      // File should exist inside basePath instead (tilde expands, then containment
-      // strips leading / and joins the full absolute path under basePath)
-      const containedPath = path.join(tempDir, tildeTargetDir, 'contained.txt');
-      const content = await fs.readFile(containedPath, 'utf-8');
-      expect(content).toBe('should be contained');
+      // contained: true, no allowedPaths — tilde expands to a real absolute path
+      // outside basePath, so it should throw PermissionError (not nest under basePath)
+      await expect(localFs.writeFile(filePath, 'should not be here')).rejects.toThrow('Permission');
     });
 
     it('should read files written via tilde path', async () => {
