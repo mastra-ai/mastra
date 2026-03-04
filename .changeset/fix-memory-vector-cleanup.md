@@ -2,12 +2,4 @@
 "@mastra/memory": patch
 ---
 
-Fixed cascading cleanup of vector embeddings when memory threads or messages are deleted. Previously, deleting a thread or messages removed records from the memory store but left orphaned vector embeddings in the vector store, causing buildup of stale vectors. This change ensures that:
-- Deleting a thread removes all associated vector embeddings
-- Deleting messages removes their corresponding vector embeddings
-- Cleanup runs as fire-and-forget (non-blocking) after storage deletion completes
-- Works across all supported vector store backends
-
-Vector deletions are batched (up to 100 message IDs per call) using the `$in` filter operator to avoid overwhelming the database when threads have many messages. Also fixed `updateMessages` vector cleanup using a hardcoded separator instead of the vector store's configured `indexSeparator`.
-
-Fixes `#12225`
+Fixed orphaned vector embeddings accumulating when memory threads or messages are deleted. Calling `memory.deleteThread()` or `memory.deleteMessages()` now automatically cleans up associated vector embeddings across all supported vector store backends. Cleanup is non-blocking and does not slow down the delete call. Also fixed `updateMessages` not cleaning up old vectors correctly when using a non-default index separator (e.g. Pinecone).
