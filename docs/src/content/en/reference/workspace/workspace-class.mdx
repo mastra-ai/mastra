@@ -467,17 +467,3 @@ Added when BM25 or vector search is configured:
 | `mastra_workspace_index` | Index content for search. Associates content with a path for later retrieval. |
 
 The `index` tool is excluded when the filesystem is in read-only mode.
-
-## Types
-
-### `AnyWorkspace`
-
-A type alias that accepts a workspace with any combination of filesystem and sandbox providers. Use this when writing functions or generics that accept any workspace configuration.
-
-```typescript
-import type { AnyWorkspace } from '@mastra/core/workspace'
-
-function processWorkspace(workspace: AnyWorkspace) {
-  // Works with any workspace configuration
-}
-```
