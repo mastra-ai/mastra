@@ -1,4 +1,5 @@
 // To setup an ElasticSearch server, run the docker compose file in the elasticsearch directory
+import { Client } from '@elastic/elasticsearch';
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -74,6 +75,37 @@ describe('ElasticSearchVector', () => {
         // Cleanup
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
+    });
+  });
+
+  describe('Constructor', () => {
+    it('should throw error if both client , url are not passed', async () => {
+      expect(() => {
+        new ElasticSearchVector({
+          id: 'elasticsearch-shared-test',
+          auth: { apiKey: process.env.ELASTICSEARCH_API_KEY ?? '' },
+        });
+      }).toThrowError('Either url or client is required');
+    });
+    it('should initialize with url', async () => {
+      expect(() => {
+        new ElasticSearchVector({
+          url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+          id: 'elasticsearch-shared-test',
+        });
+      }).not.toThrowError();
+    });
+
+    it('should initialize with client', async () => {
+      expect(() => {
+        const client = new Client({
+          node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+        });
+        new ElasticSearchVector({
+          id: 'elasticsearch-shared-test',
+          client: client,
+        });
+      }).not.toThrowError();
     });
   });
 });
