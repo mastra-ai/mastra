@@ -484,6 +484,8 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           workspace,
         });
 
+        // listWorkspaceTools is an internal method; call it directly to reproduce
+        // the converted workspace-tool execution path where exec-time workspace is absent.
         const workspaceTools = await (agent as any).listWorkspaceTools({
           runId: 'workspace-tool-context-regression',
           requestContext: new RequestContext(),
