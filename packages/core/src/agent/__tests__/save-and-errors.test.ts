@@ -642,6 +642,45 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
+      it('should throw APICallError in generate when model throws rate limit error', async () => {
+        const rateLimitError = new APICallError({
+          message: 'Rate limit exceeded',
+          url: 'https://api.example.com/v1/chat/completions',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+          responseBody: 'Rate limit exceeded',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw rateLimitError;
+          },
+          doStream: async () => {
+            throw rateLimitError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-rate-limit-generate',
+          name: 'Test Rate Limit Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(APICallError);
+        expect(caughtError!.message).toBe('Rate limit exceeded');
+        expect((caughtError as InstanceType<typeof APICallError>).statusCode).toBe(429);
+      });
+
       it('should throw correct error in generate when model throws', async () => {
         const errorModel = new MockLanguageModelV2({
           doGenerate: async () => {
@@ -784,6 +823,165 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(onErrorCalled).toBe(true);
         expect(onErrorArg).toBeInstanceOf(Error);
         expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      describe('error chunk with non-error finishReason', () => {
+        // Tests for the bug where error chunks are emitted mid-stream but the finish chunk
+        // has a non-'error' finishReason. Previously, generate() only threw when
+        // `finishReason === 'error' && error`, silently swallowing errors in this case.
+        const finishReasons = ['stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown'] as const;
+
+        for (const reason of finishReasons) {
+          it(`should throw in generate when error chunk is present but finishReason is '${reason}'`, async () => {
+            const streamError = new Error(`Stream error with finishReason '${reason}'`);
+
+            const errorModel = new MockLanguageModelV2({
+              doGenerate: async () => {
+                throw streamError;
+              },
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'error', error: streamError },
+                  {
+                    type: 'finish',
+                    finishReason: reason,
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+              }),
+            });
+
+            const agent = new Agent({
+              id: `test-error-finish-reason-${reason}`,
+              name: `Test Error FinishReason ${reason}`,
+              model: errorModel,
+              instructions: 'You are a helpful assistant.',
+            });
+
+            await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
+          });
+        }
+
+        it('should expose error in stream output when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Mid-stream error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'partial' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-error-stream-non-error-finish',
+            name: 'Test Error Stream NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+          let errorChunk: any;
+          for await (const chunk of output.fullStream) {
+            if (chunk.type === 'error') {
+              errorChunk = chunk;
+            }
+          }
+
+          expect(errorChunk).toBeDefined();
+          expect(errorChunk.payload.error).toBeInstanceOf(Error);
+          expect((errorChunk.payload.error as Error).message).toBe('Mid-stream error with stop finish');
+          expect(output.error).toBeInstanceOf(Error);
+          expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
+        });
+
+        it('should call onError in generate when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-onerror-non-error-finish',
+            name: 'Test OnError NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          let onErrorCalled = false;
+          let onErrorArg: any = null;
+
+          try {
+            await agent.generate('Hello', {
+              onError: ({ error }) => {
+                onErrorCalled = true;
+                onErrorArg = error;
+              },
+              modelSettings: { maxRetries: 0 },
+            });
+          } catch {
+            // Expected to throw
+          }
+
+          expect(onErrorCalled).toBe(true);
+          expect(onErrorArg).toBeInstanceOf(Error);
+          expect((onErrorArg as Error).message).toBe('Error with stop finish');
+        });
       });
 
       // Helper to create a model that calls a tool which will throw during execution

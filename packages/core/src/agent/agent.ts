@@ -4421,7 +4421,7 @@ export class Agent<
 
     const error = fullOutput.error;
 
-    if (fullOutput.finishReason === 'error' && error) {
+    if (error) {
       throw error;
     }
 
@@ -4720,7 +4720,7 @@ export class Agent<
 
     const error = fullOutput.error;
 
-    if (fullOutput.finishReason === 'error' && error) {
+    if (error) {
       throw error;
     }
 
