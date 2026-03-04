@@ -30,7 +30,6 @@ type TokenEstimateCacheEntry = {
 const TOKEN_ESTIMATE_CACHE_VERSION = 1;
 
 type CacheablePart = any;
-type TokenEstimateCacheMap = Record<string, TokenEstimateCacheEntry>;
 
 function buildEstimateKey(kind: string, text: string): string {
   const payloadHash = createHash('sha1').update(text).digest('hex');
@@ -58,76 +57,51 @@ function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry 
   );
 }
 
-function getCacheMapEntry(cache: unknown, key: string): TokenEstimateCacheEntry | undefined {
+function getCacheEntry(cache: unknown, key: string): TokenEstimateCacheEntry | undefined {
   if (!cache || typeof cache !== 'object') return undefined;
-
   if (isTokenEstimateEntry(cache)) {
     return cache.key === key ? cache : undefined;
   }
 
-  const mapped = (cache as TokenEstimateCacheMap)[key];
-  return isTokenEstimateEntry(mapped) ? mapped : undefined;
-}
-
-function upsertCacheMapEntry(cache: unknown, key: string, entry: TokenEstimateCacheEntry): TokenEstimateCacheMap {
-  if (cache && typeof cache === 'object' && !isTokenEstimateEntry(cache)) {
-    return {
-      ...(cache as TokenEstimateCacheMap),
-      [key]: entry,
-    };
-  }
-
-  return { [key]: entry };
+  return undefined;
 }
 
 function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCacheEntry | undefined {
   const cache = (part as any)?.providerMetadata?.mastra?.tokenEstimate;
-  return getCacheMapEntry(cache, key);
+  return getCacheEntry(cache, key);
 }
 
-function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
+function setPartCacheEntry(part: CacheablePart, _key: string, entry: TokenEstimateCacheEntry): void {
   const mutablePart = part as any;
   mutablePart.providerMetadata ??= {};
   mutablePart.providerMetadata.mastra ??= {};
-  mutablePart.providerMetadata.mastra.tokenEstimate = upsertCacheMapEntry(
-    mutablePart.providerMetadata.mastra.tokenEstimate,
-    key,
-    entry,
-  );
+  mutablePart.providerMetadata.mastra.tokenEstimate = entry;
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
   const content = message.content as any;
   if (content && typeof content === 'object') {
     const contentLevelCache = content.metadata?.mastra?.tokenEstimate;
-    const contentLevelEntry = getCacheMapEntry(contentLevelCache, key);
+    const contentLevelEntry = getCacheEntry(contentLevelCache, key);
     if (contentLevelEntry) return contentLevelEntry;
   }
 
   const messageLevelCache = (message as any)?.metadata?.mastra?.tokenEstimate;
-  return getCacheMapEntry(messageLevelCache, key);
+  return getCacheEntry(messageLevelCache, key);
 }
 
-function setMessageCacheEntry(message: MastraDBMessage, key: string, entry: TokenEstimateCacheEntry): void {
+function setMessageCacheEntry(message: MastraDBMessage, _key: string, entry: TokenEstimateCacheEntry): void {
   const content = message.content as any;
   if (content && typeof content === 'object') {
     content.metadata ??= {};
     (content.metadata as any).mastra ??= {};
-    (content.metadata as any).mastra.tokenEstimate = upsertCacheMapEntry(
-      (content.metadata as any).mastra.tokenEstimate,
-      key,
-      entry,
-    );
+    (content.metadata as any).mastra.tokenEstimate = entry;
     return;
   }
 
   (message as any).metadata ??= {};
   (message as any).metadata.mastra ??= {};
-  (message as any).metadata.mastra.tokenEstimate = upsertCacheMapEntry(
-    (message as any).metadata.mastra.tokenEstimate,
-    key,
-    entry,
-  );
+  (message as any).metadata.mastra.tokenEstimate = entry;
 }
 
 function serializePartForTokenCounting(part: CacheablePart): string {

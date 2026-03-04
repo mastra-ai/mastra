@@ -126,13 +126,11 @@ describe('TokenCounter', () => {
       });
 
       counter.countMessage(message);
-      const firstEstimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
-      const firstEntry = Object.values(firstEstimateMap)[0] as any;
+      const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       message.content.parts[0].text = 'Mutated text payload with different size and tokens';
       const recounted = counter.countMessage(message);
-      const secondEstimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
-      const secondEntry = Object.values(secondEstimateMap).find((entry: any) => entry?.key !== firstEntry.key) as any;
+      const secondEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       expect(recounted).toBeGreaterThan(0);
       expect(secondEntry).toBeTruthy();
@@ -148,29 +146,22 @@ describe('TokenCounter', () => {
       });
 
       counter.countMessage(message);
-      const estimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
-      const [entryKey, entry] = Object.entries(estimateMap)[0] as [string, any];
+      const entry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       message.content.parts[0].providerMetadata.mastra.tokenEstimate = {
-        ...estimateMap,
-        [entryKey]: {
-          ...entry,
-          v: entry.v + 1,
-        },
+        ...entry,
+        v: entry.v + 1,
       };
       counter.countMessage(message);
-      const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(versionRefreshed.v).toBe(entry.v);
 
       message.content.parts[0].providerMetadata.mastra.tokenEstimate = {
-        ...message.content.parts[0].providerMetadata.mastra.tokenEstimate,
-        [entryKey]: {
-          ...versionRefreshed,
-          source: `${versionRefreshed.source}-mismatch`,
-        },
+        ...versionRefreshed,
+        source: `${versionRefreshed.source}-mismatch`,
       };
       counter.countMessage(message);
-      const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(sourceRefreshed.source).toBe(entry.source);
     });
 
@@ -182,15 +173,13 @@ describe('TokenCounter', () => {
 
       const defaultCounter = new TokenCounter();
       defaultCounter.countMessage(message);
-      const [entryKey, defaultEntry] = Object.entries(
-        message.content.parts[0].providerMetadata.mastra.tokenEstimate,
-      )[0] as [string, any];
+      const defaultEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       const o200k_base = require('js-tiktoken/ranks/o200k_base');
       const customCounter = new TokenCounter(o200k_base);
       customCounter.countMessage(message);
 
-      const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(refreshedEntry.source).not.toBe(defaultEntry.source);
       expect(refreshedEntry.source).toContain('custom:');
     });
