@@ -301,6 +301,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'update', description: 'Check for and install updates' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
