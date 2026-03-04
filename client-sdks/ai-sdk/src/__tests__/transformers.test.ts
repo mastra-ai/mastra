@@ -3,7 +3,7 @@ import type { ChunkType, MastraAgentNetworkStream } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
 import { toAISdkV5Stream } from '../convert-streams';
-import { WorkflowStreamToAISDKTransformer } from '../transformers';
+import { transformAgent, WorkflowStreamToAISDKTransformer } from '../transformers';
 
 describe('WorkflowStreamToAISDKTransformer', () => {
   describe('basic workflow stream', () => {
@@ -1421,5 +1421,266 @@ describe('Network stream - fallback (no text events from core)', () => {
     expect(textDeltaChunks.length).toBeGreaterThan(0);
     const textContent = textDeltaChunks.map(c => c.delta || '').join('');
     expect(textContent).toContain('Here are the search results');
+  });
+});
+
+describe('transformAgent - tool-result JSON leak suppression (#13268)', () => {
+  // Helper to create a fresh bufferedSteps map with an initialized run
+  function createBufferedSteps(runId: string) {
+    const bufferedSteps = new Map<string, any>();
+    bufferedSteps.set(runId, {
+      id: runId,
+      text: '',
+      toolCalls: [],
+      toolResults: [],
+      reasoning: [],
+      sources: [],
+      files: [],
+      steps: [],
+      status: 'running',
+      response: { id: '', timestamp: new Date(), modelId: '', messages: [], uiMessages: [] },
+    });
+    return bufferedSteps;
+  }
+
+  it('should clear accumulated text when tool-call chunk arrives', () => {
+    const runId = 'run-1';
+    const bufferedSteps = createBufferedSteps(runId);
+
+    // Simulate model echoing tool-result JSON as text-delta
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: '{"priority":"critical","recommendation":"upgrade"}' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    expect(bufferedSteps.get(runId)!.text).toBe('{"priority":"critical","recommendation":"upgrade"}');
+
+    // Tool-call arrives — text should be cleared
+    transformAgent(
+      {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'tc-1', toolName: 'search', args: { query: 'test' } },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    expect(bufferedSteps.get(runId)!.text).toBe('');
+    expect(bufferedSteps.get(runId)!.toolCalls).toHaveLength(1);
+  });
+
+  it('should preserve text when no tool-call follows', () => {
+    const runId = 'run-1';
+    const bufferedSteps = createBufferedSteps(runId);
+
+    // Simulate normal text response
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Here is the analysis: ' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: 'the system is healthy.' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    expect(bufferedSteps.get(runId)!.text).toBe('Here is the analysis: the system is healthy.');
+    expect(bufferedSteps.get(runId)!.toolCalls).toHaveLength(0);
+  });
+
+  it('should produce empty text in step result when step has tool calls', () => {
+    const runId = 'run-1';
+    const bufferedSteps = createBufferedSteps(runId);
+
+    // Simulate model echoing tool-result JSON as text-delta
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: '{"leaked":"json"}' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // Tool-call arrives
+    transformAgent(
+      {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'tc-1', toolName: 'analyze', args: {} },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // Step-finish
+    const result = transformAgent(
+      {
+        type: 'step-finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: runId,
+          stepResult: { reason: 'tool-calls', warnings: [] },
+          output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          metadata: {},
+          messages: { nonUser: [] },
+        },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // The step result should have empty text
+    expect(result).not.toBeNull();
+    const stepResult = bufferedSteps.get(runId)!.steps[0];
+    expect(stepResult.text).toBe('');
+    expect(stepResult.toolCalls).toHaveLength(1);
+
+    // After step-finish, text should be reset for next step
+    expect(bufferedSteps.get(runId)!.text).toBe('');
+    expect(bufferedSteps.get(runId)!.toolCalls).toHaveLength(0);
+  });
+
+  it('should produce correct text in step result when step has no tool calls', () => {
+    const runId = 'run-1';
+    const bufferedSteps = createBufferedSteps(runId);
+
+    // Simulate normal text response
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: 'The answer is 42.' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // Step-finish with no tool calls
+    transformAgent(
+      {
+        type: 'step-finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: runId,
+          stepResult: { reason: 'stop', warnings: [] },
+          output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          metadata: {},
+          messages: { nonUser: [] },
+        },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    const stepResult = bufferedSteps.get(runId)!.steps[0];
+    expect(stepResult.text).toBe('The answer is 42.');
+    expect(stepResult.toolCalls).toHaveLength(0);
+  });
+
+  it('should handle multi-step scenario: tool-call step then text step', () => {
+    const runId = 'run-1';
+    const bufferedSteps = createBufferedSteps(runId);
+
+    // --- Step 1: Model echoes tool result JSON, then makes a tool call ---
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: '{"leaked":"tool-result-json"}' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    transformAgent(
+      {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'tc-1', toolName: 'search', args: { q: 'test' } },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    transformAgent(
+      {
+        type: 'tool-result',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'tc-1', toolName: 'search', result: { data: 'result' } },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    transformAgent(
+      {
+        type: 'step-finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: runId,
+          stepResult: { reason: 'tool-calls', warnings: [] },
+          output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          metadata: {},
+          messages: { nonUser: [] },
+        },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // Step 1 result should have empty text (leaked JSON suppressed)
+    const step1 = bufferedSteps.get(runId)!.steps[0];
+    expect(step1.text).toBe('');
+    expect(step1.toolCalls).toHaveLength(1);
+
+    // --- Step 2: Normal text response ---
+    transformAgent(
+      {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Based on the search results, here is the answer.' },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    transformAgent(
+      {
+        type: 'step-finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: runId,
+          stepResult: { reason: 'stop', warnings: [] },
+          output: { usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+          metadata: {},
+          messages: { nonUser: [] },
+        },
+      } as ChunkType,
+      bufferedSteps,
+    );
+
+    // Step 2 result should have the correct text
+    const step2 = bufferedSteps.get(runId)!.steps[1];
+    expect(step2.text).toBe('Based on the search results, here is the answer.');
+    expect(step2.toolCalls).toHaveLength(0);
   });
 });

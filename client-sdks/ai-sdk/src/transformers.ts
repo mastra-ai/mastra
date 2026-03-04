@@ -333,9 +333,13 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       hasChanged = true;
       break;
     case 'tool-call':
+      const prevToolData = bufferedSteps.get(payload.runId!)!;
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload],
+        ...prevToolData,
+        // Clear accumulated text when tool calls arrive — any text before a
+        // tool-call is the model echoing tool-result JSON, not user content.
+        text: '',
+        toolCalls: [...prevToolData.toolCalls, payload.payload],
       });
       hasChanged = true;
       break;
@@ -362,8 +366,13 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'step-finish':
       const currentRun = bufferedSteps.get(payload.runId!)!;
+      // If the step has tool calls, discard the accumulated text — it's the
+      // model echoing tool-result JSON, not meaningful user-facing content.
+      const stepHasToolCalls = currentRun.toolCalls.length > 0;
+      const stepText = stepHasToolCalls ? '' : currentRun.text;
       const stepResult = {
         ...bufferedSteps.get(payload.runId!)!,
+        text: stepText,
         stepType: currentRun.steps.length === 0 ? 'initial' : 'tool-result',
         reasoningText: bufferedSteps.get(payload.runId!)!.reasoning.join(''),
         staticToolCalls: bufferedSteps
@@ -392,9 +401,16 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
 
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!)!,
+        // Reset text and per-step accumulators for the next step
+        text: '',
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         steps: [...bufferedSteps.get(payload.runId!)!.steps, stepResult],
+        toolCalls: [],
+        toolResults: [],
+        reasoning: [],
+        sources: [],
+        files: [],
       });
       hasChanged = true;
       break;

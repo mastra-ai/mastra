@@ -70,6 +70,15 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>) {
   let transportSet = false;
 
+  // Buffer text-related chunks (text-start, text-delta, text-end) so we can
+  // discard them if the step turns out to be a tool-call step.  Some models
+  // (e.g. gpt-oss-120b via OpenRouter) echo tool-result JSON as text-delta
+  // content before emitting tool-call chunks.  By buffering and only flushing
+  // on `finish`, we suppress the leaked JSON for tool-call steps while still
+  // emitting text normally for text-only steps.
+  const bufferedTextChunks: ChunkType<OUTPUT>[] = [];
+  let hasToolCalls = false;
+
   for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -96,6 +105,20 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
+    // When a tool-call chunk arrives, mark the step as having tool calls and
+    // discard any buffered text chunks — that text is the model echoing tool
+    // results, not meaningful user-facing content.
+    if (chunk.type === 'tool-call') {
+      if (!hasToolCalls) {
+        hasToolCalls = true;
+        bufferedTextChunks.length = 0;
+        runState.setState({
+          textDeltas: [],
+          isStreaming: false,
+        });
+      }
+    }
+
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
@@ -111,7 +134,9 @@ async function processOutputStream<OUTPUT = undefined>({
       chunk.type !== 'response-metadata' &&
       runState.state.isStreaming
     ) {
-      if (runState.state.textDeltas.length) {
+      // Only persist text to messageList if the step is NOT a tool-call step.
+      // For tool-call steps the accumulated text is leaked tool-result JSON.
+      if (runState.state.textDeltas.length && !hasToolCalls) {
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
 
@@ -181,7 +206,9 @@ async function processOutputStream<OUTPUT = undefined>({
             providerOptions: chunk.payload.providerMetadata,
           });
         }
-        safeEnqueue(controller, chunk);
+        // Buffer text-start instead of enqueuing immediately — will be flushed
+        // or discarded based on whether tool-call chunks follow.
+        bufferedTextChunks.push(chunk);
         break;
       }
 
@@ -192,7 +219,11 @@ async function processOutputStream<OUTPUT = undefined>({
           textDeltas: textDeltasFromState,
           isStreaming: true,
         });
-        safeEnqueue(controller, chunk);
+        // Buffer text-delta instead of enqueuing — flushed on finish if no
+        // tool calls, discarded if tool-call chunks arrive.
+        if (!hasToolCalls) {
+          bufferedTextChunks.push(chunk);
+        }
         break;
       }
 
@@ -202,7 +233,8 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: undefined,
         });
-        safeEnqueue(controller, chunk);
+        // Buffer text-end along with other text chunks.
+        bufferedTextChunks.push(chunk);
         break;
       }
 
@@ -378,6 +410,26 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'finish':
+        // Flush or discard buffered text chunks now that we know the step's
+        // finish reason.  If the step has tool calls the text is leaked JSON
+        // from the model echoing tool results — discard it.  Otherwise flush
+        // the text chunks so they reach the client.
+        if (!hasToolCalls && bufferedTextChunks.length > 0) {
+          for (const buffered of bufferedTextChunks) {
+            safeEnqueue(controller, buffered);
+          }
+        }
+        bufferedTextChunks.length = 0;
+
+        // If the step had tool calls, clear any persisted text deltas so
+        // leaked JSON is not stored in the messageList / step result.
+        if (hasToolCalls) {
+          runState.setState({
+            textDeltas: [],
+            isStreaming: false,
+          });
+        }
+
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
           stepResult: {
@@ -1049,7 +1101,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         try {
           const stepNumber = inputData.output?.steps?.length || 0;
-          const immediateText = outputStream._getImmediateText();
+          // When tool calls are present, discard accumulated text (leaked tool-result JSON).
+          const immediateText = toolCalls.length > 0 ? '' : outputStream._getImmediateText();
           const immediateFinishReason = outputStream._getImmediateFinishReason();
 
           // Convert toolCalls to ToolCallInfo format
@@ -1099,7 +1152,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const hasErrored = runState.state.hasErrored;
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
-      const text = outputStream._getImmediateText();
+      // When tool calls are present, discard accumulated text — some models
+      // echo tool-result JSON as text content in intermediate steps (see #13268).
+      const text = toolCalls.length > 0 ? '' : outputStream._getImmediateText();
       const object = outputStream._getImmediateObject();
       // Check if tripwire was triggered (from stream processors or output step processors)
       const tripwireTriggered = outputStream.tripwire || processOutputStepTripwire !== null;
