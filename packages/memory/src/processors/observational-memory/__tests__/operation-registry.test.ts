@@ -70,5 +70,23 @@ describe('operation-registry', () => {
       unregisterOp('idem-1', 'bufferingObservation'); // should not throw
       expect(isOpActiveInProcess('idem-1', 'bufferingObservation')).toBe(false);
     });
+
+    it('handles concurrent duplicate registrations with ref counting', () => {
+      registerOp('dup-1', 'observing');
+      registerOp('dup-1', 'observing'); // second concurrent registration
+
+      // After one unregister, the op should still be active (ref count = 1)
+      unregisterOp('dup-1', 'observing');
+      expect(isOpActiveInProcess('dup-1', 'observing')).toBe(true);
+
+      // After the second unregister, the op should be inactive (ref count = 0)
+      unregisterOp('dup-1', 'observing');
+      expect(isOpActiveInProcess('dup-1', 'observing')).toBe(false);
+    });
+
+    it('unregisterOp on non-registered key is a no-op', () => {
+      unregisterOp('never-registered', 'reflecting'); // should not throw
+      expect(isOpActiveInProcess('never-registered', 'reflecting')).toBe(false);
+    });
   });
 });

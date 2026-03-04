@@ -54,9 +54,41 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime(daysFrom(now, -365), now)).toBe('1 year ago');
   });
 
-  it('returns "N years ago" with plural for multiple years', () => {
+  it('returns \"N years ago\" with plural for multiple years', () => {
     expect(formatRelativeTime(daysFrom(now, -730), now)).toBe('2 years ago');
     expect(formatRelativeTime(daysFrom(now, -1095), now)).toBe('3 years ago');
+  });
+
+  it('returns \"tomorrow\" for 1 day in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 1), now)).toBe('tomorrow');
+  });
+
+  it('returns \"in N days\" for 2-6 days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 3), now)).toBe('in 3 days');
+    expect(formatRelativeTime(daysFrom(now, 6), now)).toBe('in 6 days');
+  });
+
+  it('returns \"in 1 week\" for 7-13 days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 7), now)).toBe('in 1 week');
+    expect(formatRelativeTime(daysFrom(now, 13), now)).toBe('in 1 week');
+  });
+
+  it('returns \"in N weeks\" for 14-29 days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 14), now)).toBe('in 2 weeks');
+    expect(formatRelativeTime(daysFrom(now, 21), now)).toBe('in 3 weeks');
+  });
+
+  it('returns \"in 1 month\" for 30-59 days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 30), now)).toBe('in 1 month');
+  });
+
+  it('returns \"in N months\" for 60-364 days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 90), now)).toBe('in 3 months');
+  });
+
+  it('returns \"in N years\" for 365+ days in the future', () => {
+    expect(formatRelativeTime(daysFrom(now, 365), now)).toBe('in 1 year');
+    expect(formatRelativeTime(daysFrom(now, 730), now)).toBe('in 2 years');
   });
 });
 
@@ -251,6 +283,26 @@ describe('expandInlineEstimatedDates', () => {
     // Both should be expanded
     expect(result).toContain('May 10, 2023 -');
     expect(result).toContain('June 1, 2023 -');
+  });
+
+  it('correctly handles duplicate inline date snippets with different line contexts', () => {
+    // Both lines have the exact same date, but only the second is future-intent
+    const input = [
+      'Bought tickets for event (estimated May 30, 2023)',
+      'User plans to attend event (estimated May 30, 2023)',
+    ].join('\n');
+    const result = expandInlineEstimatedDates(input, now);
+    const lines = result.split('\n');
+    // First line: not future-intent, should NOT have "likely already happened"
+    expect(lines[0]).not.toContain('likely already happened');
+    // Second line: future-intent ("plans to"), should have "likely already happened"
+    expect(lines[1]).toContain('likely already happened');
+  });
+
+  it('uses forward-looking strings for future dates', () => {
+    const input = `Event scheduled (estimated July 15, 2025)`;
+    const result = expandInlineEstimatedDates(input, now);
+    expect(result).toContain('in 1 month');
   });
 });
 

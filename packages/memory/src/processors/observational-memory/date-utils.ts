@@ -10,6 +10,18 @@ export function formatRelativeTime(date: Date, currentDate: Date): string {
   const diffMs = currentDate.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
+  if (diffDays < 0) {
+    const futureDays = Math.abs(diffDays);
+    if (futureDays === 1) return 'tomorrow';
+    if (futureDays < 7) return `in ${futureDays} days`;
+    if (futureDays < 14) return 'in 1 week';
+    if (futureDays < 30) return `in ${Math.floor(futureDays / 7)} weeks`;
+    if (futureDays < 60) return 'in 1 month';
+    if (futureDays < 365) return `in ${Math.floor(futureDays / 30)} months`;
+    const years = Math.floor(futureDays / 365);
+    return `in ${years} year${years > 1 ? 's' : ''}`;
+  }
+
   if (diffDays === 0) return 'today';
   if (diffDays === 1) return 'yesterday';
   if (diffDays < 7) return `${diffDays} days ago`;
@@ -138,7 +150,7 @@ export function expandInlineEstimatedDates(observations: string, currentDate: Da
   // These should now be at the END of observation lines
   const inlineDateRegex = /\((estimated|meaning)\s+([^)]+\d{4})\)/gi;
 
-  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string) => {
+  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string, offset: number) => {
     const targetDate = parseDateFromContent(dateContent);
 
     if (targetDate) {
@@ -146,9 +158,8 @@ export function expandInlineEstimatedDates(observations: string, currentDate: Da
 
       // Check if this is a future-intent observation that's now in the past
       // We need to look at the text BEFORE this match to determine intent
-      const matchIndex = observations.indexOf(match);
-      const lineStart = observations.lastIndexOf('\n', matchIndex) + 1;
-      const lineBeforeDate = observations.substring(lineStart, matchIndex);
+      const lineStart = observations.lastIndexOf('\n', offset) + 1;
+      const lineBeforeDate = observations.slice(lineStart, offset);
 
       const isPastDate = targetDate < currentDate;
       const isFutureIntent = isFutureIntentObservation(lineBeforeDate);
