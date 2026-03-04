@@ -13,17 +13,26 @@ Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-t
 
 ## How approval works
 
-When a tool call requires approval, execution pauses _before_ the tool runs. The agent still decides to call the tool and provides arguments but the actual `execute` function doesn't run until the call is explicitly approved.
+Mastra offers two distinct mechanisms for pausing tool calls: **pre-execution approval** and **runtime suspension**.
 
-There are three ways to trigger this pause:
+### Pre-execution approval
 
-| Level | Mechanism | Scope |
+Pre-execution approval pauses a tool call _before_ its `execute` function runs. The LLM still decides which tool to call and provides arguments, but `execute` doesn't run until you explicitly approve.
+
+Two flags control this, combined with OR logic. If _either_ is `true`, the call pauses:
+
+| Flag | Where to set it | Scope |
 | - | - | - |
-| Agent-level | `requireToolApproval: true` on `stream()` / `generate()` | Pauses **every** tool call |
-| Tool-level | `requireApproval: true` on `createTool()` | Pauses calls to **that specific tool** |
-| Manual | `suspend()` inside the tool's `execute` function | Pauses at a specific point **during** execution |
+| `requireToolApproval: true` | `stream()` / `generate()` options | Pauses **every** tool call for that request |
+| `requireApproval: true` | `createTool()` definition | Pauses calls to **that specific tool** |
 
-Agent-level and tool-level checks are combined with OR logic. If _either_ flag is `true`, the tool call pauses.
+The stream emits a `tool-call-approval` chunk when a call is paused this way. You then call `approveToolCall()` or `declineToolCall()` to continue.
+
+### Runtime suspension with `suspend()`
+
+A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.
+
+The stream emits a `tool-call-suspended` chunk with a custom payload defined by the tool's `suspendSchema`. You resume by calling `resumeStream()` with data matching the tool's `resumeSchema`.
 
 ### Storage
 
@@ -64,7 +73,7 @@ for await (const chunk of stream.fullStream) {
 
 ### Approving tool calls
 
-Call `approveToolCall` on the agent with the `runId` of the stream to resume the suspended tool call and let it execute:
+Call `approveToolCall()` on the agent with the `runId` of the stream to resume the suspended tool call and let it execute:
 
 ```typescript
 const handleApproval = async () => {
@@ -79,7 +88,7 @@ const handleApproval = async () => {
 
 ### Declining tool calls
 
-Call `declineToolCall` on the agent to skip the tool call. The agent continues without executing the tool and responds accordingly:
+Call `declineToolCall()` on the agent to skip the tool call. The agent continues without executing the tool and responds accordingly:
 
 ```typescript
 const handleDecline = async () => {
@@ -106,7 +115,7 @@ When a tool requires approval during a `generate()` call, the response includes:
 
 ### Approving tool calls
 
-Use `approveToolCallGenerate` to approve the tool call and get the final result:
+Use `approveToolCallGenerate()` to approve the tool call and get the final result:
 
 ```typescript
 const output = await agent.generate('Find user John', {
@@ -129,7 +138,7 @@ if (output.finishReason === 'suspended') {
 
 ### Declining tool calls
 
-Use `declineToolCallGenerate` to skip the tool call:
+Use `declineToolCallGenerate()` to skip the tool call:
 
 ```typescript
 if (output.finishReason === 'suspended') {
