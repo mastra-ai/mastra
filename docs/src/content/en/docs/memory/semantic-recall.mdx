@@ -165,6 +165,8 @@ Supported embedding models:
 - **OpenRouter**: Access embedding models from various providers
 
 ```ts {7}
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
