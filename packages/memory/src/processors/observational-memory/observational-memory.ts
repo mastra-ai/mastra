@@ -33,42 +33,6 @@ function omError(msg: string, err?: unknown) {
 
 omDebug(`[OM:process-start] OM module loaded, pid=${process.pid}`);
 
-// ════════════════════════════════════════════════════════════════════════════════
-// PROCESS-LEVEL OPERATION REGISTRY
-// Tracks which operations (reflecting, observing, buffering) are actively running
-// in THIS process. Used to detect stale DB flags left by crashed processes.
-// Key format: `${recordId}:${operationType}`
-// ════════════════════════════════════════════════════════════════════════════════
-const activeOps = new Set<string>();
-
-function opKey(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): string {
-  return `${recordId}:${op}`;
-}
-
-function registerOp(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): void {
-  activeOps.add(opKey(recordId, op));
-}
-
-function unregisterOp(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): void {
-  activeOps.delete(opKey(recordId, op));
-}
-
-function isOpActiveInProcess(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): boolean {
-  return activeOps.has(opKey(recordId, op));
-}
-
 // Wrap console.error so any unexpected errors also land in the debug log
 if (OM_DEBUG_LOG) {
   const _origConsoleError = console.error;
@@ -90,6 +54,7 @@ import {
   optimizeObservationsForContext,
   formatMessagesForObserver,
 } from './observer-agent';
+import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
