@@ -394,19 +394,26 @@ export class Memory extends MastraMemory {
   }
 
   /**
+   * Lists all vector indexes that match the memory messages prefix.
+   * Handles separator differences across vector store backends (e.g. '_' vs '-').
+   */
+  private async getMemoryVectorIndexes(): Promise<string[]> {
+    if (!this.vector) return [];
+    const separator = this.vector.indexSeparator ?? '_';
+    const prefix = `memory${separator}messages`;
+    const indexes = await this.vector.listIndexes();
+    return indexes.filter(name => name.startsWith(prefix));
+  }
+
+  /**
    * Deletes all vector embeddings associated with a thread.
    * This is called internally by deleteThread to clean up orphaned vectors.
    *
    * @param threadId - The ID of the thread whose vectors should be deleted
    */
   private async deleteThreadVectors(threadId: string): Promise<void> {
-    if (!this.vector) return;
-
     try {
-      const separator = this.vector.indexSeparator ?? '_';
-      const prefix = `memory${separator}messages`;
-      const indexes = await this.vector.listIndexes();
-      const memoryIndexes = indexes.filter((name: string) => name.startsWith(prefix));
+      const memoryIndexes = await this.getMemoryVectorIndexes();
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
@@ -421,7 +428,7 @@ export class Memory extends MastraMemory {
         }),
       );
     } catch {
-      this.logger.debug(`No memory indexes found to clean up for thread ${threadId}`);
+      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
     }
   }
 
@@ -1237,27 +1244,26 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
-            const separator = this.vector.indexSeparator ?? '_';
-            const prefix = `memory${separator}messages`;
-            const indexes = await this.vector.listIndexes();
-            const memoryIndexes = indexes.filter(name => name.startsWith(prefix));
+            const memoryIndexes = await this.getMemoryVectorIndexes();
             const idsToDelete = [...messageIdsNeedingDeletion];
 
-            for (const indexName of memoryIndexes) {
-              for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
-                const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
-                try {
-                  await this.vector.deleteVectors({
-                    indexName,
-                    filter: { message_id: { $in: batch } },
-                  });
-                } catch {
-                  this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+            await Promise.all(
+              memoryIndexes.map(async indexName => {
+                for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
+                  const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+                  try {
+                    await this.vector!.deleteVectors({
+                      indexName,
+                      filter: { message_id: { $in: batch } },
+                    });
+                  } catch {
+                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                  }
                 }
-              }
-            }
+              }),
+            );
           } catch {
-            this.logger.debug(`No memory indexes found to delete from`);
+            this.logger.debug(`Failed to clean up old vectors during message update`);
           }
         }
 
@@ -1329,7 +1335,7 @@ Notes:
     const memoryStore = await this.getMemoryStore();
 
     await memoryStore.deleteMessages(messageIds);
-    if (this.vector && messageIds.length > 0) {
+    if (this.vector) {
       void this.deleteMessageVectors(messageIds);
     }
   }
@@ -1341,29 +1347,26 @@ Notes:
    * @param messageIds - The IDs of the messages whose vectors should be deleted
    */
   private async deleteMessageVectors(messageIds: string[]): Promise<void> {
-    if (!this.vector) return;
-
     try {
-      const separator = this.vector.indexSeparator ?? '_';
-      const prefix = `memory${separator}messages`;
-      const indexes = await this.vector.listIndexes();
-      const memoryIndexes = indexes.filter((name: string) => name.startsWith(prefix));
+      const memoryIndexes = await this.getMemoryVectorIndexes();
 
-      for (const indexName of memoryIndexes) {
-        for (let i = 0; i < messageIds.length; i += VECTOR_DELETE_BATCH_SIZE) {
-          const batch = messageIds.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
-          try {
-            await this.vector.deleteVectors({
-              indexName,
-              filter: { message_id: { $in: batch } },
-            });
-          } catch {
-            this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          for (let i = 0; i < messageIds.length; i += VECTOR_DELETE_BATCH_SIZE) {
+            const batch = messageIds.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+            try {
+              await this.vector!.deleteVectors({
+                indexName,
+                filter: { message_id: { $in: batch } },
+              });
+            } catch {
+              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+            }
           }
-        }
-      }
+        }),
+      );
     } catch {
-      this.logger.debug(`No memory indexes found to clean up for deleted messages`);
+      this.logger.debug(`Failed to clean up vectors for deleted messages`);
     }
   }
 
