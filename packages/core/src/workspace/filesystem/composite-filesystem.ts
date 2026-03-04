@@ -179,7 +179,7 @@ export class CompositeFilesystem<
   }
 
   private normalizePath(path: string): string {
-    if (!path || path === '/') return '/';
+    if (!path || path === '/' || path === '.') return '/';
     // posix.normalize resolves dot segments (./foo → foo, a/../b → b)
     let n = posixPath.normalize(path);
     if (!n.startsWith('/')) n = `/${n}`;
@@ -202,8 +202,9 @@ export class CompositeFilesystem<
     if (!best) return null;
 
     let fsPath = normalized.slice(best.mountPath.length);
-    if (!fsPath) fsPath = '/';
-    if (!fsPath.startsWith('/')) fsPath = '/' + fsPath;
+    // Strip the leading slash so the path is relative to the mounted filesystem's basePath
+    if (!fsPath || fsPath === '/') fsPath = '.';
+    else if (fsPath.startsWith('/')) fsPath = fsPath.slice(1);
 
     return { fs: best.fs, fsPath, mountPath: best.mountPath };
   }
@@ -391,7 +392,7 @@ export class CompositeFilesystem<
     const r = this.resolveMount(path);
     if (!r) return false;
     // Mount point root always exists (even if errored)
-    if (r.fsPath === '/') return true;
+    if (r.fsPath === '.') return true;
     return r.fs.exists(r.fsPath);
   }
 
@@ -415,7 +416,7 @@ export class CompositeFilesystem<
     if (!r) throw new Error(`No mount for path: ${path}`);
 
     // Mount point root always returns directory stat (even if errored)
-    if (r.fsPath === '/') {
+    if (r.fsPath === '.') {
       const parts = normalized.split('/').filter(Boolean);
       const now = new Date();
       return {
@@ -448,7 +449,7 @@ export class CompositeFilesystem<
     const r = this.resolveMount(path);
     if (!r) return false;
     // Mount point root is always a directory (even if errored)
-    if (r.fsPath === '/') return true;
+    if (r.fsPath === '.') return true;
     try {
       const stat = await r.fs.stat(r.fsPath);
       return stat.type === 'directory';

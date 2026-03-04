@@ -239,29 +239,15 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
-    const wasTilde = inputPath.startsWith('~');
     inputPath = expandTilde(inputPath);
 
-    if (!this._contained && nodePath.isAbsolute(inputPath)) {
-      // Containment disabled — absolute paths are real filesystem paths
+    if (nodePath.isAbsolute(inputPath)) {
+      // Absolute paths are always treated as real filesystem paths.
+      // The containment check below will throw PermissionError if
+      // the path is outside basePath and allowedPaths.
       absolutePath = nodePath.normalize(inputPath);
-    } else if (this._contained && nodePath.isAbsolute(inputPath)) {
-      // Containment enabled — check if this is a real path within basePath
-      // or an allowed path (e.g. "/Users/foo/project/src") vs the virtual-root
-      // convention (e.g. "/file.txt" meaning "basePath/file.txt")
-      const normalized = nodePath.normalize(inputPath);
-      if (this._isWithinAnyRoot(normalized)) {
-        absolutePath = normalized;
-      } else if (wasTilde) {
-        // Path started with ~ so the user meant a real filesystem path,
-        // not a virtual-root path. Treat as a real absolute path — the
-        // containment check below will throw PermissionError if it's not
-        // within basePath or allowedPaths.
-        absolutePath = normalized;
-      } else {
-        absolutePath = resolveWorkspacePath(this._basePath, inputPath);
-      }
     } else {
+      // Relative paths are resolved against basePath
       absolutePath = resolveWorkspacePath(this._basePath, inputPath);
     }
 
@@ -289,7 +275,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private toRelativePath(absolutePath: string): string {
-    return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
+    return nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }
 
   private assertWritable(operation: string): void {

@@ -201,7 +201,7 @@ export interface WorkspaceConfig<
   /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
-   * @example ['/docs', '/support']
+   * @example ['docs', 'support']
    */
   autoIndexPaths?: string[];
 
@@ -214,7 +214,7 @@ export interface WorkspaceConfig<
    *
    * @example Static paths
    * ```typescript
-   * skills: ['/skills', '/node_modules/@myorg/skills']
+   * skills: ['skills', 'node_modules/@myorg/skills']
    * ```
    *
    * @example Dynamic paths
@@ -222,8 +222,8 @@ export interface WorkspaceConfig<
    * skills: (ctx) => {
    *   const tier = ctx.requestContext?.get('userTier');
    *   return tier === 'premium'
-   *     ? ['/skills/basic', '/skills/premium']
-   *     : ['/skills/basic'];
+   *     ? ['skills/basic', 'skills/premium']
+   *     : ['skills/basic'];
    * }
    * ```
    */
@@ -241,7 +241,7 @@ export interface WorkspaceConfig<
    * import { VersionedSkillSource } from '@mastra/core/workspace';
    *
    * const workspace = new Workspace({
-   *   skills: ['/skills'],
+   *   skills: ['skills'],
    *   skillSource: new VersionedSkillSource(tree, blobStore, versionCreatedAt),
    * });
    * ```
@@ -759,10 +759,7 @@ export class Workspace<
             continue;
           }
           // Skip directories already covered by a parent directory
-          const alreadyCovered = directoryRoots.some(
-            root =>
-              entry.path === root || (root === '/' ? entry.path.startsWith('/') : entry.path.startsWith(`${root}/`)),
-          );
+          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
           if (!alreadyCovered) directoryRoots.push(entry.path);
         }
         // Index direct file matches first so they aren't lost if a directory scan fails
@@ -812,7 +809,7 @@ export class Workspace<
     const entries = await this._fs.readdir(dir);
 
     for (const entry of entries) {
-      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
@@ -916,7 +913,7 @@ export class Workspace<
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('/');
+          const files = await this.getAllFiles('.');
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing
