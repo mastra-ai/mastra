@@ -196,7 +196,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
               if (iterationResult.continue === false) {
                 pendingFeedbackStop = true;
-              } else if (rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+              } else if (!hasFinishedSteps && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
                 hasFinishedSteps = false;
                 typedInputData.stepResult.isContinued = true;
               }
