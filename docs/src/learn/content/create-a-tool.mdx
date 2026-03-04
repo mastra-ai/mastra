@@ -1,0 +1,34 @@
+Lesson by lesson, your theme park agent is moving from "chatting from instructions" to reliably working with real-world data. In this lesson, you'll add the first missing building block: a tool the agent can use to translate a human park name into the canonical park ID.
+
+You'll create a dedicated park lookup tool that queries a remote endpoint, validates inputs/outputs with schemas, and returns a small set of matches when the name is ambiguous. Then you'll test the tool directly in Mastra Studio, and finally wire it into your theme park agent so it can call the tool automatically during conversations.
+
+This matters because every downstream Q Times request depends on having the correct park ID, not just a guessed park name. By validating the tool's return shape and inspecting tool calls in observability, you set up a dependable foundation for fetching live wait times next.
+
+> "Tools are for the moments your agent needs real context—like turning a park name into the one ID every other API call depends on."
+>
+> — Guil Hernandez
+
+## Mentioned in the Lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Using Tools](/docs/agents/using-tools)
+- [createTool()](/reference/tools/create-tool)
+- [Observability](/docs/mastra-cloud/observability)
+
+## Join the Community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://linkedin.com/in/guilhermehernandez) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates
