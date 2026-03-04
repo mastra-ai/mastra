@@ -61,3 +61,8 @@ export function useLoadedSkills(): LoadedSkillsContextValue {
   }
   return context;
 }
+
+/** @deprecated Use `LoadedSkillsProvider` instead */
+export const ActivatedSkillsProvider = LoadedSkillsProvider;
+/** @deprecated Use `useLoadedSkills` instead */
+export const useActivatedSkills = useLoadedSkills;
