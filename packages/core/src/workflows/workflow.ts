@@ -1048,6 +1048,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                streamParts: (passThrough.streamParts as ChunkType[]) ?? [],
               });
 
               if (result instanceof MessageList) {

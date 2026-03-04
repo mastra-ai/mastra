@@ -106,6 +106,9 @@ export interface ProcessOutputResultArgs<
 > extends ProcessorMessageContext<TTripwireMetadata> {
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /** All chunks accumulated during stream processing (from processOutputStream).
+   * Includes the finish chunk which contains usage data at `chunk.payload.output.usage`. */
+  streamParts: ChunkType[];
 }
 
 /**

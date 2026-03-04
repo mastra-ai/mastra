@@ -315,6 +315,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         messageList,
         state: processorState.customState,
+        streamParts: processorState.streamParts as ChunkType[],
         abort,
         ...createObservabilityContext({ currentSpan: processorSpan }),
         requestContext,

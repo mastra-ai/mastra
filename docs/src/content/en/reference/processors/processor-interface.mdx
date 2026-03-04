@@ -498,6 +498,20 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     isOptional: false,
   },
   {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state that persists across all method calls within this request. Shared with processOutputStream and other methods.',
+    isOptional: false,
+  },
+  {
+    name: 'streamParts',
+    type: 'ChunkType[]',
+    description:
+      'All chunks accumulated during stream processing (from processOutputStream). Includes the finish chunk which contains usage data at `chunk.payload.output.usage`.',
+    isOptional: false,
+  },
+  {
     name: 'abort',
     type: '(reason?: string) => never',
     description: 'Function to abort processing.',
