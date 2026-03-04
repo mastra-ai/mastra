@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, statSync, rmSync } from 'node:fs';
-import { join, dirname, relative, sep } from 'node:path';
+import { join, dirname, relative, resolve, sep } from 'node:path';
 
 /**
  * FilesystemDB is a thin I/O layer for filesystem-based storage.
@@ -159,7 +159,24 @@ export class FilesystemDB {
    * Get the path to a skill's directory.
    */
   skillDir(skillName: string): string {
-    return join(this.dir, 'skills', skillName);
+    const skillsBase = join(this.dir, 'skills');
+    const dir = resolve(skillsBase, skillName);
+    if (!dir.startsWith(skillsBase + sep) && dir !== skillsBase) {
+      throw new Error(`Path traversal detected: skill name "${skillName}" escapes skills directory`);
+    }
+    return dir;
+  }
+
+  /**
+   * Resolve a file path within a skill directory, throwing if it escapes.
+   */
+  private safeSkillPath(skillName: string, relativePath: string): string {
+    const base = this.skillDir(skillName);
+    const resolved = resolve(base, relativePath);
+    if (!resolved.startsWith(base + sep) && resolved !== base) {
+      throw new Error(`Path traversal detected: "${relativePath}" escapes skill directory`);
+    }
+    return resolved;
   }
 
   /**
@@ -175,7 +192,7 @@ export class FilesystemDB {
    * Read a file from a skill's directory.
    */
   readSkillFile(skillName: string, relativePath: string): Buffer | null {
-    const filePath = join(this.skillDir(skillName), relativePath);
+    const filePath = this.safeSkillPath(skillName, relativePath);
     if (!existsSync(filePath)) return null;
     try {
       return readFileSync(filePath);
@@ -188,7 +205,7 @@ export class FilesystemDB {
    * Write a file to a skill's directory.
    */
   writeSkillFile(skillName: string, relativePath: string, content: Buffer | string): void {
-    const filePath = join(this.skillDir(skillName), relativePath);
+    const filePath = this.safeSkillPath(skillName, relativePath);
     const parentDir = dirname(filePath);
     if (!existsSync(parentDir)) {
       mkdirSync(parentDir, { recursive: true });
