@@ -3,11 +3,18 @@
  * The user can approve or deny the request via TUI dialog.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
+
+function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
 
 let requestCounter = 0;
 
@@ -22,8 +29,9 @@ export const requestSandboxAccessTool = createTool({
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 
-      // Resolve to absolute path
-      const absolutePath = path.isAbsolute(requestedPath) ? requestedPath : path.resolve(process.cwd(), requestedPath);
+      // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
+      const expanded = expandTilde(requestedPath);
+      const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
 
       // Check if already allowed
       const projectRoot = process.cwd();
@@ -60,13 +68,21 @@ export const requestSandboxAccessTool = createTool({
 
       const approved = answer.toLowerCase().startsWith('y') || answer.toLowerCase() === 'approve';
       if (approved) {
-        // Add to allowed paths
+        // Add to allowed paths in harness state (persists across turns)
         const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
           harnessCtx.setState?.({
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }
+
+        // Also update the workspace filesystem immediately so tools in the
+        // same turn can access the path without waiting for the next turn.
+        const fs = context?.workspace?.filesystem;
+        if (fs && 'setAllowedPaths' in fs && typeof (fs as any).setAllowedPaths === 'function') {
+          (fs as any).setAllowedPaths((prev: readonly string[]) => [...prev, absolutePath]);
+        }
+
         return {
           content: `Access granted: "${absolutePath}" has been added to allowed paths. You can now access files in this directory.`,
           isError: false,
