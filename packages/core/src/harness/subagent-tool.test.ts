@@ -51,6 +51,7 @@ const subagents: HarnessSubagent[] = [
     name: 'Explore',
     description: 'Read-only codebase exploration.',
     instructions: 'You are an explorer.',
+    maxSteps: 50,
     tools: { view: { id: 'view' } as any },
   },
   {
@@ -153,6 +154,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     const streamOpts = mockStream.mock.calls[0]![1];
     expect(streamOpts).toEqual({
       maxSteps: 50,
+      stopWhen: undefined,
       abortSignal: abortController.signal,
       requireToolApproval: false,
       requestContext,
