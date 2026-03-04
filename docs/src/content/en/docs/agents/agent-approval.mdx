@@ -51,6 +51,17 @@ const stream = await agent.stream("What's the weather in London?", {
 })
 ```
 
+When a tool call is paused, the stream emits a `tool-call-approval` chunk containing the `toolCallId`, `toolName`, and `args`. Use this to inspect the pending call and decide whether to approve or decline:
+
+```typescript
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Tool:', chunk.payload.toolName)
+    console.log('Args:', chunk.payload.args)
+  }
+}
+```
+
 ### Approving tool calls
 
 Call `approveToolCall` on the agent with the `runId` of the stream to resume the suspended tool call and let it execute:
