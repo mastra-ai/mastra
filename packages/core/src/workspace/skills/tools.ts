@@ -59,13 +59,13 @@ function createSkillTool(skills: WorkspaceSkills) {
       const parts = [skill.instructions];
 
       if (skill.references?.length) {
-        parts.push(`\n\n## References\n${skill.references.map(r => `- ${r}`).join('\n')}`);
+        parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
       }
       if (skill.scripts?.length) {
-        parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- ${s}`).join('\n')}`);
+        parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
       }
       if (skill.assets?.length) {
-        parts.push(`\n\n## Assets\n${skill.assets.map(a => `- ${a}`).join('\n')}`);
+        parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
       }
 
       return parts.join('');
