@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed fatal 'Cannot find module ../../package.json' error when running mastracode after installing from npm. The version is now inlined at build time instead of requiring the package.json file at runtime. ([#13760](https://github.com/mastra-ai/mastra/pull/13760))
+
 ## 0.5.0
 
 ### Minor Changes
