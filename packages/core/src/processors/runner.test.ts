@@ -1893,10 +1893,10 @@ describe('ProcessorRunner', () => {
             }
             return part;
           },
-          processOutputResult: ({ state }) => {
+          processOutputResult: ({ state, messages }) => {
             // Should be able to access state set during processOutputStream
             Object.assign(stateInOutputResult, state);
-            return undefined;
+            return messages;
           },
         },
       ];
@@ -1947,9 +1947,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ part }) => {
             return part;
           },
-          processOutputResult: ({ streamParts }) => {
+          processOutputResult: ({ streamParts, messages }) => {
             receivedStreamParts = streamParts;
-            return undefined;
+            return messages;
           },
         },
       ];
