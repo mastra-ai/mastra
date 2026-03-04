@@ -3,7 +3,11 @@ import type { SelectItem } from '@mariozechner/pi-tui';
 
 import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { THINKING_LEVELS, getThinkingLevelForModel, getThinkingLevelsForModel } from '../components/thinking-settings.js';
+import {
+  THINKING_LEVELS,
+  getThinkingLevelForModel,
+  getThinkingLevelsForModel,
+} from '../components/thinking-settings.js';
 import { theme, getSelectListTheme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
