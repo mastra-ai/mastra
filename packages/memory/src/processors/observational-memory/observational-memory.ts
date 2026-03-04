@@ -2450,19 +2450,21 @@ ${suggestedResponse}
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
+      const removalOrder: string[] = [];
       let skipped = 0;
       let backoffTriggered = false;
+      const retentionCounter = typeof minRemaining === 'number' ? new TokenCounter() : null;
 
       for (const msg of allMsgs) {
         if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
           continue;
         }
 
-        if (typeof minRemaining === 'number') {
+        if (retentionCounter && typeof minRemaining === 'number') {
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
-          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;
             backoffTriggered = true;
@@ -2471,6 +2473,21 @@ ${suggestedResponse}
         }
 
         idsToRemove.add(msg.id);
+        removalOrder.push(msg.id);
+      }
+
+      if (retentionCounter && typeof minRemaining === 'number' && idsToRemove.size > 0) {
+        let remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+        let remainingTokens = retentionCounter.countMessages(remainingMessages);
+
+        while (remainingTokens < minRemaining && removalOrder.length > 0) {
+          const restoreId = removalOrder.pop()!;
+          idsToRemove.delete(restoreId);
+          skipped += 1;
+          backoffTriggered = true;
+          remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+          remainingTokens = retentionCounter.countMessages(remainingMessages);
+        }
       }
 
       omDebug(
