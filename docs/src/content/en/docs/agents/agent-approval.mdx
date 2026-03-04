@@ -7,13 +7,23 @@ packages:
   - "@mastra/memory"
 ---
 
-# Agent Approval
+# Agent approval
 
-Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call and provide feedback to the user, or approve or decline a tool call based on targeted application conditions.
+Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or running long processes. With agent approval you can suspend a tool call before it executes so a human can approve or decline it, or let tools suspend themselves to request additional context from the user.
 
-## Tool call approval
+## How approval works
 
-Tool call approval can be enabled at the agent level and apply to every tool the agent uses, or at the tool level providing more granular control over individual tool calls.
+When a tool call requires approval, execution pauses _before_ the tool runs. The agent still decides to call the tool and provides arguments but the actual `execute` function doesn't run until the call is explicitly approved.
+
+There are three ways to trigger this pause:
+
+| Level | Mechanism | Scope |
+| - | - | - |
+| Agent-level | `requireToolApproval: true` on `stream()` / `generate()` | Pauses **every** tool call |
+| Tool-level | `requireApproval: true` on `createTool()` | Pauses calls to **that specific tool** |
+| Manual | `suspend()` inside the tool's `execute` function | Pauses at a specific point **during** execution |
+
+Agent-level and tool-level checks are combined with OR logic. If _either_ flag is `true`, the tool call pauses.
 
 ### Storage
 
@@ -33,7 +43,7 @@ export const mastra = new Mastra({
 
 ## Agent-level approval
 
-When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in its configuration.
+Pass `requireToolApproval: true` to `stream()` or `generate()` to pause every tool call before execution. The LLM still decides which tools to call and with what arguments but no tool runs until you approve or decline.
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?", {
@@ -43,7 +53,7 @@ const stream = await agent.stream("What's the weather in London?", {
 
 ### Approving tool calls
 
-To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know its now OK to call its tools.
+Call `approveToolCall` on the agent with the `runId` of the stream to resume the suspended tool call and let it execute:
 
 ```typescript
 const handleApproval = async () => {
@@ -58,7 +68,7 @@ const handleApproval = async () => {
 
 ### Declining tool calls
 
-To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call its tools.
+Call `declineToolCall` on the agent to skip the tool call. The agent continues without executing the tool and responds accordingly:
 
 ```typescript
 const handleDecline = async () => {
@@ -73,19 +83,19 @@ const handleDecline = async () => {
 
 ## Tool approval with generate()
 
-Tool approval also works with the `generate()` method for non-streaming use cases. When using `generate()` with `requireToolApproval: true`, the method returns immediately when a tool requires approval instead of executing it.
+Tool approval also works with the `generate()` method for non-streaming use cases. When a tool requires approval during a `generate()` call, the method returns immediately instead of executing the tool.
 
 ### How it works
 
 When a tool requires approval during a `generate()` call, the response includes:
 
-- `finishReason: 'suspended'` - indicates the agent is waiting for approval
-- `suspendPayload` - contains tool call details (`toolCallId`, `toolName`, `args`)
-- `runId` - needed to approve or decline the tool call
+- `finishReason: 'suspended'`: Indicates the agent is waiting for approval
+- `suspendPayload`: Contains tool call details (`toolCallId`, `toolName`, `args`)
+- `runId`: Needed to approve or decline the tool call
 
 ### Approving tool calls
 
-To approve a tool call with `generate()`, use the `approveToolCallGenerate` method:
+Use `approveToolCallGenerate` to approve the tool call and get the final result:
 
 ```typescript
 const output = await agent.generate('Find user John', {
@@ -108,7 +118,7 @@ if (output.finishReason === 'suspended') {
 
 ### Declining tool calls
 
-To decline a tool call, use the `declineToolCallGenerate` method:
+Use `declineToolCallGenerate` to skip the tool call:
 
 ```typescript
 if (output.finishReason === 'suspended') {
@@ -117,12 +127,12 @@ if (output.finishReason === 'suspended') {
     toolCallId: output.suspendPayload.toolCallId,
   })
 
-  // Agent will respond acknowledging the declined tool
+  // Agent responds acknowledging the declined tool
   console.log(result.text)
 }
 ```
 
-### Stream vs Generate comparison
+### Stream vs generate comparison
 
 | Aspect | `stream()` | `generate()` |
 | - | - | - |
@@ -134,11 +144,11 @@ if (output.finishReason === 'suspended') {
 
 ## Tool-level approval
 
-There are two types of tool call approval. The first uses `requireApproval`, which is a property on the tool definition, while `requireToolApproval` is a parameter passed to `agent.stream()`. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
+Instead of pausing every tool call at the agent level, you can mark individual tools as requiring approval. This gives you granular control — only specific tools pause, while others execute immediately.
 
-### Tool approval using `requireToolApproval`
+### Approval using `requireApproval`
 
-In this approach, `requireApproval` is configured on the tool definition (shown below) rather than on the agent.
+Set `requireApproval: true` on a tool definition. The tool pauses before execution regardless of whether `requireToolApproval` is set on the agent:
 
 ```typescript
 export const testTool = createTool({
@@ -163,7 +173,7 @@ export const testTool = createTool({
 })
 ```
 
-When `requireApproval` is true for a tool, the stream will include chunks of type `tool-call-approval` to indicate that the call is paused. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
+When `requireApproval` is `true`, the stream includes chunks of type `tool-call-approval` to indicate that the call is paused. Call `resumeStream` with the `resumeSchema` data and `runId` to continue:
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?")
@@ -184,9 +194,9 @@ const handleResume = async () => {
 }
 ```
 
-### Tool approval using `suspend`
+### Approval using `suspend`
 
-With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
+With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool's `execute` function calls `suspend` to pause at a specific point and return context or confirmation prompts to the user. This is useful when approval depends on runtime conditions rather than being unconditional.
 
 ```typescript
 export const testToolB = createTool({
@@ -219,7 +229,7 @@ export const testToolB = createTool({
 })
 ```
 
-With this approach the stream will include a `tool-call-suspended` chunk, and the `suspendPayload` will contain the `reason` defined by the tool's `suspendSchema`. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
+With this approach the stream includes a `tool-call-suspended` chunk, and the `suspendPayload` contains the `reason` defined by the tool's `suspendSchema`. Call `resumeStream` with the `resumeSchema` data and `runId` to continue:
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?")
@@ -355,7 +365,7 @@ User: "San Francisco"
 Agent: "The weather in San Francisco is: San Francisco: ☀️ +72°F"
 ```
 
-The second message automatically resumes the suspended tool - the agent extracts `{ city: "San Francisco" }` from the user's message and passes it as `resumeData`.
+The second message automatically resumes the suspended tool, the agent extracts `{ city: "San Francisco" }` from the user's message and passes it as `resumeData`.
 
 ### Requirements
 
@@ -376,7 +386,7 @@ Both approaches work with the same tool definitions. Automatic resumption trigge
 
 ## Tool approval: Supervisor pattern
 
-The [supervisor pattern](/docs/agents/networks) lets a supervisor agent coordinate multiple subagents using `.stream()` or `.generate()`. The supervisor delegates tasks to subagents, which may use tools that require approval. When this happens, tool approvals properly propagate through the delegation chain -- the approval request surfaces at the supervisor level where you can handle it, regardless of which subagent triggered it.
+The [supervisor pattern](/docs/agents/networks) lets a supervisor agent coordinate multiple subagents using `.stream()` or `.generate()`. The supervisor delegates tasks to subagents, which may use tools that require approval. When this happens, tool approvals properly propagate through the delegation chain — the approval request surfaces at the supervisor level where you can handle it, regardless of which subagent triggered it.
 
 ### How it works
 
@@ -463,7 +473,7 @@ for await (const chunk of stream.fullStream) {
 
 ### Declining tool calls in supervisor pattern
 
-You can also decline tool calls at the supervisor level by calling `declineToolCall`. The supervisor will respond acknowledging the declined tool without executing it:
+Decline tool calls at the supervisor level by calling `declineToolCall`. The supervisor responds acknowledging the declined tool without executing it:
 
 ```typescript
 for await (const chunk of stream.fullStream) {
@@ -476,7 +486,7 @@ for await (const chunk of stream.fullStream) {
       toolCallId: chunk.payload.toolCallId,
     })
 
-    // The supervisor will respond acknowledging the declined tool
+    // The supervisor responds acknowledging the declined tool
     for await (const declineChunk of declineStream.textStream) {
       process.stdout.write(declineChunk)
     }
@@ -486,7 +496,7 @@ for await (const chunk of stream.fullStream) {
 
 ### Using suspend() in supervisor pattern
 
-Tools can also use [`suspend()`](#tool-approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does -- the suspension surfaces at the supervisor level:
+Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does — the suspension surfaces at the supervisor level:
 
 ```typescript
 const conditionalTool = createTool({
