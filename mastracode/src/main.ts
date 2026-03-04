@@ -9,6 +9,7 @@ import { MastraTUI } from './tui/index.js';
 import { applyThemeMode } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
@@ -76,7 +77,7 @@ async function main() {
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
-    version: '0.1.0',
+    version: getCurrentVersion(),
     inlineQuestions: true,
   });
 

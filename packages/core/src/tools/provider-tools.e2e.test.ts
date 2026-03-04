@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
 describe('provider-defined tools', () => {
-  it('should handle Google search tool', { timeout: 120000 }, async () => {
+  it('should handle Google search tool', { timeout: 120000, retry: 2 }, async () => {
     const search = google.tools.googleSearch({});
 
     const agent = new Agent({

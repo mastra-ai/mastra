@@ -471,6 +471,20 @@ export class Mastra<
   }
 
   /**
+   * Sets the server configuration for this Mastra instance.
+   *
+   * @param server - The server configuration object
+   *
+   * @example
+   * ```typescript
+   * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
+   * ```
+   */
+  public setServer(server: ServerConfig): void {
+    this.#server = server;
+  }
+
+  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up

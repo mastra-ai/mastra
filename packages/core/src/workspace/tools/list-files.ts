@@ -8,8 +8,7 @@ import { formatAsTree } from './tree-formatter';
 export const listFilesTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
   description: `List files and directories in the workspace filesystem.
-Returns a tree-style view (like the Unix "tree" command) for easy visualization.
-The output is displayed to the user as a tree-like structure in the tool result.
+Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
 
 Examples:
@@ -25,8 +24,8 @@ Examples:
     maxDepth: z
       .number()
       .optional()
-      .default(3)
-      .describe('Maximum depth to descend (default: 3). Similar to tree -L flag.'),
+      .default(2)
+      .describe('Maximum depth to descend (default: 2). Similar to tree -L flag.'),
     showHidden: z
       .boolean()
       .optional()
@@ -45,8 +44,16 @@ Examples:
       .describe(
         'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
       ),
+    respectGitignore: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('Respect .gitignore in the listed directory (default: true).'),
   }),
-  execute: async ({ path = './', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
+  execute: async (
+    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
+    context,
+  ) => {
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
@@ -57,11 +64,12 @@ Examples:
       exclude: exclude || undefined,
       extension: extension || undefined,
       pattern: pattern || undefined,
+      respectGitignore,
     });
 
     return await applyTokenLimit(
       `${result.tree}\n\n${result.summary}`,
-      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens,
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
       'end',
     );
   },
