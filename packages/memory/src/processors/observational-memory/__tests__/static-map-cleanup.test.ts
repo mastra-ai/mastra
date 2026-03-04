@@ -61,7 +61,7 @@ describe('OM static map cleanup', () => {
       expect(OM.reflectionBufferCycleIds.has(reflBufKey)).toBe(false);
     });
 
-    it('partial cleanup removes only activated message IDs from sealedMessageIds', () => {
+    it('T3-B: partial cleanup removes only activated message IDs from sealedMessageIds', () => {
       OM.sealedMessageIds.set('thread-1', new Set(['msg-1', 'msg-2', 'msg-3']));
 
       const lockKey = 'thread:thread-1';
