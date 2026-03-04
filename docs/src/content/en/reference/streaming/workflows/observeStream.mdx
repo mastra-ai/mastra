@@ -12,18 +12,18 @@ The `.observeStream()` method opens a new `ReadableStream` to a workflow run tha
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
-const stream = await run.observeStream();
+const stream = await run.observeStream()
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 

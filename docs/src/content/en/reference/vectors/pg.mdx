@@ -17,74 +17,74 @@ It provides robust vector similarity search capabilities within your existing Po
 
 <PropertiesTable
   content={[
-    {
-      name: "connectionString",
-      type: "string",
-      description: "PostgreSQL connection URL",
-      isOptional: true,
-    },
-    {
-      name: "host",
-      type: "string",
-      description: "PostgreSQL server host",
-      isOptional: true,
-    },
-    {
-      name: "port",
-      type: "number",
-      description: "PostgreSQL server port",
-      isOptional: true,
-    },
-    {
-      name: "database",
-      type: "string",
-      description: "PostgreSQL database name",
-      isOptional: true,
-    },
-    {
-      name: "user",
-      type: "string",
-      description: "PostgreSQL user",
-      isOptional: true,
-    },
-    {
-      name: "password",
-      type: "string",
-      description: "PostgreSQL password",
-      isOptional: true,
-    },
-    {
-      name: "ssl",
-      type: "boolean | ConnectionOptions",
-      description: "Enable SSL or provide custom SSL configuration",
-      isOptional: true,
-    },
-    {
-      name: "schemaName",
-      type: "string",
-      description:
-        "The name of the schema you want the vector store to use. Will use the default schema if not provided.",
-      isOptional: true,
-    },
-    {
-      name: "max",
-      type: "number",
-      description: "Maximum number of pool connections (default: 20)",
-      isOptional: true,
-    },
-    {
-      name: "idleTimeoutMillis",
-      type: "number",
-      description: "Idle connection timeout in milliseconds (default: 30000)",
-      isOptional: true,
-    },
-    {
-      name: "pgPoolOptions",
-      type: "PoolConfig",
-      description: "Additional pg pool configuration options",
-      isOptional: true,
-    },
-  ]}
+{
+name: "connectionString",
+type: "string",
+description: "PostgreSQL connection URL",
+isOptional: true,
+},
+{
+name: "host",
+type: "string",
+description: "PostgreSQL server host",
+isOptional: true,
+},
+{
+name: "port",
+type: "number",
+description: "PostgreSQL server port",
+isOptional: true,
+},
+{
+name: "database",
+type: "string",
+description: "PostgreSQL database name",
+isOptional: true,
+},
+{
+name: "user",
+type: "string",
+description: "PostgreSQL user",
+isOptional: true,
+},
+{
+name: "password",
+type: "string",
+description: "PostgreSQL password",
+isOptional: true,
+},
+{
+name: "ssl",
+type: "boolean | ConnectionOptions",
+description: "Enable SSL or provide custom SSL configuration",
+isOptional: true,
+},
+{
+name: "schemaName",
+type: "string",
+description:
+"The name of the schema you want the vector store to use. Will use the default schema if not provided.",
+isOptional: true,
+},
+{
+name: "max",
+type: "number",
+description: "Maximum number of pool connections (default: 20)",
+isOptional: true,
+},
+{
+name: "idleTimeoutMillis",
+type: "number",
+description: "Idle connection timeout in milliseconds (default: 30000)",
+isOptional: true,
+},
+{
+name: "pgPoolOptions",
+type: "PoolConfig",
+description: "Additional pg pool configuration options",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -92,12 +92,12 @@ It provides robust vector similarity search capabilities within your existing Po
 ### Connection String
 
 ```ts
-import { PgVector } from "@mastra/pg";
+import { PgVector } from '@mastra/pg'
 
 const vectorStore = new PgVector({
   id: 'pg-vector',
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
-});
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+})
 ```
 
 ### Host/Port/Database Configuration
@@ -105,12 +105,12 @@ const vectorStore = new PgVector({
 ```ts
 const vectorStore = new PgVector({
   id: 'pg-vector',
-  host: "localhost",
+  host: 'localhost',
   port: 5432,
-  database: "mydb",
-  user: "postgres",
-  password: "password",
-});
+  database: 'mydb',
+  user: 'postgres',
+  password: 'password',
+})
 ```
 
 ### Advanced Configuration
@@ -118,15 +118,15 @@ const vectorStore = new PgVector({
 ```ts
 const vectorStore = new PgVector({
   id: 'pg-vector',
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema",
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema',
   max: 30,
   idleTimeoutMillis: 60000,
   pgPoolOptions: {
     connectionTimeoutMillis: 5000,
     allowExitOnIdle: true,
   },
-});
+})
 ```
 
 ## Methods
@@ -135,131 +135,131 @@ const vectorStore = new PgVector({
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-    {
-      name: "indexConfig",
-      type: "IndexConfig",
-      isOptional: true,
-      defaultValue: "{ type: 'ivfflat' }",
-      description: "Index configuration",
-    },
-    {
-      name: "buildIndex",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description: "Whether to build the index",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+{
+name: "indexConfig",
+type: "IndexConfig",
+isOptional: true,
+defaultValue: "{ type: 'ivfflat' }",
+description: "Index configuration",
+},
+{
+name: "buildIndex",
+type: "boolean",
+isOptional: true,
+defaultValue: "true",
+description: "Whether to build the index",
+},
+]}
 />
 
 #### IndexConfig
 
 <PropertiesTable
   content={[
-    {
-      name: "type",
-      type: "'flat' | 'hnsw' | 'ivfflat'",
-      description: "Index type",
-      defaultValue: "ivfflat",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "flat",
-              type: "flat",
-              description:
-                "Sequential scan (no index) that performs exhaustive search.",
-            },
-            {
-              name: "ivfflat",
-              type: "ivfflat",
-              description:
-                "Clusters vectors into lists for approximate search.",
-            },
-            {
-              name: "hnsw",
-              type: "hnsw",
-              description:
-                "Graph-based index offering fast search times and high recall.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "ivf",
-      type: "IVFConfig",
-      isOptional: true,
-      description: "IVF configuration",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "lists",
-              type: "number",
-              description:
-                "Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "hnsw",
-      type: "HNSWConfig",
-      isOptional: true,
-      description: "HNSW configuration",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "m",
-              type: "number",
-              description:
-                "Maximum number of connections per node (default: 8)",
-              isOptional: true,
-            },
-            {
-              name: "efConstruction",
-              type: "number",
-              description: "Build-time complexity (default: 32)",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "type",
+type: "'flat' | 'hnsw' | 'ivfflat'",
+description: "Index type",
+defaultValue: "ivfflat",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "flat",
+type: "flat",
+description:
+"Sequential scan (no index) that performs exhaustive search.",
+},
+{
+name: "ivfflat",
+type: "ivfflat",
+description:
+"Clusters vectors into lists for approximate search.",
+},
+{
+name: "hnsw",
+type: "hnsw",
+description:
+"Graph-based index offering fast search times and high recall.",
+},
+],
+},
+],
+},
+{
+name: "ivf",
+type: "IVFConfig",
+isOptional: true,
+description: "IVF configuration",
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "lists",
+type: "number",
+description:
+"Number of lists. If not specified, automatically calculated based on dataset size. (Minimum 100, Maximum 4000)",
+isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "hnsw",
+type: "HNSWConfig",
+isOptional: true,
+description: "HNSW configuration",
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "m",
+type: "number",
+description:
+"Maximum number of connections per node (default: 8)",
+isOptional: true,
+},
+{
+name: "efConstruction",
+type: "number",
+description: "Build-time complexity (default: 32)",
+isOptional: true,
+},
+],
+},
+],
+},
+]}
 />
 
 #### Memory Requirements
 
 HNSW indexes require significant shared memory during construction. For 100K vectors:
 
-- Small dimensions (64d): ~60MB with default settings
-- Medium dimensions (256d): ~180MB with default settings
-- Large dimensions (384d+): ~250MB+ with default settings
+- Small dimensions (64d): \~60MB with default settings
+- Medium dimensions (256d): \~180MB with default settings
+- Large dimensions (384d+): \~250MB+ with default settings
 
 Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
@@ -267,98 +267,98 @@ Higher M values or efConstruction values will increase memory requirements signi
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert vectors into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert vectors into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "vector",
-      type: "number[]",
-      description: "Query vector",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include the vector in the result",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-    {
-      name: "options",
-      type: "{ ef?: number; probes?: number }",
-      isOptional: true,
-      description: "Additional options for HNSW and IVF indexes",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "ef",
-              type: "number",
-              description: "HNSW search parameter",
-              isOptional: true,
-            },
-            {
-              name: "probes",
-              type: "number",
-              description: "IVF search parameter",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include the vector in the result",
+},
+{
+name: "minScore",
+type: "number",
+isOptional: true,
+defaultValue: "0",
+description: "Minimum similarity score threshold",
+},
+{
+name: "options",
+type: "{ ef?: number; probes?: number }",
+isOptional: true,
+description: "Additional options for HNSW and IVF indexes",
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "ef",
+type: "number",
+description: "HNSW search parameter",
+isOptional: true,
+},
+{
+name: "probes",
+type: "number",
+description: "IVF search parameter",
+isOptional: true,
+},
+],
+},
+],
+},
+]}
 />
 
 ### listIndexes()
@@ -369,28 +369,28 @@ Returns an array of index names as strings.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
 
 ```typescript
 interface PGIndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
-  type: "flat" | "hnsw" | "ivfflat";
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  type: 'flat' | 'hnsw' | 'ivfflat'
   config: {
-    m?: number;
-    efConstruction?: number;
-    lists?: number;
-    probes?: number;
-  };
+    m?: number
+    efConstruction?: number
+    lists?: number
+    probes?: number
+  }
 }
 ```
 
@@ -398,12 +398,12 @@ interface PGIndexStats {
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### updateVector()
@@ -412,29 +412,29 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description: "ID of the vector to update (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-    },
-    {
-      name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description: "ID of the vector to update (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+},
+{
+name: "update",
+type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+description: "Object containing the vector and/or metadata to update",
+},
+]}
 />
 
 Updates an existing vector by ID or filter. At least one of vector or metadata must be provided in the update object.
@@ -442,45 +442,45 @@ Updates an existing vector by ID or filter. At least one of vector or metadata m
 ```typescript
 // Update by ID
 await pgVector.updateVector({
-  indexName: "my_vectors",
-  id: "vector123",
+  indexName: 'my_vectors',
+  id: 'vector123',
   update: {
     vector: [0.1, 0.2, 0.3],
-    metadata: { label: "updated" },
+    metadata: { label: 'updated' },
   },
-});
+})
 
 // Update by filter
 await pgVector.updateVector({
-  indexName: "my_vectors",
-  filter: { category: "product" },
+  indexName: 'my_vectors',
+  filter: { category: 'product' },
   update: {
-    metadata: { status: "reviewed" },
+    metadata: { status: 'reviewed' },
   },
-});
+})
 ```
 
 ### deleteVector()
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 Deletes a single vector by ID from the specified index.
 
 ```typescript
-await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
+await pgVector.deleteVector({ indexName: 'my_vectors', id: 'vector123' })
 ```
 
 ### deleteVectors()
@@ -489,24 +489,24 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vectors to delete",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Array of vector IDs to delete (mutually exclusive with filter)",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vectors to delete",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Array of vector IDs to delete (mutually exclusive with filter)",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+},
+]}
 />
 
 ### disconnect()
@@ -517,50 +517,50 @@ Closes the database connection pool. Should be called when done using the store.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to define",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-    {
-      name: "indexConfig",
-      type: "IndexConfig",
-      description: "Configuration for the index type and parameters",
-    },
-  ]}
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to define",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+{
+name: "indexConfig",
+type: "IndexConfig",
+description: "Configuration for the index type and parameters",
+},
+]}
 />
 
 Builds or rebuilds an index with specified metric and configuration. Will drop any existing index before creating the new one.
 
 ```typescript
 // Define HNSW index
-await pgVector.buildIndex("my_vectors", "cosine", {
-  type: "hnsw",
+await pgVector.buildIndex('my_vectors', 'cosine', {
+  type: 'hnsw',
   hnsw: {
     m: 8,
     efConstruction: 32,
   },
-});
+})
 
 // Define IVF index
-await pgVector.buildIndex("my_vectors", "cosine", {
-  type: "ivfflat",
+await pgVector.buildIndex('my_vectors', 'cosine', {
+  type: 'ivfflat',
   ivf: {
     lists: 100,
   },
-});
+})
 
 // Define flat index
-await pgVector.buildIndex("my_vectors", "cosine", {
-  type: "flat",
-});
+await pgVector.buildIndex('my_vectors', 'cosine', {
+  type: 'flat',
+})
 ```
 
 ## Response Types
@@ -569,10 +569,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -583,13 +583,13 @@ The store throws typed errors that can be caught:
 ```typescript
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
-  });
+  })
 } catch (error) {
   if (error instanceof VectorStoreError) {
-    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // Additional error context
+    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details) // Additional error context
   }
 }
 ```
@@ -635,7 +635,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
 
 ```typescript
-pgVector.pool; // instance of pg.Pool
+pgVector.pool // instance of pg.Pool
 ```
 
 This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
@@ -661,17 +661,17 @@ npm install @mastra/fastembed@latest
 Add the following to your agent:
 
 ```typescript title="src/mastra/agents/example-pg-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { PostgresStore, PgVector } from "@mastra/pg";
-import { fastembed } from "@mastra/fastembed";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { PostgresStore, PgVector } from '@mastra/pg'
+import { fastembed } from '@mastra/fastembed'
 
 export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
+  id: 'pg-agent',
+  name: 'PG Agent',
   instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -690,7 +690,7 @@ export const pgAgent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 ## Related

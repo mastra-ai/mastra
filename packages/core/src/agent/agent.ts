@@ -32,8 +32,15 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
-import type { TracingContext, TracingProperties } from '../observability';
-import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
+import type { ObservabilityContext, TracingProperties } from '../observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  getOrCreateSpan,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../observability';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -42,10 +49,12 @@ import type {
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 
+import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -57,7 +66,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -68,6 +77,9 @@ import type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
+  DelegationConfig,
+  DelegationStartContext,
+  DelegationCompleteContext,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -153,7 +165,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace | undefined>;
+  #workspace?: DynamicArgument<AnyWorkspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -335,6 +347,30 @@ export class Agent<
   }
 
   /**
+   * Gets the workspace-instructions processors to add when the workspace has a
+   * filesystem or sandbox (i.e. something to describe).
+   * @internal
+   */
+  private async getWorkspaceInstructionsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    requestContext?: RequestContext,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (!workspace) return [];
+
+    // Skip if workspace has no filesystem or sandbox (nothing to describe)
+    if (!workspace.filesystem && !workspace.sandbox) return [];
+
+    // Check for existing processor to avoid duplicates
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-instructions-processor',
+    );
+    if (hasProcessor) return [];
+
+    return [new WorkspaceInstructionsProcessor({ workspace })];
+  }
+
+  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -505,7 +541,7 @@ export class Agent<
         // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as Parameters<typeof createStep>[0]);
+        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
       }
       workflow = workflow.then(step);
     }
@@ -570,13 +606,17 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get workspace instructions processors (with deduplication)
+    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
+
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    // Skills processors run after memory but before user-configured processors
-    const allProcessors = [...memoryProcessors, ...skillsProcessors, ...configuredProcessors];
+    // Workspace instructions run after memory
+    // Skills processors run after workspace but before user-configured processors
+    const allProcessors = [...memoryProcessors, ...workspaceProcessors, ...skillsProcessors, ...configuredProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
@@ -859,7 +899,7 @@ export class Agent<
    */
   public async getWorkspace({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+  }: { requestContext?: RequestContext } = {}): Promise<AnyWorkspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
@@ -878,7 +918,11 @@ export class Agent<
 
       // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
       if (this.#mastra) {
-        this.#mastra.addWorkspace(resolvedWorkspace);
+        this.#mastra.addWorkspace(resolvedWorkspace, undefined, {
+          source: 'agent',
+          agentId: this.id,
+          agentName: this.name,
+        });
       }
 
       return resolvedWorkspace;
@@ -1099,6 +1143,7 @@ export class Agent<
         convertTools: this.convertTools.bind(this),
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
         __runInputProcessors: this.__runInputProcessors.bind(this),
+        __runProcessInputStep: this.__runProcessInputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
@@ -1497,7 +1542,9 @@ export class Agent<
     this.model = this.model.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
-      return aIndex - bIndex;
+      const aPos = aIndex === -1 ? Infinity : aIndex;
+      const bPos = bIndex === -1 ? Infinity : bIndex;
+      return aPos - bPos;
     });
     this.logger.debug(`[Agents:${this.name}] Models reordered`);
   }
@@ -1633,20 +1680,20 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     requestContext = new RequestContext(),
-    tracingContext,
     model,
     instructions,
+    ...rest
   }: {
     message: string | MessageInput;
     requestContext?: RequestContext;
-    tracingContext: TracingContext;
     model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -1655,15 +1702,15 @@ export class Agent<
     for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType} file: ${part.url.slice(0, 100)}`,
         });
       }
     }
@@ -1696,7 +1743,7 @@ export class Agent<
       const result = (llm as MastraLLMVNext).stream({
         methodType: 'generate',
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messageList,
         agentId: this.id,
         agentName: this.name,
@@ -1706,7 +1753,7 @@ export class Agent<
     } else {
       const result = await (llm as MastraLLMV1).__text({
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messages: [
           {
             role: 'system',
@@ -1735,7 +1782,7 @@ export class Agent<
   async genTitle(
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
-    tracingContext: TracingContext,
+    observabilityContext: ObservabilityContext,
     model?: DynamicArgument<MastraModelConfig>,
     instructions?: DynamicArgument<string>,
   ) {
@@ -1746,14 +1793,14 @@ export class Agent<
           return await this.generateTitleFromUserMessage({
             message: normMessage,
             requestContext,
-            tracingContext,
+            ...observabilityContext,
             model,
             instructions,
           });
         }
       }
-      // If no user message, return a default title for new threads
-      return `New Thread ${new Date().toISOString()}`;
+      // If no user message, return undefined so existing title is preserved
+      return undefined;
     } catch (e) {
       this.logger.error('Error generating title:', e);
       // Return undefined on error so existing title is preserved
@@ -1765,6 +1812,18 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
+    this.#workspace = workspace;
+    if (this.#mastra && workspace && typeof workspace !== 'function') {
+      workspace.__setLogger(this.logger);
+      this.#mastra.addWorkspace(workspace, undefined, {
+        source: 'agent',
+        agentId: this.id,
+        agentName: this.name,
+      });
+    }
+  }
+
   /**
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
@@ -1774,20 +1833,20 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     memoryConfig,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
@@ -1825,7 +1884,7 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
@@ -1847,18 +1906,18 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
 
     if (this._agentNetworkAppend) {
@@ -1891,7 +1950,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
@@ -1910,17 +1969,16 @@ export class Agent<
    */
   private async __runInputProcessors({
     requestContext,
-    tracingContext,
     messageList,
     inputProcessorOverrides,
     processorStates,
+    ...observabilityContext
   }: {
     requestContext: RequestContext;
-    tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
-  }): Promise<{
+  } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -1931,14 +1989,20 @@ export class Agent<
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (
+      inputProcessorOverrides?.length ||
+      this.#inputProcessors ||
+      this.#memory ||
+      this.#workspace ||
+      this.#mastra?.getWorkspace()
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
+        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -1968,20 +2032,93 @@ export class Agent<
   }
 
   /**
+   * Runs processInputStep phase on input processors.
+   * Used by legacy path to execute per-step input processing (e.g., Observational Memory)
+   * that would otherwise only run in the v5 agentic loop.
+   * @internal
+   */
+  private async __runProcessInputStep(
+    args: Partial<ObservabilityContext> & {
+      requestContext: RequestContext;
+      messageList: MessageList;
+      stepNumber?: number;
+      processorStates?: Map<string, ProcessorState>;
+    },
+  ): Promise<{
+    messageList: MessageList;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
+  }> {
+    const { requestContext, messageList, stepNumber = 0, processorStates, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
+
+    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+
+    if (this.#inputProcessors || this.#memory) {
+      const runner = await this.getProcessorRunner({
+        requestContext,
+        processorStates,
+      });
+      try {
+        const llm = await this.getLLM({ requestContext });
+        const model = llm.getModel();
+        await runner.runProcessInputStep({
+          messageList,
+          stepNumber,
+          steps: [],
+          ...observabilityContext,
+          requestContext,
+          // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
+          // OM's processInputStep doesn't use the model parameter, so this is safe.
+          model: model as MastraLanguageModel,
+          retryCount: 0,
+        });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          tripwire = {
+            reason: error.message,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+            processorId: error.processorId,
+          };
+        } else {
+          throw new MastraError(
+            {
+              id: 'AGENT_INPUT_STEP_PROCESSOR_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Input step processor error`,
+            },
+            error,
+          );
+        }
+      }
+    }
+
+    return {
+      messageList,
+      tripwire,
+    };
+  }
+
+  /**
    * Executes output processors on the message list after LLM processing.
    * @internal
    */
   private async __runOutputProcessors({
     requestContext,
-    tracingContext,
     messageList,
     outputProcessorOverrides,
+    ...observabilityContext
   }: {
     requestContext: RequestContext;
-    tracingContext: TracingContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
-  }): Promise<{
+  } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
       reason: string;
@@ -1999,7 +2136,7 @@ export class Agent<
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext, requestContext);
+        messageList = await runner.runOutputProcessors(messageList, observabilityContext, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwire = {
@@ -2067,20 +2204,20 @@ export class Agent<
     resourceId,
     threadId,
     requestContext,
-    tracingContext,
     mastraProxy,
     outputWriter,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
@@ -2108,7 +2245,7 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
@@ -2139,19 +2276,19 @@ export class Agent<
     resourceId,
     toolsets,
     requestContext,
-    tracingContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
 
     const memory = await this.getMemory({ requestContext });
@@ -2174,7 +2311,7 @@ export class Agent<
             memory,
             agentName: this.name,
             requestContext,
-            tracingContext,
+            ...observabilityContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
@@ -2197,20 +2334,20 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     mastraProxy,
     clientTools,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ requestContext });
     // Convert client tools
@@ -2220,7 +2357,7 @@ export class Agent<
         runId,
       });
       for (const [toolName, tool] of clientToolsForInput) {
-        const { execute, ...rest } = tool;
+        const { execute, ...toolRest } = tool;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2231,12 +2368,12 @@ export class Agent<
           memory,
           agentName: this.name,
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -2253,18 +2390,20 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     methodType,
     autoResumeSuspendedTools,
+    delegation,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
-  }) {
+    delegation?: DelegationConfig;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
 
@@ -2275,7 +2414,12 @@ export class Agent<
           // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
           threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
           resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
-          instructions: z.string().nullish().describe('Custom instructions to override agent defaults'),
+          instructions: z
+            .string()
+            .nullish()
+            .describe(
+              'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
+            ),
           maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
           // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
           // to return a proper llm response
@@ -2298,12 +2442,200 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            const startTime = Date.now();
+            const toolCallId = context?.agent?.toolCallId || randomUUID();
+
+            // Get messages from context - available at tool execution time
+            const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
+
+            let fullSubAgentMessages: MastraDBMessage[] = contextMessages;
+
+            // Derive iteration from the number of assistant messages (rough approximation)
+            // Each iteration typically produces an assistant message
+            const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
+
+            // Build delegation start context
+            const delegationStartContext: DelegationStartContext = {
+              primitiveId: agent.id,
+              primitiveType: 'agent',
+              prompt: inputData.prompt,
+              params: {
+                threadId: inputData.threadId || undefined,
+                resourceId: inputData.resourceId || undefined,
+                instructions: inputData.instructions || undefined,
+                maxSteps: inputData.maxSteps || undefined,
+              },
+              iteration: derivedIteration,
+              runId: runId || randomUUID(),
+              threadId,
+              resourceId,
+              parentAgentId: this.id,
+              parentAgentName: this.name,
+              toolCallId,
+              messages: contextMessages,
+            };
+
+            // Generate sub-agent thread and resource IDs early (before any rejection)
+            // These are needed for both successful execution and rejection cases
+            const slugify = await import(`@sindresorhus/slugify`);
+            const subAgentThreadId = inputData.threadId
+              ? `${inputData.threadId}-${randomUUID()}`
+              : context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) || randomUUID();
+
+            const subAgentResourceId = inputData.resourceId
+              ? `${inputData.resourceId}-${agentName}`
+              : context?.mastra?.generateId({
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) || `${slugify.default(this.id)}-${agentName}`;
+
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
             // returns so the parent's processors (OM, working memory, etc.) still
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
+
+            if (
+              (methodType === 'generate' ||
+                methodType === 'generateLegacy' ||
+                methodType === 'stream' ||
+                methodType === 'streamLegacy') &&
+              supportedLanguageModelSpecifications.includes(modelVersion)
+            ) {
+              if (!agent.hasOwnMemory() && this.#memory) {
+                agent.__setMemory(this.#memory);
+              }
+            }
+
+            // Call onDelegationStart hook if provided
+            let effectivePrompt = inputData.prompt;
+            let effectiveInstructions = inputData.instructions;
+            let effectiveMaxSteps = inputData.maxSteps;
+            if (delegation?.onDelegationStart) {
+              try {
+                const startResult = await delegation.onDelegationStart(delegationStartContext);
+                if (startResult) {
+                  // Check if delegation should be rejected
+                  if (startResult.proceed === false) {
+                    const rejectionMessage =
+                      startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
+                    this.logger.debug(
+                      `[Agent:${this.name}] - Delegation to ${agentName} rejected: ${rejectionMessage}`,
+                    );
+
+                    if (
+                      (methodType === 'stream' || methodType === 'streamLegacy') &&
+                      supportedLanguageModelSpecifications.includes(modelVersion)
+                    ) {
+                      await context.writer?.write({
+                        type: 'text-delta',
+                        payload: {
+                          id: randomUUID(),
+                          text: `[Delegation Rejected] ${rejectionMessage}`,
+                        },
+                        runId,
+                        from: ChunkFrom.AGENT,
+                      });
+                    }
+
+                    // Save rejection messages to sub-agent's memory so the UI can display them
+                    const memory = await agent.getMemory({ requestContext });
+                    if (memory) {
+                      try {
+                        // Create user message with the original prompt
+                        const userMessage: MastraDBMessage = {
+                          id: this.#mastra?.generateId() || randomUUID(),
+                          role: 'user',
+                          type: 'text',
+                          createdAt: new Date(),
+                          threadId: subAgentThreadId,
+                          resourceId: subAgentResourceId,
+                          content: {
+                            format: 2,
+                            parts: [
+                              {
+                                type: 'text',
+                                text: effectivePrompt,
+                              },
+                            ],
+                          },
+                        };
+
+                        // Create assistant message with the rejection
+                        const assistantMessage: MastraDBMessage = {
+                          id: this.#mastra?.generateId() || randomUUID(),
+                          role: 'assistant',
+                          type: 'text',
+                          createdAt: new Date(new Date().getTime() + 1),
+                          threadId: subAgentThreadId,
+                          resourceId: subAgentResourceId,
+                          content: {
+                            format: 2,
+                            parts: [
+                              {
+                                type: 'text',
+                                text: `[Delegation Rejected] ${rejectionMessage}`,
+                              },
+                            ],
+                          },
+                        };
+
+                        await memory.createThread({
+                          resourceId: subAgentResourceId,
+                          threadId: subAgentThreadId,
+                        });
+
+                        await memory.saveMessages({
+                          messages: [userMessage, assistantMessage],
+                        });
+                      } catch (memoryError) {
+                        this.logger.error(
+                          `[Agent:${this.name}] - Failed to save rejection to sub-agent memory: ${memoryError}`,
+                        );
+                      }
+                    }
+
+                    return {
+                      text: `[Delegation Rejected] ${rejectionMessage}`,
+                      subAgentThreadId,
+                      subAgentResourceId,
+                    };
+                  }
+                  // Apply modifications
+                  if (startResult.modifiedPrompt !== undefined) {
+                    effectivePrompt = startResult.modifiedPrompt;
+                  }
+                  if (startResult.modifiedInstructions !== undefined) {
+                    effectiveInstructions = startResult.modifiedInstructions;
+                  }
+                  if (startResult.modifiedMaxSteps !== undefined) {
+                    effectiveMaxSteps = startResult.modifiedMaxSteps;
+                  }
+                }
+              } catch (hookError) {
+                this.logger.error(`[Agent:${this.name}] - onDelegationStart hook error: ${hookError}`);
+                // Continue with original values on hook error
+              }
+            }
+
+            // Append LLM-provided instructions to the sub-agent's own instructions
+            if (effectiveInstructions) {
+              const agentOwnInstructions = await agent.getInstructions({ requestContext });
+              if (agentOwnInstructions) {
+                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
+                if (ownStr) {
+                  effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
+                }
+              }
+            }
+
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2314,62 +2646,118 @@ export class Agent<
               });
 
               let result: any;
-              const slugify = await import(`@sindresorhus/slugify`);
-              const subAgentThreadId =
-                inputData.threadId ||
-                context?.mastra?.generateId({
-                  idType: 'thread',
-                  source: 'agent',
-                  entityId: agentName,
-                  resourceId,
-                }) ||
-                randomUUID();
-              const subAgentResourceId =
-                inputData.resourceId ||
-                context?.mastra?.generateId({
-                  idType: 'generic',
-                  source: 'agent',
-                  entityId: agentName,
-                }) ||
-                `${slugify.default(this.id)}-${agentName}`;
-
               const suspendedToolRunId = (inputData as any).suspendedToolRunId;
 
               const { resumeData, suspend } = context?.agent ?? {};
+
+              // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
+              // reflects any hook modifications). Falls back to full context on error.
+              let filteredContextMessages = contextMessages;
+              if (delegation?.messageFilter) {
+                try {
+                  filteredContextMessages = await delegation.messageFilter({
+                    messages: contextMessages,
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    threadId,
+                    resourceId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    toolCallId,
+                  });
+                } catch (filterError) {
+                  this.logger.error(`[Agent:${this.name}] - messageFilter error: ${filterError}`);
+                  // Fall back to unfiltered context on error
+                }
+              }
+
+              const messagesForSubAgent: MessageListInput = [
+                ...filteredContextMessages,
+                { role: 'user' as const, content: effectivePrompt },
+              ];
+
+              const subAgentPromptCreatedAt = new Date();
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                if (!agent.hasOwnMemory() && this.#memory) {
-                  agent.__setMemory(this.#memory);
-                }
-
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                      ...(resourceId && threadId
-                        ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
-                        : {}),
-                    })
-                  : await agent.generate(inputData.prompt, {
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: { lastMessages: false },
+                            },
+                          }
+                        : {}),
+                    })
+                  : await agent.generate(messagesForSubAgent, {
+                      requestContext,
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                              options: { lastMessages: false },
                             },
                           }
                         : {}),
                     });
+
+                const agentResponseMessages = generateResult.response.dbMessages ?? [];
+                // Create user message with the original prompt
+                const userMessage: MastraDBMessage = {
+                  id: this.#mastra?.generateId() || randomUUID(),
+                  role: 'user',
+                  type: 'text',
+                  createdAt: subAgentPromptCreatedAt,
+                  threadId: subAgentThreadId,
+                  resourceId: subAgentResourceId,
+                  content: {
+                    format: 2,
+                    parts: [
+                      {
+                        type: 'text',
+                        text: effectivePrompt,
+                      },
+                    ],
+                  },
+                };
+
+                fullSubAgentMessages = [userMessage, ...agentResponseMessages];
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: fullSubAgentMessages,
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
 
                 if (generateResult.finishReason === 'suspended') {
                   return suspend?.(generateResult.suspendPayload, {
@@ -2381,51 +2769,56 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(inputData.prompt, {
+                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                if (!agent.hasOwnMemory() && this.#memory) {
-                  agent.__setMemory(this.#memory);
-                }
-
                 const streamResult = resumeData
                   ? await agent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
                             },
                           }
                         : {}),
                     })
-                  : await agent.stream(inputData.prompt, {
+                  : await agent.stream(messagesForSubAgent, {
                       requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(inputData.instructions && { instructions: inputData.instructions }),
-                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...resolveObservabilityContext(context ?? {}),
+                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       ...(resourceId && threadId
                         ? {
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: false,
+                              },
                             },
                           }
                         : {}),
                     });
 
                 let fullText = '';
+                let requireToolApproval;
+                let suspendedPayload;
+                let resumeSchema;
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
@@ -2433,34 +2826,24 @@ export class Agent<
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
                       if (chunk.type === 'data-tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'data-tool-call-suspended') {
-                        return suspend?.(chunk.data.suspendPayload, {
-                          resumeSchema: chunk.data.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        suspendedPayload = chunk.data.suspendPayload;
+                        resumeSchema = chunk.data.resumeSchema;
                       }
                     } else {
                       await context.writer.write(chunk);
                       if (chunk.type === 'tool-call-approval') {
-                        return suspend?.(
-                          {},
-                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
-                        );
+                        suspendedPayload = {};
+                        requireToolApproval = true;
                       }
 
                       if (chunk.type === 'tool-call-suspended') {
-                        return suspend?.(chunk.payload.suspendPayload, {
-                          resumeSchema: chunk.payload.resumeSchema,
-                          runId: streamResult.runId,
-                          isAgentSuspend: true,
-                        });
+                        suspendedPayload = chunk.payload.suspendPayload;
+                        resumeSchema = chunk.payload.resumeSchema;
                       }
                     }
                   }
@@ -2470,11 +2853,61 @@ export class Agent<
                   }
                 }
 
+                const agentResponseMessages = streamResult.messageList.get.response.db();
+                // Create user message with the original prompt
+                const userMessage: MastraDBMessage = {
+                  id: this.#mastra?.generateId() || randomUUID(),
+                  role: 'user',
+                  type: 'text',
+                  createdAt: subAgentPromptCreatedAt,
+                  threadId: subAgentThreadId,
+                  resourceId: subAgentResourceId,
+                  content: {
+                    format: 2,
+                    parts: [
+                      {
+                        type: 'text',
+                        text: effectivePrompt,
+                      },
+                    ],
+                  },
+                };
+
+                fullSubAgentMessages = [userMessage, ...agentResponseMessages];
+
+                // Save response messages to sub-agent's memory so the UI can display them
+                const memory = await agent.getMemory({ requestContext });
+                if (memory) {
+                  try {
+                    await memory.createThread({
+                      resourceId: subAgentResourceId,
+                      threadId: subAgentThreadId,
+                    });
+
+                    await memory.saveMessages({
+                      messages: fullSubAgentMessages,
+                    });
+                  } catch (memoryError) {
+                    this.logger.error(
+                      `[Agent:${this.name}] - Failed to save messages to sub-agent memory: ${memoryError}`,
+                    );
+                  }
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
+
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
-                const streamResult = await agent.streamLegacy(inputData.prompt, {
+                const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
 
                 let fullText = '';
@@ -2497,6 +2930,72 @@ export class Agent<
                 result = { text: fullText };
               }
 
+              // Call onDelegationComplete hook if provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  let bailed = false;
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result,
+                    duration: Date.now() - startTime,
+                    success: true,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: fullSubAgentMessages,
+                    bail: () => {
+                      bailed = true;
+                    },
+                  };
+
+                  const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  // If bailed, add a marker to the result and signal via requestContext
+                  if (bailed) {
+                    requestContext.set('__mastra_delegationBailed', true);
+                  }
+
+                  // Handle feedback if provided
+                  if (completeResult?.feedback) {
+                    const feedbackMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'assistant',
+                      type: 'text',
+                      createdAt: new Date(),
+                      content: {
+                        format: 2,
+                        parts: [{ type: 'text', text: completeResult.feedback }],
+                        metadata: {
+                          mode: 'stream',
+                          completionResult: {
+                            suppressFeedback: true,
+                          },
+                        },
+                      },
+                      threadId,
+                      resourceId,
+                    };
+                    const supervisorMemory = await this.getMemory({ requestContext });
+                    if (supervisorMemory) {
+                      try {
+                        await supervisorMemory.saveMessages({
+                          messages: [feedbackMessage],
+                        });
+                      } catch (memoryError) {
+                        this.logger.error(
+                          `[Agent:${this.name}] - Failed to save feedback to supervisor memory: ${memoryError}`,
+                        );
+                      }
+                    }
+                  }
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error: ${hookError}`);
+                }
+              }
               // Restore the parent agent's MastraMemory after sub-agent execution
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -2504,6 +3003,73 @@ export class Agent<
 
               return result;
             } catch (err) {
+              let bailed = false;
+              // Call onDelegationComplete with error if hook is provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result: { text: '' },
+                    duration: Date.now() - startTime,
+                    success: false,
+                    error: err instanceof Error ? err : new Error(String(err)),
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: fullSubAgentMessages,
+                    bail: () => {
+                      bailed = true;
+                    },
+                  };
+
+                  const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  if (bailed) {
+                    requestContext.set('__mastra_delegationBailed', true);
+                  }
+
+                  if (completeResult?.feedback) {
+                    const feedbackMessage: MastraDBMessage = {
+                      id: this.#mastra?.generateId() || randomUUID(),
+                      role: 'assistant',
+                      type: 'text',
+                      createdAt: new Date(),
+                      content: {
+                        format: 2,
+                        parts: [{ type: 'text', text: completeResult.feedback }],
+                        metadata: {
+                          mode: 'stream',
+                          completionResult: {
+                            suppressFeedback: true,
+                          },
+                        },
+                      },
+                      threadId,
+                      resourceId,
+                    };
+                    const supervisorMemory = await this.getMemory({ requestContext });
+                    if (supervisorMemory) {
+                      try {
+                        await supervisorMemory.saveMessages({
+                          messages: [feedbackMessage],
+                        });
+                      } catch (memoryError) {
+                        this.logger.error(
+                          `[Agent:${this.name}] - Failed to save feedback to supervisor memory: ${memoryError}`,
+                        );
+                      }
+                    }
+                  }
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error on failure: ${hookError}`);
+                }
+              }
+
+              // Wrap error in MastraError
               // Restore even on error so the parent's retry/fallback logic
               // sees the correct memory context
               if (savedMastraMemory !== undefined) {
@@ -2517,7 +3083,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    subAgentName: agentName,
+                    subAgentName: agent.name,
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
@@ -2544,7 +3110,7 @@ export class Agent<
           agentName: this.name,
           requestContext,
           model: await this.getModel({ requestContext }),
-          tracingContext,
+          ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
@@ -2570,18 +3136,18 @@ export class Agent<
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     methodType,
     autoResumeSuspendedTools,
+    ...rest
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
-  }) {
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
@@ -2612,9 +3178,15 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              const runIdToUse = suspendedToolRunId || runId;
+              // Use a unique runId for each workflow tool call to prevent parallel calls
+              // from sharing the same cached Run instance (see #13473).
+              // For resume cases, suspendedToolRunId is injected into inputData by
+              // tool-call-step (from metadata stored during suspension).
+              // For fresh calls: generate a new unique runId.
+              const runIdToUse = suspendedToolRunId || randomUUID();
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
@@ -2634,13 +3206,13 @@ export class Agent<
                   result = await run.resume({
                     resumeData,
                     requestContext,
-                    tracingContext: context?.tracingContext,
+                    ...resolveObservabilityContext(context ?? {}),
                   });
                 } else {
                   result = await run.start({
                     inputData: workflowInputData,
                     requestContext,
-                    tracingContext: context?.tracingContext,
+                    ...resolveObservabilityContext(context ?? {}),
                     ...(initialState && { initialState }),
                   });
                 }
@@ -2648,7 +3220,7 @@ export class Agent<
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
                   requestContext,
-                  tracingContext: context?.tracingContext,
+                  ...resolveObservabilityContext(context ?? {}),
                 });
 
                 if (context?.writer) {
@@ -2665,12 +3237,12 @@ export class Agent<
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                     })
                   : run.stream({
                       inputData: workflowInputData,
                       requestContext,
-                      tracingContext: context?.tracingContext,
+                      ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
 
@@ -2679,6 +3251,10 @@ export class Agent<
                 }
 
                 result = await streamResult.result;
+              }
+
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
               }
 
               if (result?.status === 'success') {
@@ -2713,6 +3289,7 @@ export class Agent<
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
                   resumeSchema: resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined,
+                  runId: runIdToUse,
                 });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
@@ -2722,6 +3299,10 @@ export class Agent<
                 };
               }
             } catch (err) {
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
@@ -2755,7 +3336,7 @@ export class Agent<
           agentName: this.name,
           requestContext,
           model: await this.getModel({ requestContext }),
-          tracingContext,
+          ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
@@ -2782,11 +3363,12 @@ export class Agent<
     resourceId,
     runId,
     requestContext,
-    tracingContext,
     outputWriter,
     methodType,
     memoryConfig,
     autoResumeSuspendedTools,
+    delegation,
+    ...rest
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2794,12 +3376,13 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
-  }): Promise<Record<string, CoreTool>> {
+    delegation?: DelegationConfig;
+  } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
+    const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
     const logger = this.logger;
 
@@ -2812,7 +3395,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       outputWriter,
       autoResumeSuspendedTools,
@@ -2823,7 +3406,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       memoryConfig,
       autoResumeSuspendedTools,
@@ -2834,7 +3417,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
       autoResumeSuspendedTools,
@@ -2845,7 +3428,7 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       clientTools: clientTools!,
       autoResumeSuspendedTools,
@@ -2857,8 +3440,9 @@ export class Agent<
       threadId,
       requestContext,
       methodType,
-      tracingContext,
+      ...observabilityContext,
       autoResumeSuspendedTools,
+      delegation,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -2867,7 +3451,7 @@ export class Agent<
       threadId,
       requestContext,
       methodType,
-      tracingContext,
+      ...observabilityContext,
       autoResumeSuspendedTools,
     });
 
@@ -2876,12 +3460,12 @@ export class Agent<
       resourceId,
       threadId,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
     });
 
-    return this.formatTools({
+    const allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
@@ -2889,7 +3473,8 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
-    });
+    };
+    return this.formatTools(allTools);
   }
 
   /**
@@ -2973,7 +3558,7 @@ export class Agent<
     overrideScorers,
     threadId,
     resourceId,
-    tracingContext,
+    ...observabilityContext
   }: {
     messageList: MessageList;
     runId: string;
@@ -2984,8 +3569,7 @@ export class Agent<
       | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
-    tracingContext: TracingContext;
-  }) {
+  } & ObservabilityContext) {
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
@@ -3023,7 +3607,7 @@ export class Agent<
           structuredOutput: !!structuredOutput,
           threadId,
           resourceId,
-          tracingContext,
+          ...observabilityContext,
         });
       }
     }
@@ -3361,7 +3945,8 @@ export class Agent<
     });
 
     const run = await executionWorkflow.createRun();
-    const result = await run.start({ tracingContext: { currentSpan: agentSpan } });
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+    const result = await run.start({ ...observabilityContext });
 
     return result;
   }
@@ -3386,6 +3971,8 @@ export class Agent<
     structuredOutput = false,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
+    const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
     const resToLog = {
       text: result.text,
       object: result.object,
@@ -3462,13 +4049,13 @@ export class Agent<
           instructions: titleInstructions,
         } = this.resolveTitleGenerationConfig(config.generateTitle);
 
-        if (shouldGenerate && !threadExists) {
+        if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
             const title = await this.genTitle(
               userMessage,
               requestContext,
-              { currentSpan: agentSpan },
+              observabilityContext,
               titleModel,
               titleInstructions,
             );
@@ -3532,7 +4119,7 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentSpan },
+      ...observabilityContext,
     });
 
     agentSpan?.end({
@@ -3621,6 +4208,8 @@ export class Agent<
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
       structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+      onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });
@@ -3695,6 +4284,8 @@ export class Agent<
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
+      onStepFinish: mergedOptions?.onStepFinish,
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });

@@ -27,7 +27,7 @@ import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../..
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
-const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
 
 export class PromptBlocksPG extends PromptBlocksStorage {
   #db: PgDB;
@@ -113,6 +113,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     await this.#db.createTable({
       tableName: TABLE_PROMPT_BLOCK_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_PROMPT_BLOCK_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+      ifNotExists: ['requestContextSchema'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -252,55 +257,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-      let versionCreated = false;
-
-      // Check if any snapshot config fields are present
-      const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
-
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NO_VERSIONS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `No versions found for prompt block ${id}`,
-            details: { blockId: id },
-          });
-        }
-
-        const {
-          id: _versionId,
-          blockId: _blockId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = SNAPSHOT_FIELDS.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        if (changedFields.length > 0) {
-          versionCreated = true;
-          const newVersionId = crypto.randomUUID();
-          await this.createVersion({
-            id: newVersionId,
-            blockId: id,
-            versionNumber: latestVersion.versionNumber + 1,
-            ...newConfig,
-            changedFields: [...changedFields],
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Update metadata fields on the block record
       const setClauses: string[] = [];
@@ -315,11 +272,6 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (status === undefined) {
-          setClauses.push(`status = $${paramIndex++}`);
-          values.push('published');
-        }
       }
 
       if (status !== undefined) {
@@ -342,13 +294,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      // Always update the record (at minimum updatedAt/updatedAtZ are set)
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       const updatedBlock = await this.getById(id);
       if (!updatedBlock) {
@@ -395,7 +342,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -420,6 +367,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
+
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
@@ -494,10 +446,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, "blockId", "versionNumber",
-          name, description, content, rules,
+          name, description, content, rules, "requestContextSchema",
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           input.id,
           input.blockId,
@@ -506,6 +458,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
           input.description ?? null,
           input.content,
           input.rules ? JSON.stringify(input.rules) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -805,6 +758,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       description: row.description as string | undefined,
       content: row.content as string,
       rules: this.parseJson(row.rules, 'rules'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),

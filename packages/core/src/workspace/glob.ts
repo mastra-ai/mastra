@@ -127,3 +127,100 @@ export function createGlobMatcher(patterns: string | string[], options?: GlobMat
 export function matchGlob(path: string, pattern: string | string[], options?: GlobMatcherOptions): boolean {
   return createGlobMatcher(pattern, options)(path);
 }
+
+// =============================================================================
+// Path Pattern Resolution
+// =============================================================================
+
+/** A filesystem entry returned by resolvePathPattern */
+export interface PathEntry {
+  path: string;
+  type: 'file' | 'directory';
+}
+
+/** Minimal readdir entry — compatible with both FileEntry and SkillSourceEntry */
+export interface ReaddirEntry {
+  name: string;
+  type: 'file' | 'directory';
+  isSymlink?: boolean;
+}
+
+export interface ResolvePathOptions {
+  /** Match dotfiles (default: false) */
+  dot?: boolean;
+  /** Maximum directory depth to walk (default: 10) */
+  maxDepth?: number;
+}
+
+/**
+ * Walk a directory tree recursively, returning all entries (files and directories).
+ * Skips symlinked directories to prevent infinite loops.
+ */
+async function walkAll(
+  readdir: (dir: string) => Promise<ReaddirEntry[]>,
+  dir: string,
+  depth: number,
+  maxDepth: number,
+): Promise<PathEntry[]> {
+  if (depth >= maxDepth) return [];
+  try {
+    const entries = await readdir(dir);
+    const results: PathEntry[] = [];
+    for (const entry of entries) {
+      if (entry.type === 'directory' && entry.isSymlink) continue;
+      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      results.push({ path: fullPath, type: entry.type });
+      if (entry.type === 'directory') {
+        results.push(...(await walkAll(readdir, fullPath, depth + 1, maxDepth)));
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve a path pattern to matching filesystem entries.
+ *
+ * Handles both plain paths and glob patterns consistently:
+ * - Plain paths: determines file vs directory via readdir probe, returns single entry
+ * - Glob patterns: walks from the glob base, matches both files and directories
+ *
+ * @example
+ * // Plain paths
+ * resolvePathPattern('/docs', readdir)            // [{ path: '/docs', type: 'directory' }]
+ * resolvePathPattern('/docs/readme.md', readdir)  // [{ path: '/docs/readme.md', type: 'file' }]
+ *
+ * // Glob patterns — matches files and directories
+ * resolvePathPattern('/docs/**\/*.md', readdir)    // all .md files under /docs
+ * resolvePathPattern('**\/skills', readdir)         // all directories (and files) named 'skills'
+ * resolvePathPattern('/skills/**', readdir)         // everything under /skills
+ */
+export async function resolvePathPattern(
+  pattern: string,
+  readdir: (dir: string) => Promise<ReaddirEntry[]>,
+  options?: ResolvePathOptions,
+): Promise<PathEntry[]> {
+  const maxDepth = options?.maxDepth ?? 10;
+
+  // Strip trailing slash for consistent path handling (e.g. '/skills/' → '/skills')
+  const normalized = pattern.length > 1 && pattern.endsWith('/') ? pattern.slice(0, -1) : pattern;
+
+  if (!isGlobPattern(normalized)) {
+    // Plain path — probe with readdir to determine if it's a directory or file
+    try {
+      await readdir(normalized);
+      return [{ path: normalized, type: 'directory' }];
+    } catch {
+      // readdir failed — treat as a file path (consumer handles non-existence)
+      return [{ path: normalized, type: 'file' }];
+    }
+  }
+
+  // Glob pattern — walk from base, match all entries (files and directories)
+  const walkRoot = extractGlobBase(normalized);
+  const matcher = createGlobMatcher(normalized, { dot: options?.dot ?? false });
+  const allEntries = await walkAll(readdir, walkRoot, 0, maxDepth);
+  return allEntries.filter(entry => matcher(entry.path));
+}

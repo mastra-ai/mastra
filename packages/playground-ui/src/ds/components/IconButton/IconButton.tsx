@@ -15,12 +15,14 @@ const sizeClasses = {
   sm: `${formElementSizes.sm} w-form-sm`,
   md: `${formElementSizes.md} w-form-md`,
   lg: `${formElementSizes.lg} w-form-lg`,
+  default: `${formElementSizes.default}`,
 };
 
 const iconSizeMap = {
   sm: 'sm',
   md: 'default',
   lg: 'lg',
+  default: 'default',
 } as const;
 
 const variantClasses = {

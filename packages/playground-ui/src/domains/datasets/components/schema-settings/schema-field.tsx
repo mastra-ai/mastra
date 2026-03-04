@@ -38,9 +38,15 @@ export function SchemaField({
   const [parseError, setParseError] = useState<string | null>(null);
   // Track if we've already auto-populated to avoid repeated population on re-enable
   const hasAutoPopulatedRef = useRef(false);
+  // Track whether the latest value change originated from local editing
+  const isLocalEditRef = useRef(false);
 
   // Sync jsonText when value changes from outside (e.g., import)
   useEffect(() => {
+    if (isLocalEditRef.current) {
+      isLocalEditRef.current = false;
+      return;
+    }
     if (value) {
       setJsonText(JSON.stringify(value, null, 2));
       setParseError(null);
@@ -74,6 +80,7 @@ export function SchemaField({
       const parsed = JSON.parse(text);
       if (typeof parsed === 'object' && parsed !== null) {
         setParseError(null);
+        isLocalEditRef.current = true;
         onChange(parsed);
       } else {
         setParseError('Schema must be a JSON object');
