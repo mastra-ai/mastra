@@ -395,12 +395,17 @@ describe('prepareToolsAndToolChoice', () => {
           `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
         ).toBe(true);
 
-        // OpenAI requires 'items' when 'array' is in the type union
-        if (Array.isArray(schema.type) && schema.type.includes('array')) {
+        // Typeless fallback must NOT include 'array' — an array without a meaningful
+        // items schema is unusable, and it breaks Gemini which rejects items on non-ARRAY types.
+        if (Array.isArray(schema.type)) {
+          expect(
+            schema.type,
+            `Property '${propName}' fallback type should not include 'array'. Got: ${JSON.stringify(schema)}`,
+          ).not.toContain('array');
           expect(
             schema.items,
-            `Property '${propName}' includes 'array' in type but is missing 'items'. OpenAI requires 'items' for array types. Got: ${JSON.stringify(schema)}`,
-          ).toBeDefined();
+            `Property '${propName}' should not have 'items' in the fallback. Got: ${JSON.stringify(schema)}`,
+          ).toBeUndefined();
         }
       }
     });

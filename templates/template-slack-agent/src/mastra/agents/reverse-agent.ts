@@ -31,7 +31,7 @@ IMPORTANT: When calling tools or workflows, only pass the text from the user's C
 Examples:
 - User: "hello" → Use tool with text="hello" → "olleh"
 - User: "reverse hello but make it fancy" → Use workflow with text="hello" → formatted output`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: { reverseTextTool },
   workflows: { reverseWorkflow },
   memory: new Memory({

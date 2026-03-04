@@ -1,15 +1,15 @@
 import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 
-import { weatherInfo } from '../tools';
 import * as aiTest from 'ai/test';
+import { z } from 'zod';
 import { fixtures } from '../../../fixtures';
-import { Fixtures } from '../../../types';
-import { lessComplexWorkflow } from '../workflows/complex-workflow';
-import { simpleMcpTool } from '../tools';
-import { storage } from '../storage';
+import type { Fixtures } from '../../../types';
 import { createMockOmModel } from '../mock-om-model';
-import { createTool } from '@mastra/core/tools';
+import { storage } from '../storage';
+import { weatherInfo, simpleMcpTool } from '../tools';
+import { lessComplexWorkflow } from '../workflows/complex-workflow';
 
 const memory = new Memory({
   // ...
@@ -22,17 +22,9 @@ const memory = new Memory({
 
 // Mock model for Observer/Reflector in E2E tests
 // Returns a simple observation/reflection response
-const mockObserverModel = new aiTest.MockLanguageModelV2({
-  provider: 'mock',
-  modelId: 'mock-observer',
-  doGenerate: async () => ({
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop' as const,
-    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-    content: [
-      {
-        type: 'text' as const,
-        text: `<observations>
+// Both doGenerate and doStream are required because OM processor calls agent.stream()
+
+const observerText = `<observations>
 ## January 27, 2026
 
 ### Thread: test-thread
@@ -40,9 +32,46 @@ const mockObserverModel = new aiTest.MockLanguageModelV2({
 -  User mentioned they need assistance
 </observations>
 <current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`,
-      },
-    ],
+<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`;
+
+const reflectorText = `<observations>
+## January 27, 2026
+
+### Condensed observations
+- 🔴 User needs help with tasks
+</observations>`;
+
+function createTextStream(text: string, modelId: string) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId, timestamp: new Date() });
+      controller.enqueue({ type: 'text-start', id: 'text-0' });
+      controller.enqueue({ type: 'text-delta', id: 'text-0', delta: text });
+      controller.enqueue({ type: 'text-end', id: 'text-0' });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+      });
+      controller.close();
+    },
+  });
+}
+
+const mockObserverModel = new aiTest.MockLanguageModelV2({
+  provider: 'mock',
+  modelId: 'mock-observer',
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+    content: [{ type: 'text' as const, text: observerText }],
+    warnings: [],
+  }),
+  doStream: async () => ({
+    stream: createTextStream(observerText, 'mock-observer'),
+    rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }),
 });
@@ -54,17 +83,12 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop' as const,
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-    content: [
-      {
-        type: 'text' as const,
-        text: `<observations>
-## January 27, 2026
-
-### Condensed observations
-- 🔴 User needs help with tasks
-</observations>`,
-      },
-    ],
+    content: [{ type: 'text' as const, text: reflectorText }],
+    warnings: [],
+  }),
+  doStream: async () => ({
+    stream: createTextStream(reflectorText, 'mock-reflector'),
+    rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }),
 });
@@ -111,8 +135,6 @@ const omAdaptiveMemory = new Memory({
   },
 });
 
-import { z } from 'zod';
-
 /**
  * Tool that the mock OM model calls to trigger multi-step execution.
  * The OM processor only triggers observations when stepNumber > 0,
@@ -132,7 +154,7 @@ const omTriggerTool = createTool({
 let count = 0;
 
 // Helper function to create a delayed readable stream
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function createDelayedStream(chunks: Array<any>, delayMs: number = 10) {
   return new ReadableStream({
     async start(controller) {
@@ -175,8 +197,21 @@ export const weatherAgent = new Agent({
     console.log({ fixture });
     const fixtureData = fixtures[fixture];
 
+    // Default response for API tests that don't set a fixture
+    const defaultResponse = {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text' as const, text: 'Mock response' }],
+      warnings: [],
+    };
+
     return new aiTest.MockLanguageModelV2({
       doGenerate: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return defaultResponse;
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
@@ -186,7 +221,7 @@ export const weatherAgent = new Agent({
         }
 
         // Extract text from fixture chunks
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
         const text = textChunks.join('');
 
@@ -204,6 +239,14 @@ export const weatherAgent = new Agent({
         };
       },
       doStream: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return {
+            stream: createDelayedStream([{ type: 'text-delta', delta: 'Mock response' }, { type: 'finish' }], 0),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 

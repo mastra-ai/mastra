@@ -124,6 +124,13 @@ type: "MastraDBMessage[]",
 description:
 "Array of the cloned messages with new IDs assigned to the new thread.",
 },
+{
+name: "messageIdMap",
+type: "Record<string, string>",
+description:
+"A mapping from source message IDs to their corresponding cloned message IDs.",
+isOptional: true,
+},
 ]}
 />
 
@@ -227,3 +234,13 @@ const results = await memory.recall({
   vectorSearchString: 'search query',
 })
 ```
+
+## Observational Memory
+
+When [Observational Memory](/docs/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
+
+- **Thread-scoped OM**: The OM record is cloned to the new thread. All internal message ID references are remapped to point to the cloned messages.
+- **Resource-scoped OM (same `resourceId`)**: The OM record is shared between the source and cloned threads since they belong to the same resource. No duplication occurs.
+- **Resource-scoped OM (different `resourceId`)**: The OM record is cloned to the new resource. Message IDs are remapped and any thread-identifying tags within observations are updated to reference the cloned thread.
+
+Only the current (most recent) OM generation is cloned — older history generations are not copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.

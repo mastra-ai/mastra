@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -13,6 +14,14 @@ export interface CustomPack {
   name: string;
   models: Record<string, string>;
   createdAt: string;
+}
+
+/** A saved custom provider for OpenAI-compatible endpoints. */
+export interface CustomProviderSetting {
+  name: string;
+  url: string;
+  apiKey?: string;
+  models: string[];
 }
 
 /** Storage backend type. */
@@ -47,6 +56,9 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
+/** Valid persisted thinking level values. */
+export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -61,8 +73,8 @@ export interface GlobalSettings {
   // Global model preferences (applied to new threads)
   models: {
     /**
-     * Active model pack ID. Built-in packs use their id directly ("varied",
-     * "anthropic", "openai"). Custom packs use "custom:<name>".
+     * Active model pack ID. Built-in packs use their id directly ("anthropic",
+     * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
      * (e.g. new model versions) apply automatically.
      * Cleared when the user manually overrides via /models (falls back to modeDefaults).
@@ -86,13 +98,23 @@ export interface GlobalSettings {
   preferences: {
     yolo: boolean | null;
     theme: 'auto' | 'dark' | 'light';
+    /** Default reasoning effort level used for all threads/models unless overridden in-session. */
+    thinkingLevel: ThinkingLevelSetting;
+    /** When true, components like subagent output collapse to compact summaries on completion. */
+    quietMode: boolean;
   };
   // Storage backend configuration
   storage: StorageSettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
+  // User-created custom providers with custom models
+  customProviders: CustomProviderSetting[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // Version the user dismissed the update prompt for (skip until they manually update past this)
+  updateDismissedVersion: string | null;
+  // LSP configuration forwarded to the workspace
+  lsp?: LSPConfig;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -120,14 +142,100 @@ const DEFAULTS: GlobalSettings = {
   preferences: {
     yolo: null,
     theme: 'auto',
+    thinkingLevel: 'off',
+    quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
+  customProviders: [],
   modelUseCounts: {},
+  updateDismissedVersion: null,
+  lsp: {},
 };
+
+const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+
+function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
+  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
+    ? (value as ThinkingLevelSetting)
+    : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
+  const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
+
+  return {
+    ...DEFAULTS.preferences,
+    ...raw,
+    thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+  };
+}
 
 export function getSettingsPath(): string {
   return join(getAppDataDir(), 'settings.json');
+}
+
+export function getCustomProviderId(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'provider';
+}
+
+export function toCustomProviderModelId(providerName: string, modelName: string): string {
+  const providerId = getCustomProviderId(providerName);
+  const trimmedModelName = modelName.trim();
+  const providerPrefix = `${providerId}/`;
+  if (trimmedModelName.startsWith(providerPrefix)) {
+    return trimmedModelName;
+  }
+  return `${providerId}/${trimmedModelName}`;
+}
+
+export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
+  if (!Array.isArray(rawProviders)) return [];
+
+  const parsedProviders: CustomProviderSetting[] = [];
+  for (const rawProvider of rawProviders) {
+    if (!rawProvider || typeof rawProvider !== 'object') continue;
+
+    const candidate = rawProvider as Record<string, unknown>;
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!name || !url) continue;
+
+    const providerId = getCustomProviderId(name);
+    const models = Array.isArray(candidate.models)
+      ? [
+          ...new Set(
+            candidate.models
+              .filter((model): model is string => typeof model === 'string')
+              .map(model => model.trim())
+              .map(model => {
+                const providerPrefix = `${providerId}/`;
+                if (model.startsWith(providerPrefix)) {
+                  return model.slice(providerPrefix.length);
+                }
+                return model;
+              }),
+          ),
+        ].filter(model => model.length > 0)
+      : [];
+
+    const apiKey =
+      typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
+
+    parsedProviders.push({
+      name,
+      url,
+      ...(apiKey ? { apiKey } : {}),
+      models,
+    });
+  }
+
+  return parsedProviders;
 }
 
 /**
@@ -158,7 +266,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: { ...DEFAULTS.models, ...raw.models },
-        preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+        preferences: parsePreferences(raw.preferences),
         storage: {
           ...STORAGE_DEFAULTS,
           ...raw.storage,
@@ -166,7 +274,10 @@ function migrateFromAuth(settingsPath: string): boolean {
           pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
         },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+        customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -215,6 +326,49 @@ function migrateFromAuth(settingsPath: string): boolean {
   return true;
 }
 
+const LEGACY_VARIED_MODELS: Record<string, string> = {
+  plan: 'openai/gpt-5.3-codex',
+  build: 'anthropic/claude-sonnet-4-5',
+  fast: 'anthropic/claude-haiku-4-5',
+};
+
+export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
+  const legacyPackId = 'varied';
+  const customPackId = 'custom:varied';
+  const hasLegacyReference =
+    settings.models.activeModelPackId === legacyPackId || settings.onboarding.modePackId === legacyPackId;
+
+  if (!hasLegacyReference) return false;
+
+  const existingIdx = settings.customModelPacks.findIndex(p => p.name === 'varied');
+  if (existingIdx >= 0) {
+    const existing = settings.customModelPacks[existingIdx]!;
+    const modelsMatch = Object.entries(LEGACY_VARIED_MODELS).every(([k, v]) => existing.models[k] === v);
+    if (!modelsMatch) {
+      existing.models = { ...LEGACY_VARIED_MODELS };
+    }
+  } else {
+    settings.customModelPacks.push({
+      name: 'varied',
+      models: { ...LEGACY_VARIED_MODELS },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (settings.models.activeModelPackId === legacyPackId) {
+    settings.models.activeModelPackId = customPackId;
+    if (Object.keys(settings.models.modeDefaults).length === 0) {
+      settings.models.modeDefaults = { ...LEGACY_VARIED_MODELS };
+    }
+  }
+
+  if (settings.onboarding.modePackId === legacyPackId) {
+    settings.onboarding.modePackId = customPackId;
+  }
+
+  return true;
+}
+
 export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
@@ -222,10 +376,13 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return structuredClone(DEFAULTS);
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    // Spread raw first to preserve unknown top-level keys (forward-compatibility),
+    // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
+      ...raw,
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
-      preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+      preferences: parsePreferences(raw.preferences),
       storage: {
         ...STORAGE_DEFAULTS,
         ...raw.storage,
@@ -233,12 +390,24 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
       },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+      customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 
     // Migrate legacy omModelId → omModelOverride
+    let settingsChanged = false;
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
+      settingsChanged = true;
+    }
+
+    if (migrateLegacyVariedPack(settings)) {
+      settingsChanged = true;
+    }
+
+    if (settingsChanged) {
       saveSettings(settings, filePath);
     }
 
@@ -246,6 +415,79 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   } catch {
     return structuredClone(DEFAULTS);
   }
+}
+
+export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+
+export interface ThreadSettings {
+  activeModelPackId: string | null;
+  modeModelIds: Record<string, string>;
+}
+
+export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {
+  const modeModelIds: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    const modeMatch = key.match(/^modeModelId_(.+)$/);
+    if (modeMatch?.[1] && typeof value === 'string' && value.length > 0) {
+      modeModelIds[modeMatch[1]] = value;
+    }
+  }
+
+  const rawPackId = metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const activeModelPackId = typeof rawPackId === 'string' && rawPackId.length > 0 ? rawPackId : null;
+
+  return {
+    activeModelPackId,
+    modeModelIds,
+  };
+}
+
+/**
+ * Resolve active model pack id for the current thread.
+ *
+ * Priority:
+ * 1) explicit thread metadata activeModelPackId
+ * 2) inferred from thread modeModelId_* values
+ * 3) global settings.models.activeModelPackId
+ */
+export function resolveThreadActiveModelPackId(
+  settings: GlobalSettings,
+  builtinPacks: Array<{ id: string; models: Record<string, string> }>,
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  const threadSettings = parseThreadSettings(metadata);
+
+  const isKnownPack = (packId: string): boolean => {
+    if (packId.startsWith('custom:')) {
+      const name = packId.slice('custom:'.length);
+      return settings.customModelPacks.some(p => p.name === name);
+    }
+    return builtinPacks.some(p => p.id === packId);
+  };
+
+  if (threadSettings.activeModelPackId && isKnownPack(threadSettings.activeModelPackId)) {
+    return threadSettings.activeModelPackId;
+  }
+
+  const allPacks: Array<{ id: string; models: Record<string, string> }> = [
+    ...builtinPacks,
+    ...settings.customModelPacks.map(p => ({ id: `custom:${p.name}`, models: p.models })),
+  ];
+
+  for (const pack of allPacks) {
+    const packEntries = Object.entries(pack.models);
+    const threadEntries = Object.keys(threadSettings.modeModelIds);
+    const matches =
+      packEntries.length === threadEntries.length &&
+      packEntries.every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
+    if (matches) return pack.id;
+  }
+
+  if (settings.models.activeModelPackId && isKnownPack(settings.models.activeModelPackId)) {
+    return settings.models.activeModelPackId;
+  }
+
+  return null;
 }
 
 /**

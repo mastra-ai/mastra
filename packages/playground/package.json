@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.3.5-alpha.0",
+  "version": "1.3.6",
   "type": "module",
   "homepage": "https://mastra.ai",
   "files": [
@@ -21,7 +21,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:watch": "vite build --watch",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint --no-warn-ignored .",
     "preview": "vite preview",
     "test:e2e": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts --ui",
@@ -44,8 +44,8 @@
     "react-router": "^7.6.3"
   },
   "devDependencies": {
+    "@internal/lint": "workspace:*",
     "@playwright/test": "^1.56.0",
-    "@eslint/js": "^9.39.2",
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
@@ -53,12 +53,10 @@
     "autoprefixer": "^10.4.24",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
     "nanoid": "^5.1.6",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "typescript": "catalog:",
-    "typescript-eslint": "^8.51.0",
-    "vite": "^7.3.0"
+    "vite": "^7.3.1"
   }
 }

@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { truncateOutput } from './output-helpers';
+import { truncateOutput, sandboxToModelOutput } from './output-helpers';
 
 const KILL_TAIL_LINES = 50;
 
@@ -12,11 +12,12 @@ export const killProcessTool = createTool({
   description: `Kill a background process by its PID.
 
 Use this to stop a long-running background process that was started with execute_command (background: true). Returns the last ${KILL_TAIL_LINES} lines of output.`,
+  toModelOutput: sandboxToModelOutput,
   inputSchema: z.object({
     pid: z.number().describe('The process ID of the background process to kill'),
   }),
   execute: async ({ pid }, context) => {
-    const { sandbox } = requireSandbox(context);
+    const { workspace, sandbox } = requireSandbox(context);
 
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
@@ -54,8 +55,9 @@ Use this to stop a long-running background process that was started with execute
     const parts: string[] = [`Process ${pid} has been killed.`];
 
     if (handle) {
-      const stdout = handle.stdout ? truncateOutput(handle.stdout, KILL_TAIL_LINES) : '';
-      const stderr = handle.stderr ? truncateOutput(handle.stderr, KILL_TAIL_LINES) : '';
+      const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]?.maxOutputTokens;
+      const stdout = handle.stdout ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
+      const stderr = handle.stderr ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
 
       if (stdout) {
         parts.push('', '--- stdout (last output) ---', stdout);

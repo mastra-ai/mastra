@@ -17,7 +17,7 @@ import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -53,6 +53,16 @@ export type JSONArray = JSONValue[];
  * record is keyed by the provider-specific metadata key.
  */
 export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+export type StreamTransport = {
+  type: 'openai-websocket';
+  close: () => void;
+  closeOnFinish: boolean;
+};
+
+export type StreamTransportRef = {
+  current?: StreamTransport;
+};
 
 interface BaseChunkType {
   runId: string;
@@ -860,10 +870,10 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
-  tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
-};
+  transportRef?: StreamTransportRef;
+} & Partial<ObservabilityContext>;
 
 /**
  * Tripwire data attached to a step when a processor triggers a tripwire.

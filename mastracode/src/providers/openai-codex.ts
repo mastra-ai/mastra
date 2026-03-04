@@ -45,6 +45,17 @@ IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user
 /** Valid thinking level values. */
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
+const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
+
+export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
+  // GPT-5.* models on Codex require at least low reasoning.
+  if (GPT5_MODEL_RE.test(modelId) && level === 'off') {
+    return 'low';
+  }
+
+  return level;
+}
+
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
 const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
@@ -101,8 +112,10 @@ export function openaiCodexProvider(
 ): MastraModelConfig {
   // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
   // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
-  const level: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[level];
+  // GPT-5.* models are floored to at least "low" on Codex.
+  const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+  const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const middleware = createCodexMiddleware(reasoningEffort);
 
   // Test environment: use API key
