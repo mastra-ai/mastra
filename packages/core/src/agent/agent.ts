@@ -1964,6 +1964,7 @@ export class Agent<
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
           requestContext,
+          workspace,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
