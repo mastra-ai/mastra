@@ -673,4 +673,163 @@ describe('runExperiment', () => {
       );
     });
   });
+
+  describe('targetVersionId resolution', () => {
+    it('resolves agent at specific version via editor when targetVersionId is set', async () => {
+      const versionedAgent = createMockAgent('Versioned Response');
+      const editorGetById = vi.fn().mockResolvedValue(versionedAgent);
+
+      mastra = {
+        ...mastra,
+        getEditor: vi.fn().mockReturnValue({
+          agent: { getById: editorGetById },
+        }),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'stored-agent',
+        targetVersionId: 'version-uuid-123',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+      expect(editorGetById).toHaveBeenCalledWith('stored-agent', { versionId: 'version-uuid-123' });
+      // Should NOT have called registry fallback
+      expect(mastra.getAgentById).not.toHaveBeenCalled();
+      expect(mastra.getAgent).not.toHaveBeenCalled();
+    });
+
+    it('falls back to registry when editor returns null for targetVersionId', async () => {
+      const registryAgent = createMockAgent('Registry Response');
+      const editorGetById = vi.fn().mockResolvedValue(null);
+
+      mastra = {
+        ...mastra,
+        getEditor: vi.fn().mockReturnValue({
+          agent: { getById: editorGetById },
+        }),
+        getAgentById: vi.fn().mockReturnValue(registryAgent),
+        getAgent: vi.fn().mockReturnValue(registryAgent),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'some-agent',
+        targetVersionId: 'nonexistent-version',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(editorGetById).toHaveBeenCalled();
+      // Fell through to registry
+      expect(mastra.getAgentById).toHaveBeenCalled();
+    });
+
+    it('falls back to registry when getEditor() returns undefined', async () => {
+      const registryAgent = createMockAgent('Registry Response');
+
+      mastra = {
+        ...mastra,
+        getEditor: vi.fn().mockReturnValue(undefined),
+        getAgentById: vi.fn().mockReturnValue(registryAgent),
+        getAgent: vi.fn().mockReturnValue(registryAgent),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'some-agent',
+        targetVersionId: 'some-version',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(mastra.getAgentById).toHaveBeenCalled();
+    });
+
+    it('does not call getEditor when targetVersionId is not set', async () => {
+      const mockAgent = createMockAgent('Response');
+      const getEditorSpy = vi.fn();
+
+      mastra = {
+        ...mastra,
+        getEditor: getEditorSpy,
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(getEditorSpy).not.toHaveBeenCalled();
+    });
+
+    it('ignores targetVersionId for workflow targets', async () => {
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        createRun: vi.fn().mockImplementation(async () => ({
+          start: vi.fn().mockResolvedValue({
+            status: 'success',
+            result: { answer: 'Workflow result' },
+          }),
+        })),
+      };
+      const getEditorSpy = vi.fn();
+
+      mastra = {
+        ...mastra,
+        getEditor: getEditorSpy,
+        getWorkflowById: vi.fn().mockReturnValue(mockWorkflow),
+        getWorkflow: vi.fn().mockReturnValue(mockWorkflow),
+      } as unknown as Mastra;
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'workflow',
+        targetId: 'test-workflow',
+        targetVersionId: 'some-version',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(getEditorSpy).not.toHaveBeenCalled();
+    });
+
+    it('ignores targetVersionId for scorer targets', async () => {
+      const mockScorer = {
+        id: 'target-scorer',
+        name: 'Target Scorer',
+        description: 'Scorer under test',
+        run: vi.fn().mockResolvedValue({ score: 0.9, reason: 'Good' }),
+      };
+      const getEditorSpy = vi.fn();
+
+      mastra = {
+        ...mastra,
+        getEditor: getEditorSpy,
+        getScorerById: vi.fn().mockReturnValue(mockScorer),
+      } as unknown as Mastra;
+
+      const scorerDataset = await datasetsStorage.createDataset({ name: 'Scorer Version Test' });
+      await datasetsStorage.addItem({
+        datasetId: scorerDataset.id,
+        input: { input: 'test', output: 'test', groundTruth: 'test' },
+      });
+
+      const result = await runExperiment(mastra, {
+        datasetId: scorerDataset.id,
+        targetType: 'scorer',
+        targetId: 'target-scorer',
+        targetVersionId: 'some-version',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(getEditorSpy).not.toHaveBeenCalled();
+    });
+  });
 });
