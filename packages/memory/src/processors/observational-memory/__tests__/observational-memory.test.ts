@@ -21,6 +21,7 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -7686,7 +7687,7 @@ describe('Full Async Buffering Flow', () => {
     const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
     expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
 
-    const expectedFloor = (om as any).resolveRetentionFloor(
+    const expectedFloor = resolveRetentionFloor(
       (om as any).observationConfig.bufferActivation,
       (om as any).observationConfig.messageTokens,
     );
