@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
@@ -32,9 +33,8 @@ const TOKEN_ESTIMATE_CACHE_SOURCE = 'o200k_base';
 type CacheablePart = any;
 
 function buildEstimateKey(kind: string, text: string): string {
-  const head = text.slice(0, 24);
-  const tail = text.slice(-24);
-  return `${kind}:${text.length}:${head}:${tail}`;
+  const payloadHash = createHash('sha1').update(text).digest('hex');
+  return `${kind}:${payloadHash}`;
 }
 
 function getPartCacheEntry(part: CacheablePart): TokenEstimateCacheEntry | undefined {
