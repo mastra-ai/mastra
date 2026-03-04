@@ -235,7 +235,7 @@ export class Memory extends MastraMemory {
 
     // If history is disabled and there's no semantic recall to perform, return empty immediately
     if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
-      return { messages: [], usage: undefined };
+      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
     }
 
     if (config?.semanticRecall && vectorSearchString && this.vector) {

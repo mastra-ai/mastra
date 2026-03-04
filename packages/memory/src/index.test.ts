@@ -1334,10 +1334,14 @@ describe('Memory', () => {
       });
     });
 
-    it('recall() should return empty messages when lastMessages: false', async () => {
+    it('recall() should return empty messages with valid pagination metadata when lastMessages: false', async () => {
       const result = await memory.recall({ threadId, resourceId });
 
       expect(result.messages).toHaveLength(0);
+      expect(result).toHaveProperty('total', 0);
+      expect(result).toHaveProperty('page', 0);
+      expect(result).toHaveProperty('perPage', 0);
+      expect(result).toHaveProperty('hasMore', false);
     });
 
     it('recall() should return empty when lastMessages: false even if thread has many messages', async () => {
