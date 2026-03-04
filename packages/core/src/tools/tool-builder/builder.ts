@@ -247,6 +247,7 @@ export class CoreToolBuilder extends MastraBase {
     options: ToolOptions,
     logType?: 'tool' | 'toolset' | 'client-tool',
     processedSchema?: z.ZodTypeAny,
+    originalSchema?: z.ZodTypeAny,
   ) {
     // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
     const {
@@ -477,7 +478,7 @@ export class CoreToolBuilder extends MastraBase {
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
-        const { data, error } = validateToolInput(parameters, args, options.name);
+        const { data, error } = validateToolInput(parameters, args, options.name, originalSchema);
         if (error) {
           logger.warn(error.message);
           return error;
@@ -653,6 +654,7 @@ export class CoreToolBuilder extends MastraBase {
             { ...this.options, description: this.originalTool.description },
             this.logType,
             processedZodSchema, // Pass the processed Zod schema for validation
+            originalSchema, // Pass the original schema as fallback (GitHub #13480)
           )
         : undefined,
     };

@@ -312,15 +312,19 @@ function coerceStringifiedJsonValues(schema: SchemaWithValidation<unknown>, inpu
 /**
  * Validates raw input data against a Zod schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The Zod schema to validate against (may be processed by OpenAI compat layer)
  * @param input The raw input data to validate
  * @param toolId Optional tool ID for better error messages
+ * @param originalSchema The original unmodified schema before compat processing. Used as a
+ *   fallback when the processed schema rejects valid input (e.g., compat layer converts
+ *   `.optional()` to `.nullable().transform()`, making optional fields required). (GitHub #13480)
  * @returns The validated data or a validation error
  */
 export function validateToolInput<T = any>(
   schema: SchemaWithValidation<T> | undefined,
   input: unknown,
   toolId?: string,
+  originalSchema?: SchemaWithValidation<T>,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return input as-is
   if (!schema || !('safeParse' in schema)) {
@@ -381,6 +385,33 @@ export function validateToolInput<T = any>(
 
   if (retryValidation.success) {
     return { data: retryValidation.data };
+  }
+
+  // Step 6: Fallback to original (pre-compat) schema (GitHub #13480)
+  // The OpenAI compat layer converts .optional() to .nullable().transform(),
+  // making fields required in the processed schema. When the LLM omits optional
+  // fields entirely (key not present in input), the processed schema rejects it.
+  // The original schema still has .optional() and accepts missing keys.
+  // Note: We intentionally only apply normalizeNullishInput here (not convertUndefinedToNull
+  // or coerceStringifiedJsonValues) because the original schema accepts undefined natively.
+  if (originalSchema && 'safeParse' in originalSchema) {
+    const originalNormalized = normalizeNullishInput(originalSchema, input);
+    const originalValidation = originalSchema.safeParse(originalNormalized);
+    if (originalValidation.success) {
+      return { data: originalValidation.data };
+    }
+
+    // Step 6b: Retry original schema with null values stripped (CodeRabbit review)
+    // Handles: LLM sends null for optional fields AND compat layer removed .optional().
+    // Step 5 strips nulls but processed schema still requires the key (.nullable(), not .optional()).
+    // Step 6 tries original schema with raw input but null ≠ undefined, so .optional() rejects it.
+    // Stripping nulls makes keys absent → original schema's .optional() accepts missing keys.
+    const originalStrippedInput = stripNullishValues(input);
+    const originalNormalizedStripped = normalizeNullishInput(originalSchema, originalStrippedInput);
+    const originalStrippedValidation = originalSchema.safeParse(originalNormalizedStripped);
+    if (originalStrippedValidation.success) {
+      return { data: originalStrippedValidation.data };
+    }
   }
 
   // All attempts failed - return the original (non-stripped) error since it's
