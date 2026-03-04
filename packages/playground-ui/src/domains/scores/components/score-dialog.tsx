@@ -96,7 +96,7 @@ export function ScoreDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-        <Button variant="standard" size="default" className="ml-auto mr-8" onClick={() => setDatasetDialogOpen(true)}>
+        <Button variant="standard" size="default" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
           <Icon>
             <SaveIcon />
           </Icon>
@@ -225,7 +225,7 @@ export function ScoreDialog({
 
     <ScoreAsItemDialog
       score={score}
-      isOpen={datasetDialogOpen}
+      isOpen={datasetDialogOpen && isOpen}
       onClose={() => setDatasetDialogOpen(false)}
       level={(dialogLevel + 1) as SideDialogRootProps['level']}
     />

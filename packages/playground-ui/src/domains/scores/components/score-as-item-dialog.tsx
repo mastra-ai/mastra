@@ -18,7 +18,7 @@ function getInitialInput(score?: ScoreRowData): string {
   // input = the full scorer.run() payload: { input, output, groundTruth }
   // groundTruth from the original experiment is not available on ScoreRowData,
   // so we omit it — user can add it manually in the editor
-  return JSON.stringify({ input: score.input, output: score.output, groundTruth: undefined }, null, 2);
+  return JSON.stringify({ input: score.input, output: score.output, groundTruth: null }, null, 2);
 }
 
 function getInitialGroundTruth(score?: ScoreRowData): string {

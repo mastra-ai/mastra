@@ -15,7 +15,7 @@ type TraceAsItemDialogProps = {
 };
 
 function getInitialInput(traceDetails?: SpanRecord): string {
-  if (!traceDetails?.input) return '{}';
+  if (traceDetails?.input == null) return '{}';
 
   // Unwrap legacy { messages } wrapper from agent_run spans so the dataset item stores a valid MessageListInput
   const spanInput = traceDetails.input as Record<string, unknown> | undefined;

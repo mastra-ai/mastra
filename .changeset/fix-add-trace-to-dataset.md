@@ -2,9 +2,8 @@
 '@mastra/playground-ui': patch
 ---
 
-Fix dataset schema validation when saving traces and scores as dataset items.
+Fix saving traces and scores as dataset items in the Studio.
 
-- Align `AGENT_INPUT_SCHEMA` and `AGENT_OUTPUT_SCHEMA` with actual agent input/output shapes (support structured content parts, rich output objects)
-- Update scorer schemas to accept structured message content
-- Unwrap legacy `{ messages }` wrapper from agent_run spans in trace-as-item dialog
-- Add "Save as Dataset Item" button to score dialog for scorer calibration workflows
+- Traces with structured message content (e.g. multi-part content arrays) can now be saved as dataset items without validation errors
+- Score dialog now has a "Save as Dataset Item" button for scorer calibration workflows, pre-filling scorer input/output and expected score
+- Dataset output schema updated to match the full experiment output shape (text, object, toolCalls, files, usage, etc.)
