@@ -4,12 +4,6 @@
  * Injects available skills metadata into the system message so the model
  * knows which skills exist and can call the `skill` tool to load instructions.
  *
- * Tool creation has been moved to `createSkillTools()` in the workspace/skills
- * module and wired in via `Agent.listSkillTools()` / `convertTools()`, just
- * like workspace tools.  This avoids losing tool `execute` functions when the
- * agentic loop serializes across tool-approval pauses and keeps the processor
- * stateless (no activation tracking).
- *
  * @example
  * ```typescript
  * // Auto-created by Agent when workspace has skills

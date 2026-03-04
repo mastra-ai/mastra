@@ -8,7 +8,7 @@
 - Renamed `skill-activate` to `skill` — returns full instructions directly in the tool result
 - Consolidated `skill-read-reference`, `skill-read-script`, and `skill-read-asset` into `skill_read`
 - Renamed `skill-search` to `skill_search`
-- In Playground UI, renamed `ActivatedSkillsProvider`/`useActivatedSkills` to `LoadedSkillsProvider`/`useLoadedSkills`
+- Playground UI now derives skill "activated" status from `skill` tool completion
 
 **Migration**
 
@@ -17,8 +17,6 @@
 | `skill-activate` | `skill` |
 | `skill-read-reference` / `skill-read-script` / `skill-read-asset` | `skill_read` |
 | `skill-search` | `skill_search` |
-| `ActivatedSkillsProvider` | `LoadedSkillsProvider` |
-| `useActivatedSkills` | `useLoadedSkills` |
 
 ```ts
 // Before

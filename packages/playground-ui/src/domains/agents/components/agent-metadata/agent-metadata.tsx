@@ -26,7 +26,7 @@ import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
-import { useLoadedSkills } from '../../context/loaded-skills-context';
+import { useActivatedSkills } from '../../context/activated-skills-context';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -329,7 +329,7 @@ export interface AgentMetadataSkillListProps {
 
 export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMetadataSkillListProps) => {
   const { Link, paths } = useLinkComponent();
-  const { isSkillLoaded } = useLoadedSkills();
+  const { isSkillActivated } = useActivatedSkills();
 
   if (skills.length === 0) {
     return <AgentMetadataListEmpty>No skills</AgentMetadataListEmpty>;
@@ -338,7 +338,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
   return (
     <AgentMetadataList>
       {skills.map(skill => {
-        const loaded = isSkillLoaded(skill.name);
+        const loaded = isSkillActivated(skill.name);
         const badge = (
           <Badge
             icon={<SkillIcon className={`h-3 w-3 ${loaded ? 'text-green-400' : 'text-accent2'}`} />}

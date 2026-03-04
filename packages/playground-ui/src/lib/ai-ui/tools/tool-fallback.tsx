@@ -10,7 +10,7 @@ import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
-import { useLoadedSkills } from '@/domains/agents/context/loaded-skills-context';
+import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -26,14 +26,14 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
   // Hooks must be called unconditionally at the top (React Rules of Hooks, issue #12726)
-  const { markSkillLoaded } = useLoadedSkills();
+  const { activateSkill } = useActivatedSkills();
 
   useEffect(() => {
     if (toolName !== 'skill') return;
     if (!args?.name) return;
     if (props.status?.type !== 'complete') return;
-    markSkillLoaded(args.name);
-  }, [toolName, args?.name, props.status?.type, markSkillLoaded]);
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
 
