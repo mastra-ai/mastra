@@ -132,9 +132,9 @@ function EditLayoutWrapper() {
   const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
   useEffect(() => {
     if (isCodeAgentOverride && isOnIdentityPage) {
-      routerNavigate(`${basePath}/instruction-blocks`, { replace: true });
+      routerNavigate(`${basePath}/instruction-blocks${location.search}${location.hash}`, { replace: true });
     }
-  }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath]);
+  }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath, location.search, location.hash]);
 
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
