@@ -277,6 +277,91 @@ describe('MessageList - Gemini Compatibility', () => {
       }
     });
 
+    it('should not include empty-content messages in aiV5.llmPrompt() when assistant has source-only parts', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Find information' }, 'input');
+
+      const assistantWithOnlySource: MastraDBMessage = {
+        id: 'msg-only-source',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'source',
+              source: {
+                type: 'source',
+                sourceType: 'url',
+                id: 'source-1',
+                url: 'https://example.com/reference',
+                title: 'Reference',
+              },
+            } as any,
+          ],
+          content: '',
+        },
+      };
+
+      list.add(assistantWithOnlySource, 'response');
+      list.add({ role: 'user', content: 'Continue' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+
+      for (const msg of llmPrompt) {
+        if (msg.role !== 'system' && typeof msg.content !== 'string') {
+          expect(msg.content.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('should keep assistant message in aiV5.llmPrompt() when parts include both source and text', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Find information' }, 'input');
+
+      const assistantWithSourceAndText: MastraDBMessage = {
+        id: 'msg-source-and-text',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'source',
+              source: {
+                type: 'source',
+                sourceType: 'url',
+                id: 'source-2',
+                url: 'https://example.com/reference-2',
+                title: 'Reference 2',
+              },
+            } as any,
+            {
+              type: 'text',
+              text: 'Here is the summary.',
+            },
+          ],
+          content: 'Here is the summary.',
+        },
+      };
+
+      list.add(assistantWithSourceAndText, 'response');
+      list.add({ role: 'user', content: 'Continue' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const assistantMessages = llmPrompt.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages.length).toBeGreaterThan(0);
+      const hasExpectedText = assistantMessages.some(
+        m =>
+          typeof m.content !== 'string' &&
+          m.content.some(part => part.type === 'text' && part.text === 'Here is the summary.'),
+      );
+      expect(hasExpectedText).toBe(true);
+    });
+
     it('should preserve data-* parts in UI messages but filter from model messages', () => {
       const list = new MessageList();
 
