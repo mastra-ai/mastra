@@ -51,7 +51,6 @@ const subagents: HarnessSubagent[] = [
     name: 'Explore',
     description: 'Read-only codebase exploration.',
     instructions: 'You are an explorer.',
-    maxSteps: 50,
     tools: { view: { id: 'view' } as any },
   },
   {

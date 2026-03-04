@@ -855,102 +855,98 @@ describe('Gemini Model Compatibility Tests', () => {
       expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
     }, 15000);
 
-    it(
-      'should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true',
-      { retry: 2, timeout: 30000 },
-      async () => {
-        const findUserTool = createTool({
-          id: 'Find user tool',
-          description: 'This is a test tool that returns the name, email and age',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          suspendSchema: z.object({
-            message: z.string(),
-          }),
-          resumeSchema: z.object({
-            age: z.number(),
-          }),
-          execute: async (inputData, context) => {
-            if (!context?.agent?.resumeData) {
-              return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
-            }
+    it('should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
+      const findUserTool = createTool({
+        id: 'Find user tool',
+        description: 'This is a test tool that returns the name, email and age',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        suspendSchema: z.object({
+          message: z.string(),
+        }),
+        resumeSchema: z.object({
+          age: z.number(),
+        }),
+        execute: async (inputData, context) => {
+          if (!context?.agent?.resumeData) {
+            return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
+          }
 
-            return {
-              name: inputData.name,
-              age: context?.agent?.resumeData?.age,
-              email: 'test@test.com',
-            };
-          },
-        });
+          return {
+            name: inputData.name,
+            age: context?.agent?.resumeData?.age,
+            email: 'test@test.com',
+          };
+        },
+      });
 
-        const findUserProfessionTool = createTool({
-          id: 'Find user profession tool',
-          description: 'This is a test tool that returns the profession of the user',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          execute: async () => {
-            return {
-              profession: 'Software Engineer',
-            };
-          },
-        });
+      const findUserProfessionTool = createTool({
+        id: 'Find user profession tool',
+        description: 'This is a test tool that returns the profession of the user',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: async () => {
+          return {
+            profession: 'Software Engineer',
+          };
+        },
+      });
 
-        const userAgent = new Agent({
-          id: 'user-agent',
-          name: 'User Agent',
-          instructions: 'You are an agent that can get list of users using findUserTool.',
-          model: MODEL,
-          tools: { findUserTool, findUserProfessionTool },
-          memory,
-          defaultOptions: {
-            autoResumeSuspendedTools: true,
-          },
-        });
+      const userAgent = new Agent({
+        id: 'user-agent',
+        name: 'User Agent',
+        instructions: 'You are an agent that can get list of users using findUserTool.',
+        model: MODEL,
+        tools: { findUserTool, findUserProfessionTool },
+        memory,
+        defaultOptions: {
+          autoResumeSuspendedTools: true,
+        },
+      });
 
-        const mastra = new Mastra({
-          agents: { userAgent },
-          logger: false,
-          storage: mockStorage,
-        });
+      const mastra = new Mastra({
+        agents: { userAgent },
+        logger: false,
+        storage: mockStorage,
+      });
 
-        const agentOne = mastra.getAgent('userAgent');
+      const agentOne = mastra.getAgent('userAgent');
 
-        const threadAndResource = {
-          thread: randomUUID(),
-          resource: randomUUID(),
-        };
-        const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
-          memory: threadAndResource,
-        });
+      const threadAndResource = {
+        thread: randomUUID(),
+        resource: randomUUID(),
+      };
+      const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
+        memory: threadAndResource,
+      });
 
-        expect(output.finishReason).toBe('suspended');
-        expect(output.toolResults).toHaveLength(0);
-        expect(output.suspendPayload).toMatchObject({
-          toolName: 'findUserTool',
-          suspendPayload: {
-            message: 'Please provide the age of the user',
-          },
-        });
-        const resumeOutput = await agentOne.generate('He is 25 years old', {
-          memory: threadAndResource,
-        });
+      expect(output.finishReason).toBe('suspended');
+      expect(output.toolResults).toHaveLength(0);
+      expect(output.suspendPayload).toMatchObject({
+        toolName: 'findUserTool',
+        suspendPayload: {
+          message: 'Please provide the age of the user',
+        },
+      });
+      const resumeOutput = await agentOne.generate('He is 25 years old', {
+        memory: threadAndResource,
+      });
 
-        const toolResults = resumeOutput.toolResults;
+      const toolResults = resumeOutput.toolResults;
 
-        const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+      const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
 
-        const name = (toolCall?.result as any)?.name;
-        const email = (toolCall?.result as any)?.email;
-        const age = (toolCall?.result as any)?.age;
+      const name = (toolCall?.result as any)?.name;
+      const email = (toolCall?.result as any)?.email;
+      const age = (toolCall?.result as any)?.age;
 
-        expect(resumeOutput.suspendPayload).toBeUndefined();
-        expect(name).toBe('Dero Israel');
-        expect(email).toBe('test@test.com');
-        expect(age).toBe(25);
-      },
-    );
+      expect(resumeOutput.suspendPayload).toBeUndefined();
+      expect(name).toBe('Dero Israel');
+      expect(email).toBe('test@test.com');
+      expect(age).toBe(25);
+    }, 15000);
 
     it(
       'should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true',
