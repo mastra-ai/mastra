@@ -25,7 +25,7 @@ function getInitialInput(traceDetails?: SpanRecord): string {
     typeof spanInput === 'object' &&
     !Array.isArray(spanInput) &&
     'messages' in spanInput;
-  const rawInput = isWrappedAgentInput ? spanInput.messages : traceDetails.input;
+  const rawInput = isWrappedAgentInput ? (spanInput.messages ?? traceDetails.input) : traceDetails.input;
 
   return JSON.stringify(rawInput, null, 2);
 }

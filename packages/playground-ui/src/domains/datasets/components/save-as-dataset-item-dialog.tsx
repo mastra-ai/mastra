@@ -2,7 +2,6 @@
 
 import { useState, useEffect, type ReactNode } from 'react';
 import { DatabaseIcon } from 'lucide-react';
-import type { DatasetRecord } from '@mastra/core/storage';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
@@ -38,7 +37,7 @@ export function SaveAsDatasetItemDialog({
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
 
-  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
+  const datasets = data?.datasets ?? [];
 
   useEffect(() => {
     if (isOpen) {
