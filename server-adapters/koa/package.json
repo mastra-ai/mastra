@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.2.3",
+  "version": "1.2.4-alpha.0",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
