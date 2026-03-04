@@ -2,4 +2,8 @@
 "@mastra/playground-ui": patch
 ---
 
-Remove the Playground UI GPT-5 temperature auto-default workaround in agent settings. Temperature now remains unset unless explicitly provided by saved settings or code defaults, preventing refresh-time resets to `1`.
+---
+"@mastra/playground-ui": patch
+---
+
+Fixed Playground UI agent settings so temperature is no longer reset to `1` on refresh. Temperature now stays unset unless saved settings or code defaults provide a value.
