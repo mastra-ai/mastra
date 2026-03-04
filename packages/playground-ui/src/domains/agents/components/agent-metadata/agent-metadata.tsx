@@ -26,7 +26,7 @@ import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
-import { useActivatedSkills } from '../../context/activated-skills-context';
+import { useLoadedSkills } from '../../context/loaded-skills-context';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -329,7 +329,7 @@ export interface AgentMetadataSkillListProps {
 
 export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMetadataSkillListProps) => {
   const { Link, paths } = useLinkComponent();
-  const { isSkillActivated } = useActivatedSkills();
+  const { isSkillLoaded } = useLoadedSkills();
 
   if (skills.length === 0) {
     return <AgentMetadataListEmpty>No skills</AgentMetadataListEmpty>;
@@ -338,20 +338,20 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
   return (
     <AgentMetadataList>
       {skills.map(skill => {
-        const isActivated = isSkillActivated(skill.name);
+        const loaded = isSkillLoaded(skill.name);
         const badge = (
           <Badge
-            icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
-            variant={isActivated ? 'success' : 'default'}
+            icon={<SkillIcon className={`h-3 w-3 ${loaded ? 'text-green-400' : 'text-accent2'}`} />}
+            variant={loaded ? 'success' : 'default'}
           >
             {skill.name}
-            {isActivated && <span className="sr-only">Active</span>}
+            {loaded && <span className="sr-only">Loaded</span>}
           </Badge>
         );
 
         return (
           <AgentMetadataListItem key={skill.name}>
-            {isActivated ? (
+            {loaded ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -359,7 +359,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
+                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Loaded</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (

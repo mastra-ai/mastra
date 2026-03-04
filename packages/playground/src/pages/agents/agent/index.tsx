@@ -11,7 +11,7 @@ import {
   AgentInformation,
   TracingSettingsProvider,
   ObservationalMemoryProvider,
-  ActivatedSkillsProvider,
+  LoadedSkillsProvider,
   SchemaRequestContextProvider,
   PermissionDenied,
   is403ForbiddenError,
@@ -119,7 +119,7 @@ function Agent() {
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider>
+                <LoadedSkillsProvider>
                   <AgentLayout
                     agentId={agentId!}
                     leftSlot={
@@ -147,7 +147,7 @@ function Agent() {
                       isNewThread={isNewThread}
                     />
                   </AgentLayout>
-                </ActivatedSkillsProvider>
+                </LoadedSkillsProvider>
               </ObservationalMemoryProvider>
             </ThreadInputProvider>
           </WorkingMemoryProvider>

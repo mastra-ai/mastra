@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
  * for `toolName === 'mastra-memory-om-observation'` that returns BEFORE any hooks
  * are called. When React reuses the same fiber position (e.g., during streaming
  * when tool call lists change), a ToolFallbackInner instance that previously
- * rendered with a non-OM toolName (calling hooks: useActivatedSkills, useEffect,
+ * rendered with a non-OM toolName (calling hooks: useLoadedSkills, useEffect,
  * useWorkflowStream) gets re-rendered with the OM toolName (0 hooks), or vice
  * versa, causing React to detect a hook count mismatch and throw error #310.
  */
