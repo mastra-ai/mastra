@@ -1,5 +1,5 @@
 ---
-title: "Helicone | Models | Mastra"
+title: "Helicone | Models"
 description: "Use Helicone models with Mastra. 91 models available."
 ---
 
@@ -11,11 +11,11 @@ Access 91 Helicone models through Mastra's model router. Authentication is handl
 
 Learn more in the [Helicone documentation](https://helicone.ai/models).
 
-```bash
+```bash title=".env"
 HELICONE_API_KEY=your-api-key
 ```
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -1144,7 +1144,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ### Custom Headers
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -1161,7 +1161,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

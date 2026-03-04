@@ -1,0 +1,47 @@
+storage: ./storage
+
+# Increase max body size to handle large packages
+max_body_size: 100mb
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  # Allow @mastra/* packages to proxy to npm for old versions
+  # Local published versions will take precedence for matching tags
+  '@mastra/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+  # Same for the unscoped 'mastra' package
+  'mastra':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+  # All other packages can fall back to npm
+  '**':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+# Security settings to allow everything
+security:
+  api:
+    legacy: true
+
+# Disable audit
+middlewares:
+  audit:
+    enabled: false
+
+web:
+  enable: true
+
+log:
+  - { type: stdout, format: pretty, level: error }

@@ -1,4 +1,5 @@
 import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
 export interface AgentMetadataListProps {
   children: React.ReactNode;
@@ -10,10 +11,11 @@ export const AgentMetadataList = ({ children }: AgentMetadataListProps) => {
 
 export interface AgentMetadataListItemProps {
   children: React.ReactNode;
+  className?: string;
 }
 
-export const AgentMetadataListItem = ({ children }: AgentMetadataListItemProps) => {
-  return <li className="shrink-0 font-medium">{children}</li>;
+export const AgentMetadataListItem = ({ children, className }: AgentMetadataListItemProps) => {
+  return <li className={cn('shrink-0 font-medium flex', className)}>{children}</li>;
 };
 
 export interface AgentMetadataListEmptyProps {

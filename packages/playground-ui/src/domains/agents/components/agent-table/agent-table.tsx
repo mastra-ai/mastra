@@ -1,9 +1,10 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -16,35 +17,58 @@ import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-experimental-features';
+import { useIsCmsAvailable } from '@/domains/cms';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
+  error?: Error | null;
   onCreateClick?: () => void;
 }
 
-export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTableProps) {
+export function AgentsTable({ agents, isLoading, error, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
-  const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
+  const columns = useMemo(() => getColumns(isCmsAvailable), [isCmsAvailable]);
+  const filteredData = useMemo(
+    () => projectData.filter(agent => agent.name.toLowerCase().includes(search.toLowerCase())),
+    [projectData, search],
+  );
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const agent = filteredData[index];
+      if (agent) {
+        navigate(paths.agentLink(agent.id));
+      }
+    },
+  });
 
   const table = useReactTable({
-    data: projectData,
+    data: filteredData,
     columns: columns as ColumnDef<AgentTableData>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
-    return <EmptyAgentsTable onCreateClick={onCreateClick} />;
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
   }
 
-  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+  if (projectData.length === 0 && !isLoading) {
+    return <EmptyAgentsTable onCreateClick={onCreateClick} />;
+  }
 
   return (
     <div>
@@ -53,7 +77,7 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
       </SearchbarWrapper>
 
       {isLoading ? (
-        <AgentsTableSkeleton showSourceColumn={experimentalFeaturesEnabled} />
+        <AgentsTableSkeleton />
       ) : (
         <ScrollableContainer>
           <TooltipProvider>
@@ -66,8 +90,12 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
                 ))}
               </Thead>
               <Tbody>
-                {filteredRows.map(row => (
-                  <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+                {rows.map((row, index) => (
+                  <Row
+                    key={row.id}
+                    isActive={index === activeIndex}
+                    onClick={() => navigate(paths.agentLink(row.original.id))}
+                  >
                     {row.getVisibleCells().map(cell => (
                       <React.Fragment key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -84,11 +112,10 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
   );
 }
 
-const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }) => (
+const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      {showSourceColumn && <Th>Source</Th>}
       <Th>Model</Th>
       <Th>Attached entities</Th>
     </Thead>
@@ -98,11 +125,6 @@ const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          {showSourceColumn && (
-            <Cell>
-              <Skeleton className="h-4 w-16" />
-            </Cell>
-          )}
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
@@ -132,14 +154,14 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent
             </Button>
           )}
           <Button
             size="lg"
             variant="outline"
             as="a"
-            href="https://mastra.ai/docs/agents"
+            href="https://mastra.ai/docs/agents/overview"
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -35,6 +35,32 @@ export const Default: Story = {
   },
 };
 
+export const ExperimentalVariants: Story = {
+  render: () => (
+    <div className="grid gap-2">
+      <Button variant="standard" size="default">
+        Standard
+      </Button>
+      <Button variant="cta" size="default">
+        CTA
+      </Button>
+    </div>
+  ),
+};
+
+export const ExperimentalSizes: Story = {
+  render: () => (
+    <div className="grid gap-2">
+      <Button variant="standard" size="default">
+        Default size
+      </Button>
+      <Button variant="cta" size="large">
+        Large size
+      </Button>
+    </div>
+  ),
+};
+
 export const Light: Story = {
   args: {
     children: 'Light Button',

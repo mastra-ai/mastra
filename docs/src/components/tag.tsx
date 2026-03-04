@@ -1,9 +1,9 @@
-import React from "react";
-import styles from "./Tag.module.css";
+import React from 'react'
+import styles from './Tag.module.css'
 
 export interface TagProps {
-  text: string;
-  children: React.ReactNode;
+  text: string
+  children: React.ReactNode
 }
 
 export function Tag({ text, children }: TagProps) {
@@ -12,5 +12,5 @@ export function Tag({ text, children }: TagProps) {
       {children}
       <span className={styles.tag}>{text}</span>
     </span>
-  );
+  )
 }

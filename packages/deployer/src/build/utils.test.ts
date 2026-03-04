@@ -395,63 +395,45 @@ describe('normalizeStudioBase', () => {
 
   describe('validation - path traversal', () => {
     it('should throw error for path with parent directory traversal', () => {
-      expect(() => normalizeStudioBase('../secret')).toThrow(
-        "Invalid base path: \"../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with traversal in middle', () => {
-      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(
-        "Invalid base path: \"/admin/../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with multiple traversals', () => {
-      expect(() => normalizeStudioBase('../../secret')).toThrow(
-        "Invalid base path: \"../../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - query parameters', () => {
     it('should throw error for path with query string', () => {
-      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(
-        "Invalid base path: \"/admin?query=1\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with multiple query parameters', () => {
-      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(
-        "Invalid base path: \"/admin?a=1&b=2\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - hash fragments', () => {
     it('should throw error for path with hash', () => {
-      expect(() => normalizeStudioBase('/admin#section')).toThrow(
-        "Invalid base path: \"/admin#section\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with just hash', () => {
-      expect(() => normalizeStudioBase('#anchor')).toThrow(
-        "Invalid base path: \"#anchor\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('#anchor')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - combined invalid characters', () => {
     it('should throw error for path with query and hash', () => {
-      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(
-        "Invalid base path: \"/admin?query=1#section\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with traversal and query', () => {
-      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(
-        "Invalid base path: \"../admin?query=1\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 

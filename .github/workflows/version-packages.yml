@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - main
-      - 0.x
 
 jobs:
   version:
@@ -46,13 +45,7 @@ jobs:
       - name: Determine prerelease tag
         id: determine-tag
         run: |
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "tag=beta" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref_name }}" == "0.x" ]]; then
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          else
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=alpha" >> $GITHUB_OUTPUT
 
       - name: Bump mcp-docs-server prerelease version
         env:

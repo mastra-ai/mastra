@@ -10,7 +10,7 @@ import { parseFilters, validateBody } from './utils';
 
 export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs/transports',
+  path: '/logs/transports',
   responseType: 'json',
   responseSchema: listLogTransportsResponseSchema,
   summary: 'List log transports',
@@ -33,7 +33,7 @@ export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
 
 export const LIST_LOGS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs',
+  path: '/logs',
   responseType: 'json',
   queryParamSchema: listLogsQuerySchema,
   responseSchema: listLogsResponseSchema,
@@ -68,7 +68,7 @@ export const LIST_LOGS_ROUTE = createRoute({
 
 export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs/:runId',
+  path: '/logs/:runId',
   responseType: 'json',
   pathParamSchema: runIdSchema,
   queryParamSchema: listLogsQuerySchema,

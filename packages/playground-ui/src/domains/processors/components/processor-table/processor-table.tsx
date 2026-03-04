@@ -1,6 +1,8 @@
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -17,11 +19,12 @@ import type { ProcessorInfo } from '../../hooks/use-processors';
 export interface ProcessorTableProps {
   processors: Record<string, ProcessorInfo>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
 export type ProcessorRow = ProcessorInfo;
 
-export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
+export function ProcessorTable({ processors, isLoading, error }: ProcessorTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
 
@@ -30,25 +33,51 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
     return Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0);
   }, [processors]);
 
+  const filteredData = useMemo(() => {
+    const searchLower = search.toLowerCase();
+    return processorData.filter(p => {
+      const id = p.id.toLowerCase();
+      const name = (p.name || '').toLowerCase();
+      return id.includes(searchLower) || name.includes(searchLower);
+    });
+  }, [processorData, search]);
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const processor = filteredData[index];
+      if (processor) {
+        if (processor.isWorkflow) {
+          navigate(paths.workflowLink(processor.id) + '/graph');
+        } else {
+          navigate(paths.processorLink(processor.id));
+        }
+      }
+    },
+  });
+
   const table = useReactTable({
-    data: processorData,
+    data: filteredData,
     columns: columns as ColumnDef<ProcessorRow>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
-    return <EmptyProcessorsTable />;
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="processors" />
+      </div>
+    );
   }
 
-  const filteredRows = rows.filter(row => {
-    const id = row.original.id.toLowerCase();
-    const name = (row.original.name || '').toLowerCase();
-    const searchLower = search.toLowerCase();
-    return id.includes(searchLower) || name.includes(searchLower);
-  });
+  if (processorData.length === 0 && !isLoading) {
+    return <EmptyProcessorsTable />;
+  }
 
   return (
     <div>
@@ -69,27 +98,26 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
                 ))}
               </Thead>
               <Tbody>
-                {filteredRows.map(row => {
-                  return (
-                    <Row
-                      key={row.id}
-                      onClick={() => {
-                        // Workflow processors should navigate to the workflow graph UI
-                        if (row.original.isWorkflow) {
-                          navigate(paths.workflowLink(row.original.id) + '/graph');
-                        } else {
-                          navigate(paths.processorLink(row.original.id));
-                        }
-                      }}
-                    >
-                      {row.getVisibleCells().map(cell => (
-                        <React.Fragment key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </React.Fragment>
-                      ))}
-                    </Row>
-                  );
-                })}
+                {rows.map((row, index) => (
+                  <Row
+                    key={row.id}
+                    isActive={index === activeIndex}
+                    onClick={() => {
+                      // Workflow processors should navigate to the workflow graph UI
+                      if (row.original.isWorkflow) {
+                        navigate(paths.workflowLink(row.original.id) + '/graph');
+                      } else {
+                        navigate(paths.processorLink(row.original.id));
+                      }
+                    }}
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                ))}
               </Tbody>
             </Table>
           </TooltipProvider>

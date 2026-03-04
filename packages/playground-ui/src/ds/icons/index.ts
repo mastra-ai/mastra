@@ -30,6 +30,7 @@ export * from './PromptIcon';
 export * from './SettingsIcon';
 export * from './SlashIcon';
 export * from './ToolsIcon';
+export * from './SkillIcon';
 export * from './TraceIcon';
 export * from './TsIcon';
 export * from './VariablesIcon';

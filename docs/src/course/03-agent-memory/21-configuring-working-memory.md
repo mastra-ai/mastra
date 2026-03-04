@@ -3,21 +3,21 @@
 Let's update our agent with working memory capabilities:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 // Create a memory instance with working memory configuration
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: "learning-memory-storage",
-    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+    id: 'learning-memory-storage',
+    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
   }), // Storage for message history
   vector: new LibSQLVector({
-    id: "learning-memory-vector",
-    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    id: 'learning-memory-vector',
+    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
   }), // Vector database for semantic search
-  embedder: "openai/text-embedding-3-small", // Embedder for message embeddings
+  embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
   options: {
     semanticRecall: {
       topK: 3,
@@ -30,11 +30,11 @@ const memory = new Memory({
       enabled: true,
     },
   },
-});
+})
 
 // Create an agent with the configured memory
 export const memoryAgent = new Agent({
-  name: "MemoryAgent",
+  name: 'MemoryAgent',
   instructions: `
     You are a helpful assistant with advanced memory capabilities.
     You can remember previous conversations and user preferences.
@@ -51,9 +51,9 @@ export const memoryAgent = new Agent({
     Always refer to your working memory before asking for information the user has already provided.
     Use the information in your working memory to provide personalized responses.
   `,
-  model: "openai/gpt-4.1-mini",
+  model: 'openai/gpt-4.1-mini',
   memory: memory,
-});
+})
 ```
 
 The `workingMemory` configuration has several important options:

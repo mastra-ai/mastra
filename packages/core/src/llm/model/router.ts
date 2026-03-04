@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { StreamTransport } from '../../stream/types';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { parseModelRouterId } from './gateway-resolver.js';
@@ -10,6 +12,9 @@ import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
+import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
+import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
+import type { OpenAITransport, OpenAIWebSocketOptions, ProviderOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { PROVIDER_REGISTRY } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
@@ -19,6 +24,43 @@ import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.typ
  */
 function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV3 {
   return model.specificationVersion === 'v3';
+}
+
+const OPENAI_WS_ALLOWLIST = new Set(['openai']);
+const OPENAI_API_HOST = 'api.openai.com';
+
+function getOpenAITransport(providerOptions?: ProviderOptions): {
+  transport: OpenAITransport;
+  websocket?: OpenAIWebSocketOptions;
+} {
+  const openaiOptions = providerOptions?.openai as
+    | {
+        transport?: OpenAITransport;
+        websocket?: OpenAIWebSocketOptions;
+      }
+    | undefined;
+
+  return {
+    transport: openaiOptions?.transport ?? 'fetch',
+    websocket: openaiOptions?.websocket,
+  };
+}
+
+function isOpenAIBaseUrl(baseURL?: string): boolean {
+  if (!baseURL) return true;
+  try {
+    const hostname = new URL(baseURL).hostname;
+    return hostname === OPENAI_API_HOST;
+  } catch {
+    return false;
+  }
+}
+
+function stableHeaderKey(headers?: Record<string, string>): string {
+  if (!headers) return '';
+  const entries = Object.entries(headers);
+  if (entries.length === 0) return '';
+  return JSON.stringify(entries.sort(([a], [b]) => a.localeCompare(b)));
 }
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
@@ -39,13 +81,23 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly defaultObjectGenerationMode = 'json' as const;
   readonly supportsStructuredOutputs = true;
   readonly supportsImageUrls = true;
-  readonly supportedUrls = {} as Record<string, RegExp[]>;
+
+  /**
+   * Supported URL patterns by media type for the provider.
+   * This is a lazy promise that resolves the underlying model's supportedUrls.
+   * Models like Mistral define which URL patterns they support (e.g., application/pdf for https URLs).
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/12152
+   */
+  readonly supportedUrls: PromiseLike<Record<string, RegExp[]>>;
 
   readonly modelId: string;
   readonly provider: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
+  private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
+  #lastStreamTransport: StreamTransport | undefined;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGateway[]) {
     // Normalize config to always have an 'id' field for routing
@@ -102,6 +154,110 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
+
+    // Create a lazy PromiseLike for supportedUrls that resolves the underlying model's supportedUrls
+    // This allows providers like Mistral to expose their native URL support (e.g., PDF URLs)
+    // See: https://github.com/mastra-ai/mastra/issues/12152
+    const self = this;
+    this.supportedUrls = {
+      then<TResult1 = Record<string, RegExp[]>, TResult2 = never>(
+        onfulfilled?: ((value: Record<string, RegExp[]>) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ): PromiseLike<TResult1 | TResult2> {
+        return self._resolveSupportedUrls().then(onfulfilled, onrejected);
+      },
+    };
+  }
+
+  /**
+   * Lazily resolves the underlying model's supportedUrls.
+   * This is cached to avoid multiple model resolutions.
+   * @internal
+   */
+  private async _resolveSupportedUrls(): Promise<Record<string, RegExp[]>> {
+    if (this._supportedUrlsPromise) {
+      return this._supportedUrlsPromise;
+    }
+
+    this._supportedUrlsPromise = this._fetchSupportedUrls();
+    return this._supportedUrlsPromise;
+  }
+
+  /**
+   * Fetches supportedUrls from the underlying model.
+   * @internal
+   */
+  private async _fetchSupportedUrls(): Promise<Record<string, RegExp[]>> {
+    let apiKey: string;
+    try {
+      if (this.config.url) {
+        apiKey = this.config.apiKey || '';
+      } else {
+        apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
+      }
+    } catch {
+      // If we can't get the API key, return empty supportedUrls
+      // This gracefully degrades - URLs will be downloaded instead
+      return {};
+    }
+
+    try {
+      const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+      const model = await this.resolveLanguageModel({
+        apiKey,
+        headers: this.config.headers,
+        ...parseModelRouterId(this.config.routerId, gatewayPrefix),
+      });
+
+      // Get supportedUrls from the underlying model
+      const modelSupportedUrls = model.supportedUrls;
+      if (!modelSupportedUrls) {
+        return {};
+      }
+
+      // Handle both Promise and plain object supportedUrls
+      if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+        const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+        return resolved ?? {};
+      }
+
+      return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
+    } catch {
+      // If model resolution fails, return empty supportedUrls
+      return {};
+    }
+  }
+
+  /** @internal */
+  _getStreamTransport(): StreamTransport | undefined {
+    return this.#lastStreamTransport;
+  }
+
+  private setStreamTransport({
+    resolvedTransport,
+    key,
+    openaiWebSocket,
+  }: {
+    resolvedTransport: OpenAITransport;
+    key: string;
+    openaiWebSocket?: OpenAIWebSocketOptions;
+  }) {
+    if (resolvedTransport !== 'websocket') {
+      this.#lastStreamTransport = undefined;
+      return;
+    }
+
+    const wsFetch = ModelRouterLanguageModel.webSocketFetches.get(key);
+    if (!wsFetch) {
+      this.#lastStreamTransport = undefined;
+      return;
+    }
+
+    this.#lastStreamTransport = {
+      type: 'openai-websocket',
+      close: () => wsFetch.close(),
+      closeOnFinish: openaiWebSocket?.closeOnFinish ?? true,
+    };
   }
 
   async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
@@ -173,9 +329,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     }
 
     const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const { transport, websocket } = getOpenAITransport(options.providerOptions as ProviderOptions | undefined);
+    const requestedTransport: OpenAITransport = transport === 'auto' ? 'websocket' : transport;
+    const allowWebSocket =
+      requestedTransport === 'websocket' &&
+      OPENAI_WS_ALLOWLIST.has(this.provider) &&
+      !this.config.url &&
+      this.gateway.id === 'models.dev';
+    const resolvedTransport: OpenAITransport = allowWebSocket ? 'websocket' : 'fetch';
+
     const model = await this.resolveLanguageModel({
       apiKey,
       headers: this.config.headers,
+      transport: resolvedTransport,
+      openaiWebSocket: websocket,
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
@@ -194,12 +361,21 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     providerId,
     apiKey,
     headers,
+    transport,
+    openaiWebSocket,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    transport?: OpenAITransport;
+    openaiWebSocket?: OpenAIWebSocketOptions;
   }): Promise<GatewayLanguageModel> {
+    const resolvedTransport: OpenAITransport = transport ?? 'fetch';
+    const websocketKey =
+      resolvedTransport === 'websocket'
+        ? `${openaiWebSocket?.url ?? ''}:${stableHeaderKey(openaiWebSocket?.headers)}`
+        : '';
     const key = createHash('sha256')
       .update(
         this.gateway.id +
@@ -207,10 +383,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           providerId +
           apiKey +
           (this.config.url || '') +
-          (headers ? JSON.stringify(headers) : ''),
+          stableHeaderKey(headers) +
+          resolvedTransport +
+          websocketKey,
       )
       .digest('hex');
-    if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;
+    if (ModelRouterLanguageModel.modelInstances.has(key)) {
+      this.setStreamTransport({ resolvedTransport, key, openaiWebSocket });
+      return ModelRouterLanguageModel.modelInstances.get(key)!;
+    }
 
     // If custom URL is provided, use it directly with openai-compatible
     if (this.config.url) {
@@ -222,12 +403,60 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         supportsStructuredOutputs: true,
       }).chatModel(modelId);
       ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
+      this.setStreamTransport({ resolvedTransport, key, openaiWebSocket });
       return modelInstance;
+    }
+
+    if (resolvedTransport === 'websocket' && providerId === 'openai' && this.gateway.id === 'models.dev') {
+      const baseURL = await this.gateway.buildUrl(this.config.routerId, process.env as Record<string, string>);
+
+      if (isOpenAIBaseUrl(baseURL)) {
+        const { modelInstance, wsFetch } = this.resolveOpenAIWebSocketModel({
+          modelId,
+          apiKey,
+          baseURL,
+          headers,
+          openaiWebSocket,
+        });
+        ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
+        ModelRouterLanguageModel.webSocketFetches.set(key, wsFetch);
+        this.setStreamTransport({ resolvedTransport, key, openaiWebSocket });
+        return modelInstance;
+      }
     }
 
     const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey, headers });
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
+    this.setStreamTransport({ resolvedTransport, key, openaiWebSocket });
     return modelInstance;
   }
+
+  private resolveOpenAIWebSocketModel({
+    modelId,
+    apiKey,
+    baseURL,
+    headers,
+    openaiWebSocket,
+  }: {
+    modelId: string;
+    apiKey: string;
+    baseURL?: string;
+    headers?: Record<string, string>;
+    openaiWebSocket?: OpenAIWebSocketOptions;
+  }): { modelInstance: GatewayLanguageModel; wsFetch: OpenAIWebSocketFetch } {
+    const wsFetch = createOpenAIWebSocketFetch({
+      url: openaiWebSocket?.url,
+      headers: openaiWebSocket?.headers,
+    });
+
+    const modelInstance = createOpenAI({
+      apiKey,
+      baseURL,
+      headers,
+      fetch: wsFetch,
+    }).responses(modelId);
+    return { modelInstance, wsFetch };
+  }
   private static modelInstances = new Map<string, GatewayLanguageModel>();
+  private static webSocketFetches = new Map<string, OpenAIWebSocketFetch>();
 }

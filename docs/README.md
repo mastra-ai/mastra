@@ -9,11 +9,35 @@ Here's a quick start to run the docs locally
 - Install dependencies:
 
   ```bash
-  npm install
+  pnpm install
   ```
 
 - Start the development server:
 
   ```bash
-  npm run dev
+  pnpm run dev
   ```
+
+## Optional: Linting
+
+### Remark
+
+To lint the markdown files, you can use `remark`:
+
+```bash
+pnpm run lint:remark
+```
+
+### Vale
+
+In order to run `lint:vale` you need to globally install `mdx2vast`:
+
+```bash
+npm install -g mdx2vast
+```
+
+Then you can run the Vale linter:
+
+```bash
+pnpm run lint:vale
+```

@@ -31,12 +31,17 @@ export class StoredAgent extends BaseResource {
   /**
    * Retrieves details about the stored agent
    * @param requestContext - Optional request context to pass as query parameter
+   * @param options - Optional options like status filter
    * @returns Promise containing stored agent details
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<StoredAgentResponse> {
-    return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
-    );
+  details(
+    requestContext?: RequestContext | Record<string, any>,
+    options?: { status?: 'draft' | 'published' | 'archived' },
+  ): Promise<StoredAgentResponse> {
+    const contextString = requestContextQueryString(requestContext);
+    const statusParam = options?.status ? `status=${options.status}` : '';
+    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${contextString}${statusParam ? `${contextString ? '&' : '?'}${statusParam}` : ''}`;
+    return this.request(url);
   }
 
   /**
@@ -50,7 +55,7 @@ export class StoredAgent extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredAgentResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'PATCH',
         body: params,
@@ -65,7 +70,7 @@ export class StoredAgent extends BaseResource {
    */
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredAgentResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },
@@ -95,7 +100,7 @@ export class StoredAgent extends BaseResource {
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
     );
   }
 
@@ -110,7 +115,7 @@ export class StoredAgent extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<AgentVersionResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
         body: params || {},
@@ -126,7 +131,7 @@ export class StoredAgent extends BaseResource {
    */
   getVersion(versionId: string, requestContext?: RequestContext | Record<string, any>): Promise<AgentVersionResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
     );
   }
 
@@ -141,7 +146,7 @@ export class StoredAgent extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ActivateAgentVersionResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
       },
@@ -159,7 +164,7 @@ export class StoredAgent extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<AgentVersionResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
       },
@@ -177,7 +182,7 @@ export class StoredAgent extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<DeleteAgentVersionResponse> {
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },
@@ -202,7 +207,7 @@ export class StoredAgent extends BaseResource {
 
     const contextString = requestContextQueryString(requestContext);
     return this.request(
-      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/compare?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/compare?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
     );
   }
 }

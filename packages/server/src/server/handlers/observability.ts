@@ -108,7 +108,7 @@ async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
 
 export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces',
+  path: '/observability/traces',
   responseType: 'json',
   queryParamSchema: wrapSchemaForQueryParams(
     tracesFilterSchema
@@ -134,14 +134,14 @@ export const LIST_TRACES_ROUTE = createRoute({
       const observabilityStore = await getObservabilityStore(mastra);
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
-      handleError(error, 'Error listing traces');
+      return handleError(error, 'Error listing traces');
     }
   },
 });
 
 export const GET_TRACE_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId',
+  path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
   responseSchema: getTraceResponseSchema,
@@ -160,14 +160,14 @@ export const GET_TRACE_ROUTE = createRoute({
 
       return trace;
     } catch (error) {
-      handleError(error, 'Error getting trace');
+      return handleError(error, 'Error getting trace');
     }
   },
 });
 
 export const SCORE_TRACES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/observability/traces/score',
+  path: '/observability/traces/score',
   responseType: 'json',
   bodySchema: scoreTracesRequestSchema,
   responseSchema: scoreTracesResponseSchema,
@@ -202,14 +202,14 @@ export const SCORE_TRACES_ROUTE = createRoute({
         traceCount: targets.length,
       };
     } catch (error) {
-      handleError(error, 'Error processing trace scoring');
+      return handleError(error, 'Error processing trace scoring');
     }
   },
 });
 
 export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId/:spanId/scores',
+  path: '/observability/traces/:traceId/:spanId/scores',
   responseType: 'json',
   pathParamSchema: spanIdsSchema,
   queryParamSchema: paginationArgsSchema,
@@ -230,7 +230,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         pagination,
       });
     } catch (error) {
-      handleError(error, 'Error getting scores by span');
+      return handleError(error, 'Error getting scores by span');
     }
   },
 });

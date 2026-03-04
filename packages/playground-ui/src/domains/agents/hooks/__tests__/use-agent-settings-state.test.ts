@@ -24,11 +24,8 @@ import { isAnthropicModelWithSamplingRestriction } from '../../utils/model-restr
 /**
  * Test file for use-agent-settings-state.ts
  *
- * Issue #11760: Anthropic Claude 4.5+ models fail when both temperature and topP are sent.
- * Anthropic's API returns: "`temperature` and `top_p` cannot both be specified for this model."
- *
- * Default settings include both temperature and topP for models that support both (OpenAI, Google, Claude 3.5).
- * For Claude 4.5+ models, the AgentSettings component auto-clears topP when the model is detected.
+ * Default settings should NOT include temperature or topP - these should be
+ * left undefined so models use their provider defaults unless explicitly set.
  */
 describe('use-agent-settings-state defaults', () => {
   beforeEach(() => {
@@ -36,16 +33,15 @@ describe('use-agent-settings-state defaults', () => {
     vi.clearAllMocks();
   });
 
-  it('should have both temperature and topP set by default (for models that support both)', async () => {
+  it('should not have temperature or topP set by default (use model provider defaults)', async () => {
     const { defaultSettings } = await import('../use-agent-settings-state');
 
     const modelSettings = defaultSettings.modelSettings;
 
-    // Defaults should include both values for models that support them
-    // (OpenAI, Google, Claude 3.5, etc.)
-    // Claude 4.5+ models will have topP auto-cleared at the component level
-    expect(modelSettings.temperature).toBe(0.5);
-    expect(modelSettings.topP).toBe(1);
+    // temperature and topP should be undefined to use model provider defaults
+    // This also avoids Claude 4.5+ errors where both cannot be specified
+    expect(modelSettings.temperature).toBeUndefined();
+    expect(modelSettings.topP).toBeUndefined();
   });
 });
 

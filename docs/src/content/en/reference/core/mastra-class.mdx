@@ -16,24 +16,24 @@ Think of `Mastra` as a top-level registry where you register agents, workflows, 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { weatherWorkflow } from "./workflows/weather-workflow";
-import { weatherAgent } from "./agents/weather-agent";
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+import { LibSQLStore } from '@mastra/libsql'
+import { weatherWorkflow } from './workflows/weather-workflow'
+import { weatherAgent } from './agents/weather-agent'
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: ":memory:",
+    url: ':memory:',
   }),
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
-});
+})
 ```
 
 ## Constructor parameters

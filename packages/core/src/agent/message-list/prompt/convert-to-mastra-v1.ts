@@ -95,7 +95,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             role: 'user',
             ...fields,
             type: 'text',
-            // @ts-expect-error
+            // @ts-expect-error - content type mismatch in conversion
             content: userContent,
           });
         } else {

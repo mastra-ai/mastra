@@ -25,12 +25,24 @@ export class BenchmarkStore extends MastraStorage {
     mastra_threads: new Map(),
     mastra_traces: new Map(),
     mastra_resources: new Map(),
+    mastra_scorers: new Map(),
+    mastra_ai_spans: new Map(),
+    mastra_agents: new Map(),
+    mastra_agent_versions: new Map(),
+    mastra_datasets: new Map(),
+    mastra_dataset_items: new Map(),
+    mastra_dataset_item_versions: new Map(),
+    mastra_dataset_versions: new Map(),
+    mastra_experiments: new Map(),
+    mastra_experiment_results: new Map(),
+    mastra_prompt_blocks: new Map(),
+    mastra_prompt_block_versions: new Map(),
   };
 
   private mode: DBMode;
 
   constructor(mode: DBMode = 'read-write') {
-    super({ name: 'BenchmarkStore' });
+    super({ id: 'benchmark-store', name: 'BenchmarkStore' });
     this.hasInitialized = Promise.resolve(true);
     this.mode = mode;
   }
@@ -39,6 +51,9 @@ export class BenchmarkStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      hasColumn: true,
+      createTable: true,
+      deleteMessages: true,
     };
   }
 

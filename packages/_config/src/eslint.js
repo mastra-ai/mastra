@@ -29,10 +29,7 @@ export const createConfig = async () =>
         '**/.mastra/**',
         '**/.cache/**',
         '**/node_modules/**',
-        '**/build/**',
-        '**/public/build/**',
         '**/playwright-report/**',
-        '**/server-build/**',
         '**/dist/**',
         '**/coverage/**',
       ],
@@ -175,6 +172,17 @@ export const createConfig = async () =>
             '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
 
             '@typescript-eslint/no-floating-promises': 'error',
+
+            '@typescript-eslint/ban-ts-comment': [
+              ERROR,
+              {
+                'ts-expect-error': 'allow-with-description',
+                'ts-ignore': true,
+                'ts-nocheck': true,
+                'ts-check': false,
+                minimumDescriptionLength: 3,
+              },
+            ],
 
             // here are rules we've decided to not enable. Commented out rather
             // than setting them to disabled to avoid them being referenced at all

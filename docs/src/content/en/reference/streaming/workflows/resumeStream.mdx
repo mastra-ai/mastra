@@ -12,22 +12,22 @@ The `.resumeStream()` method resumes a suspended workflow run with new data, all
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 const stream = run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
-const result = await stream.result;
+const result = await stream.result
 
-if (result!.status === "suspended") {
+if (result!.status === 'suspended') {
   const resumedStream = await run.resumeStream({
     resumeData: {
-      value: "resume data",
+      value: 'resume data',
     },
-  });
+  })
 }
 ```
 
@@ -35,116 +35,116 @@ if (result!.status === "suspended") {
 
 <PropertiesTable
   content={[
-    {
-      name: "resumeData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "step",
-      type: "Step<string, any, any, any, any, TEngineType>",
-      description: "The step to resume execution from",
-      isOptional: true,
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "requestContextKeys",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "traceId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "parentSpanId",
-              type: "string",
-              isOptional: true,
-              description:
-                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tags",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+{
+name: "resumeData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "requestContext",
+type: "RequestContext",
+description: "Request Context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "step",
+type: "Step<string, any, any, any, any, TEngineType>",
+description: "The step to resume execution from",
+isOptional: true,
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for Tracing configuration.",
+properties: [
+{
+parameters: [
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description:
+"Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+},
+],
+},
+{
+parameters: [
+{
+name: "requestContextKeys",
+type: "string[]",
+isOptional: true,
+description:
+"Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+},
+],
+},
+{
+parameters: [
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description:
+"Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+},
+],
+},
+{
+parameters: [
+{
+name: "parentSpanId",
+type: "string",
+isOptional: true,
+description:
+"Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+},
+],
+},
+{
+parameters: [
+{
+name: "tags",
+type: "string[]",
+isOptional: true,
+description:
+"Tags to apply to this trace. String labels for categorizing and filtering traces.",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "stream",
-      type: "MastraWorkflowStream<ChunkType>",
-      description:
-        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
-    },
-    {
-      name: "stream.status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "stream.result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A promise that resolves to the final workflow result",
-    },
-    {
-      name: "stream.usage",
-      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "A promise that resolves to token usage statistics",
-    },
-  ]}
+{
+name: "stream",
+type: "MastraWorkflowStream<ChunkType>",
+description:
+"A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+},
+{
+name: "stream.status",
+type: "Promise<RunStatus>",
+description: "A promise that resolves to the current workflow run status",
+},
+{
+name: "stream.result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A promise that resolves to the final workflow result",
+},
+{
+name: "stream.usage",
+type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+description: "A promise that resolves to token usage statistics",
+},
+]}
 />
 
 ## Stream Events

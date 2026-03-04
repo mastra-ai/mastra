@@ -337,6 +337,7 @@ export function chatRoute<OUTPUT = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
+          abortSignal: c.req.raw.signal,
         } as any,
         defaultOptions,
         sendStart,

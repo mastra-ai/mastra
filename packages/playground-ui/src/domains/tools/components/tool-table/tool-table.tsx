@@ -1,8 +1,10 @@
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
@@ -20,27 +22,51 @@ export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
+export function ToolTable({ tools, agents, isLoading, error }: ToolTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
 
+  const filteredData = useMemo(
+    () => toolData.filter(tool => tool.id.toLowerCase().includes(search.toLowerCase())),
+    [toolData, search],
+  );
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const tool = filteredData[index];
+      if (tool) {
+        navigate(paths.toolLink(tool.id));
+      }
+    },
+  });
+
   const table = useReactTable({
-    data: toolData,
+    data: filteredData,
     columns: columns as ColumnDef<ToolWithAgents>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
-    return <EmptyToolsTable />;
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="tools" />
+      </div>
+    );
   }
 
-  const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
+  if (toolData.length === 0 && !isLoading) {
+    return <EmptyToolsTable />;
+  }
 
   return (
     <div>
@@ -61,22 +87,19 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
                 ))}
               </Thead>
               <Tbody>
-                {filteredRows.map(row => {
-                  return (
-                    <Row
-                      key={row.id}
-                      onClick={() => {
-                        navigate(paths.toolLink(row.original.id));
-                      }}
-                    >
-                      {row.getVisibleCells().map(cell => (
-                        <React.Fragment key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </React.Fragment>
-                      ))}
-                    </Row>
-                  );
-                })}
+                {rows.map((row, index) => (
+                  <Row
+                    key={row.id}
+                    isActive={index === activeIndex}
+                    onClick={() => navigate(paths.toolLink(row.original.id))}
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                ))}
               </Tbody>
             </Table>
           </TooltipProvider>

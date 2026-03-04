@@ -17,9 +17,9 @@ export const Shadows = {
 
 // Glow effects for interactive elements (focus states, etc.)
 export const Glows = {
-  accent1: '0 0 20px rgba(26, 251, 111, 0.3)',
-  accent2: '0 0 20px rgba(255, 73, 49, 0.3)',
+  accent1: '0 0 20px rgba(34, 197, 94, 0.25)',
+  accent2: '0 0 20px rgba(239, 68, 68, 0.25)',
 
   // Subtle glow for focus rings
-  focusRing: '0 0 0 3px rgba(26, 251, 111, 0.15)',
+  focusRing: '0 0 0 3px rgba(34, 197, 94, 0.12)',
 };

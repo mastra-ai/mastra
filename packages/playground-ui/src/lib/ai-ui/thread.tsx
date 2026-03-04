@@ -7,7 +7,7 @@ import {
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
-import { TooltipIconButton } from './tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
@@ -19,6 +19,9 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { BracketOverlay } from './components/bracket-overlay';
 
 export interface ThreadProps {
   agentName?: string;
@@ -29,6 +32,7 @@ export interface ThreadProps {
 
 export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
@@ -40,7 +44,8 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
+        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+          <BracketOverlay containerRef={messagesContainerRef} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -55,7 +60,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} />
+      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} />
     </ThreadWrapper>
   );
 };
@@ -86,11 +91,15 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 interface ComposerProps {
   hasMemory?: boolean;
   agentId?: string;
+  hasModelList?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { canExecute } = usePermissions();
+  const canExecuteAgent = canExecute('agents');
+
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -98,26 +107,25 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div
-          className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
-          onClick={() => {
-            textareaRef.current?.focus();
-          }}
-        >
+        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
-              placeholder="Enter your message..."
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
+              disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>
-          <div className="flex justify-end gap-2">
-            <SpeechInput agentId={agentId} />
-            <ComposerAction />
+          <div className="flex items-center justify-between gap-2">
+            {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
+            <div className="flex items-center gap-2 ml-auto">
+              {canExecuteAgent && <SpeechInput agentId={agentId} />}
+              <ComposerAction canExecute={canExecuteAgent} />
+            </div>
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -136,49 +144,61 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   }, [composerRuntime, transcript]);
 
   return (
-    <TooltipIconButton
+    <IconButton
+      variant="light"
+      size="md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
-    </TooltipIconButton>
+    </IconButton>
   );
 };
 
-const ComposerAction = () => {
+interface ComposerActionProps {
+  canExecute?: boolean;
+}
+
+const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
   const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
 
   return (
     <>
-      <TooltipIconButton
-        type="button"
-        tooltip="Add attachment"
-        className="rounded-full"
-        onClick={() => setIsAddAttachmentDialogOpen(true)}
-      >
-        <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-      </TooltipIconButton>
+      {canExecute && (
+        <IconButton
+          variant="light"
+          size="md"
+          type="button"
+          tooltip="Add attachment"
+          className="rounded-full"
+          onClick={() => setIsAddAttachmentDialogOpen(true)}
+        >
+          <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </IconButton>
+      )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send"
-            variant="default"
+        <ComposerPrimitive.Send asChild disabled={!canExecute}>
+          <IconButton
+            variant="light"
+            size="md"
+            tooltip={canExecute ? 'Send' : 'No permission to execute'}
             className="rounded-full border border-border1 bg-surface5"
+            disabled={!canExecute}
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-          </TooltipIconButton>
+          </IconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel asChild>
-          <TooltipIconButton tooltip="Cancel" variant="default">
+          <IconButton variant="light" size="md" tooltip="Cancel">
             <CircleStopIcon />
-          </TooltipIconButton>
+          </IconButton>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </>

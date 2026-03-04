@@ -12,101 +12,115 @@ The `runEvals` function enables batch evaluation of agents and workflows by runn
 ## Usage Example
 
 ```typescript
-import { runEvals } from "@mastra/core/evals";
-import { myAgent } from "./agents/my-agent";
-import { myScorer1, myScorer2 } from "./scorers";
+import { runEvals } from '@mastra/core/evals'
+import { myAgent } from './agents/my-agent'
+import { myScorer1, myScorer2 } from './scorers'
 
 const result = await runEvals({
   target: myAgent,
   data: [
-    { input: "What is machine learning?" },
-    { input: "Explain neural networks" },
-    { input: "How does AI work?" },
+    { input: 'What is machine learning?' },
+    { input: 'Explain neural networks' },
+    { input: 'How does AI work?' },
   ],
   scorers: [myScorer1, myScorer2],
+  targetOptions: { maxSteps: 5 },
   concurrency: 2,
   onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Completed: ${item.input}`);
-    console.log(`Scores:`, scorerResults);
+    console.log(`Completed: ${item.input}`)
+    console.log(`Scores:`, scorerResults)
   },
-});
+})
 
-console.log(`Average scores:`, result.scores);
-console.log(`Processed ${result.summary.totalItems} items`);
+console.log(`Average scores:`, result.scores)
+console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "target",
-      type: "Agent | Workflow",
-      description: "The agent or workflow to evaluate.",
-      isOptional: false,
-    },
-    {
-      name: "data",
-      type: "RunEvalsDataItem[]",
-      description:
-        "Array of test cases with input data and optional ground truth.",
-      isOptional: false,
-    },
-    {
-      name: "scorers",
-      type: "MastraScorer[] | WorkflowScorerConfig",
-      description:
-        "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
-      isOptional: false,
-    },
-    {
-      name: "concurrency",
-      type: "number",
-      description: "Number of test cases to run concurrently.",
-      isOptional: true,
-      defaultValue: "1",
-    },
-    {
-      name: "onItemComplete",
-      type: "function",
-      description:
-        "Callback function called after each test case completes. Receives item, target result, and scorer results.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "target",
+type: "Agent | Workflow",
+description: "The agent or workflow to evaluate.",
+isOptional: false,
+},
+{
+name: "data",
+type: "RunEvalsDataItem[]",
+description:
+"Array of test cases with input data and optional ground truth.",
+isOptional: false,
+},
+{
+name: "scorers",
+type: "MastraScorer[] | WorkflowScorerConfig",
+description:
+"Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
+isOptional: false,
+},
+{
+name: "targetOptions",
+type: "AgentExecutionOptions | WorkflowRunOptions",
+description:
+"Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState).",
+isOptional: true,
+},
+{
+name: "concurrency",
+type: "number",
+description: "Number of test cases to run concurrently.",
+isOptional: true,
+defaultValue: "1",
+},
+{
+name: "onItemComplete",
+type: "function",
+description:
+"Callback function called after each test case completes. Receives item, target result, and scorer results.",
+isOptional: true,
+},
+]}
 />
 
 ## Data Item Structure
 
 <PropertiesTable
   content={[
-    {
-      name: "input",
-      type: "string | string[] | CoreMessage[] | any",
-      description:
-        "Input data for the target. For agents: messages or strings. For workflows: workflow input data.",
-      isOptional: false,
-    },
-    {
-      name: "groundTruth",
-      type: "any",
-      description:
-        "Expected or reference output for comparison during scoring.",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context to pass to the target during execution.",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      description: "Tracing context for observability and debugging.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "input",
+type: "string | string[] | CoreMessage[] | any",
+description:
+"Input data for the target. For agents: messages or strings. For workflows: workflow input data.",
+isOptional: false,
+},
+{
+name: "groundTruth",
+type: "any",
+description:
+"Expected or reference output for comparison during scoring.",
+isOptional: true,
+},
+{
+name: "requestContext",
+type: "RequestContext",
+description: "Request Context to pass to the target during execution.",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+description: "Tracing context for observability and debugging.",
+isOptional: true,
+},
+{
+name: "startOptions",
+type: "WorkflowRunOptions",
+description: "Per-item workflow run options (e.g. initialState, perStep, outputOptions). Merged on top of targetOptions, so per-item values take precedence. Only applicable when the target is a workflow.",
+isOptional: true,
+},
+]}
 />
 
 ## Workflow Scorer Configuration
@@ -115,43 +129,43 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 
 <PropertiesTable
   content={[
-    {
-      name: "workflow",
-      type: "MastraScorer[]",
-      description: "Array of scorers to evaluate the entire workflow output.",
-      isOptional: true,
-    },
-    {
-      name: "steps",
-      type: "Record<string, MastraScorer[]>",
-      description:
-        "Object mapping step IDs to arrays of scorers for evaluating individual step outputs.",
-      isOptional: true,
-    },
-  ]}
+{
+name: "workflow",
+type: "MastraScorer[]",
+description: "Array of scorers to evaluate the entire workflow output.",
+isOptional: true,
+},
+{
+name: "steps",
+type: "Record<string, MastraScorer[]>",
+description:
+"Object mapping step IDs to arrays of scorers for evaluating individual step outputs.",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scores",
-      type: "Record<string, any>",
-      description:
-        "Average scores across all test cases, organized by scorer name.",
-    },
-    {
-      name: "summary",
-      type: "object",
-      description: "Summary information about the experiment execution.",
-    },
-    {
-      name: "summary.totalItems",
-      type: "number",
-      description: "Total number of test cases processed.",
-    },
-  ]}
+{
+name: "scores",
+type: "Record<string, any>",
+description:
+"Average scores across all test cases, organized by scorer name.",
+},
+{
+name: "summary",
+type: "object",
+description: "Summary information about the experiment execution.",
+},
+{
+name: "summary.totalItems",
+type: "number",
+description: "Total number of test cases processed.",
+},
+]}
 />
 
 ## Examples
@@ -159,35 +173,49 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 ### Agent Evaluation
 
 ```typescript
-import { createScorer, runEvals } from "@mastra/core/evals";
+import { createScorer, runEvals } from '@mastra/core/evals'
 
 const myScorer = createScorer({
-  id: "my-scorer",
+  id: 'my-scorer',
   description: "Check if Agent's response contains ground truth",
-  type: "agent",
+  type: 'agent',
 }).generateScore(({ run }) => {
-  const response = run.output[0]?.content || "";
-  const expectedResponse = run.groundTruth;
-  return response.includes(expectedResponse) ? 1 : 0;
-});
+  const response = run.output[0]?.content || ''
+  const expectedResponse = run.groundTruth
+  return response.includes(expectedResponse) ? 1 : 0
+})
 
 const result = await runEvals({
   target: chatAgent,
   data: [
     {
-      input: "What is AI?",
-      groundTruth:
-        "AI is a field of computer science that creates intelligent machines.",
+      input: 'What is AI?',
+      groundTruth: 'AI is a field of computer science that creates intelligent machines.',
     },
     {
-      input: "How does machine learning work?",
-      groundTruth:
-        "Machine learning uses algorithms to learn patterns from data.",
+      input: 'How does machine learning work?',
+      groundTruth: 'Machine learning uses algorithms to learn patterns from data.',
     },
   ],
   scorers: [relevancyScorer],
   concurrency: 3,
-});
+})
+```
+
+### Agent with targetOptions
+
+Pass execution options like `maxSteps` or `modelSettings` to customize agent behavior during evaluation:
+
+```typescript
+const result = await runEvals({
+  target: chatAgent,
+  data: [{ input: 'Summarize this article' }, { input: 'Translate to French' }],
+  scorers: [relevancyScorer],
+  targetOptions: {
+    maxSteps: 5,
+    modelSettings: { temperature: 0 },
+  },
+})
 ```
 
 ### Workflow Evaluation
@@ -196,26 +224,48 @@ const result = await runEvals({
 const workflowResult = await runEvals({
   target: myWorkflow,
   data: [
-    { input: { query: "Process this data", priority: "high" } },
-    { input: { query: "Another task", priority: "low" } },
+    { input: { query: 'Process this data', priority: 'high' } },
+    { input: { query: 'Another task', priority: 'low' } },
   ],
   scorers: {
     workflow: [outputQualityScorer],
     steps: {
-      "validation-step": [validationScorer],
-      "processing-step": [processingScorer],
+      'validation-step': [validationScorer],
+      'processing-step': [processingScorer],
     },
   },
   onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Workflow completed for: ${item.inputData.query}`);
+    console.log(`Workflow completed for: ${item.inputData.query}`)
     if (scorerResults.workflow) {
-      console.log("Workflow scores:", scorerResults.workflow);
+      console.log('Workflow scores:', scorerResults.workflow)
     }
     if (scorerResults.steps) {
-      console.log("Step scores:", scorerResults.steps);
+      console.log('Step scores:', scorerResults.steps)
     }
   },
-});
+})
+```
+
+### Workflow with per-item startOptions
+
+Use `startOptions` on individual data items to customize each workflow run. Per-item values take precedence over `targetOptions`:
+
+```typescript
+const result = await runEvals({
+  target: myWorkflow,
+  data: [
+    {
+      input: { query: 'hello' },
+      startOptions: { initialState: { counter: 1 } },
+    },
+    {
+      input: { query: 'world' },
+      startOptions: { initialState: { counter: 2 } },
+    },
+  ],
+  scorers: [outputQualityScorer],
+  targetOptions: { perStep: true },
+})
 ```
 
 ## Related

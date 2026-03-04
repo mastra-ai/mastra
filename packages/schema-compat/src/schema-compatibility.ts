@@ -1,16 +1,28 @@
+import type { StandardJSONSchemaV1 } from '@standard-schema/spec';
+import traverse from 'json-schema-traverse';
 import type { z as zV3 } from 'zod/v3';
-import type { z as zV4, ZodType } from 'zod/v4';
+import type { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
-import {
-  SchemaCompatLayer as SchemaCompatLayerV3,
+import * as jsonSchemaUtils from './json-schema/utils';
+import * as v3 from './schema-compatibility-v3';
+import { SchemaCompatLayer as SchemaCompatLayerV3 } from './schema-compatibility-v3';
+import * as v4 from './schema-compatibility-v4';
+import { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility-v4';
+import type { ZodType, ZodUnion } from './schema.types';
+import { standardSchemaToJSONSchema, toStandardSchema } from './standard-schema/standard-schema';
+import type { ModelInformation } from './types';
+import { convertZodSchemaToAISDKSchema } from './utils';
+
+// Re-export constants and types
+export {
   ALL_STRING_CHECKS,
   ALL_NUMBER_CHECKS,
   ALL_ARRAY_CHECKS,
   UNSUPPORTED_ZOD_TYPES as UNSUPPORTED_ZOD_TYPES_V3,
   SUPPORTED_ZOD_TYPES as SUPPORTED_ZOD_TYPES_V3,
 } from './schema-compatibility-v3';
-import type {
+export type {
   UnsupportedZodType as UnsupportedZodTypeV3,
   ShapeValue as ShapeValueV3,
   StringCheckType,
@@ -18,19 +30,15 @@ import type {
   ArrayCheckType,
   AllZodType as AllZodTypeV3,
 } from './schema-compatibility-v3';
-import {
-  SchemaCompatLayer as SchemaCompatLayerV4,
+export {
   UNSUPPORTED_ZOD_TYPES as UNSUPPORTED_ZOD_TYPES_V4,
   SUPPORTED_ZOD_TYPES as SUPPORTED_ZOD_TYPES_V4,
 } from './schema-compatibility-v4';
-import type {
+export type {
   UnsupportedZodType as UnsupportedZodTypeV4,
   ShapeValue as ShapeValueV4,
   AllZodType as AllZodTypeV4,
 } from './schema-compatibility-v4';
-import type { ModelInformation } from './types';
-
-import { convertZodSchemaToAISDKSchema } from './utils';
 
 type ConstraintHelperText = string[];
 
@@ -59,181 +67,103 @@ export abstract class SchemaCompatLayer {
     return this.model;
   }
 
-  getUnsupportedZodTypes(v: ZodType): readonly string[] {
-    if ('_zod' in v) {
+  getUnsupportedZodTypes(value: ZodType): readonly string[] {
+    if ('_zod' in value) {
       return this.v4Layer.getUnsupportedZodTypes();
     } else {
       return this.v3Layer.getUnsupportedZodTypes();
     }
   }
 
-  /**
-   * Type guard for optional Zod types
-   */
-  isOptional(v: zV4.ZodType): v is zV4.ZodOptional<any>;
-  isOptional(v: zV3.ZodType): v is zV3.ZodOptional<any>;
-  isOptional(v: zV3.ZodType | zV4.ZodType) {
+  isOptional(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodOptional<any> | zV4.ZodOptional<any> {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isOptional(v);
+      return this.v4Layer.isOptional(v as any);
     } else {
-      return this.v3Layer.isOptional(v);
+      return this.v3Layer.isOptional(v as any);
     }
   }
 
-  /**
-   * Type guard for object Zod types
-   */
-  isObj(v: zV4.ZodType): v is zV4.ZodObject<any, any>;
-  isObj(v: zV3.ZodType): v is zV3.ZodObject<any, any, any, any, any>;
-  isObj(v: zV3.ZodType | zV4.ZodType) {
+  isObj(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any> {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isObj(v);
+      return this.v4Layer.isObj(v as any);
     } else {
-      return this.v3Layer.isObj(v);
+      return this.v3Layer.isObj(v as any);
     }
   }
 
-  /**
-   * Type guard for null Zod types
-   */
-  isNull(v: zV4.ZodType): v is zV4.ZodNull;
-  isNull(v: zV3.ZodType): v is zV3.ZodNull;
-  isNull(v: zV3.ZodType | zV4.ZodType) {
+  isNull(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNull | zV4.ZodNull {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isNull(v);
+      return this.v4Layer.isNull(v as any);
     } else {
-      return this.v3Layer.isNull(v);
+      return this.v3Layer.isNull(v as any);
     }
   }
 
-  /**
-   * Type guard for array Zod types
-   */
-  isArr(v: zV4.ZodType): v is zV4.ZodArray<any>;
-  isArr(v: zV3.ZodType): v is zV3.ZodArray<any, any>;
-  isArr(v: zV3.ZodType | zV4.ZodType) {
+  isNullable(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNullable<any> | zV4.ZodNullable<any> {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isArr(v);
+      return this.v4Layer.isNullable(v as any);
     } else {
-      return this.v3Layer.isArr(v);
+      return this.v3Layer.isNullable(v as any);
     }
   }
 
-  /**
-   * Type guard for union Zod types
-   */
-  isUnion(v: zV4.ZodType): v is zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]>;
-  isUnion(v: zV3.ZodType): v is zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]>;
-  isUnion(v: zV3.ZodType | zV4.ZodType) {
+  isArr(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodArray<any, any> | zV4.ZodArray<any> {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isUnion(v);
+      return this.v4Layer.isArr(v as any);
     } else {
-      return this.v3Layer.isUnion(v);
+      return this.v3Layer.isArr(v as any);
     }
   }
 
-  /**
-   * Type guard for string Zod types
-   */
-  isString(v: zV4.ZodType): v is zV4.ZodString;
-  isString(v: zV3.ZodType): v is zV3.ZodString;
-  isString(v: zV3.ZodType | zV4.ZodType) {
+  isUnion(
+    v: zV3.ZodType | zV4.ZodType,
+  ): v is zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]> | zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]> {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isString(v);
+      return this.v4Layer.isUnion(v as any);
     } else {
-      return this.v3Layer.isString(v);
+      return this.v3Layer.isUnion(v as any);
     }
   }
 
-  /**
-   * Type guard for number Zod types
-   */
-  isNumber(v: zV4.ZodType): v is zV4.ZodNumber;
-  isNumber(v: zV3.ZodType): v is zV3.ZodNumber;
-  isNumber(v: zV3.ZodType | zV4.ZodType) {
+  isString(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodString | zV4.ZodString {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isNumber(v);
+      return this.v4Layer.isString(v as any);
     } else {
-      return this.v3Layer.isNumber(v);
+      return this.v3Layer.isString(v as any);
     }
   }
 
-  /**
-   * Type guard for date Zod types
-   */
-  isDate(v: zV4.ZodType): v is zV4.ZodDate;
-  isDate(v: zV3.ZodType): v is zV3.ZodDate;
-  isDate(v: zV3.ZodType | zV4.ZodType) {
+  isNumber(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNumber | zV4.ZodNumber {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isDate(v);
+      return this.v4Layer.isNumber(v as any);
     } else {
-      return this.v3Layer.isDate(v);
+      return this.v3Layer.isNumber(v as any);
     }
   }
 
-  /**
-   * Type guard for default Zod types
-   */
-  isDefault(v: zV4.ZodType): v is zV4.ZodDefault<any>;
-  isDefault(v: zV3.ZodType): v is zV3.ZodDefault<any>;
-  isDefault(v: zV3.ZodType | zV4.ZodType) {
+  isDate(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodDate | zV4.ZodDate {
     if ('_zod' in v) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.isDefault(v);
+      return this.v4Layer.isDate(v as any);
     } else {
-      return this.v3Layer.isDefault(v);
+      return this.v3Layer.isDate(v as any);
     }
   }
 
-  /**
-   * Determines whether this compatibility layer should be applied for the current model.
-   *
-   * @returns True if this compatibility layer should be used, false otherwise
-   * @abstract
-   */
+  isDefault(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodDefault<any> | zV4.ZodDefault<any> {
+    if ('_zod' in v) {
+      return this.v4Layer.isDefault(v as any);
+    } else {
+      return this.v3Layer.isDefault(v as any);
+    }
+  }
+
   abstract shouldApply(): boolean;
-
-  /**
-   * Returns the JSON Schema target format for this provider.
-   *
-   * @returns The schema target format, or undefined to use the default 'jsonSchema7'
-   * @abstract
-   */
   abstract getSchemaTarget(): Targets | undefined;
+  abstract processZodType(value: ZodType): ZodType;
 
-  /**
-   * Processes a specific Zod type according to the provider's requirements.
-   *
-   * @param value - The Zod type to process
-   * @returns The processed Zod type
-   * @abstract
-   */
-  abstract processZodType(value: zV4.ZodType): zV4.ZodType;
-  abstract processZodType(value: zV3.ZodType): zV3.ZodType;
-  abstract processZodType(value: zV4.ZodType | zV3.ZodType): zV4.ZodType | zV3.ZodType;
+  public preProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
+  public postProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
 
-  /**
-   * Default handler for Zod object types. Recursively processes all properties in the object.
-   *
-   * @param value - The Zod object to process
-   * @returns The processed Zod object
-   */
-  public defaultZodObjectHandler(
-    value: zV4.ZodObject<any, any>,
-    options?: { passthrough?: boolean },
-  ): zV4.ZodObject<any, any>;
-  public defaultZodObjectHandler(
-    value: zV3.ZodObject<any, any>,
-    options?: { passthrough?: boolean },
-  ): zV3.ZodObject<any, any>;
   public defaultZodObjectHandler(
     value: zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any>,
     options: { passthrough?: boolean } = { passthrough: true },
@@ -245,70 +175,34 @@ export abstract class SchemaCompatLayer {
     }
   }
 
-  /**
-   * Merges validation constraints into a parameter description.
-   *
-   * This helper method converts validation constraints that may not be supported
-   * by a provider into human-readable descriptions.
-   *
-   * @param description - The existing parameter description
-   * @param constraints - The validation constraints to merge
-   * @returns The updated description with constraints, or undefined if no constraints
-   */
   public mergeParameterDescription(
     description: string | undefined,
     constraints: ConstraintHelperText,
   ): string | undefined {
-    // This method doesn't depend on Zod version, so we can use either layer
     return this.v3Layer.mergeParameterDescription(description, constraints);
   }
 
-  /**
-   * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
-   *
-   * @param value - The Zod type to check
-   * @param throwOnTypes - Array of type names to throw errors for
-   * @returns The original value if not in the throw list
-   * @throws Error if the type is in the unsupported list
-   */
-  public defaultUnsupportedZodTypeHandler<T extends zV4.ZodObject | zV3.AnyZodObject>(
-    value: T,
-    throwOnTypes?: T extends zV4.ZodObject
-      ? UnsupportedZodTypeV4[]
-      : T extends zV3.AnyZodObject
-        ? UnsupportedZodTypeV3[]
-        : never,
-  ): T extends zV4.ZodObject ? ShapeValueV4<T> : T extends zV3.AnyZodObject ? ShapeValueV3<T> : never {
+  public defaultUnsupportedZodTypeHandler(
+    value: zV3.ZodType | zV4.ZodType,
+    throwOnTypes?: readonly (v3.UnsupportedZodType | v4.UnsupportedZodType)[],
+  ): zV3.ZodType | zV4.ZodType {
     if ('_zod' in value) {
       return this.v4Layer.defaultUnsupportedZodTypeHandler(
-        // @ts-expect-error - fix later
-        value,
-        (throwOnTypes ?? UNSUPPORTED_ZOD_TYPES_V4) as typeof UNSUPPORTED_ZOD_TYPES_V4,
+        value as any,
+        (throwOnTypes ?? v4.UNSUPPORTED_ZOD_TYPES) as typeof v4.UNSUPPORTED_ZOD_TYPES,
       );
     } else {
       return this.v3Layer.defaultUnsupportedZodTypeHandler(
-        value,
-        (throwOnTypes ?? UNSUPPORTED_ZOD_TYPES_V3) as typeof UNSUPPORTED_ZOD_TYPES_V3,
+        value as any,
+        (throwOnTypes ?? v3.UNSUPPORTED_ZOD_TYPES) as typeof v3.UNSUPPORTED_ZOD_TYPES,
       );
     }
   }
 
-  /**
-   * Default handler for Zod array types. Processes array constraints according to provider support.
-   *
-   * @param value - The Zod array to process
-   * @param handleChecks - Array constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod array
-   */
-  public defaultZodArrayHandler(value: zV4.ZodArray<any>, handleChecks?: readonly ArrayCheckType[]): zV4.ZodArray<any>;
   public defaultZodArrayHandler(
-    value: zV3.ZodArray<any, any>,
-    handleChecks?: readonly ArrayCheckType[],
-  ): zV3.ZodArray<any, any>;
-  public defaultZodArrayHandler(
-    value: zV4.ZodArray<any> | zV3.ZodArray<any, any>,
-    handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
-  ): zV4.ZodArray<any> | zV3.ZodArray<any, any> {
+    value: zV3.ZodArray<any, any> | zV4.ZodArray<any>,
+    handleChecks: readonly v3.ArrayCheckType[] = v3.ALL_ARRAY_CHECKS,
+  ): zV3.ZodArray<any, any> | zV4.ZodArray<any> {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodArrayHandler(value, handleChecks);
     } else {
@@ -316,39 +210,18 @@ export abstract class SchemaCompatLayer {
     }
   }
 
-  /**
-   * Default handler for Zod union types. Processes all union options.
-   *
-   * @param value - The Zod union to process
-   * @returns The processed Zod union
-   * @throws Error if union has fewer than 2 options
-   */
-  public defaultZodUnionHandler(value: zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]>): zV4.ZodType;
-  public defaultZodUnionHandler(value: zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]>): zV3.ZodType;
-  public defaultZodUnionHandler(
-    value: zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]> | zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]>,
-  ): zV4.ZodType | zV3.ZodType {
+  public defaultZodUnionHandler(value: ZodUnion): zV3.ZodType | zV4.ZodType {
     if ('_zod' in value) {
-      // @ts-expect-error - fix later
-      return this.v4Layer.defaultZodUnionHandler(value);
+      return this.v4Layer.defaultZodUnionHandler(value as any);
     } else {
-      return this.v3Layer.defaultZodUnionHandler(value);
+      return this.v3Layer.defaultZodUnionHandler(value as any);
     }
   }
 
-  /**
-   * Default handler for Zod string types. Processes string validation constraints.
-   *
-   * @param value - The Zod string to process
-   * @param handleChecks - String constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod string
-   */
-  public defaultZodStringHandler(value: zV4.ZodString, handleChecks?: readonly StringCheckType[]): zV4.ZodString;
-  public defaultZodStringHandler(value: zV3.ZodString, handleChecks?: readonly StringCheckType[]): zV3.ZodString;
   public defaultZodStringHandler(
-    value: zV4.ZodString | zV3.ZodString,
-    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
-  ): zV4.ZodString | zV3.ZodString {
+    value: zV3.ZodString | zV4.ZodString,
+    handleChecks: readonly v3.StringCheckType[] = v3.ALL_STRING_CHECKS,
+  ): zV3.ZodString | zV4.ZodString {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodStringHandler(value);
     } else {
@@ -356,19 +229,10 @@ export abstract class SchemaCompatLayer {
     }
   }
 
-  /**
-   * Default handler for Zod number types. Processes number validation constraints.
-   *
-   * @param value - The Zod number to process
-   * @param handleChecks - Number constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod number
-   */
-  public defaultZodNumberHandler(value: zV4.ZodNumber, handleChecks?: readonly NumberCheckType[]): zV4.ZodNumber;
-  public defaultZodNumberHandler(value: zV3.ZodNumber, handleChecks?: readonly NumberCheckType[]): zV3.ZodNumber;
   public defaultZodNumberHandler(
-    value: zV4.ZodNumber | zV3.ZodNumber,
-    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
-  ): zV4.ZodNumber | zV3.ZodNumber {
+    value: zV3.ZodNumber | zV4.ZodNumber,
+    handleChecks: readonly v3.NumberCheckType[] = v3.ALL_NUMBER_CHECKS,
+  ): zV3.ZodNumber | zV4.ZodNumber {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodNumberHandler(value);
     } else {
@@ -376,15 +240,7 @@ export abstract class SchemaCompatLayer {
     }
   }
 
-  /**
-   * Default handler for Zod date types. Converts dates to ISO strings with constraint descriptions.
-   *
-   * @param value - The Zod date to process
-   * @returns A Zod string schema representing the date in ISO format
-   */
-  public defaultZodDateHandler(value: zV4.ZodDate): zV4.ZodString;
-  public defaultZodDateHandler(value: zV3.ZodDate): zV3.ZodString;
-  public defaultZodDateHandler(value: zV4.ZodDate | zV3.ZodDate): zV4.ZodString | zV3.ZodString {
+  public defaultZodDateHandler(value: zV3.ZodDate | zV4.ZodDate): zV3.ZodString | zV4.ZodString {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodDateHandler(value);
     } else {
@@ -392,45 +248,337 @@ export abstract class SchemaCompatLayer {
     }
   }
 
-  /**
-   * Default handler for Zod optional types. Processes the inner type and maintains optionality.
-   *
-   * @param value - The Zod optional to process
-   * @param handleTypes - Types that should be processed vs passed through
-   * @returns The processed Zod optional
-   */
-  public defaultZodOptionalHandler(value: zV4.ZodOptional<any>, handleTypes?: readonly AllZodTypeV4[]): zV4.ZodType;
-  public defaultZodOptionalHandler(value: zV3.ZodOptional<any>, handleTypes?: readonly AllZodTypeV3[]): zV3.ZodType;
   public defaultZodOptionalHandler(
-    value: zV4.ZodOptional<any> | zV3.ZodOptional<any>,
-    handleTypes?: readonly AllZodTypeV3[] | readonly AllZodTypeV4[],
-  ): zV4.ZodType | zV3.ZodType {
+    value: zV3.ZodOptional<any> | zV4.ZodOptional<any>,
+    handleTypes?: readonly string[],
+  ): zV3.ZodType | zV4.ZodType {
+    if (!handleTypes) {
+      handleTypes = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber'];
+    }
+
+    // Get the inner type name to check if it should be processed
+    // Zod v3 uses typeName (e.g., "ZodString"), v4 uses type (e.g., "string")
+    let innerTypeName: string;
     if ('_zod' in value) {
-      return this.v4Layer.defaultZodOptionalHandler(value, handleTypes ?? SUPPORTED_ZOD_TYPES_V4);
+      // Zod v4: type is lowercase without "Zod" prefix (e.g., "string", "object", "array")
+      // Add defensive checks for nested property access
+      const innerType = value._zod?.def?.innerType;
+      const v4Type = innerType?._zod?.def?.type as string | undefined;
+      if (!v4Type) {
+        // If nested properties are missing, return the value unchanged
+        return value;
+      }
+      // Convert to v3-style name for comparison (e.g., "string" -> "ZodString")
+      innerTypeName = 'Zod' + v4Type.charAt(0).toUpperCase() + v4Type.slice(1);
     } else {
-      return this.v3Layer.defaultZodOptionalHandler(value, handleTypes ?? SUPPORTED_ZOD_TYPES_V3);
+      innerTypeName = value._def.innerType._def.typeName;
+    }
+
+    if (handleTypes.includes(innerTypeName)) {
+      if ('_zod' in value) {
+        const innerType = value._zod?.def?.innerType;
+        if (!innerType) {
+          return value;
+        }
+        return this.processZodType(innerType).optional();
+      } else {
+        return this.processZodType(value._def.innerType).optional();
+      }
+    } else {
+      return value;
     }
   }
 
-  /**
-   * Processes a Zod object schema and converts it to an AI SDK Schema.
-   *
-   * @param zodSchema - The Zod object schema to process
-   * @returns An AI SDK Schema with provider-specific compatibility applied
-   */
+  public defaultZodNullableHandler(
+    value: zV3.ZodNullable<any> | zV4.ZodNullable<any>,
+    handleTypes?: readonly string[],
+  ): zV3.ZodType | zV4.ZodType {
+    if ('_zod' in value) {
+      return this.v4Layer.defaultZodNullableHandler(
+        value,
+        (handleTypes ?? v4.SUPPORTED_ZOD_TYPES) as typeof v4.SUPPORTED_ZOD_TYPES,
+      );
+    } else {
+      return this.v3Layer.defaultZodNullableHandler(
+        value as any,
+        (handleTypes ?? v3.SUPPORTED_ZOD_TYPES) as typeof v3.SUPPORTED_ZOD_TYPES,
+      );
+    }
+  }
+
   public processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): Schema {
     const processedSchema = this.processZodType(zodSchema);
 
     return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
   }
 
+  public processToJSONSchema(zodSchema: ZodType, io: 'input' | 'output' = 'input'): JSONSchema7 {
+    const standardSchema = toStandardSchema(zodSchema);
+
+    return standardSchemaToJSONSchema(standardSchema, {
+      target: 'draft-07',
+      io, // Use input mode so fields with defaults are optional
+    });
+  }
+
+  // ==========================================
+  // JSON Schema Default Handlers
+  // ==========================================
+
   /**
-   * Processes a Zod object schema and converts it to a JSON Schema.
-   *
-   * @param zodSchema - The Zod object schema to process
-   * @returns A JSONSchema7 object with provider-specific compatibility applied
+   * Default handler for JSON Schema objects.
+   * Processes object schemas with properties and required fields.
    */
-  public processToJSONSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): JSONSchema7 {
-    return this.processToAISDKSchema(zodSchema).jsonSchema;
+  protected defaultObjectHandler(schema: JSONSchema7): JSONSchema7 {
+    // Ensure additionalProperties is set appropriately for strict mode
+    if (schema.properties && schema.additionalProperties === undefined) {
+      schema.additionalProperties = false;
+    }
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema arrays.
+   * Converts array constraints (minItems, maxItems) to description text.
+   */
+  protected defaultArrayHandler(schema: JSONSchema7): JSONSchema7 {
+    let constraints: string[] = [];
+
+    const minItems = schema.minItems;
+    const maxItems = schema.maxItems;
+
+    if (minItems !== undefined && maxItems !== undefined && minItems === maxItems) {
+      constraints = [`exact length ${minItems}`];
+      delete schema.minItems;
+      delete schema.maxItems;
+    } else {
+      if (minItems !== undefined) {
+        constraints.push(`minimum length ${minItems}`);
+        delete schema.minItems;
+      }
+      if (maxItems !== undefined) {
+        constraints.push(`maximum length ${maxItems}`);
+        delete schema.maxItems;
+      }
+    }
+
+    if (constraints.length) {
+      schema.description = this.mergeParameterDescription(schema.description, constraints);
+    }
+
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema strings.
+   * Converts string constraints (minLength, maxLength, pattern, format) to description text.
+   */
+  protected defaultStringHandler(schema: JSONSchema7): JSONSchema7 {
+    const constraints: string[] = [];
+
+    if (schema.minLength !== undefined) {
+      constraints.push(`minimum length ${schema.minLength}`);
+      delete schema.minLength;
+    }
+    if (schema.maxLength !== undefined) {
+      constraints.push(`maximum length ${schema.maxLength}`);
+      delete schema.maxLength;
+    }
+    if (schema.pattern !== undefined) {
+      // Don't add pattern to constraints - just remove it
+      delete schema.pattern;
+    }
+    if (schema.format !== undefined) {
+      // Convert format to human-readable constraint text
+      const formatMap: Record<string, string> = {
+        email: 'a valid email',
+        uri: 'a valid url',
+        url: 'a valid url',
+        uuid: 'a valid uuid',
+        'date-time': 'a valid date-time',
+        date: 'a valid date',
+        time: 'a valid time',
+      };
+      const formatText = formatMap[schema.format] || `format: ${schema.format}`;
+      constraints.push(formatText);
+      delete schema.format;
+    }
+
+    if (constraints.length) {
+      schema.description = this.mergeParameterDescription(schema.description, constraints);
+    }
+
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema numbers/integers.
+   * Converts number constraints (minimum, maximum, multipleOf, exclusiveMinimum, exclusiveMaximum) to description text.
+   */
+  protected defaultNumberHandler(schema: JSONSchema7): JSONSchema7 {
+    const constraints: string[] = [];
+    if (schema.minimum !== undefined) {
+      if (schema.minimum !== Number.MIN_SAFE_INTEGER) {
+        constraints.push(`greater than or equal to ${schema.minimum}`);
+      }
+
+      delete schema.minimum;
+    }
+    if (schema.maximum !== undefined) {
+      if (schema.maximum !== Number.MAX_SAFE_INTEGER) {
+        constraints.push(`lower than or equal to ${schema.maximum}`);
+      }
+
+      delete schema.maximum;
+    }
+    if (schema.exclusiveMinimum !== undefined) {
+      constraints.push(`greater than ${schema.exclusiveMinimum}`);
+      delete schema.exclusiveMinimum;
+    }
+    if (schema.exclusiveMaximum !== undefined) {
+      constraints.push(`lower than ${schema.exclusiveMaximum}`);
+      delete schema.exclusiveMaximum;
+    }
+    if (schema.multipleOf !== undefined) {
+      constraints.push(`multiple of ${schema.multipleOf}`);
+      delete schema.multipleOf;
+    }
+
+    if (constraints.length) {
+      schema.description = this.mergeParameterDescription(schema.description, constraints);
+    }
+
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema unions (anyOf/oneOf).
+   * Processes union schemas and can convert anyOf patterns to type arrays for simple primitives.
+   */
+  protected defaultUnionHandler(schema: JSONSchema7): JSONSchema7 {
+    if (schema.anyOf && Array.isArray(schema.anyOf)) {
+      // Check if all items in anyOf are simple primitive types (only have a 'type' property)
+      const allSimplePrimitives = schema.anyOf.every((s: any) => {
+        if (typeof s !== 'object' || s === null) return false;
+        const keys = Object.keys(s);
+        return keys.length === 1 && keys[0] === 'type' && typeof s.type === 'string';
+      });
+
+      if (allSimplePrimitives) {
+        // Convert anyOf: [{type: "string"}, {type: "number"}] to type: ["string", "number"]
+        const types = schema.anyOf.map((s: any) => s.type);
+        delete schema.anyOf;
+        schema.type = types as JSONSchema7['type'];
+      }
+    }
+
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema nullable types.
+   * Ensures nullable types are represented correctly.
+   */
+  protected defaultNullableHandler(schema: JSONSchema7): JSONSchema7 {
+    return this.defaultUnionHandler(schema);
+  }
+
+  /**
+   * Default handler for JSON Schema dates (string with date/date-time format).
+   * Converts date formats to string type with format constraint in description.
+   */
+  protected defaultDateHandler(schema: JSONSchema7): JSONSchema7 {
+    if (schema.format === 'date' || schema.format === 'date-time') {
+      const format = schema.format;
+      delete schema.format;
+      schema.description = this.mergeParameterDescription(schema.description, [`format: ${format}`]);
+    }
+    return schema;
+  }
+
+  /**
+   * Default handler for empty JSON schemas.
+   * Converts empty {} schemas to a union of primitive types.
+   */
+  protected defaultEmptySchemaHandler(schema: JSONSchema7): JSONSchema7 {
+    if (Object.keys(schema).length === 0) {
+      schema.type = ['string', 'number', 'boolean', 'null'] as JSONSchema7['type'];
+    }
+    return schema;
+  }
+
+  /**
+   * Default handler for unsupported JSON Schema features.
+   * Can be used to strip or convert unsupported keywords.
+   */
+  protected defaultUnsupportedHandler(schema: JSONSchema7, unsupportedKeywords: string[] = []): JSONSchema7 {
+    for (const keyword of unsupportedKeywords) {
+      if (keyword in schema) {
+        delete (schema as Record<string, unknown>)[keyword];
+      }
+    }
+    return schema;
+  }
+
+  // ==========================================
+  // JSON Schema Type Checkers (delegating to json-schema/utils)
+  // ==========================================
+
+  protected isObjectSchema(schema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isObjectSchema(schema);
+  }
+
+  protected isArraySchema(schema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isArraySchema(schema);
+  }
+
+  protected isStringSchema(schema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isStringSchema(schema);
+  }
+
+  protected isNumberSchema(schema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isNumberSchema(schema);
+  }
+
+  protected isUnionSchema(schema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isUnionSchema(schema);
+  }
+
+  /**
+   * Checks if a property is optional within a parent object schema.
+   * A property is optional if it's not in the parent's `required` array.
+   * @param propertyName - The name of the property to check
+   * @param parentSchema - The parent object schema containing the property
+   */
+  protected isOptionalProperty(propertyName: string, parentSchema: JSONSchema7): boolean {
+    return jsonSchemaUtils.isOptionalSchema(propertyName, parentSchema);
+  }
+
+  /**
+   * Converts a Zod schema to JSON Schema using the standard-schema interface
+   * and applies pre/post processing via traverse.
+   *
+   * Uses 'input' io mode so that fields with defaults are optional (appropriate for tool parameters).
+   */
+  public toJSONSchema(zodSchema: ZodType): JSONSchema7 {
+    const target = 'draft-07' as StandardJSONSchemaV1.Target;
+    const standardSchema = toStandardSchema(zodSchema);
+    const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
+      target,
+      io: 'input', // Use input mode so fields with defaults are optional
+    });
+
+    traverse(jsonSchema, {
+      cb: {
+        pre: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+          this.preProcessJSONNode(schema, parentSchema);
+        },
+        post: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+          this.postProcessJSONNode(schema, parentSchema);
+        },
+      },
+    });
+
+    return jsonSchema;
   }
 }

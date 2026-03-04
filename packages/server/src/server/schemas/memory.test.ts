@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { normalizeQueryParams } from '../server-adapter/index';
 import { listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
 
 /**
@@ -31,7 +32,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: orderBy was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
+       * Example URL: /memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
        */
       it('should parse orderBy when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify({ field: 'createdAt', direction: 'ASC' });
@@ -90,7 +91,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: include was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?include=[{"role":"user","withPreviousMessages":5}]
+       * Example URL: /memory/threads/abc/messages?include=[{"role":"user","withPreviousMessages":5}]
        */
       it('should parse include when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify([
@@ -133,7 +134,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: filter was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?filter={"roles":["user","assistant"]}
+       * Example URL: /memory/threads/abc/messages?filter={"roles":["user","assistant"]}
        */
       it('should parse filter when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify({ roles: ['user', 'assistant'] });
@@ -354,6 +355,43 @@ describe('Memory Schema Query Parsing', () => {
         });
 
         expect(result.success).toBe(false);
+      });
+    });
+  });
+
+  /**
+   * Regression tests for GitHub Issue #12816
+   *
+   * When users send sort direction parameters via common REST API patterns
+   * (bracket notation or flat params), the orderBy should be correctly parsed.
+   * Currently, bracket notation like `orderBy[field]=createdAt&orderBy[direction]=DESC`
+   * is silently dropped because normalizeQueryParams doesn't reconstruct nested objects.
+   */
+  describe('Issue #12816: Sort direction parameters', () => {
+    describe('normalizeQueryParams should handle bracket notation for orderBy', () => {
+      it('should reconstruct nested object from bracket notation query params', () => {
+        // Simulates what Hono's request.queries() returns for:
+        // ?orderBy[field]=createdAt&orderBy[direction]=DESC
+        // Hono returns bracket-notation keys as flat entries
+        const honoQueries: Record<string, string[]> = {
+          page: ['0'],
+          perPage: ['10'],
+          'orderBy[field]': ['createdAt'],
+          'orderBy[direction]': ['DESC'],
+        };
+
+        const normalized = normalizeQueryParams(honoQueries);
+
+        // After normalization, we need orderBy to be parseable by the schema.
+        // Currently this produces { "orderBy[field]": "createdAt", "orderBy[direction]": "DESC" }
+        // which means the schema never sees an "orderBy" key at all.
+        const result = listMessagesQuerySchema.safeParse(normalized);
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          // This is the key assertion: orderBy should contain the direction
+          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'DESC' });
+        }
       });
     });
   });

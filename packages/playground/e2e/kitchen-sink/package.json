@@ -16,11 +16,12 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/editor": "latest",
     "@mastra/mcp": "latest",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "typescript": "^5.9.3"
   },
   "pnpm": {
@@ -30,8 +31,9 @@
       "@mastra/loggers": "link:../../../../packages/loggers",
       "@mastra/memory": "link:../../../../packages/memory",
       "@mastra/libsql": "link:../../../../stores/libsql",
+      "@mastra/editor": "link:../../../../packages/editor",
       "@mastra/mcp": "link:../../../../packages/mcp"
     }
   },
-  "packageManager": "pnpm@10.18.2"
+  "packageManager": "pnpm@10.29.3"
 }

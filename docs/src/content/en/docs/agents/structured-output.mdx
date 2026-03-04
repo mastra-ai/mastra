@@ -22,57 +22,53 @@ Agents can return structured data by defining the expected output with either [Z
 
 <Tabs>
   <TabItem value="zod" label="Zod">
+    Define the `output` shape using [Zod](https://zod.dev/):
 
-Define the `output` shape using [Zod](https://zod.dev/):
+    ```typescript
+    import { z } from 'zod'
 
-```typescript
-import { z } from "zod";
+    const response = await testAgent.generate('Help me plan my day.', {
+      structuredOutput: {
+        schema: z.array(
+          z.object({
+            name: z.string(),
+            activities: z.array(z.string()),
+          }),
+        ),
+      },
+    })
 
-const response = await testAgent.generate("Help me plan my day.", {
-  structuredOutput: {
-    schema: z.array(
-      z.object({
-        name: z.string(),
-        activities: z.array(z.string()),
-      }),
-    ),
-  },
-});
-
-console.log(response.object);
-```
-
+    console.log(response.object)
+    ```
   </TabItem>
+
   <TabItem value="json-schema" label="JSON Schema">
+    You can also use JSON Schema to define your output structure:
 
-You can also use JSON Schema to define your output structure:
-
-```typescript
-const response = await testAgent.generate("Help me plan my day.", {
-  structuredOutput: {
-    schema: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          activities: {
-            type: "array",
-            items: { type: "string" },
+    ```typescript
+    const response = await testAgent.generate('Help me plan my day.', {
+      structuredOutput: {
+        schema: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              activities: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+            },
+            required: ['name', 'activities'],
           },
         },
-        required: ["name", "activities"],
       },
-    },
-  },
-});
+    })
 
-console.log(response.object);
-```
-
+    console.log(response.object)
+    ```
   </TabItem>
 </Tabs>
-
 
 :::info
 
@@ -106,30 +102,30 @@ The `response.object` will contain the structured data as defined by the schema.
 Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
-const stream = await testAgent.stream("Help me plan my day.", {
+const stream = await testAgent.stream('Help me plan my day.', {
   structuredOutput: {
     schema: z.array(
       z.object({
         name: z.string(),
-        activities: z.array(z.string())
-      })
+        activities: z.array(z.string()),
+      }),
     ),
   },
-});
+})
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === "object-result") {
-    console.log("\n", JSON.stringify(chunk, null, 2));
+  if (chunk.type === 'object-result') {
+    console.log('\n', JSON.stringify(chunk, null, 2))
   }
-  process.stdout.write(JSON.stringify(chunk));
+  process.stdout.write(JSON.stringify(chunk))
 }
 
 console.log(await stream.object)
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
+  process.stdout.write(chunk)
 }
 ```
 
@@ -138,28 +134,30 @@ for await (const chunk of stream.textStream) {
 When your main agent isn't proficient at creating structured output you can provide a `model` to `structuredOutput`. In this case, Mastra uses a second agent under the hood to extract structured data from the main agent's natural language response. This makes two LLM calls, one to generate the response and another to turn that response into the structured object, which adds some latency and cost but can improve accuracy for complex structuring tasks.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
-const response = await testAgent.generate("Analyze the TypeScript programming language.", {
+const response = await testAgent.generate('Analyze the TypeScript programming language.', {
   structuredOutput: {
     schema: z.object({
       overview: z.string(),
       strengths: z.array(z.string()),
       weaknesses: z.array(z.string()),
-      useCases: z.array(z.object({
-        scenario: z.string(),
-        reasoning: z.string(),
-      })),
+      useCases: z.array(
+        z.object({
+          scenario: z.string(),
+          reasoning: z.string(),
+        }),
+      ),
       comparison: z.object({
         similarTo: z.array(z.string()),
         differentiators: z.array(z.string()),
       }),
     }),
-    model: "openai/gpt-4o",
+    model: 'openai/gpt-4o',
   },
-});
+})
 
-console.log(response.object);
+console.log(response.object)
 ```
 
 ## Combining tools and structured output
@@ -173,8 +171,8 @@ If your tools aren't being called when structured output is enabled, or you rece
 When your model doesn't support tools and structured output together, you have three options:
 
 1. **Use `jsonPromptInjection: true`** - Injects the schema into the prompt instead of using the API's `response_format` parameter
-2. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
-3. **Use `prepareStep`** - Handle tools and structured output in separate steps
+1. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
+1. **Use `prepareStep`** - Handle tools and structured output in separate steps
 
 Each approach is detailed in the sections below.
 
@@ -189,9 +187,9 @@ By default, Mastra passes the schema to the model provider using the `response_f
 If your model provider doesn't support `response_format`, you'll get an error from the API. When this happens, set `jsonPromptInjection: true`. This adds the schema to the system prompt instead, instructing the model to output JSON. This is less reliable than the API parameter approach.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
-const response = await testAgent.generate("Help me plan my day.", {
+const response = await testAgent.generate('Help me plan my day.', {
   structuredOutput: {
     schema: z.array(
       z.object({
@@ -201,9 +199,9 @@ const response = await testAgent.generate("Help me plan my day.", {
     ),
     jsonPromptInjection: true,
   },
-});
+})
 
-console.log(response.object);
+console.log(response.object)
 ```
 
 :::info[Gemini 2.5 with tools]
@@ -211,20 +209,21 @@ console.log(response.object);
 Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
 
 ```typescript
-const response = await agentWithTools.generate("Your prompt", {
+const response = await agentWithTools.generate('Your prompt', {
   structuredOutput: {
     schema: yourSchema,
-    jsonPromptInjection: true,  // Required for Gemini 2.5 when tools are present
+    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
   },
-});
+})
 ```
+
 :::
 
 ### Using a separate structuring model
 
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
 
-```typescript
+```typescript prettier:false
 const response = await testAgent.generate("Tell me about TypeScript.", {
   structuredOutput: {
     schema: yourSchema
@@ -238,19 +237,19 @@ const response = await testAgent.generate("Tell me about TypeScript.", {
 For models that don't support tools and structured outputs together, you can use `prepareStep` to handle them in separate steps.
 
 ```typescript
-const result = await agent.stream("weather in vancouver?", {
+const result = await agent.stream('weather in vancouver?', {
   prepareStep: async ({ stepNumber }) => {
     if (stepNumber === 0) {
       return {
-        model: "anthropic/claude-sonnet-4-20250514",
+        model: 'anthropic/claude-sonnet-4-20250514',
         tools: {
           weatherTool,
         },
-        toolChoice: "required",
-      };
+        toolChoice: 'required',
+      }
     }
     return {
-      model: "anthropic/claude-sonnet-4-20250514",
+      model: 'anthropic/claude-sonnet-4-20250514',
       tools: undefined,
       structuredOutput: {
         schema: z.object({
@@ -259,9 +258,9 @@ const result = await agent.stream("weather in vancouver?", {
           windSpeed: z.number(),
         }),
       },
-    };
+    }
   },
-});
+})
 ```
 
 ## Error handling
@@ -269,23 +268,23 @@ const result = await agent.stream("weather in vancouver?", {
 When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
 
 ```typescript
-import { z } from "zod";
+import { z } from 'zod'
 
-const response = await testAgent.generate("Tell me about TypeScript.", {
+const response = await testAgent.generate('Tell me about TypeScript.', {
   structuredOutput: {
     schema: z.object({
       summary: z.string(),
-      keyFeatures: z.array(z.string())
+      keyFeatures: z.array(z.string()),
     }),
-    errorStrategy: "fallback",
+    errorStrategy: 'fallback',
     fallbackValue: {
-      summary: "TypeScript is a typed superset of JavaScript",
-      keyFeatures: ["Static typing", "Compiles to JavaScript", "Better tooling"]
-    }
-  }
-});
+      summary: 'TypeScript is a typed superset of JavaScript',
+      keyFeatures: ['Static typing', 'Compiles to JavaScript', 'Better tooling'],
+    },
+  },
+})
 
-console.log(response.object);
+console.log(response.object)
 ```
 
 ## Related

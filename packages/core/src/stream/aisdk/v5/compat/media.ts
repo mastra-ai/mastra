@@ -114,13 +114,13 @@ export const audioMediaTypeSignatures = [
 const stripID3 = (data: Uint8Array | string) => {
   const bytes = typeof data === 'string' ? convertBase64ToUint8Array(data) : data;
   const id3Size =
-    // @ts-expect-error
+    // @ts-expect-error - bytes array access
     ((bytes[6] & 0x7f) << 21) |
-    // @ts-expect-error
+    // @ts-expect-error - bytes array access
     ((bytes[7] & 0x7f) << 14) |
-    // @ts-expect-error
+    // @ts-expect-error - bytes array access
     ((bytes[8] & 0x7f) << 7) |
-    // @ts-expect-error
+    // @ts-expect-error - bytes array access
     (bytes[9] & 0x7f);
 
   // The raw MP3 starts here

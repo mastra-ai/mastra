@@ -13,7 +13,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -56,7 +56,12 @@ export class CoreToolBuilder extends MastraBase {
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
-    if (!isVercelTool(this.originalTool) && input.autoResumeSuspendedTools) {
+    if (
+      !isVercelTool(this.originalTool) &&
+      (input.autoResumeSuspendedTools ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-') ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('workflow-'))
+    ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
         schema = schema();
@@ -66,7 +71,7 @@ export class CoreToolBuilder extends MastraBase {
       }
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional().default(''),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -212,6 +217,7 @@ export class CoreToolBuilder extends MastraBase {
               this.logType,
             )
           : undefined,
+        toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
@@ -242,8 +248,17 @@ export class CoreToolBuilder extends MastraBase {
     logType?: 'tool' | 'toolset' | 'client-tool',
     processedSchema?: z.ZodTypeAny,
   ) {
-    // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
+    // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
+    const {
+      logger,
+      mastra: _mastra,
+      memory: _memory,
+      requestContext,
+      model,
+      tracingContext: _tracingContext,
+      tracingPolicy: _tracingPolicy,
+      ...rest
+    } = options;
     const logModelObject = {
       modelId: model?.modelId,
       provider: model?.provider,
@@ -267,6 +282,7 @@ export class CoreToolBuilder extends MastraBase {
         name: `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
+        entityId: options.name,
         entityName: options.name,
         attributes: {
           toolDescription: options.description,
@@ -316,7 +332,10 @@ export class CoreToolBuilder extends MastraBase {
             mastra: wrappedMastra,
             memory: options.memory,
             runId: options.runId,
-            requestContext: options.requestContext ?? new RequestContext(),
+            requestContext: execOptions.requestContext ?? options.requestContext ?? new RequestContext(),
+            // Workspace for file operations and command execution
+            // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
+            workspace: execOptions.workspace ?? options.workspace,
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -326,7 +345,7 @@ export class CoreToolBuilder extends MastraBase {
               },
               options.outputWriter || execOptions.outputWriter,
             ),
-            tracingContext: { currentSpan: toolSpan },
+            ...createObservabilityContext({ currentSpan: toolSpan }),
             abortSignal: execOptions.abortSignal,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
@@ -459,7 +478,10 @@ export class CoreToolBuilder extends MastraBase {
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
-        if (error) {
+        //suspendedToolRunId is only required when resumeData is provided
+        const suspendedToolRunIdErrToIgnore =
+          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+        if (error && !suspendedToolRunIdErrToIgnore) {
           logger.warn(error.message);
           return error;
         }
@@ -484,7 +506,7 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              errorMessage: String(error),
+              errorMessage: String(err),
               argsJson: JSON.stringify(args),
               model: model?.modelId ?? '',
             },
@@ -493,7 +515,7 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
-        return mastraError;
+        throw mastraError;
       }
     };
   }
@@ -573,7 +595,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (applicableLayer && originalSchema) {
       // Get the transformed Zod schema (with constraints removed/modified)
-      processedZodSchema = applicableLayer.processZodType(originalSchema);
+      processedZodSchema = applicableLayer.processZodType(originalSchema) as z.ZodTypeAny;
       // Convert to AI SDK Schema for the LLM
       processedSchema = applyCompatLayer({
         schema: originalSchema,
@@ -645,6 +667,11 @@ export class CoreToolBuilder extends MastraBase {
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
+      toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
+      onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
+      onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
+      onOutput: 'onOutput' in this.originalTool ? this.originalTool.onOutput : undefined,
     } as unknown as CoreTool;
   }
 }

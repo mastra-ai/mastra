@@ -1,9 +1,23 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { registerApiRoute } from '@mastra/core/server';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
-import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
+import { mastraAuth, rbacProvider } from './auth';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { z } from 'zod';
+import { ComposioToolProvider } from '@mastra/editor/composio';
+
+import {
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+  dynamicToolsAgent,
+  schemaValidatedAgent,
+  requestContextDemoAgent,
+} from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {
@@ -12,6 +26,7 @@ import {
   agentWithAdvancedModeration,
   agentWithBranchingModeration,
   agentWithSequentialModeration,
+  supervisorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -34,15 +49,7 @@ import {
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: 'file:./mastra.db',
-});
-
-const testScorer = createScorer({
-  id: 'scorer1',
-  name: 'My Scorer',
-  description: 'Scorer 1',
-}).generateScore(() => {
-  return 1;
+  url: 'file:../../../mastra.db',
 });
 
 const config = {
@@ -50,18 +57,21 @@ const config = {
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
+    schemaValidatedAgent,
+    requestContextDemoAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
     simpleAssistantAgent,
     agentWithBranchingWorkflow,
-    // Agents with processor workflows from model-v2-agent
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+    supervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -71,7 +81,6 @@ const config = {
     sensitiveTopicBlocker,
     stepLoggerProcessor,
   },
-  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
   mcpServers: {
     myMcpServer,
@@ -89,30 +98,18 @@ const config = {
   bundler: {
     sourcemap: true,
   },
+  editor: new MastraEditor(),
   server: {
-    build: {
-      swaggerUI: true,
-    },
+    auth: mastraAuth,
+    rbac: rbacProvider,
   },
-  scorers: {
-    testScorer,
-  },
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
-      },
-    },
-  }),
 };
 
 export const mastra = new Mastra({
   ...config,
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
 });

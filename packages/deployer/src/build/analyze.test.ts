@@ -4,6 +4,7 @@ import { noopLogger } from '@mastra/core/logger';
 import { join } from 'node:path';
 import { ensureDir, remove, writeFile, pathExists } from 'fs-extra';
 import { tmpdir } from 'node:os';
+import { slash } from './utils';
 
 vi.mock('../bundler/workspaceDependencies', () => ({
   getWorkspaceInformation: vi.fn().mockResolvedValue({
@@ -161,5 +162,15 @@ describe('analyzeBundle', () => {
       expect(result.externalDependencies.has('pino-pretty')).toBe(true);
       expect(result.externalDependencies.has('pino-opentelemetry-transport')).toBe(true);
     });
+  });
+});
+
+describe('workspace path normalization (issue #13022)', () => {
+  it('should normalize backslashes so startsWith matches rollup imports', () => {
+    const rollupImport = 'apps/@agents/devstudio/.mastra/.build/chunk-ILQXPZCD.mjs';
+    const windowsPath = 'apps\\@agents\\devstudio';
+
+    expect(rollupImport.startsWith(windowsPath)).toBe(false);
+    expect(rollupImport.startsWith(slash(windowsPath))).toBe(true);
   });
 });

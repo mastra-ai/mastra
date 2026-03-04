@@ -69,9 +69,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
     });
 
     afterEach(async () => {
-      //@ts-expect-error
+      // @ts-expect-error - accessing client for cleanup
       await storage.client.close();
-      //@ts-expect-error
+      // @ts-expect-error - accessing client for cleanup
       await vector.turso.close();
     });
 
@@ -727,9 +727,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
     });
 
     afterEach(async () => {
-      //@ts-expect-error
+      // @ts-expect-error - accessing client for cleanup
       await storage.client.close();
-      //@ts-expect-error
+      // @ts-expect-error - accessing client for cleanup
       await vector.turso.close();
     });
 

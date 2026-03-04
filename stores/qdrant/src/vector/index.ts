@@ -352,6 +352,16 @@ export class QdrantVector extends MastraVector {
     includeVector = false,
     using,
   }: QdrantQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Qdrant queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {
@@ -439,7 +449,7 @@ export class QdrantVector extends MastraVector {
       return {
         dimension: config.params.vectors?.size as number,
         count: points_count || 0,
-        // @ts-expect-error
+        // @ts-expect-error - Object.keys returns string[] but DISTANCE_MAPPING keys are typed
         metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
       };
     } catch (error) {

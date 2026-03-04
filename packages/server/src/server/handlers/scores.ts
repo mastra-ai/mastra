@@ -17,6 +17,7 @@ import {
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 
 async function listScorersFromSystem({
@@ -70,14 +71,39 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.listStoredAgents();
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list();
     if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
       }
     }
   } catch {
     // Silently ignore if storage is not configured - not all setups have storage
+  }
+
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list();
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
@@ -143,7 +169,7 @@ function getTraceDetails(traceIdWithSpanId?: string) {
 
 export const LIST_SCORERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers',
+  path: '/scores/scorers',
   responseType: 'json',
   responseSchema: listScorersResponseSchema,
   summary: 'List all scorers',
@@ -161,7 +187,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
 
 export const GET_SCORER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers/:scorerId',
+  path: '/scores/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   responseSchema: scorerEntrySchema.nullable(),
@@ -187,7 +213,7 @@ export const GET_SCORER_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/run/:runId',
+  path: '/scores/run/:runId',
   responseType: 'json',
   pathParamSchema: runIdSchema,
   queryParamSchema: listScoresByRunIdQuerySchema,
@@ -220,7 +246,7 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorer/:scorerId',
+  path: '/scores/scorer/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   queryParamSchema: listScoresByScorerIdQuerySchema,
@@ -251,7 +277,7 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/entity/:entityType/:entityId',
+  path: '/scores/entity/:entityType/:entityId',
   responseType: 'json',
   pathParamSchema: entityPathParams,
   queryParamSchema: listScoresByEntityIdQuerySchema,
@@ -266,7 +292,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId);
+        const agent = await getAgentFromSystem({ mastra, agentId: entityId });
         entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);
@@ -297,7 +323,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
 export const SAVE_SCORE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/scores',
+  path: '/scores',
   responseType: 'json',
   bodySchema: saveScoreBodySchema,
   responseSchema: saveScoreResponseSchema,

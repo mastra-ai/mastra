@@ -3,7 +3,16 @@ import { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
 import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
+import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
+
+/**
+ * Marker to identify Mastra tools even when `instanceof` fails.
+ * This can happen in environments like Vite SSR where the same module
+ * may be loaded multiple times, creating different class instances.
+ * Uses Symbol.for() so the same symbol is shared across module copies.
+ * Follows the naming convention: <org>.<product>.<category>.<className>
+ */
+export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -62,12 +71,13 @@ export class Tool<
   TSchemaOut = unknown,
   TSuspendSchema = unknown,
   TResumeSchema = unknown,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, any> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -87,12 +97,18 @@ export class Tool<
   resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
+   * Schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+
+  /**
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute'];
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -122,6 +138,12 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
    * Optional MCP-specific properties including annotations and metadata.
    * Only relevant when the tool is being used in an MCP context.
    * @example
@@ -141,6 +163,43 @@ export class Tool<
    */
   mcp?: MCPToolProperties;
 
+  onInputStart?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputStart'];
+  onInputDelta?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputDelta'];
+  onInputAvailable?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputAvailable'];
+  onOutput?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onOutput'];
+
   /**
    * Creates a new Tool instance with input validation wrapper.
    *
@@ -155,17 +214,24 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+    (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.suspendSchema = opts.suspendSchema;
     this.resumeSchema = opts.resumeSchema;
+    this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
+    this.onInputStart = opts.onInputStart;
+    this.onInputDelta = opts.onInputDelta;
+    this.onInputAvailable = opts.onInputAvailable;
+    this.onOutput = opts.onOutput;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
@@ -177,6 +243,16 @@ export class Tool<
         const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
           return error as any;
+        }
+
+        // Validate request context if schema exists
+        const { error: requestContextError } = validateRequestContext(
+          this.requestContextSchema,
+          context?.requestContext,
+          this.id,
+        );
+        if (requestContextError) {
+          return requestContextError as any;
         }
 
         let suspendData = null;
@@ -388,9 +464,14 @@ export function createTool<
   TSchemaOut = unknown,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
-): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId> {
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> {
   return new Tool(opts);
 }

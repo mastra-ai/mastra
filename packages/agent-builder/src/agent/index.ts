@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraModelOutput, FullOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { AgentBuilderDefaults } from '../defaults';
@@ -60,6 +61,13 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
     const additionalInstructions = config.instructions ? `## Priority Instructions \n\n${config.instructions}` : '';
     const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
+    // Create Memory with storage for AgentBuilder
+    // Use provided storage if available, otherwise fall back to in-memory storage
+    const memory = new Memory({
+      options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
+    });
+    memory.setStorage(config.storage ?? new InMemoryStore());
+
     const agentConfig: AgentConfig<'agent-builder', TTools, TOutput> = {
       id: 'agent-builder',
       name: 'agent-builder',
@@ -73,9 +81,7 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
           ...(config.tools || ({} as TTools)),
         } as TTools;
       },
-      memory: new Memory({
-        options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-      }),
+      memory,
       inputProcessors: [
         // use the write to disk processor to debug the agent's context
         // new WriteToDiskProcessor({ prefix: 'before-filter' }),
