@@ -13,26 +13,24 @@ Sandbox providers give agents the ability to execute shell commands. When you co
 
 A sandbox provider executes commands in a controlled environment:
 
-- **Command execution** - Run shell commands with arguments
-- **Background processes** - Spawn long-running processes like dev servers and watchers
-- **Working directory** - Commands run from a specific directory
-- **Environment variables** - Control what variables are available
-- **Timeouts** - Prevent long-running commands from hanging
-- **Isolation** - Optional OS-level sandboxing for security
-
-When you assign a workspace with a sandbox to an agent, Mastra automatically includes the `execute_command` tool in the agent's toolset.
+- **Command execution**: Run shell commands with arguments
+- **Background processes**: Spawn long-running processes like dev servers and watchers
+- **Working directory**: Commands run from a specific directory
+- **Environment variables**: Control what variables are available
+- **Timeouts**: Prevent long-running commands from hanging
+- **Isolation**: Optional OS-level sandboxing for security
 
 ## Supported providers
 
-Available providers:
+- [`LocalSandbox`](/reference/workspace/local-sandbox): Executes commands on the local machine
+- [`DaytonaSandbox`](/reference/workspace/daytona-sandbox): Executes commands in isolated Daytona cloud sandboxes
+- [`E2BSandbox`](/reference/workspace/e2b-sandbox): Executes commands in isolated E2B cloud sandboxes
 
-- [`LocalSandbox`](/reference/workspace/local-sandbox) - Executes commands on the local machine
-- [`DaytonaSandbox`](/reference/workspace/daytona-sandbox) - Executes commands in isolated Daytona cloud sandboxes
-- [`E2BSandbox`](/reference/workspace/e2b-sandbox) - Executes commands in isolated E2B cloud sandboxes
+All three providers include built-in process managers for background process support.
 
 ## Basic usage
 
-Create a workspace with a sandbox and assign it to an agent. The agent can then execute shell commands:
+Create a workspace with a sandbox and assign it to an agent. The agent receives the `execute_command` tool automatically:
 
 ```typescript title="src/mastra/agents/dev-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -60,35 +58,72 @@ const response = await agent.generate('Run `ls -la` in the workspace directory')
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
-## Background processes
-
-Sandbox providers can also spawn long-running background processes. Use background processes for dev servers, file watchers, REPLs, and other tasks that run continuously:
-
-```typescript
-const handle = await sandbox.processes.spawn('npm run dev', {
-  onStdout: data => console.log(data),
-})
-
-console.log(handle.pid)
-await handle.sendStdin('input\n')
-await handle.kill()
-```
-
-See [background processes](/docs/workspace/processes) for a full guide, or the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for API details.
-
 ## Agent tools
 
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. When the sandbox includes a process manager, agents also get:
+When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. When the sandbox includes a process manager (all built-in providers do), agents also receive tools for background process management:
 
-- **`execute_command`** with `background: true` - Start a long-running command and get back a PID
-- **`get_process_output`** - Check stdout, stderr, and status of a background process by PID
-- **`kill_process`** - Stop a background process by PID
+| Tool | Description |
+| - | - |
+| `execute_command` | Run a shell command. Returns stdout, stderr, and exit code. Accepts `background: true` to start a long-running process and return a PID. |
+| `get_process_output` | Check stdout, stderr, and status of a background process by PID. Supports `tail` to limit output lines and `wait: true` to block until exit. |
+| `kill_process` | Stop a background process by PID. Returns the last 50 lines of output. |
 
-These tools are registered automatically when `sandbox.processes` is available. See [workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full list.
+These tools are registered automatically. See [Workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full tool name list.
+
+## Background process callbacks
+
+When agents start background processes through the `execute_command` tool, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on the `execute_command` tool:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: {
+        onStdout: (data, { pid }) => console.log(`[${pid}] ${data}`),
+        onStderr: (data, { pid }) => console.error(`[${pid}] ${data}`),
+        onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
+      },
+    },
+  },
+})
+```
+
+These callbacks fire for all background processes started by the agent through the `execute_command` tool.
+
+### Abort signal
+
+By default, background processes inherit the agent's abort signal and are killed when the agent disconnects. Control this behavior with the `abortSignal` option:
+
+- **`undefined`** (default): Uses the agent's abort signal
+- **`AbortSignal`**: Uses a custom signal
+- **`null` or `false`**: Disables abort — processes persist after agent shutdown
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: {
+        abortSignal: null, // Processes survive agent disconnection
+      },
+    },
+  },
+})
+```
+
+Use `null` or `false` for cloud sandboxes (for example, E2B or Daytona) where processes should outlive the agent.
+
+:::note
+For the full `SandboxProcessManager` API (spawning processes programmatically, reading output, sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
+:::
 
 ## Related
 
-- [Background processes](/docs/workspace/processes)
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [`LocalSandbox` reference](/reference/workspace/local-sandbox)
 - [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)

@@ -349,6 +349,26 @@ await handle.sendStdin('console.log("hello")\n')
 
 **Returns:** `Promise<void>`
 
+## Stream interop
+
+`ProcessHandle` exposes `reader` and `writer` properties for integration with Node.js stream-based protocols like LSP or JSON-RPC:
+
+```typescript
+import {
+  createMessageConnection,
+  StreamMessageReader,
+  StreamMessageWriter,
+} from 'vscode-jsonrpc/node'
+
+const handle = await sandbox.processes.spawn('typescript-language-server --stdio')
+
+const connection = createMessageConnection(
+  new StreamMessageReader(handle.reader),
+  new StreamMessageWriter(handle.writer),
+)
+connection.listen()
+```
+
 ## Building a custom process manager
 
 To build a process manager for a custom sandbox provider, extend `SandboxProcessManager` and implement `spawn()` and `list()`. The base class automatically wraps your methods with `ensureRunning()` so the sandbox starts before any process operation.
@@ -392,7 +412,7 @@ When a process manager is provided, `MastraSandbox` automatically creates a defa
 
 ## Related
 
-- [Background processes](/docs/workspace/processes)
+- [Sandbox](/docs/workspace/sandbox)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [E2BSandbox reference](/reference/workspace/e2b-sandbox)
