@@ -72,7 +72,6 @@ function createSkillTool(skills: WorkspaceSkills) {
     },
   });
 
-  (tool as any).needsApprovalFn = () => false as const;
   return tool;
 }
 
@@ -103,7 +102,6 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
     },
   });
 
-  (tool as any).needsApprovalFn = () => false as const;
   return tool;
 }
 
@@ -161,6 +159,5 @@ function createSkillReadTool(skills: WorkspaceSkills) {
     },
   });
 
-  (tool as any).needsApprovalFn = () => false as const;
   return tool;
 }

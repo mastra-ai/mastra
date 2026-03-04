@@ -644,15 +644,6 @@ export class CoreToolBuilder extends MastraBase {
       }
     }
 
-    // Also check for needsApprovalFn set directly on non-Vercel tools (e.g. skill tools)
-    if (
-      !needsApprovalFn &&
-      'needsApprovalFn' in this.originalTool &&
-      typeof (this.originalTool as any).needsApprovalFn === 'function'
-    ) {
-      needsApprovalFn = (this.originalTool as any).needsApprovalFn;
-    }
-
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
