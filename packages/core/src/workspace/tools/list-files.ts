@@ -20,7 +20,7 @@ Examples:
 - Find config files: { path: "./", pattern: "*.config.{js,ts}" }
 - Multiple patterns: { path: "./", pattern: ["**/*.ts", "**/*.tsx"] }`,
   inputSchema: z.object({
-    path: z.string().default('./').describe('Directory path to list'),
+    path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z
       .number()
       .optional()
@@ -51,7 +51,7 @@ Examples:
       .describe('Respect .gitignore in the listed directory (default: true).'),
   }),
   execute: async (
-    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
+    { path = '.', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);

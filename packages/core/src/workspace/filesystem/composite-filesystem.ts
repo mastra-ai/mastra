@@ -182,6 +182,7 @@ export class CompositeFilesystem<
     if (!path || path === '/' || path === '.') return '/';
     // posix.normalize resolves dot segments (./foo → foo, a/../b → b)
     let n = posixPath.normalize(path);
+    if (n === '.') return '/';
     if (!n.startsWith('/')) n = `/${n}`;
     if (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
     return n;

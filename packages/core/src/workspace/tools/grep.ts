@@ -28,7 +28,7 @@ Usage:
     path: z
       .string()
       .optional()
-      .default('./')
+      .default('.')
       .describe(
         'File, directory, or glob pattern to search within (default: "./"). ' +
           'A plain path searches that file or directory. ' +
@@ -57,7 +57,7 @@ Usage:
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
   }),
   execute: async (
-    { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
+    { pattern, path: inputPath = '.', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);
