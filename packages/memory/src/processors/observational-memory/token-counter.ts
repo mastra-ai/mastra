@@ -28,16 +28,23 @@ type TokenEstimateCacheEntry = {
 };
 
 const TOKEN_ESTIMATE_CACHE_VERSION = 1;
-const TOKEN_ESTIMATE_CACHE_SOURCE = 'o200k_base';
 
 type CacheablePart = any;
 type TokenEstimateCacheMap = Record<string, TokenEstimateCacheEntry>;
 
 function buildEstimateKey(kind: string, text: string): string {
-  const head = text.slice(0, 24);
-  const tail = text.slice(-24);
   const payloadHash = createHash('sha1').update(text).digest('hex');
-  return `${kind}:${text.length}:${head}:${tail}:${payloadHash}`;
+  return `${kind}:${payloadHash}`;
+}
+
+function resolveEncodingId(encoding?: TiktokenBPE): string {
+  if (!encoding) return 'o200k_base';
+
+  try {
+    return `custom:${createHash('sha1').update(JSON.stringify(encoding)).digest('hex')}`;
+  } catch {
+    return 'custom:unknown';
+  }
 }
 
 function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry {
@@ -155,11 +162,12 @@ function serializePartForTokenCounting(part: CacheablePart): string {
 function isValidCacheEntry(
   entry: TokenEstimateCacheEntry | undefined,
   expectedKey: string,
+  expectedSource: string,
 ): entry is TokenEstimateCacheEntry {
   return Boolean(
     entry &&
     entry.v === TOKEN_ESTIMATE_CACHE_VERSION &&
-    entry.source === TOKEN_ESTIMATE_CACHE_SOURCE &&
+    entry.source === expectedSource &&
     entry.key === expectedKey &&
     Number.isFinite(entry.tokens),
   );
@@ -172,6 +180,7 @@ function isValidCacheEntry(
  */
 export class TokenCounter {
   private encoder: Tiktoken;
+  private readonly cacheSource: string;
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // Empirically derived from OpenAI's token counting guide (3 tokens per message base +
@@ -182,6 +191,7 @@ export class TokenCounter {
 
   constructor(encoding?: TiktokenBPE) {
     this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
+    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEncodingId(encoding)}`;
   }
 
   /**
@@ -196,14 +206,14 @@ export class TokenCounter {
   private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {
     const key = buildEstimateKey(kind, payload);
     const cached = getPartCacheEntry(part, key);
-    if (isValidCacheEntry(cached, key)) {
+    if (isValidCacheEntry(cached, key, this.cacheSource)) {
       return cached.tokens;
     }
 
     const tokens = this.countString(payload);
     setPartCacheEntry(part, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
-      source: TOKEN_ESTIMATE_CACHE_SOURCE,
+      source: this.cacheSource,
       key,
       tokens,
     });
@@ -214,14 +224,14 @@ export class TokenCounter {
   private readOrPersistMessageEstimate(message: MastraDBMessage, kind: string, payload: string): number {
     const key = buildEstimateKey(kind, payload);
     const cached = getMessageCacheEntry(message, key);
-    if (isValidCacheEntry(cached, key)) {
+    if (isValidCacheEntry(cached, key, this.cacheSource)) {
       return cached.tokens;
     }
 
     const tokens = this.countString(payload);
     setMessageCacheEntry(message, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
-      source: TOKEN_ESTIMATE_CACHE_SOURCE,
+      source: this.cacheSource,
       key,
       tokens,
     });

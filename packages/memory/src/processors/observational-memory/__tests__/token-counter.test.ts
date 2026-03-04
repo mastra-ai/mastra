@@ -174,6 +174,27 @@ describe('TokenCounter', () => {
       expect(sourceRefreshed.source).toBe(entry.source);
     });
 
+    it('scopes cache source by encoding identity', () => {
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'text', text: 'Same payload, different encoding identity' }],
+      });
+
+      const defaultCounter = new TokenCounter();
+      defaultCounter.countMessage(message);
+      const [entryKey, defaultEntry] = Object.entries(
+        message.content.parts[0].providerMetadata.mastra.tokenEstimate,
+      )[0] as [string, any];
+
+      const o200k_base = require('js-tiktoken/ranks/o200k_base');
+      const customCounter = new TokenCounter(o200k_base);
+      customCounter.countMessage(message);
+
+      const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      expect(refreshedEntry.source).not.toBe(defaultEntry.source);
+      expect(refreshedEntry.source).toContain('custom:');
+    });
+
     it('keeps data-* and reasoning skipped/uncached while caching eligible parts', () => {
       const counter = new TokenCounter();
       const message = createMessage({
