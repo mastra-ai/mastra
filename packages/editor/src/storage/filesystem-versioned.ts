@@ -208,6 +208,8 @@ export class FilesystemVersionedHelpers<
 
     // Track per-entity version counts from git
     const entityVersionCount = new Map<string, number>();
+    // Track previous snapshot per entity to skip unchanged entries
+    const previousSnapshots = new Map<string, string>();
 
     for (let i = 0; i < orderedCommits.length; i++) {
       const commit = orderedCommits[i]!;
@@ -220,9 +222,14 @@ export class FilesystemVersionedHelpers<
       );
       if (!fileContent) continue;
 
-      // Create a version record for each entity that existed in this commit
+      // Create a version record for each entity that actually changed in this commit
       for (const [entityId, snapshotConfig] of Object.entries(fileContent)) {
         if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+
+        // Skip if entity data is unchanged from the previous commit
+        const serialized = JSON.stringify(snapshotConfig);
+        if (previousSnapshots.get(entityId) === serialized) continue;
+        previousSnapshots.set(entityId, serialized);
 
         const count = (entityVersionCount.get(entityId) ?? 0) + 1;
         entityVersionCount.set(entityId, count);
