@@ -7,6 +7,7 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -20,6 +21,10 @@ export interface ChatThreadsProps {
 export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const { canDelete } = usePermissions();
+
+  // Check if user can delete threads (memory:delete permission)
+  const canDeleteThread = canDelete('memory');
 
   if (isLoading) {
     return <ChatThreadSkeleton />;
@@ -64,7 +69,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
-                <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />
+                {canDeleteThread && <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />}
               </ThreadItem>
             );
           })}

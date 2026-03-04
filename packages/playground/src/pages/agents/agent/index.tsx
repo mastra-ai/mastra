@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentLayout,
@@ -6,17 +7,17 @@ import {
   ThreadInputProvider,
   useAgent,
   useMemory,
-  useThread,
   useThreads,
   AgentInformation,
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
-  type AgentSettingsType,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -24,7 +25,7 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
@@ -40,17 +41,14 @@ function Agent() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory });
-
-  const { data: thread } = useThread({ threadId, agentId });
-  const effectiveResourceId = thread?.resourceId ?? agentId!;
+  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
   useEffect(() => {
     if (!hasMemory) return;
     if (threadId) return;
 
     // After redirects on /agents/:agentId
-    navigate(`/agents/${agentId}/chat/new`);
+    void navigate(`/agents/${agentId}/chat/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -87,7 +85,16 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading || !agent) {
+  // 403 check - permission denied for agents
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
+  }
+
+  if (isAgentLoading) {
     return null;
   }
 
@@ -101,7 +108,7 @@ function Agent() {
     await refreshThreads();
 
     if (isNewThread) {
-      navigate(`/agents/${agentId}/chat/${newThreadId}`);
+      void navigate(`/agents/${agentId}/chat/${newThreadId}`);
     }
   };
 
@@ -109,7 +116,7 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={effectiveResourceId}>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
                 <ActivatedSkillsProvider>

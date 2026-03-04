@@ -102,7 +102,7 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     ]).finally(() => clearTimeout(diagTimer!));
     // null means no LSP client was available — don't show anything
     if (diagnostics === null) return '';
-    if (diagnostics.length === 0) return '\n\nLSP Diagnostics:\nNo errors or warnings';
+    if (diagnostics.length === 0) return '';
 
     // Deduplicate by severity + location + message
     const seen = new Set<string>();

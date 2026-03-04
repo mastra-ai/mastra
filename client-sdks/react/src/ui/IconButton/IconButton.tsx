@@ -1,6 +1,7 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/Tooltip';
-import { Icon, IconProps } from '../Icon/Icon';
 import { twMerge } from 'tailwind-merge';
+import type { IconProps } from '../Icon/Icon';
+import { Icon } from '../Icon/Icon';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/Tooltip';
 
 export interface IconButtonProps extends React.ComponentPropsWithoutRef<'button'> {
   children: React.ReactNode;
